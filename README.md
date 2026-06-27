@@ -1,6 +1,6 @@
 # BuildGraph AI 프로토타입
 
-정글 최종 프로젝트 `나만의 무기 만들기`용 프로토타입 저장소입니다. 목표는 완성 서비스가 아니라, 5명이 각자 담당 기능을 바로 구현할 수 있는 공통 화면/API/인프라 출발점을 제공하는 것입니다.
+정글 최종 프로젝트 `나만의 무기 만들기`용 프로토타입 저장소입니다. 5명이 각자 담당 기능을 바로 구현할 수 있도록 공통 화면, API 계약, Docker 인프라, CI 출발점을 제공합니다.
 
 ## 먼저 읽을 문서
 
@@ -9,7 +9,7 @@
 | 1 | [docs/role-workspaces.md](docs/role-workspaces.md) | 자기 담당 범위, 파일 소유권, PR 규칙 확인 |
 | 2 | [docs/sprint-1-start-checklist.md](docs/sprint-1-start-checklist.md) | 첫 PR에서 무엇을 할지 확인 |
 | 3 | [docs/architecture.md](docs/architecture.md) | 전체 구조와 런타임 흐름 확인 |
-| 4 | [docs/scaffold-decisions.md](docs/scaffold-decisions.md) | 이번 프로토타입에서 고정한 결정사항과 제외 범위 확인 |
+| 4 | [docs/scaffold-decisions.md](docs/scaffold-decisions.md) | 이번 Sprint에서 고정한 결정사항과 이후 작업 확인 |
 | 5 | [docs/openapi.yaml](docs/openapi.yaml) | API 요청/응답 계약 확인 |
 
 4번 담당자는 [apps/pc-agent/README.md](apps/pc-agent/README.md)도 함께 확인합니다.
@@ -103,7 +103,7 @@ cd apps/api
 - mock 데이터는 담당 feature의 `mocks` 디렉터리에 둡니다.
 - seed 데이터는 담당 백엔드 domain의 `*Seed.java`에 둡니다.
 - `components/ui.tsx`, `prototypeData.ts`, `QuotePages.tsx`, `AdminPages.tsx`는 barrel 용도입니다. 새 구현을 쌓지 않습니다.
-- 운영급 결제/배송/원격제어/최저가/FPS 보장은 이번 프로토타입 범위가 아닙니다.
+- 결제/배송/원격제어/최저가/FPS 보장은 이후 Sprint에서 별도 기능으로 다룹니다.
 
 ## CI
 

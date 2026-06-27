@@ -60,7 +60,7 @@
 
 - API 요청/응답 구조를 바꾸면 [openapi.yaml](openapi.yaml)을 같은 PR에서 수정합니다.
 - 기능 API 호출은 page component에서 `api()`를 직접 호출하지 말고 담당 `*Api.ts`에 추가합니다.
-- 운영급 오류 코드 전체 목록은 지금 선행 확정하지 않습니다.
+- 오류 응답 세부 정책은 각 domain DTO/service가 구체화될 때 함께 확정합니다.
 - 성공 요청 body, 인증 필요 여부, 핵심 response 필드명처럼 담당자 간 해석이 갈릴 수 있는 계약은 먼저 맞춥니다.
 - 현재 Tool API는 `/api/tools/{tool}/check` 축약 방식을 사용합니다.
 
