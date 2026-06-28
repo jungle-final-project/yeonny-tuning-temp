@@ -1,5 +1,14 @@
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? '';
 
+export class ApiError extends Error {
+  constructor(
+    public readonly status: number,
+    public readonly path: string
+  ) {
+    super(`API ${status}: ${path}`);
+  }
+}
+
 export async function api<T>(path: string, init?: RequestInit): Promise<T> {
   const token = localStorage.getItem('buildgraph.token');
   const headers = new Headers(init?.headers);
@@ -12,7 +21,7 @@ export async function api<T>(path: string, init?: RequestInit): Promise<T> {
   });
 
   if (!response.ok) {
-    throw new Error(`API ${response.status}: ${path}`);
+    throw new ApiError(response.status, path);
   }
 
   return response.json() as Promise<T>;
@@ -20,6 +29,10 @@ export async function api<T>(path: string, init?: RequestInit): Promise<T> {
 
 export function saveToken(token: string) {
   localStorage.setItem('buildgraph.token', token);
+}
+
+export function getToken() {
+  return localStorage.getItem('buildgraph.token');
 }
 
 export function clearToken() {

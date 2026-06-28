@@ -1,7 +1,14 @@
 import { api } from '../../lib/api';
 
+export type AdminDashboard = {
+  llmQueueP95: string;
+  apiP95: string;
+  asOpen: number;
+  recommendationSuccess: string;
+};
+
 export function getAdminDashboard() {
-  return api('/api/admin/dashboard');
+  return api<AdminDashboard>('/api/admin/dashboard');
 }
 
 export function getAgentSession(sessionId: string) {

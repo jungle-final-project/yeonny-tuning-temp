@@ -47,6 +47,12 @@ paths:
       responses:
         "200":
           description: 현재 사용자 정보
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/User"
+        "401":
+          $ref: "#/components/responses/UnauthorizedError"
   /api/requirements/parse:
     post:
       summary: 자연어 요구사항 파싱
@@ -292,12 +298,20 @@ paths:
   /api/admin/dashboard:
     get:
       summary: 관리자 대시보드
+      security:
+        - bearerAuth: []
       responses:
         "200":
           description: 대시보드
+        "401":
+          $ref: "#/components/responses/UnauthorizedError"
+        "403":
+          $ref: "#/components/responses/ForbiddenError"
   /api/admin/agent-sessions/{id}:
     get:
       summary: 에이전트 세션 상세 조회
+      security:
+        - bearerAuth: []
       parameters:
         - in: path
           name: id
@@ -307,15 +321,27 @@ paths:
       responses:
         "200":
           description: 에이전트 세션
+        "401":
+          $ref: "#/components/responses/UnauthorizedError"
+        "403":
+          $ref: "#/components/responses/ForbiddenError"
   /api/admin/tool-invocations:
     get:
       summary: 도구 호출 목록
+      security:
+        - bearerAuth: []
       responses:
         "200":
           description: 도구 호출
+        "401":
+          $ref: "#/components/responses/UnauthorizedError"
+        "403":
+          $ref: "#/components/responses/ForbiddenError"
   /api/admin/tool-invocations/{id}:
     get:
       summary: 도구 호출 상세 조회
+      security:
+        - bearerAuth: []
       parameters:
         - in: path
           name: id
@@ -329,9 +355,15 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ToolInvocation"
+        "401":
+          $ref: "#/components/responses/UnauthorizedError"
+        "403":
+          $ref: "#/components/responses/ForbiddenError"
   /api/admin/rag-evidence/{id}:
     get:
       summary: 관리자 RAG 근거 상세 조회
+      security:
+        - bearerAuth: []
       parameters:
         - in: path
           name: id
@@ -345,15 +377,27 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/RagEvidence"
+        "401":
+          $ref: "#/components/responses/UnauthorizedError"
+        "403":
+          $ref: "#/components/responses/ForbiddenError"
   /api/admin/as-tickets:
     get:
       summary: 관리자 AS 티켓 목록
+      security:
+        - bearerAuth: []
       responses:
         "200":
           description: 티켓
+        "401":
+          $ref: "#/components/responses/UnauthorizedError"
+        "403":
+          $ref: "#/components/responses/ForbiddenError"
   /api/admin/as-tickets/{id}:
     get:
       summary: 관리자 AS 티켓 상세 조회
+      security:
+        - bearerAuth: []
       parameters:
         - in: path
           name: id
@@ -367,24 +411,53 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/AdminAsTicket"
+        "401":
+          $ref: "#/components/responses/UnauthorizedError"
+        "403":
+          $ref: "#/components/responses/ForbiddenError"
   /api/admin/price-jobs:
     get:
       summary: 가격 작업 목록
+      security:
+        - bearerAuth: []
       responses:
         "200":
           description: 작업
+        "401":
+          $ref: "#/components/responses/UnauthorizedError"
+        "403":
+          $ref: "#/components/responses/ForbiddenError"
   /api/admin/price-jobs/run:
     post:
       summary: 가격 수집 작업 실행
+      security:
+        - bearerAuth: []
       responses:
         "202":
           description: 작업 대기열 등록 완료
+        "401":
+          $ref: "#/components/responses/UnauthorizedError"
+        "403":
+          $ref: "#/components/responses/ForbiddenError"
 components:
   securitySchemes:
     bearerAuth:
       type: http
       scheme: bearer
       bearerFormat: JWT
+  responses:
+    UnauthorizedError:
+      description: 로그인 필요
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+    ForbiddenError:
+      description: 관리자 권한 필요
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
   schemas:
     LoginRequest:
       type: object
@@ -422,6 +495,15 @@ components:
         role:
           type: string
           enum: [USER, ADMIN]
+    ErrorResponse:
+      type: object
+      required: [code, message]
+      properties:
+        code:
+          type: string
+          enum: [UNAUTHORIZED, FORBIDDEN, API_ERROR]
+        message:
+          type: string
     RequirementParseRequest:
       type: object
       properties:
