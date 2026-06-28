@@ -3,7 +3,7 @@
 ## 목적
 
 이 문서는 BuildGraph 3주 MVP의 PostgreSQL 공통 DB 스키마 계약을 정의한다.
-실제 Flyway DDL이 아니라, 이후 Flyway migration과 API/route 문서가 따라야 하는 기준 문서다.
+실제 실행 DDL은 `apps/api/src/main/resources/db/migration`의 Flyway migration 파일이며, 이 문서는 migration과 API/route 문서가 따라야 하는 공통 계약이다.
 
 ## 설계 원칙
 
@@ -943,7 +943,7 @@ MVP 기준 결정값:
 8. parent table은 child table보다 먼저 생성한다.
 9. `agent_sessions.as_ticket_id` FK는 `as_tickets` 생성 이후 추가한다.
 10. seed 기준 데이터는 Flyway migration으로 버전 관리한다.
-11. 실제 Flyway DDL은 이 문서 이후 별도 작성한다.
+11. 실제 Flyway DDL은 `apps/api/src/main/resources/db/migration`에 둔다.
 
 권장 migration 순서:
 
@@ -956,6 +956,8 @@ V5__support_ticket.sql
 V6__agent_rag_tool.sql
 V7__admin_audit_seed.sql
 ```
+
+현재 저장소에는 위 순서의 Flyway migration이 반영되어 있다. 기존 PostgreSQL volume이 남아 있으면 새 migration과 seed가 다시 실행되지 않으므로, 공통 DB를 처음부터 검증할 때는 `docker compose down -v` 후 `docker compose up --build`를 사용한다.
 
 ## V1 제외 테이블
 

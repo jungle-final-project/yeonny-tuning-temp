@@ -10,7 +10,10 @@ spring:
     password: ${SPRING_DATASOURCE_PASSWORD:buildgraph}
   sql:
     init:
-      mode: always
+      mode: never
+  flyway:
+    enabled: true
+    locations: classpath:db/migration
   data:
     redis:
       host: ${SPRING_DATA_REDIS_HOST:localhost}

@@ -52,6 +52,25 @@ docker compose down -v
 
 `docker compose down -v`는 PostgreSQL volume까지 삭제하므로 seed 상태로 다시 시작할 때만 사용합니다.
 
+DB schema와 seed 데이터는 Spring SQL init이 아니라 Flyway migration으로 관리합니다.
+
+| 파일 | 역할 |
+| --- | --- |
+| `apps/api/src/main/resources/db/migration/V1__extensions.sql` | `pgvector`, `pgcrypto` extension |
+| `apps/api/src/main/resources/db/migration/V2__users_auth.sql` | 사용자, OAuth provider, refresh token |
+| `apps/api/src/main/resources/db/migration/V3__parts_price.sql` | 부품, 가격, 호환성, 벤치마크 |
+| `apps/api/src/main/resources/db/migration/V4__quote_build.sql` | 요구사항, 추천 build, build item |
+| `apps/api/src/main/resources/db/migration/V5__support_ticket.sql` | PC Agent 로그 업로드, AS ticket |
+| `apps/api/src/main/resources/db/migration/V6__agent_rag_tool.sql` | Agent session, Tool invocation, RAG evidence |
+| `apps/api/src/main/resources/db/migration/V7__admin_audit_seed.sql` | 관리자 audit log와 팀 공통 seed 데이터 |
+
+DB 계약이나 seed 기준을 바꾼 뒤 깨끗한 DB로 다시 확인하려면 아래처럼 실행합니다.
+
+```powershell
+docker compose down -v
+docker compose up --build
+```
+
 ## VS Code 컨테이너로 열기
 
 로컬 Node/Java/Python 버전을 맞추기 어렵다면 VS Code Dev Containers로 작업합니다.
