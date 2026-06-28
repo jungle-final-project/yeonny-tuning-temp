@@ -58,6 +58,10 @@ jobs:
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v4
 
+      - name: Run API tests
+        working-directory: apps/api
+        run: ./gradlew test --no-daemon
+
       - name: Build API
         working-directory: apps/api
         run: ./gradlew bootJar --no-daemon

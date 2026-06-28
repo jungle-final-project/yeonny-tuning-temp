@@ -164,10 +164,23 @@ cd apps/api
 
 ## CI
 
-Pull Request와 `main` push에서 GitHub Actions가 다음을 확인합니다.
+Pull Request와 `main`, `dev` push에서 GitHub Actions가 다음을 확인합니다.
 
 - 웹 의존성 설치, build, 17개 route smoke test
 - OpenAPI YAML 및 핵심 POST requestBody 검증
+- API test
 - API `bootJar` 빌드
 - Docker Compose config 검증
 - API jar 실행 후 `/api/health` runtime smoke
+
+CI 실행 조건:
+
+| 상황 | CI 실행 여부 |
+| --- | --- |
+| 개인 브랜치에 그냥 push | 실행 안 됨 |
+| 개인 브랜치에서 PR 생성 | 실행됨 |
+| PR에 새 commit push | 실행됨 |
+| PR을 dev로 merge | 실행됨 |
+| PR을 main으로 merge | 실행됨 |
+| main에 직접 push | 실행됨 |
+| dev에 직접 push | 실행됨 |
