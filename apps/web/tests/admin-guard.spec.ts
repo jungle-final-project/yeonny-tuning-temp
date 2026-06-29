@@ -120,12 +120,55 @@ test('renders admin page when auth/me returns ADMIN role', async ({ page }) => {
       body: JSON.stringify({ id: 'admin-001', email: 'admin@example.com', role: 'ADMIN' })
     });
   });
+  await page.route('**/api/admin/agent-sessions/demo-session', async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        id: 'demo-session',
+        status: 'SUCCEEDED',
+        summary: 'Agent trace completed.',
+        purpose: 'BUILD_RECOMMEND',
+        stateTimeline: [
+          { from: null, to: 'QUEUED', actor: 'USER', at: '2026-06-29T10:00:00Z', reason: 'created' },
+          { from: 'QUEUED', to: 'RUNNING', actor: 'SYSTEM', at: '2026-06-29T10:00:01Z', reason: 'started' }
+        ],
+        toolInvocations: [
+          {
+            id: 'tool-001',
+            agentSessionId: 'demo-session',
+            toolName: 'compatibility',
+            status: 'PASS',
+            confidence: 'HIGH',
+            summary: 'Compatibility check passed.',
+            latencyMs: 40
+          }
+        ],
+        evidenceIds: ['rag-001']
+      })
+    });
+  });
+  await page.route('**/api/admin/rag-evidence/rag-001', async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        id: 'rag-001',
+        agentSessionId: 'demo-session',
+        sourceId: 'internal-rule-demo',
+        summary: 'Demo RAG evidence.',
+        score: 0.91,
+        metadata: { sourceType: 'INTERNAL_RULE' }
+      })
+    });
+  });
 
   await page.goto('/admin/agent-sessions/demo-session');
 
   await expect(page.getByRole('heading', { name: '관리자 권한이 필요합니다' })).toBeHidden();
   await expect(page.locator('body')).toContainText('Agent / RAG / Tool 근거 상세');
-  await expect(page.getByRole('main')).toContainText('Agent 상태 전이');
+  await expect(page.getByRole('main')).toContainText('Agent 실행 Trace');
+  await expect(page.getByRole('main')).toContainText('Compatibility check passed.');
   expect(authMeCalls).toBeGreaterThan(0);
 });
 
