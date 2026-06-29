@@ -27,14 +27,14 @@ class UserControllerTest {
     private UserQueryService userQueryService;
 
     @Test
-    void loginReturnsSkeletonAuthResponse() throws Exception {
-        when(userQueryService.login("admin@example.com")).thenReturn(Map.of(
-                "accessToken", "demo-access-admin",
+    void loginReturnsAuthResponse() throws Exception {
+        when(userQueryService.login("admin@example.com", "passw0rd!")).thenReturn(Map.of(
+                "accessToken", "jwt-access-token",
                 "refreshToken", "demo-refresh-admin",
                 "user", Map.of(
                         "id", "00000000-0000-4000-8000-000000000001",
                         "email", "admin@example.com",
-                        "name", "관리자",
+                        "name", "Admin User",
                         "role", "ADMIN"
                 )
         ));
@@ -44,26 +44,26 @@ class UserControllerTest {
                         .content("""
                                 {
                                   "email": "admin@example.com",
-                                  "password": "password"
+                                  "password": "passw0rd!"
                                 }
                                 """))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.accessToken").value("demo-access-admin"))
+                .andExpect(jsonPath("$.accessToken").value("jwt-access-token"))
                 .andExpect(jsonPath("$.refreshToken").value("demo-refresh-admin"))
                 .andExpect(jsonPath("$.user.id").value("00000000-0000-4000-8000-000000000001"))
                 .andExpect(jsonPath("$.user.email").value("admin@example.com"))
-                .andExpect(jsonPath("$.user.name").value("관리자"))
+                .andExpect(jsonPath("$.user.name").value("Admin User"))
                 .andExpect(jsonPath("$.user.role").value("ADMIN"));
 
-        verify(userQueryService).login("admin@example.com");
+        verify(userQueryService).login("admin@example.com", "passw0rd!");
     }
 
     @Test
     void signupReturnsCreatedUserResponse() throws Exception {
-        when(userQueryService.signup("홍길동", "user@example.com", false)).thenReturn(Map.of(
+        when(userQueryService.signup("Demo User", "user@example.com", "passw0rd!", true, false)).thenReturn(Map.of(
                 "id", "00000000-0000-4000-8000-000000001004",
                 "email", "user@example.com",
-                "name", "홍길동",
+                "name", "Demo User",
                 "role", "USER"
         ));
 
@@ -72,8 +72,8 @@ class UserControllerTest {
                         .content("""
                                 {
                                   "email": "user@example.com",
-                                  "password": "password",
-                                  "name": "홍길동",
+                                  "password": "passw0rd!",
+                                  "name": "Demo User",
                                   "termsAccepted": true,
                                   "marketingAccepted": false
                                 }
@@ -81,18 +81,18 @@ class UserControllerTest {
                 .andExpect(status().isCreated())
                 .andExpect(jsonPath("$.id").value("00000000-0000-4000-8000-000000001004"))
                 .andExpect(jsonPath("$.email").value("user@example.com"))
-                .andExpect(jsonPath("$.name").value("홍길동"))
+                .andExpect(jsonPath("$.name").value("Demo User"))
                 .andExpect(jsonPath("$.role").value("USER"));
 
-        verify(userQueryService).signup("홍길동", "user@example.com", false);
+        verify(userQueryService).signup("Demo User", "user@example.com", "passw0rd!", true, false);
     }
 
     @Test
-    void signupCanReturnExistingUserResponseShape() throws Exception {
-        when(userQueryService.signup("홍길동", "user@example.com", true)).thenReturn(Map.of(
+    void signupPassesMarketingAccepted() throws Exception {
+        when(userQueryService.signup("Demo User", "user@example.com", "passw0rd!", true, true)).thenReturn(Map.of(
                 "id", "00000000-0000-4000-8000-000000001004",
                 "email", "user@example.com",
-                "name", "홍길동",
+                "name", "Demo User",
                 "role", "USER"
         ));
 
@@ -101,8 +101,8 @@ class UserControllerTest {
                         .content("""
                                 {
                                   "email": "user@example.com",
-                                  "password": "password",
-                                  "name": "홍길동",
+                                  "password": "passw0rd!",
+                                  "name": "Demo User",
                                   "termsAccepted": true,
                                   "marketingAccepted": true
                                 }
@@ -110,10 +110,10 @@ class UserControllerTest {
                 .andExpect(status().isCreated())
                 .andExpect(jsonPath("$.id").value("00000000-0000-4000-8000-000000001004"))
                 .andExpect(jsonPath("$.email").value("user@example.com"))
-                .andExpect(jsonPath("$.name").value("홍길동"))
+                .andExpect(jsonPath("$.name").value("Demo User"))
                 .andExpect(jsonPath("$.role").value("USER"));
 
-        verify(userQueryService).signup("홍길동", "user@example.com", true);
+        verify(userQueryService).signup("Demo User", "user@example.com", "passw0rd!", true, true);
     }
 
     @Test
@@ -121,7 +121,7 @@ class UserControllerTest {
         when(userQueryService.me("Bearer demo-access-admin")).thenReturn(Map.of(
                 "id", "00000000-0000-4000-8000-000000000001",
                 "email", "admin@example.com",
-                "name", "관리자",
+                "name", "Admin User",
                 "role", "ADMIN"
         ));
 
@@ -130,7 +130,7 @@ class UserControllerTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.id").value("00000000-0000-4000-8000-000000000001"))
                 .andExpect(jsonPath("$.email").value("admin@example.com"))
-                .andExpect(jsonPath("$.name").value("관리자"))
+                .andExpect(jsonPath("$.name").value("Admin User"))
                 .andExpect(jsonPath("$.role").value("ADMIN"));
 
         verify(userQueryService).me("Bearer demo-access-admin");
@@ -138,12 +138,12 @@ class UserControllerTest {
 
     @Test
     void meReturnsUnauthorizedWhenTokenIsMissing() throws Exception {
-        when(userQueryService.me(eq(null))).thenThrow(new ResponseStatusException(HttpStatus.UNAUTHORIZED, "로그인이 필요합니다."));
+        when(userQueryService.me(eq(null))).thenThrow(new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Login required."));
 
         mockMvc.perform(get("/api/auth/me"))
                 .andExpect(status().isUnauthorized())
                 .andExpect(jsonPath("$.code").value("UNAUTHORIZED"))
-                .andExpect(jsonPath("$.message").value("로그인이 필요합니다."));
+                .andExpect(jsonPath("$.message").value("Login required."));
 
         verify(userQueryService).me(null);
     }
