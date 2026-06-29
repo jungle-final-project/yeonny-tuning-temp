@@ -206,6 +206,34 @@ paths:
           name: category
           schema:
             $ref: "#/components/schemas/PartCategory"
+        - in: query
+          name: q
+          schema:
+            type: string
+          description: 부품명, 제조사, attributes JSON 검색어
+        - in: query
+          name: manufacturer
+          schema:
+            type: string
+        - in: query
+          name: status
+          schema:
+            $ref: "#/components/schemas/GenericStatus"
+        - in: query
+          name: minPrice
+          schema:
+            type: integer
+            minimum: 0
+        - in: query
+          name: maxPrice
+          schema:
+            type: integer
+            minimum: 0
+        - in: query
+          name: sort
+          schema:
+            type: string
+            enum: [category, price_asc, price_desc, name]
         - $ref: "#/components/parameters/Page"
         - $ref: "#/components/parameters/Size"
       responses:
@@ -921,6 +949,13 @@ components:
         benchmarkSummary:
           type: object
           additionalProperties: true
+        latestPriceSource:
+          type: string
+          nullable: true
+        latestPriceCollectedAt:
+          type: string
+          format: date-time
+          nullable: true
     PriceAlertCreateRequest:
       type: object
       required: [partId, targetPrice]

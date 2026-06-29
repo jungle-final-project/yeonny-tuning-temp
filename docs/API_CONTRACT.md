@@ -174,8 +174,8 @@ Google OAuth 정책:
 
 | Method | Path | Auth | Owner | Request 예시 | Response 예시 | 관련 DB table |
 |---|---|---|---|---|---|---|
-| `GET` | `/api/parts` | USER | 2번 | `?category=GPU&page=0&size=20` | `{ "items": [{ "id": "0e9f3b8b-8c83-4d9a-9f7d-1f2b4dfb8a11", "category": "GPU", "name": "RTX 4070", "manufacturer": "NVIDIA", "price": 850000, "status": "ACTIVE", "attributes": { "wattage": 200 } }], "page": 0, "size": 20, "total": 1 }` | `parts` |
-| `GET` | `/api/parts/{id}` | USER | 2번 | - | `{ "id": "0e9f3b8b-8c83-4d9a-9f7d-1f2b4dfb8a11", "category": "GPU", "name": "RTX 4070", "manufacturer": "NVIDIA", "price": 850000, "status": "ACTIVE", "attributes": { "wattage": 200, "lengthMm": 304 }, "benchmarkSummary": { "summary": "QHD high preset 기준", "score": 92.5 } }` | `parts`, `benchmark_summaries` |
+| `GET` | `/api/parts` | USER | 2번 | `?category=GPU&q=4070&manufacturer=NVIDIA&status=ACTIVE&minPrice=500000&maxPrice=1300000&page=0&size=20&sort=price_desc` | `{ "items": [{ "id": "0e9f3b8b-8c83-4d9a-9f7d-1f2b4dfb8a11", "category": "GPU", "name": "RTX 4070", "manufacturer": "NVIDIA", "price": 850000, "status": "ACTIVE", "attributes": { "wattage": 200 }, "latestPriceSource": "DANAWA_BACKUP" }], "page": 0, "size": 20, "total": 1 }` | `parts`, `price_snapshots`, `benchmark_summaries` |
+| `GET` | `/api/parts/{id}` | USER | 2번 | - | `{ "id": "0e9f3b8b-8c83-4d9a-9f7d-1f2b4dfb8a11", "category": "GPU", "name": "RTX 4070", "manufacturer": "NVIDIA", "price": 850000, "status": "ACTIVE", "attributes": { "wattage": 200, "lengthMm": 304 }, "benchmarkSummary": { "summary": "QHD high preset 기준", "score": 92.5 }, "latestPriceSource": "DANAWA_BACKUP" }` | `parts`, `price_snapshots`, `benchmark_summaries` |
 | `GET` | `/api/price-alerts` | USER | 2번 | `?page=0&size=20` | `{ "items": [{ "partId": "0e9f3b8b-8c83-4d9a-9f7d-1f2b4dfb8a11", "partName": "RTX 4070", "targetPrice": 700000, "currentPrice": 850000, "status": "ACTIVE", "createdAt": "2026-06-29T10:25:00Z" }], "page": 0, "size": 20, "total": 1 }` | `price_alerts`, `parts`, `users` |
 | `POST` | `/api/price-alerts` | USER | 2번 | `{ "partId": "0e9f3b8b-8c83-4d9a-9f7d-1f2b4dfb8a11", "targetPrice": 700000 }` | `{ "partId": "0e9f3b8b-8c83-4d9a-9f7d-1f2b4dfb8a11", "partName": "RTX 4070", "targetPrice": 700000, "currentPrice": 850000, "status": "ACTIVE", "createdAt": "2026-06-29T10:25:00Z" }` | `price_alerts`, `parts`, `users` |
 | `GET` | `/api/admin/price-jobs` | ADMIN | 2번 | `?page=0&size=20` | `{ "items": [{ "id": "8d4b2d5b-7d39-4f8a-8195-bf32b9c5f61e", "status": "SUCCEEDED", "requestedBy": "c6d75f0c-0f57-4d1c-a8b2-a4079dcd40fd", "startedAt": "2026-06-29T10:00:00Z", "finishedAt": "2026-06-29T10:01:00Z", "errorSummary": null }], "page": 0, "size": 20, "total": 1 }` | `price_jobs` |
@@ -186,6 +186,10 @@ Google OAuth 정책:
 `POST /api/price-alerts`는 같은 사용자, 같은 `partId`, 같은 `targetPrice`의 `ACTIVE` 알림이 이미 있으면 `409 DUPLICATE_RESOURCE`를 반환한다.
 
 `POST /api/admin/price-jobs/run`은 `price_jobs.status IN ('QUEUED', 'RUNNING')`인 row가 하나라도 있으면 새 job을 만들지 않고 `409 CONFLICT_STATE`를 반환한다.
+
+부품 검색 정렬은 `category`, `price_asc`, `price_desc`, `name`만 허용한다. `q`는 `parts.name`, `parts.manufacturer`, `parts.attributes`를 대상으로 검색한다.
+
+외부 가격 수집 백업은 별도 public API를 만들지 않는다. 현재 단계에서는 `price_snapshots.source = "DANAWA_BACKUP"`와 `price_snapshots.raw_payload`, `parts.attributes.externalSources`에 키워드와 source metadata를 저장한다. 실제 크롤러/수집기는 관리자 가격 Job 내부 처리로만 붙인다.
 
 ### Tool
 

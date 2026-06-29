@@ -746,6 +746,17 @@ JSONB 금지 대상:
   "wattage": 120,
   "lengthMm": 304,
   "memoryType": "DDR5",
+  "shortSpec": "RTX 4070 Ti SUPER, 16GB, 285W",
+  "externalSources": {
+    "danawa": {
+      "keyword": "RTX 4070 Ti SUPER 16GB",
+      "backupOnly": true
+    },
+    "naver": {
+      "keyword": "RTX 4070 Ti SUPER",
+      "backupOnly": true
+    }
+  },
   "metadataVersion": 1
 }
 ```
@@ -757,7 +768,11 @@ JSONB 금지 대상:
 | `wattage` | `number` | yes | 소비전력 또는 권장 전력 계산 기준 |
 | `lengthMm` | `number` | yes | GPU/case 호환성 계산 기준 |
 | `memoryType` | `string` | yes | RAM/메인보드 메모리 타입 |
+| `shortSpec` | `string` | yes | 쇼핑몰 목록에 표시할 짧은 사양 |
+| `externalSources` | `object` | yes | 다나와/네이버 등 외부 가격 백업 검색 키워드와 source metadata |
 | `metadataVersion` | `number` | no | attributes shape 버전. MVP 기본값 `1` |
+
+외부 가격 백업은 별도 `products` 테이블을 만들지 않고 `parts` 도메인 안에 보관한다. 수집된 가격은 `price_snapshots.source`, `price_snapshots.raw_payload`에 저장하며, 내부 쇼핑몰 노출 기준 상품명/카테고리/가격은 항상 `parts`를 기준으로 한다.
 
 ### `agent_sessions.state_timeline`
 
