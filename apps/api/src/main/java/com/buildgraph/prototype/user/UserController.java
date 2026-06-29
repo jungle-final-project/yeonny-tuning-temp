@@ -28,6 +28,11 @@ public class UserController {
         return userQueryService.login(request.email(), request.password());
     }
 
+    @PostMapping("/auth/refresh")
+    Map<String, Object> refresh(@Valid @RequestBody RefreshRequest request) {
+        return userQueryService.refresh(request.refreshToken());
+    }
+
     @PostMapping("/users")
     @ResponseStatus(HttpStatus.CREATED)
     Map<String, Object> signup(@Valid @RequestBody SignupRequest request) {
@@ -46,6 +51,9 @@ public class UserController {
     }
 
     record LoginRequest(@NotBlank @Email String email, @NotBlank String password) {
+    }
+
+    record RefreshRequest(@NotBlank String refreshToken) {
     }
 
     record SignupRequest(

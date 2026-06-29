@@ -76,11 +76,51 @@ public class UserQueryService {
         return currentUserService.requireUser(authorization).toUserMap();
     }
 
+    public Map<String, Object> refresh(String refreshToken) {
+        if (refreshToken == null || refreshToken.isBlank()) {
+            throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Invalid refresh token.");
+        }
+
+        Map<String, Object> tokenRow = findActiveRefreshToken(refreshTokenService.hash(refreshToken));
+        Map<String, Object> user = findByInternalId(longValue(tokenRow, "user_id"));
+        Map<String, Object> userDto = userMap(user);
+
+        revokeRefreshToken(longValue(tokenRow, "id"));
+        RefreshTokenService.IssuedRefreshToken nextRefreshToken = refreshTokenService.issue();
+        storeRefreshToken(user, nextRefreshToken);
+
+        return MockData.map(
+                "accessToken", jwtTokenService.issueAccessToken(userDto),
+                "refreshToken", nextRefreshToken.token()
+        );
+    }
+
     private Map<String, Object> findByEmail(String email) {
         return findRowsByEmail(email)
                 .stream()
                 .findFirst()
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.UNAUTHORIZED, "등록된 사용자를 찾을 수 없습니다."));
+    }
+
+    private Map<String, Object> findActiveRefreshToken(String tokenHash) {
+        return jdbcTemplate.queryForList("""
+                SELECT id, user_id, token_hash, expires_at, revoked_at
+                FROM refresh_tokens
+                WHERE token_hash = ?
+                  AND revoked_at IS NULL
+                  AND expires_at > now()
+                """, tokenHash)
+                .stream()
+                .findFirst()
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Invalid refresh token."));
+    }
+
+    private void revokeRefreshToken(Long refreshTokenId) {
+        jdbcTemplate.update("""
+                UPDATE refresh_tokens
+                SET revoked_at = now()
+                WHERE id = ?
+                """, refreshTokenId);
     }
 
     private void storeRefreshToken(Map<String, Object> user, RefreshTokenService.IssuedRefreshToken refreshToken) {
@@ -92,6 +132,18 @@ public class UserQueryService {
                 refreshToken.tokenHash(),
                 Timestamp.from(refreshToken.expiresAt())
         );
+    }
+
+    private Map<String, Object> findByInternalId(Long userId) {
+        return jdbcTemplate.queryForList("""
+                SELECT id AS internal_id, public_id::text AS id, email, password_hash, name, role, created_at
+                FROM users
+                WHERE id = ?
+                  AND deleted_at IS NULL
+                """, userId)
+                .stream()
+                .findFirst()
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Invalid refresh token."));
     }
 
     private List<Map<String, Object>> findRowsByEmail(String email) {

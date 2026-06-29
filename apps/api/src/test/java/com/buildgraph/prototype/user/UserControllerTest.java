@@ -59,6 +59,27 @@ class UserControllerTest {
     }
 
     @Test
+    void refreshReturnsNewTokens() throws Exception {
+        when(userQueryService.refresh("opaque-refresh-token")).thenReturn(Map.of(
+                "accessToken", "new-jwt-access-token",
+                "refreshToken", "new-opaque-refresh-token"
+        ));
+
+        mockMvc.perform(post("/api/auth/refresh")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "refreshToken": "opaque-refresh-token"
+                                }
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.accessToken").value("new-jwt-access-token"))
+                .andExpect(jsonPath("$.refreshToken").value("new-opaque-refresh-token"));
+
+        verify(userQueryService).refresh("opaque-refresh-token");
+    }
+
+    @Test
     void signupReturnsCreatedUserResponse() throws Exception {
         when(userQueryService.signup("Demo User", "user@example.com", "passw0rd!", true, false)).thenReturn(Map.of(
                 "id", "00000000-0000-4000-8000-000000001004",
