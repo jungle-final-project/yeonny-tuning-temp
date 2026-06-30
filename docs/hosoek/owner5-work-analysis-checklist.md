@@ -726,6 +726,7 @@ AdminShell nav 분석 결과:
 - [x] 2026-06-30 추가 UI 변경 기준 홈 첫 화면 추천 견적/인기 부품 랭킹, 셀프 견적 쇼핑 workspace, 공통 commerce 색상/패널/테이블/헤더 스타일, 모바일 셀프 견적 테스트 범위를 확인했다.
 - [x] 2026-06-30 추가 변경 기준 홈 화면의 빠른 쇼핑/상담 요약 보조 섹션 숨김과 Vite 개발 서버 API 프록시 대상 환경변수 분리 범위를 확인했다.
 - [x] 2026-06-30 `origin/main` 최신 변경을 `feat/improve-home-ui`에 병합하고, 숨긴 홈 보조 섹션 기준으로 Playwright 기대값을 정리했다. 검증: web build, web test 61개, OpenAPI 49 paths, backend test, backend bootJar, docker compose config 통과.
+- [x] 2026-06-30 구매 컨설팅 개선 기준 `POST /api/ai/build-chat`, `PUT /api/quote-drafts/current/apply-ai-build`, 홈 AI 추천상품 탭, 챗봇 대화 세션, 셀프 견적 batch 적용, 구매 컨설팅 아이콘 자산, 관련 backend/frontend 테스트와 OpenAPI 계약 변경 범위를 확인했다.
 
 ## 우선순위
 
