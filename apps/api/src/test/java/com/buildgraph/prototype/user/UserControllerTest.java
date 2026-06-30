@@ -2,6 +2,7 @@ package com.buildgraph.prototype.user;
 
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -59,6 +60,35 @@ class UserControllerTest {
     }
 
     @Test
+    void loginReturnsValidationErrorForInvalidRequest() throws Exception {
+        mockMvc.perform(post("/api/auth/login")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "email": "not-an-email",
+                                  "password": "passw0rd!"
+                                }
+                                """))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("VALIDATION_ERROR"))
+                .andExpect(jsonPath("$.message").value("요청 값이 올바르지 않습니다."));
+
+        verifyNoInteractions(userQueryService);
+    }
+
+    @Test
+    void loginReturnsValidationErrorForMalformedJson() throws Exception {
+        mockMvc.perform(post("/api/auth/login")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("VALIDATION_ERROR"))
+                .andExpect(jsonPath("$.message").value("요청 값이 올바르지 않습니다."));
+
+        verifyNoInteractions(userQueryService);
+    }
+
+    @Test
     void refreshReturnsNewTokens() throws Exception {
         when(userQueryService.refresh("opaque-refresh-token")).thenReturn(Map.of(
                 "accessToken", "new-jwt-access-token",
@@ -77,6 +107,34 @@ class UserControllerTest {
                 .andExpect(jsonPath("$.refreshToken").value("new-opaque-refresh-token"));
 
         verify(userQueryService).refresh("opaque-refresh-token");
+    }
+
+    @Test
+    void logoutReturnsNoContent() throws Exception {
+        mockMvc.perform(post("/api/auth/logout")
+                        .header("Authorization", "Bearer jwt-access-token")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "refreshToken": "opaque-refresh-token"
+                                }
+                                """))
+                .andExpect(status().isNoContent());
+
+        verify(userQueryService).logout("Bearer jwt-access-token", "opaque-refresh-token");
+    }
+
+    @Test
+    void logoutReturnsValidationErrorForMissingRefreshToken() throws Exception {
+        mockMvc.perform(post("/api/auth/logout")
+                        .header("Authorization", "Bearer jwt-access-token")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{}"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("VALIDATION_ERROR"))
+                .andExpect(jsonPath("$.message").value("요청 값이 올바르지 않습니다."));
+
+        verifyNoInteractions(userQueryService);
     }
 
     @Test

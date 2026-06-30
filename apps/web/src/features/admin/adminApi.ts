@@ -41,6 +41,24 @@ export type ToolInvocation = {
   createdAt?: string;
 };
 
+export type LlmGeneration = {
+  id: string;
+  aiProfile: string;
+  provider: string;
+  model: string;
+  reasoningEffort?: string | null;
+  useCase: string;
+  status: string;
+  schemaName?: string | null;
+  latencyMs?: number | null;
+  inputTokens?: number | null;
+  outputTokens?: number | null;
+  totalTokens?: number | null;
+  schemaValid?: boolean;
+  errorCode?: string | null;
+  createdAt?: string;
+};
+
 export type AgentSessionDetail = {
   id: string;
   status: string;
@@ -49,6 +67,7 @@ export type AgentSessionDetail = {
   purpose?: string;
   toolInvocations: ToolInvocation[];
   evidenceIds: string[];
+  llmGenerations?: LlmGeneration[];
 };
 
 export type RagEvidenceDetail = {

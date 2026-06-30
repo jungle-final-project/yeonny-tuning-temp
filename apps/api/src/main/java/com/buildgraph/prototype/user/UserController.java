@@ -33,6 +33,15 @@ public class UserController {
         return userQueryService.refresh(request.refreshToken());
     }
 
+    @PostMapping("/auth/logout")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    void logout(
+            @RequestHeader(value = "Authorization", required = false) String authorization,
+            @Valid @RequestBody RefreshRequest request
+    ) {
+        userQueryService.logout(authorization, request.refreshToken());
+    }
+
     @PostMapping("/users")
     @ResponseStatus(HttpStatus.CREATED)
     Map<String, Object> signup(@Valid @RequestBody SignupRequest request) {

@@ -261,10 +261,43 @@ public class AgentRagRetrievalService {
         Set<String> result = new LinkedHashSet<>();
         for (String token : TOKEN_SPLIT.split(value)) {
             if (token.length() >= 2) {
-                result.add(token.toLowerCase(Locale.ROOT));
+                String normalized = token.toLowerCase(Locale.ROOT);
+                result.add(normalized);
+                result.addAll(expandedTokens(normalized));
             }
         }
         return new ArrayList<>(result);
+    }
+
+    private static List<String> expandedTokens(String token) {
+        if (containsAny(token, "온도", "발열", "열", "뜨거", "스로틀")) {
+            return List.of("thermal", "throttling", "gpu", "fan", "airflow", "먼지", "팬");
+        }
+        if (containsAny(token, "프레임", "렉", "끊김", "드랍", "급락", "frametime", "fps")) {
+            return List.of("frame", "drop", "spike", "프레임", "급락", "튐");
+        }
+        if (containsAny(token, "드라이버", "블루스크린", "멈춤", "튕김", "nvlddmkm", "crash")) {
+            return List.of("driver", "event", "log", "crash", "display", "오류");
+        }
+        if (containsAny(token, "램", "ram", "메모리", "크롬", "ide", "렌더링")) {
+            return List.of("memory", "ram", "pressure", "storage", "디스크");
+        }
+        if (containsAny(token, "ssd", "디스크", "로딩", "저장장치", "100퍼")) {
+            return List.of("storage", "disk", "queue", "loading", "ssd");
+        }
+        if (containsAny(token, "재부팅", "전원", "꺼짐", "파워", "psu", "다운")) {
+            return List.of("power", "psu", "connector", "transient", "전력");
+        }
+        return List.of();
+    }
+
+    private static boolean containsAny(String token, String... needles) {
+        for (String needle : needles) {
+            if (token.contains(needle)) {
+                return true;
+            }
+        }
+        return false;
     }
 
     private static Map<String, Object> metadata(Map<String, Object> row) {

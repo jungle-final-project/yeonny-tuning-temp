@@ -3,14 +3,15 @@
 @tailwind utilities;
 
 :root {
-  color: #16202f;
-  background: #e9eef5;
+  color: #111827;
+  background: #f6f7f9;
   font-family: "Noto Sans KR", "Pretendard", system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
 }
 
 body {
-  min-width: 1280px;
+  min-width: 0;
   margin: 0;
+  background: #f6f7f9;
 }
 
 button,
@@ -21,15 +22,21 @@ textarea {
 }
 
 .screen-shell {
-  width: 1440px;
-  min-height: 1024px;
-  margin: 0 auto;
-  background: #e9eef5;
+  min-height: 100vh;
+background:
+  linear-gradient(
+    180deg,
+    #ffffff 0,
+    #ffffff 112px,
+    #edf7ff 112px,
+    #f6fbff 55%,
+    #f3f6fa 100%
+  );
 }
 
 .panel {
-  border: 1px solid #d8e2ef;
-  border-radius: 6px;
+  border: 1px solid #e4e7ec;
+  border-radius: 10px;
   background: white;
-  box-shadow: 0 8px 24px rgba(15, 23, 42, 0.06);
+  box-shadow: 0 10px 26px rgba(17, 24, 39, 0.05);
 }

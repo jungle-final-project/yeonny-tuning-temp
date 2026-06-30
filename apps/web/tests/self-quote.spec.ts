@@ -211,6 +211,8 @@ test('opens cooler internal assets from home category link', async ({ page }) =>
   });
 
   await page.goto('/');
+  await page.getByRole('textbox', { name: '원하는 PC 사양 입력' }).fill('저소음 작업용 PC 추천해줘');
+  await page.getByRole('button', { name: '견적 상담 시작' }).click();
   await page.getByRole('link', { name: '쿨러' }).click();
 
   await expect(page).toHaveURL('/self-quote?category=COOLER');
@@ -263,6 +265,8 @@ test('opens GPU internal assets from home category link', async ({ page }) => {
   });
 
   await page.goto('/');
+  await page.getByRole('textbox', { name: '원하는 PC 사양 입력' }).fill('QHD 게임용 PC 추천해줘');
+  await page.getByRole('button', { name: '견적 상담 시작' }).click();
   await page.getByRole('link', { name: 'GPU' }).click();
 
   await expect(page).toHaveURL('/self-quote?category=GPU');
@@ -336,6 +340,107 @@ test('paginates self quote assets in 20 item pages', async ({ page }) => {
   await expect(page.getByText('페이지 2 / 3')).toBeVisible();
   await expect(page.getByText('페이징 파워 21', { exact: true })).toBeVisible();
   expect(requestedPages).toContain('1');
+});
+
+test('keeps self quote shopping workspace usable on mobile width', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.addInitScript(() => {
+    localStorage.setItem('buildgraph.token', 'jwt-user-token');
+  });
+
+  await page.route('**/api/quote-drafts/current**', async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        id: 'draft-mobile-test',
+        status: 'ACTIVE',
+        name: '셀프 견적',
+        items: [
+          {
+            id: 'draft-item-mobile-test',
+            partId: 'part-mobile-gpu-test',
+            category: 'GPU',
+            name: '모바일 RTX 테스트',
+            manufacturer: 'NVIDIA',
+            quantity: 1,
+            unitPriceAtAdd: 890000,
+            currentPrice: 890000,
+            lineTotal: 890000,
+            attributes: {}
+          }
+        ],
+        totalPrice: 890000,
+        itemCount: 1
+      })
+    });
+  });
+
+  await page.route('**/api/parts**', async (route) => {
+    const url = new URL(route.request().url());
+    if (url.pathname.includes('/price-history')) {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          partId: 'part-mobile-gpu-test',
+          partName: '모바일 RTX 테스트',
+          currentPrice: 890000,
+          days: 3650,
+          source: 'NAVER_SHOPPING_SEARCH',
+          items: [{ price: 890000, source: 'NAVER_SHOPPING_SEARCH', collectedAt: '2026-06-29T00:00:00Z' }],
+          summary: {
+            sampleCount: 1,
+            currentPrice: 890000,
+            minPrice: 890000,
+            maxPrice: 890000,
+            firstPrice: 890000,
+            lastPrice: 890000,
+            changeAmount: 0,
+            changeRatePercent: 0
+          }
+        })
+      });
+      return;
+    }
+
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        items: [
+          {
+            id: 'part-mobile-gpu-test',
+            category: 'GPU',
+            name: '모바일 RTX 테스트',
+            manufacturer: 'NVIDIA',
+            price: 890000,
+            status: 'ACTIVE',
+            attributes: { shortSpec: 'QHD gaming mobile test' },
+            externalOffer: {
+              imageUrl: 'https://example.test/mobile-gpu.png',
+              supplierName: '모바일테스트몰',
+              offerUrl: 'https://example.test/mobile-gpu',
+              lowPrice: 890000,
+              source: 'NAVER_SHOPPING_SEARCH'
+            }
+          }
+        ],
+        page: 0,
+        size: 20,
+        total: 1
+      })
+    });
+  });
+
+  await page.goto('/self-quote?category=GPU');
+
+  await expect(page.getByText('GPU 부품 목록')).toBeVisible();
+  await expect(page.getByRole('link', { name: '모바일 RTX 테스트', exact: true })).toBeVisible();
+  await expect(page.getByRole('heading', { name: '견적 장바구니', exact: true })).toBeVisible();
+
+  const hasBodyOverflow = await page.evaluate(() => document.documentElement.scrollWidth > window.innerWidth + 1);
+  expect(hasBodyOverflow).toBe(false);
 });
 
 test('updates quantity only for repeatable quote draft categories', async ({ page }) => {

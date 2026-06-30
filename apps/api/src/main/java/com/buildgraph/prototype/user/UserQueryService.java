@@ -95,6 +95,16 @@ public class UserQueryService {
         );
     }
 
+    public void logout(String authorization, String refreshToken) {
+        currentUserService.requireUser(authorization);
+        if (refreshToken == null || refreshToken.isBlank()) {
+            throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Invalid refresh token.");
+        }
+
+        Map<String, Object> tokenRow = findActiveRefreshToken(refreshTokenService.hash(refreshToken));
+        revokeRefreshToken(longValue(tokenRow, "id"));
+    }
+
     private Map<String, Object> findByEmail(String email) {
         return findRowsByEmail(email)
                 .stream()

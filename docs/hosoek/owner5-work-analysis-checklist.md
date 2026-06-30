@@ -26,8 +26,8 @@ Figma 기준으로 5번이 직접 맡아야 할 화면은 `153:1880 STATE-15 ADM
 | Health | 완료 | `/api/health` DB probe, 503 DOWN, 테스트/OpenAPI 완료. 2026-06-29 runtime 응답 `{"status":"UP","database":"UP"}` 확인 완료 |
 | Docker Compose | 완료 | `docker compose config` 완료. Postgres init SQL 주입 제거 완료. `docker compose up --build` 기준 web/api/postgres/redis/rabbitmq/mailpit 기동과 health 응답 확인 완료 |
 | Redis | 완료 | Sprint 1 smoke 완료: container `Up`, `redis-cli ping`=`PONG`. 실제 기능 사용은 1번 OAuth one-time code 또는 3번/공통 cache·quota 구현 후 연동 |
-| RabbitMQ | 완료 | Sprint 1 smoke 완료: container `Up`, management API 200, queue 0개 확인. 실제 publish/consume은 3번 Agent job 또는 2번 price job 구현 후 연동 |
-| Mailpit | 완료 | Sprint 1 smoke 완료: container `Up`, UI/API 200, SMTP 1025 연결 확인. 실제 가격 알림 메일은 2번 price alert email 구현 후 연동 |
+| RabbitMQ | 완료 | Sprint 1 smoke 완료: container `Up`, management API 200, queue 0개 확인. 실제 작업 등록/처리는 3번 AI 견적 추천 실행 작업 또는 2번 부품 가격 수집 작업 구현 후 연동 |
+| Mailpit | 완료 | Sprint 1 smoke 완료: container `Up`, UI/API 200, SMTP 1025 연결 확인. 실제 가격 알림 메일은 2번 가격 알림 메일 구현 후 연동 |
 | CI/GitHub Actions | 완료 | frontend build/test, OpenAPI, backend bootJar, compose config, health smoke 구성 완료 |
 | k6/부하 테스트 | 진행중 | `infra/k6/smoke.js` skeleton과 `docs/reports/k6-smoke-report-template.md` 있음. 300명/1000명 부하 시나리오 확장은 별도 작업 |
 | 테스트/검증 | 완료 | `npm build/test`, `gradlew test/bootJar`, OpenAPI validation, compose config, Docker Compose runtime health 검증 완료 |
@@ -65,8 +65,8 @@ Figma 기준으로 5번이 직접 맡아야 할 화면은 `153:1880 STATE-15 ADM
 | --- | --- | --- |
 | Docker Compose | 완료 | `docker compose config`, `docker compose up --build`, web/API/postgres/redis/rabbitmq/mailpit 기동, health 응답 확인 완료 |
 | Redis | 완료 | Sprint 1 smoke 완료. 실제 사용 후보는 OAuth one-time code, LLM/RAG cache, quota, job state |
-| RabbitMQ | 완료 | Sprint 1 smoke 완료. queue naming 초안: `agent.jobs`, `price.jobs`, `mail.jobs` |
-| Mailpit | 완료 | Sprint 1 smoke 완료. 실제 사용 후보는 price alert email |
+| RabbitMQ | 완료 | Sprint 1 smoke 완료. 작업 대기열 이름 초안: `agent.jobs`, `price.jobs`, `mail.jobs` |
+| Mailpit | 완료 | Sprint 1 smoke 완료. 실제 사용 후보는 가격 알림 메일 |
 | CI/GitHub Actions | 완료 | web build/test, OpenAPI 검증, API test/bootJar, compose config, Docker build, API runtime smoke 구성 완료 |
 | k6/부하 테스트 | 진행중 | smoke script와 smoke report template 완료. 300명/1000명 부하 시나리오 확장은 별도 작업 |
 | 테스트/검증 | 완료 | frontend/backend/OpenAPI/compose/runtime health 검증 기록 완료 |
@@ -290,7 +290,7 @@ Figma 기준으로 5번이 직접 맡아야 할 화면은 `153:1880 STATE-15 ADM
 - [x] `153:1880` 기준으로 degraded alert frame을 추가한다.
 - [x] metric card 4개를 실제 API/계약에 맞게 다시 배치한다.
 - [x] `최근 Agent 세션` 영역은 3번 데이터와 경계를 확인한 뒤 summary 수준으로만 둔다.
-- [x] `운영 작업` 영역은 price job, email, mock-worker, k6-report 중 어떤 값을 5번이 표시할지 결정한다.
+- [x] `운영 작업` 영역은 부품 가격 수집 작업, 메일 발송 확인, Mock Worker, k6 Smoke 리포트 중 어떤 값을 5번이 표시할지 결정한다.
 - [x] `관리자 할 일` table은 각 도메인 owner 데이터가 필요한지 확인한다.
 - [x] 5번 단독으로 만들 수 없는 도메인 데이터는 mock summary 또는 link frame으로만 둔다.
 
@@ -371,8 +371,8 @@ AdminShell nav 분석 결과:
 
 - [x] Postgres Docker init SQL 주입을 제거해 Flyway schema history 충돌 원인을 없앤다.
 - [x] Redis를 Sprint 1에서 연결 확인만 할지 실제 기능에 쓸지 결정한다. 결정: Sprint 1은 연결 확인과 사용 정책 문서화까지만 진행하고, 실제 사용은 OAuth/cache/quota/job state 구현 PR에서 연동한다.
-- [x] RabbitMQ를 Agent job, price job, mail job 중 어디까지 검증할지 결정한다. 결정: Sprint 1은 기동/관리 화면/connection smoke와 queue naming 초안까지만 진행하고, 실제 publish/consume은 3번 Agent job 또는 2번 price job 구현 PR에서 연동한다.
-- [x] Mailpit은 실행 확인만 할지 실제 메일 발송까지 할지 결정한다. 결정: Sprint 1은 UI/SMTP 확인과 test mail smoke 방식 정리까지 진행하고, 실제 가격 알림 메일은 2번 price alert email 구현 PR에서 연동한다.
+- [x] RabbitMQ를 AI 견적 추천 실행 작업, 부품 가격 수집 작업, 메일 발송 작업 중 어디까지 검증할지 결정한다. 결정: Sprint 1은 기동/관리 화면/connection smoke와 작업 대기열 이름 초안까지만 진행하고, 실제 작업 등록/처리는 3번 AI 견적 추천 실행 작업 또는 2번 부품 가격 수집 작업 구현 PR에서 연동한다.
+- [x] Mailpit은 실행 확인만 할지 실제 메일 발송까지 할지 결정한다. 결정: Sprint 1은 UI/SMTP 확인과 test mail smoke 방식 정리까지 진행하고, 실제 가격 알림 메일은 2번 가격 알림 메일 구현 PR에서 연동한다.
 
 #### Redis Sprint 1 작업
 
@@ -393,12 +393,13 @@ AdminShell nav 분석 결과:
 - [x] `apps/api/build.gradle`에 `spring-boot-starter-amqp` 의존성이 있음을 확인했다.
 - [x] `docker compose up --build` 기준 `buildgraph-rabbitmq` 컨테이너가 `Up` 상태임을 확인했다.
 - [x] RabbitMQ 관리 화면 접속을 확인한다. 주소: `http://localhost:15672`, 계정: `buildgraph` / `buildgraph`. 확인: management API `/api/overview`가 200으로 응답했다.
-- [x] RabbitMQ connection smoke 방식을 정한다. 결정: Sprint 1은 management API 확인과 `/api/queues` 조회로 끝내고 테스트용 queue declare는 하지 않는다.
-- [x] queue naming 초안을 문서화한다. 초안: `agent.jobs`, `price.jobs`, `mail.jobs`.
-- [x] Sprint 1에서는 실제 consumer/worker를 임의 구현하지 않는다고 기록한다.
+- [x] RabbitMQ connection smoke 방식을 정한다. 결정: Sprint 1은 management API 확인과 `/api/queues` 조회로 끝내고 테스트용 작업 대기열 선언은 하지 않는다.
+- [x] 작업 대기열 이름 초안을 문서화한다. 초안: `agent.jobs`, `price.jobs`, `mail.jobs`.
+- [x] Sprint 1에서는 실제 작업 처리 worker를 임의 구현하지 않는다고 기록한다.
 - [x] 현재 RabbitMQ queue가 없는 상태를 확인했다. 결과: `/api/queues` 응답 `[]`.
-- [ ] 3번이 Agent job을 구현하면 Agent 상태 전이 `QUEUED -> RUNNING -> ...`와 queue ack/retry 정책을 같이 검토한다.
-- [ ] 2번이 price job을 구현하면 `POST /api/admin/price-jobs/run` 이후 queue publish, 중복 실행 409, worker 실패 처리 정책을 같이 검토한다.
+- [ ] 3번이 AI 견적 추천 실행 작업을 구현하면 추천 상태 전이 `QUEUED(대기) -> RUNNING(처리 중) -> RAG_SEARCHED(근거 검색 완료) -> TOOLS_CALLED(검증 완료) -> SUMMARY_READY(요약 완료) -> SUCCEEDED(완료)`와 `FALLBACK_READY`, `FAILED`, `CANCELLED` 처리 기준을 같이 검토한다.
+- [ ] 3번이 AI 견적 추천 실행 작업을 RabbitMQ에 연결하면 `agent.jobs` 작업 등록, 작업 처리기 성공 확인(ack), 일시 실패 재시도, 최종 실패 기록 정책을 같이 검토한다.
+- [ ] 2번이 부품 가격 수집 작업을 구현하면 `POST /api/admin/price-jobs/run` 이후 `price_jobs` 생성, `price.jobs` 작업 등록, 이미 실행 중인 가격 수집 중복 요청 409, 작업 처리기 실패 시 `FAILED`와 `error_summary` 기록 정책을 같이 검토한다.
 - [ ] mail job이 필요해지면 가격 알림 메일과 연결할지, RabbitMQ 없이 동기 smoke로 둘지 결정한다.
 
 #### Mailpit Sprint 1 작업
@@ -409,10 +410,10 @@ AdminShell nav 분석 결과:
 - [x] `docker compose up --build` 기준 `buildgraph-mailpit` 컨테이너가 `Up` 상태임을 확인했다.
 - [x] Mailpit UI 접속을 확인한다. 주소: `http://localhost:8025`. 확인: HTML title `Mailpit` 응답.
 - [x] Mailpit API 접속을 확인했다. 결과: `/api/v1/messages`가 200으로 응답하고 현재 message count는 0이다.
-- [x] SMTP smoke 방식을 정한다. 결정: Sprint 1은 SMTP 포트 연결 확인까지만 수행하고, 실제 test mail 발송은 price alert email 구현 전까지 보류한다.
+- [x] SMTP smoke 방식을 정한다. 결정: Sprint 1은 SMTP 포트 연결 확인까지만 수행하고, 실제 test mail 발송은 가격 알림 메일 구현 전까지 보류한다.
 - [x] SMTP 포트 연결을 확인했다. 결과: `nc -z localhost 1025` 성공.
 - [x] Sprint 1에서는 실제 사용자 메일 발송 로직을 5번이 임의 구현하지 않는다고 기록한다.
-- [ ] 2번이 price alert email을 구현하면 Mailpit으로 목표가 알림 메일 수신 여부를 확인한다.
+- [ ] 2번이 가격 알림 메일을 구현하면 Mailpit으로 목표가 알림 메일 수신 여부를 확인한다.
 - [ ] 1번이 회원가입 인증 메일을 요구하면 Auth owner와 API 계약을 먼저 확정한다.
 - [x] `docker compose up --build`로 전체 실행을 확인한다. 확인 범위: 컨테이너 기동, web/API 포트 응답, `/api/health`, Vite proxy health, 관리자 JWT 응답
 - [x] k6 smoke와 실제 부하 테스트 시나리오를 분리한다. 결정: Sprint 1 k6는 `infra/k6/smoke.js`와 `docs/reports/k6-smoke-report-template.md` 기준의 smoke 결과 기록으로 두고, 300명/1000명 부하는 별도 확장 작업으로 분리한다.
@@ -461,6 +462,18 @@ AdminShell nav 분석 결과:
 - [x] `README.md`와 `ROUTE_OWNERSHIP.md`는 Auth/User 구현 owner 1번 기준과 2번의 parts/catalog refresh 확장 기준을 함께 반영했다.
 - [x] 충돌 marker 제거 후 `npm --prefix apps/web run build`와 `git diff --check`가 통과했다.
 
+#### Home UI 커밋 메시지 요청 기록
+
+- [x] 2026-06-30 기준 홈 화면 command center 개편, 공통 header/nav/screen 반응형 조정, body 최소 폭 제거, 홈 Playwright 테스트 추가 범위를 확인했다.
+- [x] 커밋 메시지에는 사용자 홈 화면 경험과 모바일 overflow 방지 검증을 함께 반영한다.
+- [x] 2026-06-30 추가 변경 기준 홈 화면 자연어 입력, 추천 모드 감지, 세션 저장, follow-up 상담, draggable assistant bar, 로컬 추천 카드 갱신 테스트 범위를 확인했다.
+- [x] 커밋 메시지에는 백엔드 추천 완성이 아니라 프론트 로컬 상담 시뮬레이션 흐름임을 명확히 반영한다.
+- [x] 2026-06-30 홈 챗봇 UX 개선 기준 assistant 답변 영역, 용도/해상도 칩 위저드, 추천 컴퓨터 카드 동시 갱신, 직접 입력 보조 흐름을 확인했다.
+- [x] 검증 결과: `./node_modules/.bin/tsc -b`, `npm --prefix apps/web run test -- home.spec.ts`, `npm --prefix apps/web run build` 통과.
+- [x] 2026-06-30 추가 UI 변경 기준 홈 첫 화면 추천 견적/인기 부품 랭킹, 셀프 견적 쇼핑 workspace, 공통 commerce 색상/패널/테이블/헤더 스타일, 모바일 셀프 견적 테스트 범위를 확인했다.
+- [x] 2026-06-30 추가 변경 기준 홈 화면의 빠른 쇼핑/상담 요약 보조 섹션 숨김과 Vite 개발 서버 API 프록시 대상 환경변수 분리 범위를 확인했다.
+- [x] 2026-06-30 `origin/main` 최신 변경을 `feat/improve-home-ui`에 병합하고, 숨긴 홈 보조 섹션 기준으로 Playwright 기대값을 정리했다. 검증: web build, web test 61개, OpenAPI 49 paths, backend test, backend bootJar, docker compose config 통과.
+
 ## 우선순위
 
 ### P0
@@ -487,7 +500,7 @@ AdminShell nav 분석 결과:
 
 ### P2
 
-- [ ] Redis/RabbitMQ/Mailpit 실제 기능 연동. 조건: OAuth one-time code, Agent job, price job, price alert email 중 해당 owner 구현 PR 발생
+- [ ] Redis/RabbitMQ/Mailpit 실제 기능 연동. 조건: OAuth one-time code, AI 견적 추천 실행 작업, 부품 가격 수집 작업, 가격 알림 메일 중 해당 owner 구현 PR 발생
 - [ ] 부하 테스트 300명/1000명 시나리오 확장
 - [ ] 1번 refresh/JWT 구현 후 5번 공통 API client/admin guard 연동 고도화
 
@@ -505,9 +518,9 @@ AdminShell nav 분석 결과:
 
 3. **Redis/RabbitMQ/Mailpit 실제 기능 연동 대기**
    - Sprint 1 smoke는 완료했다. Redis `PONG`, RabbitMQ management API 200, Mailpit UI/API/SMTP 응답 확인.
-   - RabbitMQ queue naming 초안은 `agent.jobs`, `price.jobs`, `mail.jobs`로 기록했다.
-   - 실제 Redis key schema, RabbitMQ queue declare/consumer, Mailpit 메일 발송 로직은 owner 구현 전까지 만들지 않는다.
-   - 1번 OAuth one-time code, 3번 Agent job, 2번 price job 또는 price alert email 구현 PR이 나오면 5번이 인프라 연동을 검토한다.
+   - RabbitMQ 작업 대기열 이름 초안은 `agent.jobs`, `price.jobs`, `mail.jobs`로 기록했다.
+   - 실제 Redis key schema, RabbitMQ 작업 대기열 선언/작업 처리기, Mailpit 메일 발송 로직은 owner 구현 전까지 만들지 않는다.
+   - 1번 OAuth one-time code, 3번 AI 견적 추천 실행 작업, 2번 부품 가격 수집 작업 또는 가격 알림 메일 구현 PR이 나오면 5번이 인프라 연동을 검토한다.
 
 4. **k6 확장 시나리오 분리**
    - 현재 완료된 것은 `infra/k6/smoke.js`와 `docs/reports/k6-smoke-report-template.md` 기준의 smoke 결과 기록이다.

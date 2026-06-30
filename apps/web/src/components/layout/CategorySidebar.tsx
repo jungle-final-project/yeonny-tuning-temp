@@ -31,10 +31,10 @@ export function CategorySidebar({
   onSelect?: (value: string) => void;
 }) {
   return (
-    <aside className="panel w-[216px] p-4">
-      <div className="mb-1 text-base font-bold">PC 카테고리</div>
-      <div className="mb-4 text-xs text-slate-500">프로젝트 범위만 표시</div>
-      <div className="space-y-2">
+    <aside className="panel w-full p-4 xl:w-[216px]">
+      <div className="mb-1 text-base font-black text-commerce-ink">PC 카테고리</div>
+      <div className="mb-4 text-xs font-medium text-slate-500">부품별 쇼핑 필터</div>
+      <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 xl:block xl:space-y-2">
         {items.map((item, idx) => {
           const label = typeof item === 'string' ? item : item.label;
           const value = typeof item === 'string' ? item : item.value;
@@ -46,7 +46,7 @@ export function CategorySidebar({
                 key={label}
                 type="button"
                 onClick={() => onSelect(value)}
-                className={`block w-full rounded border px-3 py-3 text-left text-sm hover:border-brand-blue hover:bg-brand-pale ${active ? 'border-brand-blue bg-brand-pale font-bold text-brand-blue' : 'border-slate-200 bg-slate-50 text-slate-900'}`}
+                className={`block min-h-11 w-full rounded-md border px-3 py-2 text-left text-sm transition hover:border-commerce-ink hover:bg-white ${active ? 'border-commerce-ink bg-commerce-ink font-black text-white' : 'border-commerce-line bg-slate-50 font-bold text-slate-800'}`}
               >
                 {label}
               </button>
@@ -54,7 +54,7 @@ export function CategorySidebar({
           }
 
           return (
-            <Link key={label} to={categoryRoutes[label] ?? (idx === 0 ? '/requirements/new' : idx === 1 ? '/self-quote' : '/')} className="block rounded border border-slate-200 bg-slate-50 px-3 py-2 text-sm hover:border-brand-blue hover:bg-brand-pale">
+            <Link key={label} to={categoryRoutes[label] ?? (idx === 0 ? '/requirements/new' : idx === 1 ? '/self-quote' : '/')} className="block min-h-11 rounded-md border border-commerce-line bg-slate-50 px-3 py-2 text-sm font-bold text-slate-800 hover:border-commerce-ink hover:bg-white">
               {label}
             </Link>
           );

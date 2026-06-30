@@ -2,7 +2,7 @@ import { useQueries, useQuery } from '@tanstack/react-query';
 import { Link, useParams } from 'react-router-dom';
 import { AdminShell, DataTable, Panel, StateMessage, StatusBadge } from '../../../components/ui';
 import { getAgentSession, getRagEvidence } from '../adminApi';
-import type { AgentSessionDetail, RagEvidenceDetail, ToolInvocation } from '../adminApi';
+import type { AgentSessionDetail, LlmGeneration, RagEvidenceDetail, ToolInvocation } from '../adminApi';
 
 export function AgentSessionAdminPage() {
   const { id = '00000000-0000-4000-8000-000000003001' } = useParams();
@@ -62,6 +62,13 @@ export function AgentSessionAdminPage() {
             <StateMessage type="info" title="Tool 호출 없음" body="이 Agent 세션에 연결된 Tool 호출 기록이 없습니다." />
           )}
         </Panel>
+        <Panel title="LLM 생성 기록">
+          {session.llmGenerations?.length ? (
+            <DataTable columns={['id', 'profile', 'model', 'status', 'schema', 'latency', 'tokens']} rows={llmRows(session.llmGenerations)} />
+          ) : (
+            <StateMessage type="info" title="LLM 호출 없음" body="이 Agent 세션에 연결된 LLM generation 기록이 없습니다." />
+          )}
+        </Panel>
         <Panel title="RAG Evidence">
           {session.evidenceIds.length ? (
             <DataTable columns={['id', 'sourceId', 'summary', 'score', 'metadata']} rows={evidenceRows(session.evidenceIds, evidenceQueries.map((query) => query.data))} />
@@ -93,6 +100,18 @@ function toolRows(toolInvocations: ToolInvocation[]) {
     confidence: <StatusBadge status={invocation.confidence} />,
     latency: invocation.latencyMs == null ? '-' : `${invocation.latencyMs}ms`,
     summary: invocation.summary
+  }));
+}
+
+function llmRows(generations: LlmGeneration[]) {
+  return generations.map((generation) => ({
+    id: shortId(generation.id),
+    profile: generation.aiProfile,
+    model: `${generation.model}${generation.reasoningEffort ? ` / ${generation.reasoningEffort}` : ''}`,
+    status: <StatusBadge status={generation.status} />,
+    schema: generation.schemaValid ? 'valid' : generation.errorCode ?? 'invalid',
+    latency: generation.latencyMs == null ? '-' : `${generation.latencyMs}ms`,
+    tokens: generation.totalTokens == null ? '-' : String(generation.totalTokens)
   }));
 }
 

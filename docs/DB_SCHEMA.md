@@ -43,6 +43,7 @@
 - `as_tickets`
 - `as_chat_sessions`
 - `as_chat_messages`
+- `llm_generations`
 
 `deleted_at` 적용 테이블:
 
@@ -880,6 +881,51 @@ MVP 기준 결정값:
 - LLM JSON 계약 실패 시 assistant message는 저장하지 않고 연결된 `agent_sessions`를 `FAILED`로 종료한다.
 - `as_tickets.cause_candidates`, `as_tickets.upgrade_candidates`는 이 테이블 저장 과정에서 수정하지 않는다.
 
+### llm_generations
+
+목적: AS Chat 등 Agent 내부 LLM 호출의 profile, model, latency, token, schema 검증 결과를 저장한다.
+
+Owner: 3번
+
+| 컬럼명 | 타입 | nullable | FK | 설명 |
+|---|---|---:|---|---|
+| `id` | `BIGINT` | no | - | 내부 PK |
+| `public_id` | `UUID` | no | - | 외부 ID |
+| `agent_session_id` | `BIGINT` | no | `agent_sessions.id` | LLM 호출이 속한 Agent 세션 |
+| `ai_profile` | `VARCHAR(60)` | no | - | `AS_CHAT_FAST`, `AS_CHAT_NANO_FAST`, `AS_CHAT_BALANCED`, `AS_CHAT_HIGH_QUALITY` |
+| `provider` | `VARCHAR(40)` | no | - | `openai` |
+| `model` | `VARCHAR(120)` | no | - | 실제 호출 모델 |
+| `reasoning_effort` | `VARCHAR(30)` | yes | - | reasoning effort |
+| `use_case` | `VARCHAR(60)` | no | - | `AS_CHAT` |
+| `status` | `VARCHAR(30)` | no | - | `SUCCESS`, `FAILED` |
+| `schema_name` | `VARCHAR(120)` | yes | - | Structured Outputs schema 이름 |
+| `rag_top_k` | `INTEGER` | no | - | 해당 profile의 RAG 근거 수 |
+| `prompt_version` | `VARCHAR(120)` | no | - | prompt/profile 버전 |
+| `latency_ms` | `BIGINT` | yes | - | LLM 호출 또는 실패까지 걸린 시간 |
+| `input_tokens` | `INTEGER` | yes | - | provider usage input/prompt tokens |
+| `output_tokens` | `INTEGER` | yes | - | provider usage output/candidate tokens |
+| `total_tokens` | `INTEGER` | yes | - | provider usage total tokens |
+| `schema_valid` | `BOOLEAN` | no | - | 응답 schema 검증 성공 여부 |
+| `error_code` | `VARCHAR(80)` | yes | - | 실패 코드 |
+| `error_message` | `TEXT` | yes | - | 실패 요약 |
+| `request_metadata` | `JSONB` | no | - | promptVersion, ragTopK, maxOutputTokens, recentMessageLimit 등 비민감 메타데이터 |
+| `created_at` | `TIMESTAMPTZ` | no | - | 생성 시각 |
+
+Index:
+
+- unique: `llm_generations.public_id`
+- index: `llm_generations.agent_session_id`
+- index: `(ai_profile, created_at)`
+- index: `(status, created_at)`
+- index: `(model, created_at)`
+
+MVP 기준 결정값:
+
+- prompt 원문, API key, 원본 로그 전문은 저장하지 않는다.
+- AS Chat 사용자 요청 1회에는 기본적으로 profile 1개만 실행한다.
+- profile별 비교는 `tools/benchmark_as_chat_profiles.py`가 내부 검증 목적으로 순차 실행한다.
+- 사용자 화면에는 `ai_profile`, token, latency를 표시하지 않는다. 관리자 상세와 보고서에서만 확인한다.
+
 ### admin_audit_logs
 
 목적: 관리자 mutation과 주요 운영 이벤트를 기록한다.
@@ -1335,6 +1381,9 @@ V28__quote_drafts.sql
 V29__quote_draft_category_policy.sql
 V30__auth_seed_password_hashes.sql
 V31__as_chat_sessions.sql
+V32__llm_generations.sql
+V34__llm_generations_nano_profile.sql
+V35__correct_corsair_ram_offer_seed.sql
 ```
 
 현재 저장소에는 위 순서의 Flyway migration이 반영되어 있다. 기존 PostgreSQL volume이 남아 있으면 새 migration과 seed가 다시 실행되지 않으므로, 공통 DB를 처음부터 검증할 때는 `docker compose down -v` 후 `docker compose up --build`를 사용한다.

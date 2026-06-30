@@ -39,7 +39,48 @@ agent:
 openai:
   base-url: ${OPENAI_BASE_URL:https://api.openai.com/v1}
   api-key: ${OPENAI_API_KEY:}
-  model: ${OPENAI_MODEL:gpt-4.1-mini}
+  model: ${OPENAI_MODEL:gpt-5.5}
+  reasoning-effort: ${OPENAI_REASONING_EFFORT:medium}
+
+ai:
+  as-chat:
+    default-profile: ${AS_CHAT_DEFAULT_PROFILE:AS_CHAT_FAST}
+    fast:
+      model: ${AS_CHAT_FAST_MODEL:gpt-5.5}
+      reasoning-effort: ${AS_CHAT_FAST_REASONING_EFFORT:low}
+      rag-top-k: ${AS_CHAT_FAST_RAG_TOP_K:2}
+      max-output-tokens: ${AS_CHAT_FAST_MAX_OUTPUT_TOKENS:900}
+      recent-message-limit: ${AS_CHAT_FAST_RECENT_MESSAGE_LIMIT:3}
+      include-evidence-chunk-text: ${AS_CHAT_FAST_INCLUDE_EVIDENCE_CHUNK_TEXT:false}
+      include-tool-result-payload: ${AS_CHAT_FAST_INCLUDE_TOOL_RESULT_PAYLOAD:false}
+      use-compact-prompt: ${AS_CHAT_FAST_USE_COMPACT_PROMPT:true}
+    nano-fast:
+      model: ${AS_CHAT_NANO_FAST_MODEL:gpt-5.4-nano}
+      reasoning-effort: ${AS_CHAT_NANO_FAST_REASONING_EFFORT:low}
+      rag-top-k: ${AS_CHAT_NANO_FAST_RAG_TOP_K:2}
+      max-output-tokens: ${AS_CHAT_NANO_FAST_MAX_OUTPUT_TOKENS:700}
+      recent-message-limit: ${AS_CHAT_NANO_FAST_RECENT_MESSAGE_LIMIT:2}
+      include-evidence-chunk-text: ${AS_CHAT_NANO_FAST_INCLUDE_EVIDENCE_CHUNK_TEXT:false}
+      include-tool-result-payload: ${AS_CHAT_NANO_FAST_INCLUDE_TOOL_RESULT_PAYLOAD:false}
+      use-compact-prompt: ${AS_CHAT_NANO_FAST_USE_COMPACT_PROMPT:true}
+    balanced:
+      model: ${AS_CHAT_BALANCED_MODEL:${OPENAI_MODEL:gpt-5.5}}
+      reasoning-effort: ${AS_CHAT_BALANCED_REASONING_EFFORT:low}
+      rag-top-k: ${AS_CHAT_BALANCED_RAG_TOP_K:3}
+      max-output-tokens: ${AS_CHAT_BALANCED_MAX_OUTPUT_TOKENS:1100}
+      recent-message-limit: ${AS_CHAT_BALANCED_RECENT_MESSAGE_LIMIT:4}
+      include-evidence-chunk-text: ${AS_CHAT_BALANCED_INCLUDE_EVIDENCE_CHUNK_TEXT:false}
+      include-tool-result-payload: ${AS_CHAT_BALANCED_INCLUDE_TOOL_RESULT_PAYLOAD:false}
+      use-compact-prompt: ${AS_CHAT_BALANCED_USE_COMPACT_PROMPT:true}
+    high-quality:
+      model: ${AS_CHAT_HIGH_QUALITY_MODEL:gpt-5.5}
+      reasoning-effort: ${AS_CHAT_HIGH_QUALITY_REASONING_EFFORT:medium}
+      rag-top-k: ${AS_CHAT_HIGH_QUALITY_RAG_TOP_K:5}
+      max-output-tokens: ${AS_CHAT_HIGH_QUALITY_MAX_OUTPUT_TOKENS:2600}
+      recent-message-limit: ${AS_CHAT_HIGH_QUALITY_RECENT_MESSAGE_LIMIT:5}
+      include-evidence-chunk-text: ${AS_CHAT_HIGH_QUALITY_INCLUDE_EVIDENCE_CHUNK_TEXT:true}
+      include-tool-result-payload: ${AS_CHAT_HIGH_QUALITY_INCLUDE_TOOL_RESULT_PAYLOAD:false}
+      use-compact-prompt: ${AS_CHAT_HIGH_QUALITY_USE_COMPACT_PROMPT:true}
 
 part:
   price-refresh:

@@ -6,6 +6,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.verifyNoMoreInteractions;
 import static org.mockito.Mockito.when;
 
@@ -93,6 +94,56 @@ class UserQueryServiceRefreshTest {
                 .isInstanceOfSatisfying(ResponseStatusException.class, exception ->
                         assertThat(exception.getStatusCode()).isEqualTo(HttpStatus.UNAUTHORIZED)
                 );
+    }
+
+    @Test
+    void logoutRevokesRefreshToken() {
+        String refreshToken = "logout-refresh-token";
+        when(currentUserService.requireUser("Bearer jwt-access-token")).thenReturn(currentUser());
+        when(jdbcTemplate.queryForList(anyString(), eq(refreshTokenService.hash(refreshToken))))
+                .thenReturn(List.of(refreshTokenRow()));
+
+        userQueryService.logout("Bearer jwt-access-token", refreshToken);
+
+        verify(currentUserService).requireUser("Bearer jwt-access-token");
+        verify(jdbcTemplate).update(
+                anyString(),
+                eq(9001L)
+        );
+    }
+
+    @Test
+    void logoutRequiresUserBeforeRevokingRefreshToken() {
+        when(currentUserService.requireUser(null))
+                .thenThrow(new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Login required."));
+
+        assertThatThrownBy(() -> userQueryService.logout(null, "logout-refresh-token"))
+                .isInstanceOfSatisfying(ResponseStatusException.class, exception ->
+                        assertThat(exception.getStatusCode()).isEqualTo(HttpStatus.UNAUTHORIZED)
+                );
+        verifyNoInteractions(jdbcTemplate);
+    }
+
+    @Test
+    void logoutRejectsBlankRefreshToken() {
+        when(currentUserService.requireUser("Bearer jwt-access-token")).thenReturn(currentUser());
+
+        assertThatThrownBy(() -> userQueryService.logout("Bearer jwt-access-token", " "))
+                .isInstanceOfSatisfying(ResponseStatusException.class, exception ->
+                        assertThat(exception.getStatusCode()).isEqualTo(HttpStatus.UNAUTHORIZED)
+                );
+        verifyNoInteractions(jdbcTemplate);
+    }
+
+    private CurrentUserService.CurrentUser currentUser() {
+        return new CurrentUserService.CurrentUser(
+                1004L,
+                "00000000-0000-4000-8000-000000001004",
+                "user@example.com",
+                "Demo User",
+                "USER",
+                NOW
+        );
     }
 
     private Map<String, Object> refreshTokenRow() {

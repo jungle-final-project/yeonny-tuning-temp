@@ -1,9 +1,9 @@
 import { ChangeEvent, FormEvent, useState } from 'react';
 import { useMutation, useQuery } from '@tanstack/react-query';
-import { Link, useNavigate, useParams } from 'react-router-dom';
+import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { DataTable, Panel, Screen, StateMessage, StatusBadge } from '../../components/ui';
 import { ApiError } from '../../lib/api';
-import { AS_CHAT_DEFAULT_TICKET_ID, getAsChat, sendAsChat } from './asChatApi';
+import { AS_CHAT_DEFAULT_TICKET_ID, getAsChat, sendAsChat, streamAsChat } from './asChatApi';
 import type { AsChatEvidence, AsChatResponse, AsChatToolResult } from './asChatApi';
 import { createSupportTicket, getSupportTicket, uploadAgentLog } from './supportApi';
 import type { AsTicketDto, CauseCandidate } from './types';
@@ -11,10 +11,14 @@ import type { AsTicketDto, CauseCandidate } from './types';
 type SubmitState = 'default' | 'consent_required' | 'uploading' | 'upload_error' | 'ticket_created';
 
 export function AsChatPage() {
-  const [ticketId, setTicketId] = useState(AS_CHAT_DEFAULT_TICKET_ID);
+  const [searchParams] = useSearchParams();
+  const initialTicketId = searchParams.get('asTicketId')?.trim() || AS_CHAT_DEFAULT_TICKET_ID;
+  const [ticketId, setTicketId] = useState(initialTicketId);
   const [message, setMessage] = useState('게임 20분 뒤 프레임이 급락하고 GPU 온도가 95도까지 올라가요.');
   const [latestResponse, setLatestResponse] = useState<AsChatResponse | null>(null);
   const [error, setError] = useState('');
+  const [progressMessage, setProgressMessage] = useState('');
+  const [progressSteps, setProgressSteps] = useState<string[]>([]);
 
   const chatQuery = useQuery({
     queryKey: ['as-chat', ticketId],
@@ -22,19 +26,46 @@ export function AsChatPage() {
   });
 
   const sendMutation = useMutation({
-    mutationFn: () => sendAsChat(ticketId, message.trim()),
+    mutationFn: async () => {
+      const outgoingMessage = message.trim();
+      let streamStarted = false;
+      setProgressMessage('AS AI 요청을 준비하고 있습니다.');
+      setProgressSteps([]);
+      try {
+        return await streamAsChat(ticketId, outgoingMessage, (event) => {
+          streamStarted = true;
+          if (event.event === 'DONE') return;
+          const nextMessage = String(event.data.message ?? progressLabel(event.event));
+          setProgressMessage(nextMessage);
+          setProgressSteps((previous) => [...previous, nextMessage].slice(-4));
+        });
+      } catch (cause) {
+        if (!streamStarted) {
+          setProgressMessage('실시간 진행 상태 연결 실패로 기본 요청으로 전환합니다.');
+          return sendAsChat(ticketId, outgoingMessage);
+        }
+        throw cause;
+      }
+    },
     onSuccess: (response) => {
       setLatestResponse(response);
       setMessage('');
       setError('');
+      setProgressMessage('');
+      setProgressSteps([]);
     },
     onError: (cause) => {
+      setProgressMessage('');
       if (cause instanceof ApiError && cause.status === 428) {
         setError('서버에 OPENAI_API_KEY가 필요합니다. API 컨테이너 환경 변수 설정 후 다시 실행해 주세요.');
         return;
       }
       if (cause instanceof ApiError && cause.status === 404) {
         setError('현재 로그인 사용자에게 연결된 AS 티켓을 찾을 수 없습니다.');
+        return;
+      }
+      if (cause instanceof Error && cause.message) {
+        setError(cause.message);
         return;
       }
       setError('AS AI 챗봇 요청에 실패했습니다. 백엔드 실행 상태와 로그인 토큰을 확인해 주세요.');
@@ -94,7 +125,18 @@ export function AsChatPage() {
                 아직 저장된 대화가 없습니다. 아래 입력창으로 AS 증상을 이어서 설명해 주세요.
               </div>
             )}
-            {isBusy ? <div className="mt-3 text-sm font-bold text-brand-blue">AI가 RAG 근거와 Tool 결과를 확인하고 있습니다...</div> : null}
+            {isBusy ? (
+              <div className="mt-3 rounded border border-blue-100 bg-blue-50 p-3 text-sm text-brand-blue">
+                <div className="font-bold">{progressMessage || 'AI가 RAG 근거와 Tool 결과를 확인하고 있습니다...'}</div>
+                {progressSteps.length ? (
+                  <div className="mt-2 flex flex-wrap gap-2 text-xs text-slate-600">
+                    {progressSteps.map((step, index) => (
+                      <span key={`${step}-${index}`} className="rounded-full bg-white px-2 py-1">{step}</span>
+                    ))}
+                  </div>
+                ) : null}
+              </div>
+            ) : null}
           </div>
 
           <form onSubmit={submitMessage} className="mt-4 flex gap-3">
@@ -157,6 +199,14 @@ export function AsChatPage() {
       </div>
     </Screen>
   );
+}
+
+function progressLabel(eventName: string) {
+  if (eventName === 'STARTED') return 'AS 티켓과 사용자 세션을 확인하고 있습니다.';
+  if (eventName === 'RAG_READY') return '관련 AS 근거를 찾았습니다.';
+  if (eventName === 'TOOLS_READY') return 'Tool 검증 결과를 정리했습니다.';
+  if (eventName === 'LLM_RUNNING') return 'AI 답변을 생성하고 있습니다.';
+  return 'AS AI 처리를 진행하고 있습니다.';
 }
 
 export function SupportNewPage() {

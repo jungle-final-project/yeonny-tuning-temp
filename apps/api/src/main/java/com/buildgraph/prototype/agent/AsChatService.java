@@ -19,38 +19,47 @@ public class AsChatService {
     private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
     private static final TypeReference<Map<String, Object>> MAP_TYPE = new TypeReference<>() {
     };
+    private static final String AS_CHAT_SCHEMA_NAME = "buildgraph_as_chat_response";
     private static final String SYSTEM_PROMPT = """
             당신은 BuildGraph AS AI 상담 챗봇입니다.
-            반드시 JSON 객체 하나만 반환하십시오. 마크다운, 코드블록, 설명 문장을 JSON 밖에 쓰지 마십시오.
+            응답은 서버가 제공한 Structured Output JSON schema를 반드시 따릅니다.
             제공된 AS 티켓 증상, 최근 대화, RAG 근거, Tool 결과만 근거로 답하십시오.
             확인되지 않은 부품명, 가격, FPS, 수리 비용, 성능 수치를 지어내지 마십시오.
+            근거가 부족하면 confidence를 LOW로 낮추고 필요한 로그를 ticketDraft.recommendedLogRequest에 적으십시오.
             사용자가 직접 시도할 수 있는 안전한 확인 절차와 원격지원/기사 연결 필요 여부를 구분하십시오.
-            필수 JSON 필드:
-            assistantMessage: 사용자에게 보여줄 한국어 답변 문자열
-            causeCandidates: [{label, confidence, reason}]
-            nextActions: [{label, priority, instruction}]
-            escalation: {required, reason}
-            ticketDraft: {symptomSummary, recommendedLogRequest}
+            서버가 제공한 responseLimits의 길이와 개수 제한을 지키십시오.
+            사용자 증상에 드라이버, 이벤트 로그, RAM, SSD, 파워, 전원, 온도 같은 핵심 단서가 있으면 답변 또는 조치에 그 단서를 명확히 언급하십시오.
             """;
+    private static final AsChatProgressSink NOOP_PROGRESS = (eventName, payload) -> {
+    };
 
     private final JdbcTemplate jdbcTemplate;
     private final AgentTraceService agentTraceService;
     private final AgentRagRetrievalService agentRagRetrievalService;
-    private final OpenAiResponsesClient openAiResponsesClient;
+    private final StructuredLlmClientRouter structuredLlmClientRouter;
     private final ToolCheckService toolCheckService;
+    private final AiProfileConfig aiProfileConfig;
+    private final AsChatProfilePolicy asChatProfilePolicy;
+    private final LlmGenerationService llmGenerationService;
 
     public AsChatService(
             JdbcTemplate jdbcTemplate,
             AgentTraceService agentTraceService,
             AgentRagRetrievalService agentRagRetrievalService,
-            OpenAiResponsesClient openAiResponsesClient,
-            ToolCheckService toolCheckService
+            StructuredLlmClientRouter structuredLlmClientRouter,
+            ToolCheckService toolCheckService,
+            AiProfileConfig aiProfileConfig,
+            AsChatProfilePolicy asChatProfilePolicy,
+            LlmGenerationService llmGenerationService
     ) {
         this.jdbcTemplate = jdbcTemplate;
         this.agentTraceService = agentTraceService;
         this.agentRagRetrievalService = agentRagRetrievalService;
-        this.openAiResponsesClient = openAiResponsesClient;
+        this.structuredLlmClientRouter = structuredLlmClientRouter;
         this.toolCheckService = toolCheckService;
+        this.aiProfileConfig = aiProfileConfig;
+        this.asChatProfilePolicy = asChatProfilePolicy;
+        this.llmGenerationService = llmGenerationService;
     }
 
     public Map<String, Object> history(String asTicketId, CurrentUserService.CurrentUser user) {
@@ -62,21 +71,34 @@ public class AsChatService {
                 "sessionId", session == null ? null : session.publicId(),
                 "asTicketId", ticket.publicId(),
                 "ticket", ticketMap(ticket),
-                "model", openAiResponsesClient.model(),
+                "model", aiProfileConfig.defaultAsChatProfile().model(),
                 "messages", messages,
                 "evidence", List.of(),
                 "toolResults", List.of()
         );
     }
 
-    public Map<String, Object> send(String asTicketId, String message, CurrentUserService.CurrentUser user) {
-        if (!openAiResponsesClient.isConfigured()) {
-            throw new ResponseStatusException(HttpStatus.PRECONDITION_REQUIRED, "OPENAI_API_KEY가 필요합니다.");
-        }
+    public Map<String, Object> send(String asTicketId, String message, CurrentUserService.CurrentUser user, String requestedAiProfile) {
+        return send(asTicketId, message, user, requestedAiProfile, NOOP_PROGRESS);
+    }
+
+    public Map<String, Object> send(
+            String asTicketId,
+            String message,
+            CurrentUserService.CurrentUser user,
+            String requestedAiProfile,
+            AsChatProgressSink progressSink
+    ) {
+        AsChatProgressSink progress = progressSink == null ? NOOP_PROGRESS : progressSink;
+        progress.emit("STARTED", progressPayload("STARTED", "AS 티켓과 사용자 세션을 확인하고 있습니다.", Map.of("asTicketId", safe(asTicketId))));
 
         String ticketId = requireText(asTicketId, "AS 티켓 ID가 필요합니다.");
         String userMessage = requireText(message, "챗봇에 보낼 메시지가 필요합니다.");
         TicketRow ticket = ticket(ticketId, user);
+        AiProfileDefinition aiProfile = requireAiProfile(requestedAiProfile, ticket, userMessage);
+        if (!structuredLlmClientRouter.isConfigured(aiProfile.provider())) {
+            throw new ResponseStatusException(HttpStatus.PRECONDITION_REQUIRED, structuredLlmClientRouter.missingKeyMessage(aiProfile.provider()));
+        }
         ChatSessionRow chatSession = findOrCreateActiveSession(ticket, user);
         saveMessage(chatSession.internalId(), "USER", userMessage, Map.of(), null);
 
@@ -87,32 +109,44 @@ public class AsChatService {
         try {
             agentTraceService.advanceStatus(agentSessionId, AgentStatus.RUNNING, "SYSTEM", "AS AI chat requested");
 
-            String retrievalQuery = retrievalQuery(ticket, recentConversation(chatSession.internalId()), userMessage);
-            List<AgentRagEvidenceDraft> evidenceDrafts = agentRagRetrievalService.retrieveEvidenceSet(root, profile, retrievalQuery, 4);
+            List<Map<String, Object>> recentMessages = recentConversation(chatSession.internalId(), aiProfile.recentMessageLimit());
+            String retrievalQuery = retrievalQuery(ticket, recentMessages, userMessage);
+            List<AgentRagEvidenceDraft> evidenceDrafts = agentRagRetrievalService.retrieveEvidenceSet(root, profile, retrievalQuery, aiProfile.ragTopK());
             List<String> evidenceIds = evidenceDrafts.stream()
                     .map(draft -> agentTraceService.recordRagEvidence(agentSessionId, draft))
                     .toList();
             agentTraceService.advanceStatus(agentSessionId, AgentStatus.RAG_SEARCHED, "SYSTEM", "AS chat RAG evidence retrieved");
+            progress.emit("RAG_READY", progressPayload("RAG_READY", "관련 AS 근거를 찾았습니다.", MockData.map("evidenceCount", evidenceIds.size())));
 
             List<AgentToolInvocationDraft> toolDrafts = toolInvocations(root, profile);
             List<String> toolInvocationIds = toolDrafts.stream()
                     .map(draft -> agentTraceService.recordToolInvocation(agentSessionId, draft))
                     .toList();
             agentTraceService.advanceStatus(agentSessionId, AgentStatus.TOOLS_CALLED, "SYSTEM", "AS chat Tool checks completed");
+            progress.emit("TOOLS_READY", progressPayload("TOOLS_READY", "Tool 검증 결과를 정리했습니다.", MockData.map("toolCount", toolInvocationIds.size())));
 
             List<Map<String, Object>> evidence = evidenceItems(evidenceIds, evidenceDrafts);
             List<Map<String, Object>> toolResults = toolItems(toolInvocationIds, toolDrafts);
-            Map<String, Object> llmJson = strictJson(openAiResponsesClient.createSummary(
-                    SYSTEM_PROMPT,
-                    llmPrompt(ticket, recentConversation(chatSession.internalId()), userMessage, evidence, toolResults)
-            ));
+            progress.emit("LLM_RUNNING", progressPayload("LLM_RUNNING", "AI 답변을 생성하고 있습니다.", Map.of()));
+            Map<String, Object> llmJson = generateAsChatJson(
+                    agentInternalId,
+                    aiProfile,
+                    ticket,
+                    chatSession,
+                    recentMessages,
+                    userMessage,
+                    evidence,
+                    toolResults,
+                    evidenceIds,
+                    toolInvocationIds
+            );
             String assistantMessage = requireAssistantMessage(llmJson);
             agentTraceService.updateSummary(agentSessionId, assistantMessage);
-            agentTraceService.advanceStatus(agentSessionId, AgentStatus.SUMMARY_READY, "SYSTEM", "AS chat LLM JSON generated by " + openAiResponsesClient.model());
+            agentTraceService.advanceStatus(agentSessionId, AgentStatus.SUMMARY_READY, "SYSTEM", "AS chat LLM JSON generated by " + aiProfile.profile().name() + " / " + aiProfile.model());
             agentTraceService.advanceStatus(agentSessionId, AgentStatus.SUCCEEDED, "SYSTEM", "AS chat completed");
 
             saveMessage(chatSession.internalId(), "ASSISTANT", assistantMessage, llmJson, agentInternalId);
-            return response(ticket, chatSession, agentSessionId, assistantMessage, llmJson, evidence, toolResults);
+            return response(ticket, chatSession, agentSessionId, assistantMessage, llmJson, evidence, toolResults, aiProfile);
         } catch (ResponseStatusException error) {
             failAgentSession(agentSessionId, error);
             throw error;
@@ -225,14 +259,17 @@ public class AsChatService {
                 .toList();
     }
 
-    private List<Map<String, Object>> recentConversation(Long chatSessionId) {
+    private List<Map<String, Object>> recentConversation(Long chatSessionId, int limit) {
+        if (limit <= 0) {
+            return List.of();
+        }
         List<Map<String, Object>> rows = jdbcTemplate.queryForList("""
                 SELECT role, content, created_at
                 FROM as_chat_messages
                 WHERE chat_session_id = ?
                 ORDER BY created_at DESC, id DESC
-                LIMIT 8
-                """, chatSessionId);
+                LIMIT ?
+                """, chatSessionId, limit);
         return rows.reversed().stream()
                 .map(row -> MockData.map(
                         "role", DbValueMapper.string(row, "role"),
@@ -261,13 +298,14 @@ public class AsChatService {
             String assistantMessage,
             Map<String, Object> llmJson,
             List<Map<String, Object>> evidence,
-            List<Map<String, Object>> toolResults
+            List<Map<String, Object>> toolResults,
+            AiProfileDefinition aiProfile
     ) {
         return MockData.map(
                 "sessionId", chatSession.publicId(),
                 "asTicketId", ticket.publicId(),
                 "ticket", ticketMap(ticket),
-                "model", openAiResponsesClient.model(),
+                "model", aiProfile.model(),
                 "agentSessionId", agentSessionId,
                 "messages", messages(chatSession.internalId()),
                 "assistantMessage", assistantMessage,
@@ -280,35 +318,176 @@ public class AsChatService {
         );
     }
 
+    private Map<String, Object> generateAsChatJson(
+            Long agentInternalId,
+            AiProfileDefinition aiProfile,
+            TicketRow ticket,
+            ChatSessionRow chatSession,
+            List<Map<String, Object>> recentMessages,
+            String userMessage,
+            List<Map<String, Object>> evidence,
+            List<Map<String, Object>> toolResults,
+            List<String> evidenceIds,
+            List<String> toolInvocationIds
+    ) {
+        long startedAt = System.nanoTime();
+        LlmResponseResult llmResult = null;
+        try {
+            llmResult = structuredLlmClientRouter.createStructuredJsonResult(
+                    aiProfile,
+                    SYSTEM_PROMPT,
+                    llmPrompt(ticket, recentMessages, userMessage, evidence, toolResults, aiProfile),
+                    AS_CHAT_SCHEMA_NAME,
+                    asChatResponseSchema(evidenceIds, toolInvocationIds)
+            );
+            Map<String, Object> llmJson = strictJson(llmResult.text());
+            llmGenerationService.recordSuccess(agentInternalId, aiProfile, AS_CHAT_SCHEMA_NAME, llmResult);
+            return llmJson;
+        } catch (ResponseStatusException error) {
+            boolean schemaValid = error.getStatusCode().value() != HttpStatus.BAD_GATEWAY.value();
+            llmGenerationService.recordFailure(
+                    agentInternalId,
+                    aiProfile,
+                    AS_CHAT_SCHEMA_NAME,
+                    schemaValid,
+                    llmResult == null ? elapsedMs(startedAt) : llmResult.latencyMs(),
+                    "HTTP_" + error.getStatusCode().value(),
+                    error.getReason()
+            );
+            throw error;
+        } catch (RuntimeException error) {
+            llmGenerationService.recordFailure(
+                    agentInternalId,
+                    aiProfile,
+                    AS_CHAT_SCHEMA_NAME,
+                    false,
+                    elapsedMs(startedAt),
+                    "LLM_RUNTIME_ERROR",
+                    safeReason(error)
+            );
+            throw error;
+        }
+    }
+
     private static String llmPrompt(
             TicketRow ticket,
             List<Map<String, Object>> recentMessages,
             String userMessage,
             List<Map<String, Object>> evidence,
-            List<Map<String, Object>> toolResults
+            List<Map<String, Object>> toolResults,
+            AiProfileDefinition aiProfile
     ) {
         return AgentTraceService.json(MockData.map(
                 "task", "AS_ANALYZE_CHAT",
-                "ticket", MockData.map(
-                        "id", ticket.publicId(),
-                        "status", ticket.status(),
-                        "symptom", ticket.symptom(),
-                        "logSummary", ticket.logSummary(),
-                        "existingCauseCandidates", ticket.causeCandidates(),
-                        "existingUpgradeCandidates", ticket.upgradeCandidates()
-                ),
+                "aiProfile", aiProfile.profile().name(),
+                "promptVersion", aiProfile.promptVersion(),
+                "responseLimits", responseLimits(aiProfile),
+                "ticket", promptTicket(ticket),
                 "recentMessages", recentMessages,
                 "latestUserMessage", userMessage,
-                "ragEvidence", evidence,
-                "toolResults", toolResults,
-                "outputContract", MockData.map(
-                        "assistantMessage", "string",
-                        "causeCandidates", List.of(MockData.map("label", "string", "confidence", "LOW|MEDIUM|HIGH", "reason", "string")),
-                        "nextActions", List.of(MockData.map("label", "string", "priority", "LOW|MEDIUM|HIGH", "instruction", "string")),
-                        "escalation", MockData.map("required", "boolean", "reason", "string"),
-                        "ticketDraft", MockData.map("symptomSummary", "string", "recommendedLogRequest", "string")
-                )
+                "ragEvidence", promptEvidenceItems(evidence, aiProfile),
+                "toolResults", promptToolItems(toolResults, aiProfile)
         ));
+    }
+
+    private static Map<String, Object> promptTicket(TicketRow ticket) {
+        Map<String, Object> payload = new LinkedHashMap<>();
+        payload.put("id", ticket.publicId());
+        payload.put("status", ticket.status());
+        payload.put("symptom", ticket.symptom());
+        if (!safe(ticket.logSummary()).isBlank()) {
+            payload.put("logSummary", trimText(ticket.logSummary(), 800));
+        }
+        if (!isEmptyJsonValue(ticket.causeCandidates())) {
+            payload.put("existingCauseCandidates", ticket.causeCandidates());
+        }
+        if (!isEmptyJsonValue(ticket.upgradeCandidates())) {
+            payload.put("existingUpgradeCandidates", ticket.upgradeCandidates());
+        }
+        return payload;
+    }
+
+    private static Map<String, Object> responseLimits(AiProfileDefinition aiProfile) {
+        return switch (aiProfile.profile()) {
+            case AS_CHAT_FAST, AS_CHAT_NANO_FAST -> MockData.map(
+                    "assistantMessage", "Korean, around 220 characters",
+                    "causeCandidatesMax", 1,
+                    "nextActionsMax", 2
+            );
+            case AS_CHAT_BALANCED -> MockData.map(
+                    "assistantMessage", "Korean, around 350 characters",
+                    "causeCandidatesMax", 2,
+                    "nextActionsMax", 3
+            );
+            case AS_CHAT_HIGH_QUALITY -> MockData.map(
+                    "assistantMessage", "Korean, around 500 characters",
+                    "causeCandidatesMax", 3,
+                    "nextActionsMax", 3
+            );
+        };
+    }
+
+    private static List<Map<String, Object>> promptEvidenceItems(List<Map<String, Object>> evidence, AiProfileDefinition aiProfile) {
+        return evidence.stream()
+                .map(item -> {
+                    Map<String, Object> payload = new LinkedHashMap<>();
+                    payload.put("id", item.get("id"));
+                    payload.put("sourceId", item.get("sourceId"));
+                    payload.put("summary", item.get("summary"));
+                    payload.put("score", item.get("score"));
+                    if (aiProfile.includeEvidenceChunkText()) {
+                        Object chunkText = item.get("chunkText");
+                        payload.put("chunkText", trimText(chunkText == null ? "" : String.valueOf(chunkText), 1200));
+                    }
+                    if (!aiProfile.useCompactPrompt() && item.get("metadata") != null) {
+                        payload.put("metadata", item.get("metadata"));
+                    }
+                    return payload;
+                })
+                .toList();
+    }
+
+    private static List<Map<String, Object>> promptToolItems(List<Map<String, Object>> toolResults, AiProfileDefinition aiProfile) {
+        return toolResults.stream()
+                .map(item -> {
+                    Map<String, Object> payload = new LinkedHashMap<>();
+                    payload.put("id", item.get("id"));
+                    payload.put("toolName", item.get("toolName"));
+                    payload.put("status", item.get("status"));
+                    payload.put("confidence", item.get("confidence"));
+                    payload.put("summary", item.get("summary"));
+                    if (aiProfile.includeToolResultPayload()) {
+                        payload.put("resultPayload", item.getOrDefault("resultPayload", Map.of()));
+                    } else {
+                        payload.put("details", compactToolDetails(item.get("resultPayload")));
+                    }
+                    return payload;
+                })
+                .toList();
+    }
+
+    @SuppressWarnings("unchecked")
+    private static Object compactToolDetails(Object resultPayload) {
+        if (!(resultPayload instanceof Map<?, ?> payload)) {
+            return Map.of();
+        }
+        Object details = payload.get("details");
+        if (details instanceof Map<?, ?> detailsMap) {
+            Map<String, Object> result = new LinkedHashMap<>();
+            detailsMap.forEach((key, value) -> {
+                if (value instanceof Number || value instanceof Boolean || value instanceof String) {
+                    result.put(String.valueOf(key), value);
+                }
+            });
+            return result;
+        }
+        Map<String, Object> result = new LinkedHashMap<>();
+        payload.forEach((key, value) -> {
+            if (value instanceof Number || value instanceof Boolean || value instanceof String) {
+                result.put(String.valueOf(key), value);
+            }
+        });
+        return result;
     }
 
     private static String retrievalQuery(TicketRow ticket, List<Map<String, Object>> recentMessages, String userMessage) {
@@ -352,9 +531,89 @@ public class AsChatService {
                 .toList();
     }
 
+    private static Map<String, Object> schemaObject(List<String> required, Map<String, Object> properties) {
+        return MockData.map(
+                "type", "object",
+                "additionalProperties", false,
+                "required", required,
+                "properties", properties
+        );
+    }
+
+    private static Map<String, Object> asChatResponseSchema(List<String> evidenceIds, List<String> toolInvocationIds) {
+        return schemaObject(
+                List.of("assistantMessage", "causeCandidates", "nextActions", "escalation", "ticketDraft"),
+                MockData.map(
+                        "assistantMessage", stringSchema(),
+                        "causeCandidates", arraySchema(schemaObject(
+                                List.of("label", "confidence", "reason", "evidenceIds", "toolInvocationIds"),
+                                MockData.map(
+                                        "label", stringSchema(),
+                                        "confidence", enumSchema("LOW", "MEDIUM", "HIGH"),
+                                        "reason", stringSchema(),
+                                        "evidenceIds", idArraySchema(evidenceIds),
+                                        "toolInvocationIds", idArraySchema(toolInvocationIds)
+                                )
+                        )),
+                        "nextActions", arraySchema(schemaObject(
+                                List.of("label", "priority", "instruction", "evidenceIds", "toolInvocationIds"),
+                                MockData.map(
+                                        "label", stringSchema(),
+                                        "priority", enumSchema("LOW", "MEDIUM", "HIGH"),
+                                        "instruction", stringSchema(),
+                                        "evidenceIds", idArraySchema(evidenceIds),
+                                        "toolInvocationIds", idArraySchema(toolInvocationIds)
+                                )
+                        )),
+                        "escalation", schemaObject(
+                                List.of("required", "reason"),
+                                MockData.map(
+                                        "required", MockData.map("type", "boolean"),
+                                        "reason", stringSchema()
+                                )
+                        ),
+                        "ticketDraft", schemaObject(
+                                List.of("symptomSummary", "recommendedLogRequest"),
+                                MockData.map(
+                                        "symptomSummary", stringSchema(),
+                                        "recommendedLogRequest", stringSchema()
+                                )
+                        )
+                )
+        );
+    }
+
+    private static Map<String, Object> idArraySchema(List<String> allowedIds) {
+        Map<String, Object> itemSchema = allowedIds == null || allowedIds.isEmpty()
+                ? stringSchema()
+                : MockData.map("type", "string", "enum", allowedIds);
+        return MockData.map(
+                "type", "array",
+                "items", itemSchema
+        );
+    }
+
+    private static Map<String, Object> stringSchema() {
+        return MockData.map("type", "string");
+    }
+
+    private static Map<String, Object> enumSchema(String... values) {
+        return MockData.map(
+                "type", "string",
+                "enum", List.of(values)
+        );
+    }
+
+    private static Map<String, Object> arraySchema(Map<String, Object> items) {
+        return MockData.map(
+                "type", "array",
+                "items", items
+        );
+    }
+
     private Map<String, Object> strictJson(String raw) {
         try {
-            Map<String, Object> parsed = OBJECT_MAPPER.readValue(raw, MAP_TYPE);
+            Map<String, Object> parsed = OBJECT_MAPPER.readValue(normalizeJsonPayload(raw), MAP_TYPE);
             requireJsonField(parsed, "assistantMessage");
             requireJsonField(parsed, "causeCandidates");
             requireJsonField(parsed, "nextActions");
@@ -366,6 +625,22 @@ public class AsChatService {
         } catch (Exception error) {
             throw new ResponseStatusException(HttpStatus.BAD_GATEWAY, "LLM이 JSON 계약을 지키지 않았습니다.", error);
         }
+    }
+
+    private static String normalizeJsonPayload(String raw) {
+        String text = safe(raw).trim();
+        if (text.startsWith("```")) {
+            text = text.replaceFirst("^```[a-zA-Z0-9_-]*\\s*", "").replaceFirst("\\s*```$", "").trim();
+        }
+        if (text.startsWith("{") && text.endsWith("}")) {
+            return text;
+        }
+        int start = text.indexOf('{');
+        int end = text.lastIndexOf('}');
+        if (start >= 0 && end > start) {
+            return text.substring(start, end + 1).trim();
+        }
+        return text;
     }
 
     private static void requireJsonField(Map<String, Object> parsed, String key) {
@@ -451,6 +726,14 @@ public class AsChatService {
         return value.trim();
     }
 
+    private AiProfileDefinition requireAiProfile(String requestedAiProfile, TicketRow ticket, String userMessage) {
+        try {
+            return asChatProfilePolicy.resolve(requestedAiProfile, ticket.symptom(), ticket.logSummary(), userMessage);
+        } catch (IllegalArgumentException error) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, error.getMessage(), error);
+        }
+    }
+
     private static Long longValue(Map<String, Object> row, String key) {
         Object value = row.get(key);
         if (value instanceof Number number) {
@@ -480,8 +763,48 @@ public class AsChatService {
         return message == null || message.isBlank() ? error.getClass().getSimpleName() : message;
     }
 
+    private static long elapsedMs(long startedAt) {
+        return Math.max(0L, (System.nanoTime() - startedAt) / 1_000_000L);
+    }
+
     private static String safe(String value) {
         return value == null ? "" : value;
+    }
+
+    private static Map<String, Object> progressPayload(String state, String message, Map<String, Object> extra) {
+        Map<String, Object> payload = new LinkedHashMap<>();
+        payload.put("state", state);
+        payload.put("message", message);
+        payload.put("createdAt", java.time.OffsetDateTime.now().toString());
+        if (extra != null) {
+            payload.putAll(extra);
+        }
+        return payload;
+    }
+
+    private static boolean isEmptyJsonValue(Object value) {
+        if (value == null) {
+            return true;
+        }
+        if (value instanceof List<?> list) {
+            return list.isEmpty();
+        }
+        if (value instanceof Map<?, ?> map) {
+            return map.isEmpty();
+        }
+        return value.toString().isBlank() || "[]".equals(value.toString()) || "{}".equals(value.toString());
+    }
+
+    private static String trimText(String value, int maxLength) {
+        String text = safe(value).replaceAll("\\s+", " ").trim();
+        if (text.length() <= maxLength) {
+            return text;
+        }
+        return text.substring(0, maxLength) + "...";
+    }
+
+    public interface AsChatProgressSink {
+        void emit(String eventName, Map<String, Object> payload);
     }
 
     private record TicketRow(

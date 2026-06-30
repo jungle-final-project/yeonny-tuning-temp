@@ -1,9 +1,9 @@
 export function MetricCard({ label, value, tone = 'blue' }: { label: string; value: string; tone?: 'blue' | 'green' | 'orange' }) {
-  const color = tone === 'green' ? 'text-emerald-600' : tone === 'orange' ? 'text-orange-600' : 'text-brand-blue';
+  const color = tone === 'green' ? 'text-commerce-green' : tone === 'orange' ? 'text-commerce-sale' : 'text-brand-blue';
   return (
-    <div className="panel min-h-[84px] p-4">
-      <div className="text-xs text-slate-500">{label}</div>
-      <div className={`mt-2 text-2xl font-bold ${color}`}>{value}</div>
+    <div className="rounded-md border border-commerce-line bg-white p-4 shadow-sm">
+      <div className="text-xs font-bold text-slate-500">{label}</div>
+      <div className={`mt-2 text-2xl font-black tracking-tight ${color}`}>{value}</div>
     </div>
   );
 }

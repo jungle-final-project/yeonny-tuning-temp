@@ -127,3 +127,66 @@ jobs:
 
           cat api-smoke.log
           exit 1
+
+  ai-live-quality:
+    name: AS Chat live AI quality benchmark
+    runs-on: ubuntu-latest
+    needs: verify
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Run AS Chat profile benchmark
+        shell: bash
+        env:
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          OPENAI_MODEL: gpt-5.5
+          OPENAI_REASONING_EFFORT: medium
+          AS_CHAT_DEFAULT_PROFILE: AS_CHAT_FAST
+          AS_CHAT_FAST_MODEL: gpt-5.5
+          AS_CHAT_FAST_REASONING_EFFORT: low
+          AS_CHAT_NANO_FAST_MODEL: gpt-5.4-nano
+          AS_CHAT_NANO_FAST_REASONING_EFFORT: low
+          AS_CHAT_BALANCED_MODEL: gpt-5.5
+          AS_CHAT_BALANCED_REASONING_EFFORT: medium
+          AS_CHAT_HIGH_QUALITY_MODEL: gpt-5.5
+          AS_CHAT_HIGH_QUALITY_REASONING_EFFORT: high
+        run: |
+          set -euo pipefail
+          if [ -z "${OPENAI_API_KEY}" ]; then
+            echo "OPENAI_API_KEY secret is not configured; skipping live AI benchmark."
+            exit 0
+          fi
+
+          docker compose up -d --build postgres redis rabbitmq mailpit api
+          cleanup() {
+            docker compose down -v
+          }
+          trap cleanup EXIT
+
+          for attempt in {1..90}; do
+            if curl -fsS http://localhost:8080/api/health; then
+              break
+            fi
+            if [ "$attempt" -eq 90 ]; then
+              docker compose logs api
+              exit 1
+            fi
+            sleep 2
+          done
+
+          python tools/benchmark_as_chat_profiles.py
+
+      - name: Upload AS Chat benchmark report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: as-chat-profile-benchmark
+          path: docs/reports/as-chat-profile-benchmark-*.md
+          if-no-files-found: ignore

@@ -16,17 +16,20 @@ public class AgentQueryService {
     private final RagQueryService ragQueryService;
     private final AgentTraceService agentTraceService;
     private final AgentRunner agentRunner;
+    private final LlmGenerationService llmGenerationService;
 
     public AgentQueryService(
             JdbcTemplate jdbcTemplate,
             RagQueryService ragQueryService,
             AgentTraceService agentTraceService,
-            AgentRunner agentRunner
+            AgentRunner agentRunner,
+            LlmGenerationService llmGenerationService
     ) {
         this.jdbcTemplate = jdbcTemplate;
         this.ragQueryService = ragQueryService;
         this.agentTraceService = agentTraceService;
         this.agentRunner = agentRunner;
+        this.llmGenerationService = llmGenerationService;
     }
 
     public Map<String, Object> createSession(AgentSessionCreateRequest request) {
@@ -66,7 +69,8 @@ public class AgentQueryService {
                 "stateTimeline", DbValueMapper.json(row, "state_timeline", List.of()),
                 "purpose", rootFromRow(row).purpose().name(),
                 "toolInvocations", toolInvocationsBySession(id),
-                "evidenceIds", evidenceIdsBySession(id)
+                "evidenceIds", evidenceIdsBySession(id),
+                "llmGenerations", llmGenerationService.generationsBySession(id)
         );
     }
 

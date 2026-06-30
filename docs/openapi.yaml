@@ -78,6 +78,8 @@ paths:
                 $ref: "#/components/schemas/RefreshResponse"
   /api/auth/logout:
     post:
+      security:
+        - bearerAuth: []
       summary: 로그아웃
       requestBody:
         required: true
@@ -744,6 +746,14 @@ paths:
       summary: AS AI 챗봇 메시지 전송
       security:
         - bearerAuth: []
+      parameters:
+        - in: header
+          name: X-BuildGraph-AI-Profile
+          required: false
+          description: 내부 benchmark용 profile override. 사용자 화면은 보내지 않는다.
+          schema:
+            type: string
+            enum: [AS_CHAT_FAST, AS_CHAT_NANO_FAST, AS_CHAT_BALANCED, AS_CHAT_HIGH_QUALITY]
       requestBody:
         required: true
         content:
@@ -769,6 +779,35 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
+  /api/ai/as-chat/stream:
+    post:
+      summary: AS AI 챗봇 메시지 전송 진행 상태 SSE
+      description: STARTED, RAG_READY, TOOLS_READY, LLM_RUNNING, DONE, ERROR 이벤트를 text/event-stream으로 반환한다. DONE data는 AsChatResponse JSON이다.
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: header
+          name: X-BuildGraph-AI-Profile
+          required: false
+          description: 내부 benchmark용 profile override. 사용자 화면은 보내지 않는다.
+          schema:
+            type: string
+            enum: [AS_CHAT_FAST, AS_CHAT_NANO_FAST, AS_CHAT_BALANCED, AS_CHAT_HIGH_QUALITY]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AsChatRequest"
+      responses:
+        "200":
+          description: AS AI 챗봇 진행 상태와 최종 구조화 응답 SSE
+          content:
+            text/event-stream:
+              schema:
+                type: string
+        "401":
+          description: USER 인증 필요
   /api/admin/dashboard:
     get:
       summary: 관리자 대시보드
@@ -1772,6 +1811,10 @@ components:
               type: array
               items:
                 $ref: "#/components/schemas/ToolInvocationDto"
+            llmGenerations:
+              type: array
+              items:
+                $ref: "#/components/schemas/LlmGenerationDto"
     StateTimelineItemDto:
       type: object
       required: [to, actor, at]
@@ -1842,6 +1885,52 @@ components:
           additionalProperties: true
         latencyMs:
           type: integer
+        createdAt:
+          type: string
+          format: date-time
+    LlmGenerationDto:
+      type: object
+      required: [id, aiProfile, provider, model, useCase, status, schemaValid]
+      properties:
+        id:
+          type: string
+          format: uuid
+        aiProfile:
+          type: string
+          enum: [AS_CHAT_FAST, AS_CHAT_NANO_FAST, AS_CHAT_BALANCED, AS_CHAT_HIGH_QUALITY]
+        provider:
+          type: string
+        model:
+          type: string
+        reasoningEffort:
+          type: string
+          nullable: true
+        useCase:
+          type: string
+          enum: [AS_CHAT]
+        status:
+          type: string
+          enum: [SUCCESS, FAILED]
+        schemaName:
+          type: string
+          nullable: true
+        latencyMs:
+          type: integer
+          nullable: true
+        inputTokens:
+          type: integer
+          nullable: true
+        outputTokens:
+          type: integer
+          nullable: true
+        totalTokens:
+          type: integer
+          nullable: true
+        schemaValid:
+          type: boolean
+        errorCode:
+          type: string
+          nullable: true
         createdAt:
           type: string
           format: date-time
@@ -1948,7 +2037,7 @@ components:
           format: date-time
     AsChatCauseCandidateDto:
       type: object
-      required: [label, confidence, reason]
+      required: [label, confidence, reason, evidenceIds, toolInvocationIds]
       properties:
         label:
           type: string
@@ -1956,9 +2045,19 @@ components:
           $ref: "#/components/schemas/Confidence"
         reason:
           type: string
+        evidenceIds:
+          type: array
+          items:
+            type: string
+            format: uuid
+        toolInvocationIds:
+          type: array
+          items:
+            type: string
+            format: uuid
     AsChatNextActionDto:
       type: object
-      required: [label, priority, instruction]
+      required: [label, priority, instruction, evidenceIds, toolInvocationIds]
       properties:
         label:
           type: string
@@ -1967,6 +2066,16 @@ components:
           enum: [LOW, MEDIUM, HIGH]
         instruction:
           type: string
+        evidenceIds:
+          type: array
+          items:
+            type: string
+            format: uuid
+        toolInvocationIds:
+          type: array
+          items:
+            type: string
+            format: uuid
     AsChatEscalationDto:
       type: object
       required: [required, reason]
