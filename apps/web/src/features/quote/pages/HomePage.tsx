@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { useQueries, useQuery } from '@tanstack/react-query';
 import { Link, useNavigate } from 'react-router-dom';
 import {
   Activity,
@@ -53,6 +53,7 @@ type PopularPart = {
   rank: number;
   label: string;
   category: string;
+  searchQuery: string;
   price: number;
   sale: string;
   detail: string;
@@ -122,10 +123,10 @@ const featuredBuilds: FeaturedBuild[] = [
 ];
 
 const popularPartDeals: PopularPart[] = [
-  { rank: 1, label: 'RTX 5070 QHD 그래픽카드', category: 'GPU', price: 890000, sale: 'SALE', detail: 'QHD 고주사율 후보', to: '/self-quote?category=GPU', icon: Monitor },
-  { rank: 2, label: 'Ryzen 7 작업용 CPU', category: 'CPU', price: 420000, sale: 'BEST', detail: '게임/개발 균형형', to: '/self-quote?category=CPU', icon: Cpu },
-  { rank: 3, label: 'DDR5 32GB 메모리', category: 'RAM', price: 128000, sale: 'LOW', detail: '멀티태스킹 표준', to: '/self-quote?category=RAM', icon: Database },
-  { rank: 4, label: 'ATX 3.1 850W 파워', category: 'PSU', price: 165000, sale: 'PASS', detail: '전력 여유 확보', to: '/self-quote?category=PSU', icon: Zap }
+  { rank: 1, label: 'RTX 5070 QHD 그래픽카드', category: 'GPU', searchQuery: 'RTX 5070', price: 890000, sale: 'SALE', detail: 'QHD 고주사율 후보', to: '/self-quote?category=GPU', icon: Monitor },
+  { rank: 2, label: 'Ryzen 7 작업용 CPU', category: 'CPU', searchQuery: 'Ryzen 7', price: 420000, sale: 'BEST', detail: '게임/개발 균형형', to: '/self-quote?category=CPU', icon: Cpu },
+  { rank: 3, label: 'DDR5 32GB 메모리', category: 'RAM', searchQuery: 'DDR5 32GB', price: 128000, sale: 'LOW', detail: '멀티태스킹 표준', to: '/self-quote?category=RAM', icon: Database },
+  { rank: 4, label: 'ATX 3.1 850W 파워', category: 'PSU', searchQuery: 'ATX 3.1 850W', price: 165000, sale: 'PASS', detail: '전력 여유 확보', to: '/self-quote?category=PSU', icon: Zap }
 ];
 
 export function HomePage() {
@@ -432,6 +433,14 @@ function FeaturedBuildCard({ build, casePart }: { build: FeaturedBuild; casePart
 }
 
 function PopularPartsSection() {
+  const popularPartQueries = useQueries({
+    queries: popularPartDeals.map((part) => ({
+      queryKey: ['parts', 'home-popular-ranking', part.category, part.searchQuery],
+      queryFn: () => listParts({ category: part.category, q: part.searchQuery, page: 0, size: 1, sort: 'price_desc' }),
+      staleTime: 60_000
+    }))
+  });
+
   return (
     <section className="panel p-5 sm:p-6">
       <div className="mb-5 flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
@@ -443,27 +452,39 @@ function PopularPartsSection() {
         <Link to="/self-quote" aria-label="셀프 견적 전체 보기" className="text-sm font-black text-brand-blue hover:underline">셀프 견적 전체 보기</Link>
       </div>
       <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-        {popularPartDeals.map((part) => (
-          <Link key={part.label} to={part.to} aria-label={`인기 부품 ${part.rank}번 보기`} className="rounded-lg border border-commerce-line bg-white p-4 transition hover:-translate-y-0.5 hover:border-commerce-ink hover:shadow-product focus:outline-none focus:ring-4 focus:ring-blue-100">
-            <div className="mb-3 flex items-center justify-between">
-              <span className="flex h-7 w-7 items-center justify-center rounded-full bg-commerce-ink text-xs font-black text-white">{part.rank}</span>
-              <span className={`rounded px-2 py-1 text-[11px] font-black ${part.sale === 'SALE' ? 'bg-commerce-sale text-white' : 'bg-slate-100 text-slate-700'}`}>{part.sale}</span>
-            </div>
-            <div className="grid h-24 place-items-center rounded-md bg-slate-50 text-brand-blue">
-              <part.icon size={30} />
-            </div>
-            <div className="mt-3 text-xs font-black text-brand-blue">{part.category}</div>
-            <h3 className="mt-1 min-h-10 text-sm font-black leading-5 text-commerce-ink">{part.label}</h3>
-            <p className="mt-1 text-xs text-slate-500">{part.detail}</p>
-            <div className="mt-3 flex items-center justify-between gap-2">
-              <span className="text-lg font-black text-commerce-ink">{part.price.toLocaleString()}원</span>
-              <div className="flex items-center gap-1 text-[11px] font-bold text-amber-600">
-                <Star size={12} fill="currentColor" />
-                인기
+        {popularPartDeals.map((part, index) => {
+          const matchedPart = popularPartQueries[index]?.data?.items[0];
+
+          return (
+            <Link key={part.label} to={part.to} aria-label={`인기 부품 ${part.rank}번 보기`} className="group rounded-lg border border-commerce-line bg-white p-4 transition hover:-translate-y-0.5 hover:border-commerce-ink hover:shadow-product focus:outline-none focus:ring-4 focus:ring-blue-100">
+              <div className="mb-3 flex items-center justify-between">
+                <span className="flex h-7 w-7 items-center justify-center rounded-full bg-commerce-ink text-xs font-black text-white">{part.rank}</span>
+                <span className={`rounded px-2 py-1 text-[11px] font-black ${part.sale === 'SALE' ? 'bg-commerce-sale text-white' : 'bg-slate-100 text-slate-700'}`}>{part.sale}</span>
               </div>
-            </div>
-          </Link>
-        ))}
+              <div className="grid h-56 w-full place-items-center overflow-hidden rounded-md border border-commerce-line bg-slate-50 text-brand-blue">
+                {matchedPart ? (
+                  <img
+                    src={partImageUrl(matchedPart)}
+                    alt={`${matchedPart.name} 제품 사진`}
+                    className="block h-full w-full object-contain p-3"
+                  />
+                ) : (
+                  <part.icon size={30} />
+                )}
+              </div>
+              <div className="mt-3 text-xs font-black text-brand-blue">{part.category}</div>
+              <h3 className="mt-1 min-h-10 text-sm font-black leading-5 text-commerce-ink">{part.label}</h3>
+              <p className="mt-1 text-xs text-slate-500">{part.detail}</p>
+              <div className="mt-3 flex items-center justify-between gap-2">
+                <span className="text-lg font-black text-commerce-ink">{part.price.toLocaleString()}원</span>
+                <div className="flex items-center gap-1 text-[11px] font-bold text-amber-600">
+                  <Star size={12} fill="currentColor" />
+                  인기
+                </div>
+              </div>
+            </Link>
+          );
+        })}
       </div>
     </section>
   );

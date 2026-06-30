@@ -126,7 +126,7 @@ async function mockAiBuildChatApi(page: Page) {
   return requests;
 }
 
-async function mockHomeCasePartsApi(page: Page) {
+async function mockHomePartsApi(page: Page) {
   const cases = [1, 2, 3].map((index) => ({
     id: `home-case-${index}`,
     category: 'CASE',
@@ -146,6 +146,30 @@ async function mockHomeCasePartsApi(page: Page) {
       refreshedAt: '2026-07-01T00:00:00Z'
     }
   }));
+  const popularParts = [
+    { category: 'GPU', query: 'RTX 5070', name: 'Home RTX 5070 GPU', imageUrl: 'https://example.test/popular-rtx5070.png', price: 890000 },
+    { category: 'CPU', query: 'Ryzen 7', name: 'Home Ryzen 7 CPU', imageUrl: 'https://example.test/popular-ryzen7.png', price: 420000 },
+    { category: 'RAM', query: 'DDR5 32GB', name: 'Home DDR5 32GB RAM', imageUrl: 'https://example.test/popular-ddr5.png', price: 128000 },
+    { category: 'PSU', query: 'ATX 3.1 850W', name: 'Home ATX 3.1 850W PSU', imageUrl: 'https://example.test/popular-psu.png', price: 165000 }
+  ].map((part, index) => ({
+    id: `home-popular-${index + 1}`,
+    category: part.category,
+    name: part.name,
+    manufacturer: 'BuildGraph',
+    price: part.price,
+    status: 'ACTIVE',
+    attributes: {
+      shortSpec: part.query
+    },
+    externalOffer: {
+      imageUrl: part.imageUrl,
+      supplierName: 'Naver Store',
+      offerUrl: null,
+      lowPrice: part.price,
+      source: 'NAVER_SHOPPING_SEARCH',
+      refreshedAt: '2026-07-01T00:00:00Z'
+    }
+  }));
 
   await page.route('**/api/parts**', async (route) => {
     const url = new URL(route.request().url());
@@ -158,6 +182,23 @@ async function mockHomeCasePartsApi(page: Page) {
           page: 0,
           size: cases.length,
           total: cases.length
+        })
+      });
+      return;
+    }
+
+    const category = url.searchParams.get('category');
+    const query = url.searchParams.get('q');
+    const popularPart = popularParts.find((part) => part.category === category && part.attributes.shortSpec === query);
+    if (url.pathname === '/api/parts' && popularPart) {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          items: [popularPart],
+          page: 0,
+          size: 1,
+          total: 1
         })
       });
       return;
@@ -184,7 +225,7 @@ async function openHomeAsUser(page: Page) {
       })
     });
   });
-  await mockHomeCasePartsApi(page);
+  await mockHomePartsApi(page);
   await page.goto('/');
 }
 
@@ -310,6 +351,7 @@ test('renders a single shopping home without the old hero prompt flow', async ({
   await main.getByRole('tab', { name: 'AI 추천상품' }).click();
   await expect(main.getByText('AI에게 예산이나 부품을 물어보면 추천상품 3개가 여기에 표시됩니다.')).toBeVisible();
   await expect(main.getByRole('heading', { name: '인기 부품 랭킹' })).toBeVisible();
+  await expect(main.getByRole('img', { name: /Home RTX 5070 GPU/ })).toBeVisible();
 
   for (const label of ['CPU', '메인보드', 'RAM', 'GPU', 'SSD', '파워', '케이스', '쿨러']) {
     await expect(main.getByRole('link', { name: label, exact: true })).toBeVisible();
