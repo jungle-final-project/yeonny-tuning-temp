@@ -37,8 +37,11 @@ export type BuildItem = {
 export type ToolResult = {
   tool: string;
   status: string;
+  score?: number;
   confidence: string;
   summary: string;
+  warnings?: string[];
+  evidence?: Array<{ source_id?: string; sourceId?: string; summary?: string }>;
   details?: Record<string, unknown>;
 };
 

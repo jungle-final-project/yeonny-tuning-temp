@@ -1134,13 +1134,32 @@ components:
         status:
           type: string
           enum: [PASS, WARN, FAIL]
+        score:
+          type: number
+          format: double
         confidence:
           $ref: "#/components/schemas/Confidence"
         summary:
           type: string
+        warnings:
+          type: array
+          items:
+            type: string
+        evidence:
+          type: array
+          items:
+            $ref: "#/components/schemas/ToolEvidenceDto"
         details:
           type: object
           additionalProperties: true
+    ToolEvidenceDto:
+      type: object
+      required: [source_id, summary]
+      properties:
+        source_id:
+          type: string
+        summary:
+          type: string
     WarningDto:
       type: object
       required: [code, message, severity]
@@ -1394,14 +1413,27 @@ components:
           additionalProperties: true
     ToolCheckResponse:
       type: object
-      required: [status, confidence, summary, details]
+      required: [tool, status, score, confidence, summary, warnings, evidence, details]
       properties:
+        tool:
+          type: string
         status:
           $ref: "#/components/schemas/ToolStatus"
+        score:
+          type: number
+          format: double
         confidence:
           $ref: "#/components/schemas/Confidence"
         summary:
           type: string
+        warnings:
+          type: array
+          items:
+            type: string
+        evidence:
+          type: array
+          items:
+            $ref: "#/components/schemas/ToolEvidenceDto"
         details:
           type: object
           additionalProperties: true

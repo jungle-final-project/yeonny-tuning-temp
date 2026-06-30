@@ -1,5 +1,5 @@
 import { api } from '../../lib/api';
-import type { PartPage, PartPriceHistory, PartPriceHistoryParams, PartSearchParams, PartRow } from './types';
+import type { PartPage, PartPriceHistory, PartPriceHistoryParams, PartSearchParams, PartRow, ToolRow } from './types';
 
 export function listParts(params: PartSearchParams = {}) {
   const search = new URLSearchParams();
@@ -28,7 +28,7 @@ export function getPartPriceHistory(partId: string, params: PartPriceHistoryPara
 }
 
 export function runToolCheck(tool: 'compatibility' | 'power' | 'size' | 'performance' | 'price', payload: unknown) {
-  return api(`/api/tools/${tool}/check`, {
+  return api<ToolRow>(`/api/tools/${tool}/check`, {
     method: 'POST',
     body: JSON.stringify(payload)
   });

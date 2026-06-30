@@ -1,9 +1,9 @@
-import { useQuery } from '@tanstack/react-query';
+import { useMutation, useQuery } from '@tanstack/react-query';
 import { useCallback, useEffect, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
-import { CategorySidebar, DataTable, MetricCard, Panel, Screen } from '../../../components/ui';
-import { getPartPriceHistory, listParts } from '../partsApi';
-import type { PartRow, PartSearchParams } from '../types';
+import { CategorySidebar, DataTable, MetricCard, Panel, Screen, StatusBadge } from '../../../components/ui';
+import { getPartPriceHistory, listParts, runToolCheck } from '../partsApi';
+import type { PartRow, PartSearchParams, ToolRow } from '../types';
 
 const selfQuoteCategories = [
   { label: '셀프 견적', value: '' },
@@ -18,6 +18,7 @@ const selfQuoteCategories = [
 ];
 
 const PAGE_SIZE = 20;
+const TOOL_ORDER = ['compatibility', 'power', 'size', 'performance', 'price'] as const;
 
 export function SelfQuotePage() {
   const [searchParams, setSearchParams] = useSearchParams();
@@ -40,6 +41,15 @@ export function SelfQuotePage() {
   const toIndex = total === 0 ? 0 : Math.min((safePage + 1) * PAGE_SIZE, total);
   const selectedTotal = selectedParts.reduce((sum, part) => sum + part.price, 0);
   const selectedPartIds = new Set(selectedParts.map((part) => part.id));
+  const toolMutation = useMutation({
+    mutationFn: () => Promise.all(TOOL_ORDER.map((tool) => runToolCheck(tool, {
+      partIds: selectedParts.map((part) => part.id),
+      context: {
+        currentTotalPrice: selectedTotal,
+        budget: selectedTotal
+      }
+    })))
+  });
 
   useEffect(() => {
     const nextCategory = normalizeCategory(searchParams.get('category'));
@@ -116,10 +126,12 @@ export function SelfQuotePage() {
 
   const addPart = (part: PartRow) => {
     setSelectedParts((current) => current.some((item) => item.id === part.id) ? current : [...current, part]);
+    toolMutation.reset();
   };
 
   const removePart = (partId: string) => {
     setSelectedParts((current) => current.filter((part) => part.id !== partId));
+    toolMutation.reset();
   };
 
   return (
@@ -191,12 +203,47 @@ export function SelfQuotePage() {
             ))}
           </div>
           <div className="mt-4 space-y-3">
-            <button className="w-full rounded bg-brand-blue px-4 py-3 text-sm font-bold text-white">Tool 검증하기</button>
+            <button
+              type="button"
+              onClick={() => toolMutation.mutate()}
+              disabled={selectedParts.length === 0 || toolMutation.isPending}
+              className="w-full rounded bg-brand-blue px-4 py-3 text-sm font-bold text-white disabled:cursor-not-allowed disabled:bg-slate-300"
+            >
+              {toolMutation.isPending ? '검증 중' : 'Tool 검증하기'}
+            </button>
+            {toolMutation.isError ? (
+              <div className="rounded border border-orange-200 bg-orange-50 p-3 text-xs text-orange-700">
+                Tool 검증 API를 불러오지 못했습니다.
+              </div>
+            ) : null}
+            {toolMutation.data ? <ToolResultList results={toolMutation.data} /> : null}
             <Link to="/builds/00000000-0000-4000-8000-000000002001" className="block rounded border border-slate-300 px-4 py-3 text-center text-sm font-bold">추천 결과로 보기</Link>
           </div>
         </Panel>
       </div>
     </Screen>
+  );
+}
+
+function ToolResultList({ results }: { results: ToolRow[] }) {
+  return (
+    <div className="space-y-2">
+      {results.map((result) => (
+        <div key={result.tool} className="rounded border border-slate-200 bg-white p-3 text-xs">
+          <div className="mb-2 flex items-center justify-between gap-2">
+            <span className="font-bold text-slate-900">{result.tool}</span>
+            <div className="flex shrink-0 items-center gap-1">
+              <StatusBadge status={result.status} />
+              <StatusBadge status={result.confidence} />
+            </div>
+          </div>
+          <div className="text-slate-700">{result.summary}</div>
+          <div className="mt-2 text-[11px] text-slate-500">
+            score {formatScore(result.score)} · {evidenceSummary(result)}
+          </div>
+        </div>
+      ))}
+    </div>
   );
 }
 
@@ -320,6 +367,15 @@ function partImageUrl(part: PartRow) {
     </svg>
   `;
   return `data:image/svg+xml;utf8,${encodeURIComponent(svg)}`;
+}
+
+function formatScore(score: number | undefined) {
+  return typeof score === 'number' ? score.toFixed(2) : '-';
+}
+
+function evidenceSummary(result: ToolRow) {
+  const firstEvidence = result.evidence?.[0];
+  return firstEvidence?.source_id ?? firstEvidence?.sourceId ?? '근거 없음';
 }
 
 function categoryAccent(category: string) {

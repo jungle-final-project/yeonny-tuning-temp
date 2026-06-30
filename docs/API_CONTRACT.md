@@ -226,9 +226,18 @@ Tool API는 직접 check 호출 자체를 `tool_invocations`에 저장하지 않
 
 ```json
 {
+  "tool": "compatibility",
   "status": "PASS",
+  "score": 1.0,
   "confidence": "HIGH",
   "summary": "호환됩니다.",
+  "warnings": [],
+  "evidence": [
+    {
+      "source_id": "compatibility-rule-v1",
+      "summary": "호환됩니다."
+    }
+  ],
   "details": {
     "checkedPartIds": ["0e9f3b8b-8c83-4d9a-9f7d-1f2b4dfb8a11"]
   }
@@ -461,9 +470,13 @@ Agent 실행 방식:
 | `ToolCheckRequest` | `buildId` | `string` | yes | `3ff6d7a2-1c51-4c9d-9720-94b7ef1d62bd` |
 | `ToolCheckRequest` | `partIds` | `string[]` | no | `["0e9f3b8b-8c83-4d9a-9f7d-1f2b4dfb8a11"]` |
 | `ToolCheckRequest` | `context` | `object` | no | `{ "category": "GPU" }` |
+| `ToolCheckResponse` | `tool` | `string` | no | `compatibility` |
 | `ToolCheckResponse` | `status` | `string` | no | `PASS` |
+| `ToolCheckResponse` | `score` | `number` | no | `1.0` |
 | `ToolCheckResponse` | `confidence` | `string` | no | `HIGH` |
 | `ToolCheckResponse` | `summary` | `string` | no | `호환됩니다.` |
+| `ToolCheckResponse` | `warnings` | `string[]` | no | `[]` |
+| `ToolCheckResponse` | `evidence` | `object[]` | no | `[{ "source_id": "compatibility-rule-v1", "summary": "호환됩니다." }]` |
 | `ToolCheckResponse` | `details` | `object` | no | `{ "checkedPartIds": ["0e9f3b8b-8c83-4d9a-9f7d-1f2b4dfb8a11"] }` |
 
 ### Agent/RAG DTO

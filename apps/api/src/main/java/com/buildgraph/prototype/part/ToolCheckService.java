@@ -321,7 +321,39 @@ public class ToolCheckService {
 
     /** Builds the common Tool response shape. */
     private static Map<String, Object> tool(String tool, String status, String confidence, String summary, Map<String, Object> details) {
-        return MockData.map("tool", tool, "status", status, "confidence", confidence, "summary", summary, "details", details);
+        return MockData.map(
+                "tool", tool,
+                "status", status,
+                "score", score(status),
+                "confidence", confidence,
+                "summary", summary,
+                "warnings", warnings(status, summary),
+                "evidence", evidence(tool, summary),
+                "details", details
+        );
+    }
+
+    /** Scores the normalized Tool status for sorting and admin display. */
+    private static double score(String status) {
+        return switch (String.valueOf(status)) {
+            case "PASS" -> 1.0;
+            case "WARN" -> 0.65;
+            case "FAIL" -> 0.2;
+            default -> 0.0;
+        };
+    }
+
+    /** Converts non-pass summaries into user-facing warning strings. */
+    private static List<String> warnings(String status, String summary) {
+        return "PASS".equals(status) ? List.of() : List.of(firstText(summary, "Tool 검증 경고가 있습니다."));
+    }
+
+    /** Adds source evidence metadata to every Tool response. */
+    private static List<Map<String, Object>> evidence(String tool, String summary) {
+        return List.of(MockData.map(
+                "source_id", tool + "-rule-v1",
+                "summary", summary
+        ));
     }
 
     /** Indexes selected parts by category. */
