@@ -3,7 +3,7 @@ import { AlertTriangle, Bell, CheckCircle2, PackageCheck, Search, ShoppingCart, 
 import { useCallback, useEffect, useState } from 'react';
 import { Link, useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import { CategorySidebar, DataTable, MetricCard, Panel, Screen } from '../../../components/ui';
-import { getToken } from '../../../lib/api';
+import { AUTH_CHANGED_EVENT, getToken } from '../../../lib/api';
 import { AiBuildAssistant } from '../../quote/components/AiBuildAssistant';
 import {
   AI_SELECTED_BUILD_CHANGED_EVENT,
@@ -141,9 +141,11 @@ export function SelfQuotePage() {
   useEffect(() => {
     const syncSelectedBuild = () => setAiBuild(readSelectedAiBuild());
     window.addEventListener(AI_SELECTED_BUILD_CHANGED_EVENT, syncSelectedBuild);
+    window.addEventListener(AUTH_CHANGED_EVENT, syncSelectedBuild);
     window.addEventListener('storage', syncSelectedBuild);
     return () => {
       window.removeEventListener(AI_SELECTED_BUILD_CHANGED_EVENT, syncSelectedBuild);
+      window.removeEventListener(AUTH_CHANGED_EVENT, syncSelectedBuild);
       window.removeEventListener('storage', syncSelectedBuild);
     };
   }, []);

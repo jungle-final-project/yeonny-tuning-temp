@@ -2,12 +2,14 @@ import { type FormEvent, useEffect, useRef, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
 import { Bot, CheckCircle2, Cpu, PackageCheck, Send, ShoppingCart, Sparkles, X, Zap } from 'lucide-react';
-import { getToken } from '../../../lib/api';
+import { AUTH_CHANGED_EVENT, ApiError, clearToken, getToken } from '../../../lib/api';
 import { applyAiBuildToQuoteDraft, deleteQuoteDraftItem, getCurrentQuoteDraft, patchQuoteDraftItem, putQuoteDraftItem } from '../../parts/partsApi';
 import {
   AI_ASSISTANT_SESSION_CHANGED_EVENT,
   PART_CATEGORY_LABELS,
+  clearLegacyAiStorage,
   createAiMessageId,
+  getAiStorageOwnerKey,
   normalizeAiBuilds,
   normalizeAiRecommendedBuild,
   readAssistantSession,
@@ -25,6 +27,9 @@ import { buildChat } from '../quoteApi';
 type AiBuildAssistantProps = {
   surface?: 'home' | 'self-quote';
 };
+
+const LOGIN_REQUIRED_MESSAGE = '로그인이 필요합니다. 다시 로그인해 주세요.';
+const GENERIC_SUBMIT_ERROR_MESSAGE = 'AI 추천 API 호출에 실패했습니다. 잠시 후 다시 시도해 주세요.';
 
 export function AiBuildAssistant({ surface = 'home' }: AiBuildAssistantProps) {
   const navigate = useNavigate();
@@ -47,11 +52,17 @@ export function AiBuildAssistant({ surface = 'home' }: AiBuildAssistantProps) {
   });
 
   useEffect(() => {
-    const syncSession = () => setSession(readAssistantSession());
+    const syncSession = () => {
+      clearLegacyAiStorage();
+      setSession(readAssistantSession());
+    };
+    syncSession();
     window.addEventListener(AI_ASSISTANT_SESSION_CHANGED_EVENT, syncSession);
+    window.addEventListener(AUTH_CHANGED_EVENT, syncSession);
     window.addEventListener('storage', syncSession);
     return () => {
       window.removeEventListener(AI_ASSISTANT_SESSION_CHANGED_EVENT, syncSession);
+      window.removeEventListener(AUTH_CHANGED_EVENT, syncSession);
       window.removeEventListener('storage', syncSession);
     };
   }, []);
@@ -66,7 +77,14 @@ export function AiBuildAssistant({ surface = 'home' }: AiBuildAssistantProps) {
     const nextPrompt = prompt.trim();
     if (!nextPrompt || isSending) return;
 
+    const ownerKey = getAiStorageOwnerKey();
+    if (!getToken() || !ownerKey) {
+      setSubmitError(LOGIN_REQUIRED_MESSAGE);
+      return;
+    }
+
     const now = new Date().toISOString();
+    const baseSession = readAssistantSession(ownerKey);
     const userMessage: AiChatMessage = {
       id: createAiMessageId('user'),
       role: 'user',
@@ -75,12 +93,12 @@ export function AiBuildAssistant({ surface = 'home' }: AiBuildAssistantProps) {
       kind: 'general'
     };
     const optimisticSession = {
-      ...session,
-      messages: [...session.messages, userMessage],
+      ...baseSession,
+      messages: [...baseSession.messages, userMessage],
       updatedAt: now
     };
     setSession(optimisticSession);
-    saveAssistantSession(optimisticSession);
+    saveAssistantSession(optimisticSession, ownerKey);
     setPrompt('');
     setSubmitError(null);
     setIsSending(true);
@@ -88,21 +106,21 @@ export function AiBuildAssistant({ surface = 'home' }: AiBuildAssistantProps) {
     try {
       const response = await buildChat({
         message: nextPrompt,
-        currentBuilds: session.latestBuilds,
-        appliedPartPreferences: session.appliedPartPreferences,
+        currentBuilds: baseSession.latestBuilds,
+        appliedPartPreferences: baseSession.appliedPartPreferences,
         currentQuoteDraft: surface === 'self-quote' ? quoteDraftQuery.data : undefined
       });
       const responseTime = new Date().toISOString();
       const responseBuilds = response.builds?.length ? normalizeAiBuilds(response.builds) : undefined;
-      const latestBuilds = responseBuilds ?? session.latestBuilds;
+      const latestBuilds = responseBuilds ?? baseSession.latestBuilds;
       const appliedPartPreferences = response.partRecommendation
-        ? replaceAppliedPartPreference(session.appliedPartPreferences, {
+        ? replaceAppliedPartPreference(baseSession.appliedPartPreferences, {
             category: response.partRecommendation.category,
             label: response.partRecommendation.label,
             appliedAt: responseTime,
             options: response.partRecommendation.options
           })
-        : session.appliedPartPreferences;
+        : baseSession.appliedPartPreferences;
       const assistantMessage: AiChatMessage = {
         id: createAiMessageId(response.answerType.toLowerCase()),
         role: 'assistant',
@@ -121,9 +139,16 @@ export function AiBuildAssistant({ surface = 'home' }: AiBuildAssistantProps) {
         updatedAt: responseTime
       };
       setSession(nextSession);
-      saveAssistantSession(nextSession);
-    } catch {
-      setSubmitError('AI 추천 API 호출에 실패했습니다. 잠시 후 다시 시도해 주세요.');
+      saveAssistantSession(nextSession, ownerKey);
+    } catch (error) {
+      if (error instanceof ApiError && error.status === 401) {
+        saveAssistantSession(baseSession, ownerKey);
+        clearToken();
+        setSession(readAssistantSession(null));
+        setSubmitError(LOGIN_REQUIRED_MESSAGE);
+        return;
+      }
+      setSubmitError(GENERIC_SUBMIT_ERROR_MESSAGE);
     } finally {
       setIsSending(false);
     }

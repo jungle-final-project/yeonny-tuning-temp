@@ -18,12 +18,14 @@ import {
   type LucideIcon
 } from 'lucide-react';
 import { Screen } from '../../../components/ui';
+import { AUTH_CHANGED_EVENT } from '../../../lib/api';
 import { partImageUrl } from '../../parts/partDisplay';
 import { applyAiBuildToQuoteDraft, getPart, listParts } from '../../parts/partsApi';
 import type { PartRow } from '../../parts/types';
 import { AiBuildAssistant } from '../components/AiBuildAssistant';
 import {
   AI_ASSISTANT_SESSION_CHANGED_EVENT,
+  clearLegacyAiStorage,
   normalizeAiRecommendedBuild,
   readAssistantSession,
   saveSelectedAiBuild,
@@ -204,16 +206,22 @@ export function HomePage() {
 
   useEffect(() => {
     const syncAssistantSession = () => {
+      clearLegacyAiStorage();
       const nextSession = readAssistantSession();
       setAssistantSession(nextSession);
       if (nextSession.latestBuilds.length > 0) {
         setRecommendationTab('ai');
+      } else {
+        setRecommendationTab('popular');
       }
     };
+    syncAssistantSession();
     window.addEventListener(AI_ASSISTANT_SESSION_CHANGED_EVENT, syncAssistantSession);
+    window.addEventListener(AUTH_CHANGED_EVENT, syncAssistantSession);
     window.addEventListener('storage', syncAssistantSession);
     return () => {
       window.removeEventListener(AI_ASSISTANT_SESSION_CHANGED_EVENT, syncAssistantSession);
+      window.removeEventListener(AUTH_CHANGED_EVENT, syncAssistantSession);
       window.removeEventListener('storage', syncAssistantSession);
     };
   }, []);

@@ -202,6 +202,12 @@ test('self quote chatbot sends current draft and applies a remove action after c
 
   await page.addInitScript(() => {
     localStorage.setItem('buildgraph.token', 'jwt-user-token');
+    localStorage.setItem('buildgraph.authUser', JSON.stringify({
+      id: 'user-test',
+      email: 'user@example.com',
+      name: 'Demo User',
+      role: 'USER'
+    }));
     sessionStorage.clear();
   });
 
@@ -414,7 +420,13 @@ test('opens GPU internal assets from home category link', async ({ page }) => {
 test('shows selected AI build separately from the manual quote draft and marks duplicate parts', async ({ page }) => {
   await page.addInitScript(() => {
     localStorage.setItem('buildgraph.token', 'jwt-user-token');
-    sessionStorage.setItem('buildgraph.ai.selectedBuild', JSON.stringify({
+    localStorage.setItem('buildgraph.authUser', JSON.stringify({
+      id: 'user-test',
+      email: 'user@example.com',
+      name: 'Demo User',
+      role: 'USER'
+    }));
+    sessionStorage.setItem('buildgraph.ai.selectedBuild:user-test', JSON.stringify({
       id: 'ai-balanced',
       tier: 'balanced',
       title: '균형 추천 조합',
