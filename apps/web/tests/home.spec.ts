@@ -632,6 +632,9 @@ test('chatbot uses build-chat API and updates latest home AI recommendations', a
   const gpuGraphNode = graphCanvas.locator('.react-flow__node').filter({ hasText: 'RTX 5070' }).first();
   await expect(gpuGraphNode).toHaveClass(/buildgraph-flow-node/);
   await expect(gpuGraphNode).toHaveCSS('border-radius', '50%');
+  await expect(gpuGraphNode.locator('.buildgraph-node-category-label')).toHaveText('GPU');
+  await expect(gpuGraphNode.locator('.buildgraph-node-main-label')).toContainText('RTX 5070');
+  await expect(gpuGraphNode.locator('.buildgraph-node-status-label')).toHaveText('호환됨');
   const gpuGraphNodeBox = await gpuGraphNode.boundingBox();
   expect(gpuGraphNodeBox).not.toBeNull();
   expect(Math.abs((gpuGraphNodeBox?.width ?? 0) - (gpuGraphNodeBox?.height ?? 0))).toBeLessThanOrEqual(2);

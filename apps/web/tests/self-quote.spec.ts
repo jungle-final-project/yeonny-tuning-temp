@@ -1224,10 +1224,13 @@ test('renders quote dependency graph with circular nodes in the reference layout
   const graphCanvas = page.getByTestId('graph-flow-canvas');
   await expect(graphCanvas.getByText('소켓 일치')).toBeVisible();
 
-  const nodeBox = async (label: string) => {
+  const nodeBox = async (label: string, categoryLabel: string) => {
     const node = graphCanvas.locator('.react-flow__node').filter({ hasText: label }).first();
     await expect(node).toHaveClass(/buildgraph-flow-node/);
     await expect(node).toHaveCSS('border-radius', '50%');
+    await expect(node.locator('.buildgraph-node-category-label')).toHaveText(categoryLabel);
+    await expect(node.locator('.buildgraph-node-main-label')).toContainText(label);
+    await expect(node.locator('.buildgraph-node-status-label')).toHaveText(/호환됨|간섭 주의|장착 불가/);
     const box = await node.boundingBox();
     expect(box).not.toBeNull();
     expect(Math.abs((box?.width ?? 0) - (box?.height ?? 0))).toBeLessThanOrEqual(2);
@@ -1238,15 +1241,15 @@ test('renders quote dependency graph with circular nodes in the reference layout
     y: box.y + box.height / 2
   });
 
-  const cpu = center(await nodeBox('CPU'));
-  const motherboard = center(await nodeBox('메인보드'));
-  const ram = center(await nodeBox('RAM'));
-  const gpu = center(await nodeBox('RTX 5070'));
-  const psu = center(await nodeBox('750W 파워'));
-  const pcCase = center(await nodeBox('Airflow Case'));
-  const cooler = center(await nodeBox('쿨러'));
-  const storage = center(await nodeBox('SSD'));
-  const price = center(await nodeBox('총액'));
+  const cpu = center(await nodeBox('CPU', 'CPU'));
+  const motherboard = center(await nodeBox('메인보드', '메인보드'));
+  const ram = center(await nodeBox('RAM', 'RAM'));
+  const gpu = center(await nodeBox('RTX 5070', 'GPU'));
+  const psu = center(await nodeBox('750W 파워', '파워'));
+  const pcCase = center(await nodeBox('Airflow Case', '케이스'));
+  const cooler = center(await nodeBox('쿨러', '쿨러'));
+  const storage = center(await nodeBox('SSD', 'SSD'));
+  const price = center(await nodeBox('총액', '총액'));
 
   expect(cpu.x).toBeLessThan(motherboard.x);
   expect(motherboard.x).toBeLessThan(ram.x);

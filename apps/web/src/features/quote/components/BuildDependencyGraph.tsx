@@ -444,10 +444,19 @@ function toFlowElements(graph?: BuildGraphResolveResponse | null): { nodes: Node
 function nodeLabel(node: BuildGraphResolveResponse['nodes'][number]) {
   return (
     <div className="buildgraph-node-card buildgraph-node-circle">
+      <div className="buildgraph-node-category-label">{nodeCategoryLabel(node)}</div>
       <div className="buildgraph-node-main-label">{node.label}</div>
       <div className={`buildgraph-node-status-label ${statusBadgeTone(node.status)}`}>{statusLabel(node.status)}</div>
     </div>
   );
+}
+
+function nodeCategoryLabel(node: BuildGraphResolveResponse['nodes'][number]) {
+  const category = typeof node.category === 'string' ? node.category.toUpperCase() : '';
+  if (isPartCategory(category)) return PART_CATEGORY_LABELS[category];
+  if (category === 'PRICE') return '총액';
+  if (node.type === 'CONSTRAINT') return '조건';
+  return typeof node.category === 'string' && node.category.trim() ? node.category : node.type;
 }
 
 function nodeStyle(node: BuildGraphResolveResponse['nodes'][number]) {
