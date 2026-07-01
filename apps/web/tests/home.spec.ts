@@ -99,6 +99,30 @@ function budgetBuilds(budgetWon: number, appliedPartCategories: PartCategory[] =
   return (['budget', 'balanced', 'performance'] as AiTier[]).map((tier) => build(tier, budgetWon, appliedPartCategories));
 }
 
+function storedAssistantSession(messageText: string) {
+  return {
+    messages: [
+      {
+        id: 'ai-intro',
+        role: 'assistant',
+        text: '예산은 “200만원 PC 추천”처럼, 부품은 “GPU 추천해줘”처럼 물어보세요. 추천은 서버의 실제 부품 DB와 룰 기반 검증 결과로 계산됩니다.',
+        createdAt: '2026-06-30T00:00:00.000Z',
+        kind: 'intro'
+      },
+      {
+        id: 'user-existing',
+        role: 'user',
+        text: messageText,
+        createdAt: '2026-07-01T00:00:00.000Z',
+        kind: 'general'
+      }
+    ],
+    latestBuilds: [],
+    appliedPartPreferences: [],
+    updatedAt: '2026-07-01T00:00:00.000Z'
+  };
+}
+
 async function mockAiBuildChatApi(page: Page) {
   const requests: Array<{ message: string; currentBuilds?: unknown[] }> = [];
 
@@ -225,6 +249,12 @@ async function mockHomePartsApi(page: Page) {
 async function openHomeAsUser(page: Page) {
   await page.addInitScript(() => {
     localStorage.setItem('buildgraph.token', 'jwt-user-token');
+    localStorage.setItem('buildgraph.authUser', JSON.stringify({
+      id: 'user-1004',
+      email: 'user@example.com',
+      name: '테스트 사용자',
+      role: 'USER'
+    }));
     sessionStorage.clear();
   });
   await page.route('**/api/auth/me', async (route) => {
@@ -470,6 +500,99 @@ test('chatbot part questions show backend parts and apply them to home AI builds
   await expect(main.getByTestId('home-ai-recommendations').getByRole('img', { name: /케이스 이미지/ })).toHaveCount(0);
   await expect(main.getByTestId('home-ai-recommendations')).toContainText('AI 추천');
   await expect(main.getByTestId('home-ai-recommendations')).toContainText('호환성 통과');
+});
+
+test('chatbot only shows the current user scoped assistant session', async ({ page }) => {
+  await page.addInitScript(({ otherUserSession, legacySession }) => {
+    localStorage.setItem('buildgraph.token', 'jwt-user-token');
+    localStorage.setItem('buildgraph.authUser', JSON.stringify({
+      id: 'user-b',
+      email: 'test@test.test',
+      name: '테스트 사용자 B',
+      role: 'USER'
+    }));
+    sessionStorage.setItem('buildgraph.ai.assistantSession:user-a', otherUserSession);
+    sessionStorage.setItem('buildgraph.ai.assistantSession', legacySession);
+  }, {
+    otherUserSession: JSON.stringify(storedAssistantSession('kmb5037@naver.com 계정의 이전 구매 상담')),
+    legacySession: JSON.stringify(storedAssistantSession('legacy global key에 남아 있던 이전 상담'))
+  });
+  await page.route('**/api/auth/me', async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        id: 'user-b',
+        email: 'test@test.test',
+        name: '테스트 사용자 B',
+        role: 'USER'
+      })
+    });
+  });
+  await mockHomePartsApi(page);
+  await page.goto('/');
+
+  await page.getByRole('button', { name: 'AI 견적 챗봇 열기' }).click();
+
+  await expect(page.getByTestId('ai-chat-messages')).toContainText('예산은');
+  await expect(page.getByTestId('ai-chat-messages')).not.toContainText('kmb5037@naver.com 계정의 이전 구매 상담');
+  await expect(page.getByTestId('ai-chat-messages')).not.toContainText('legacy global key에 남아 있던 이전 상담');
+});
+
+test('chatbot asks for login when token disappears before submit', async ({ page }) => {
+  let buildChatCalls = 0;
+  await openHomeAsUser(page);
+  await page.route('**/api/ai/build-chat', async (route) => {
+    buildChatCalls += 1;
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        answerType: 'GENERAL',
+        message: '호출되면 안 되는 응답입니다.',
+        builds: [],
+        partRecommendation: null,
+        warnings: []
+      })
+    });
+  });
+
+  await page.getByRole('button', { name: 'AI 견적 챗봇 열기' }).click();
+  await page.evaluate(() => {
+    localStorage.removeItem('buildgraph.token');
+  });
+  await page.getByRole('textbox', { name: 'AI 챗봇에게 PC 사양 질문' }).fill('토큰 삭제 확인 질문');
+  await page.getByRole('button', { name: '질문 보내기' }).click();
+
+  await expect(page.getByRole('alert')).toContainText('로그인이 필요합니다. 다시 로그인해 주세요.');
+  await expect(page.getByRole('alert')).not.toContainText('AI 추천 API 호출에 실패했습니다.');
+  await expect(page.getByTestId('ai-chat-messages')).not.toContainText('토큰 삭제 확인 질문');
+  expect(buildChatCalls).toBe(0);
+});
+
+test('chatbot maps build-chat 401 to login required instead of generic failure', async ({ page }) => {
+  let buildChatCalls = 0;
+  await openHomeAsUser(page);
+  await page.route('**/api/ai/build-chat', async (route) => {
+    buildChatCalls += 1;
+    await route.fulfill({
+      status: 401,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        code: 'UNAUTHORIZED',
+        message: '로그인이 필요합니다.'
+      })
+    });
+  });
+
+  await page.getByRole('button', { name: 'AI 견적 챗봇 열기' }).click();
+  await page.getByRole('textbox', { name: 'AI 챗봇에게 PC 사양 질문' }).fill('로그인 만료 확인 질문');
+  await page.getByRole('button', { name: '질문 보내기' }).click();
+
+  await expect.poll(() => buildChatCalls).toBe(1);
+  await expect(page.getByRole('alert')).toContainText('로그인이 필요합니다. 다시 로그인해 주세요.');
+  await expect(page.getByRole('alert')).not.toContainText('AI 추천 API 호출에 실패했습니다.');
+  await expect(page.getByTestId('ai-chat-messages')).not.toContainText('로그인 만료 확인 질문');
 });
 
 test('selects a home AI recommendation through batch API and shows applied cart in self quote', async ({ page }) => {

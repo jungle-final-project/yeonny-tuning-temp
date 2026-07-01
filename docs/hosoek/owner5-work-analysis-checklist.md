@@ -755,6 +755,126 @@ AdminShell nav 분석 결과:
 - [x] 현재 unstaged 변경은 `docs/hosoek/owner5-work-analysis-checklist.md` 1개뿐이며, 코드/API/OpenAPI 추가 변경은 없다.
 - [x] 이번 커밋 메시지는 구매 상담 기능 구현이 아니라 공동계약서 감사와 커밋 메시지 요청 전 점검 기록을 남기는 문서 커밋으로 분리한다.
 
+#### 2026-07-01 1번/4번 완료도 재감사 기록
+
+결론: **1번과 4번은 모두 부분완료다.** 현재 테스트와 OpenAPI 검증은 통과하지만, 계약서 기준의 소유권, OAuth, 파일 검증, 관리자 화면/API 상태 전이까지 완전히 닫히지는 않았다.
+
+- [x] 검증 실행 결과
+  - [x] `cd apps/web && npm run test` 통과. Playwright 70개 통과.
+  - [x] `cd apps/api && ./gradlew test --no-daemon` 통과. `BUILD SUCCESSFUL`.
+  - [x] `/private/tmp/buildgraph-openapi-check/bin/python tools/validate_openapi.py` 통과. 52 paths.
+- [x] 1번 완료된 부분 확인
+  - [x] `POST /api/users`, `POST /api/auth/login`, `POST /api/auth/refresh`, `POST /api/auth/logout`, `GET /api/auth/me` 구현과 테스트가 있다.
+  - [x] 로그인/회원가입 화면은 API payload, 오류 표시, token 저장, logout 흐름 테스트가 있다.
+  - [x] 요구사항 분석, 추천, build 상세, 부품 변경 API 골격은 있다.
+- [ ] 1번 미완료/확인 필요
+  - [ ] `GET /api/auth/google/start`, `GET /api/auth/google/callback`, `POST /api/auth/exchange`는 OpenAPI/계약에는 있으나 현재 `UserController`에 구현되어 있지 않다.
+  - [ ] `BuildQueryService.parse()`가 현재 로그인 사용자 id가 아니라 `user@example.com` 고정 user_id로 requirement를 저장한다.
+  - [ ] `GET /api/builds/history`, `GET /api/builds/{id}`, `POST /api/builds/{id}/change-part`는 현재 사용자 소유권 404를 보장하지 않는다.
+  - [ ] `/my/quotes`는 `quoteMock` 기반 정적 화면이고 `getBuildHistory()`를 호출하지 않는다.
+- [x] 4번 완료된 부분 확인
+  - [x] PC Agent CLI sample/export가 있다.
+  - [x] `/support/new`는 파일 선택, 동의, `POST /api/agent-logs/upload`, `POST /api/as-tickets`, 상세 이동 흐름을 갖고 있다.
+  - [x] `POST /api/agent-logs/upload`, `GET /api/agent-logs/{id}`, `POST /api/as-tickets`, `GET /api/as-tickets/{id}` API 골격이 있다.
+  - [x] `GET/PATCH /api/admin/as-tickets` 백엔드 route는 `AdminController`에 있다.
+- [ ] 4번 미완료/확인 필요
+  - [ ] `AgentLogQueryService.upload()`가 현재 사용자 id가 아니라 `user@example.com` 고정 user_id로 저장한다.
+  - [ ] 로그 업로드 서버 검증이 계약 수준에 부족하다. 파일 필수, JSONL line 검증, MIME/확장자, 10 MiB, 20000 line, PII masking, `FILE_VALIDATION_ERROR`가 필요하다.
+  - [ ] `AgentLogQueryService.detail()`과 `TicketQueryService.ticket()`는 본인 소유 404를 보장하지 않는다.
+  - [ ] `TicketQueryService.create()`가 현재 사용자 id가 아니라 `user@example.com` 고정 user_id로 티켓을 만든다.
+  - [ ] `PATCH /api/admin/as-tickets/{id}`는 허용 상태 전이표, `409 CONFLICT_STATE`, `assignedAdminId`, `resolvedAt`, `admin_audit_logs` 기록을 구현하지 않는다.
+  - [ ] `/admin/as-tickets`, `/admin/as-tickets/:ticketId` 프론트는 mock/static/no-op 화면으로 실제 admin AS API를 호출하지 않는다.
+  - [ ] `AgentLogControllerTest`, `TicketControllerTest`, `TicketQueryServiceTest`가 없어 4번 계약을 막아주는 백엔드 테스트가 부족하다.
+
+#### 2026-07-01 프로젝트 종료까지 남은 작업
+
+프로젝트를 끝내려면 “화면이 렌더링된다”가 아니라 **계약서의 실제 사용자 흐름이 서버+DB+테스트로 닫히는 상태**가 되어야 한다.
+
+- [ ] 1번 Quote/Auth 마무리
+  - [ ] Google OAuth start/callback/exchange 구현 여부를 결정하고, 구현한다면 Redis/runtime one-time code와 token 저장 흐름을 완성한다.
+  - [ ] `requirements`, `builds`, `build_items` 저장/조회/변경을 현재 로그인 사용자 소유권 기준으로 바꾼다.
+  - [ ] 타인 build/history/detail/change-part 접근 시 404를 반환하도록 contract test를 추가한다.
+  - [ ] `/my/quotes`를 mock에서 `GET /api/builds/history` 실제 API 연결로 전환한다.
+- [ ] 2번 Parts/Price/Tool 마무리
+  - [ ] 가격 알림을 현재 사용자 기준으로 저장/조회하고 active 중복 등록은 409로 정리한다.
+  - [ ] `POST /api/admin/price-jobs/run`의 중복 실행 409, 실패 처리, 상태 전이 정책을 계약과 맞춘다.
+  - [ ] `/admin/price-jobs`를 disabled/static 화면이 아니라 실제 API 실행/상태/실패 이력 화면으로 연결한다.
+  - [ ] 가격 수집이 네이버 API/다나와 보완 결과를 내부 후보/게시 데이터로 저장하는 흐름을 최종 검증한다.
+- [ ] 3번 Agent/RAG/AS Chat 마무리
+  - [ ] 일반 Agent session create/run/get API의 본인 소유권 404를 보장한다.
+  - [ ] Agent 실행 상태 전이와 queue/worker 사용 여부를 결정하고, RabbitMQ를 실제로 쓰는 경우 ack/retry 정책을 문서화/테스트한다.
+  - [ ] 관리자 Agent/Tool/RAG 메뉴가 seed 상세 링크인지 list route인지 최종 결정한다.
+  - [ ] AS Chat LLM/RAG/Tool 응답이 저장되고 실패/OPENAI_API_KEY 없음/stream fallback이 테스트로 막히는지 확인한다.
+- [ ] 4번 PC Agent/AS 마무리
+  - [ ] 로그 업로드를 현재 로그인 사용자 기준으로 저장하고 본인 소유 404를 적용한다.
+  - [ ] JSONL 파일 필수, MIME/확장자, 10 MiB, 20000 line, line JSON validation, PII masking, `FILE_VALIDATION_ERROR`를 구현한다.
+  - [ ] AS 티켓 생성/조회/update에 현재 사용자 소유권, soft delete 제외, 상태 전이 409, `assignedAdminId`, `resolvedAt`, audit log를 적용한다.
+  - [ ] `/admin/as-tickets`, `/admin/as-tickets/:ticketId`를 mock/static에서 실제 admin AS API 화면으로 전환한다.
+  - [ ] `AgentLogControllerTest`, `TicketControllerTest`, `TicketQueryServiceTest`를 추가한다.
+- [ ] 5번 Common/Admin/Infra 마무리
+  - [ ] `api.ts`의 `ErrorResponse` 보존, refresh retry 1회, refresh 실패 시 `clearToken()`, logout API 호출 흐름을 고정한다.
+  - [ ] `RequireUser`, `RequireAdmin`, admin shell route guard가 실제 JWT/role 정책과 충돌 없는지 최종 확인한다.
+  - [ ] AdminShell nav label/order와 각 owner route 정책을 2/3/4번과 공유해 확정한다.
+  - [ ] k6 300명/1000명 부하 테스트 시나리오와 리포트 템플릿을 실제 endpoint 기준으로 확장한다.
+  - [ ] Redis/RabbitMQ/Mailpit은 실제 기능이 붙은 뒤 connection smoke에서 기능 smoke로 올린다.
+- [ ] 공통 종료 검증
+  - [ ] `npm run build`, `npm run test`.
+  - [ ] `./gradlew test --no-daemon`, `./gradlew bootJar --no-daemon`.
+  - [ ] `python tools/validate_openapi.py`.
+  - [ ] `docker compose config`, 필요 시 `docker compose up --build` runtime smoke.
+  - [ ] 실제 E2E: 로그인 -> 자연어 구매 상담 -> 추천 적용 -> 내 견적함 -> 가격 알림 -> PC Agent 로그 업로드 -> AS 티켓 생성 -> 관리자 화면 확인.
+
+#### 2026-07-01 MVP와 MVP 이후 작업 구분
+
+| 구분 | 기능/영역 | 끝내기 위한 작업 | 담당/협업 |
+| --- | --- | --- | --- |
+| MVP | Auth/User | 이메일 회원가입, 로그인, refresh/logout, `/auth/me`, token 저장/삭제, 401/403 분기, 공통 `ErrorResponse`를 테스트까지 닫는다. OAuth는 구현 여부를 별도 확정한다. | 1번, 5번 |
+| MVP | 구매 상담/추천 | 자연어 입력 -> 요구사항 저장 -> RAG/Tool 근거 기반 추천 2~3개 -> 추천 적용까지 실제 DB와 현재 사용자 기준으로 연결한다. | 1번, 2번, 3번 |
+| MVP | 내 견적함 | `/my/quotes` mock을 제거하고 `GET /api/builds/history` 실제 사용자 build 목록으로 바꾼다. | 1번, 2번 협업 |
+| MVP | 부품/가격/Tool | 내부 자산 `parts`, 가격 스냅샷, Tool check, 견적초안 적용/수정/삭제를 계약 DTO와 맞추고 테스트한다. | 2번 |
+| MVP | 가격 알림 | 목표가 알림 등록/조회, 현재 사용자 기준 저장, active 중복 409, 1회 이메일 발송 정책을 구현한다. | 2번, 5번 Mailpit |
+| MVP | Agent/RAG/근거 | Agent session, Tool invocation, RAG evidence 저장/조회, 관리자 상세 확인, 본인 소유권/관리자 권한을 테스트한다. | 3번, 5번 |
+| MVP | PC Agent/AS | JSONL sample/export, 로그 업로드, 파일 검증, AS 티켓 생성/조회, 본인 소유권 404를 구현한다. | 4번 |
+| MVP | 관리자 AS | `/admin/as-tickets`, `/admin/as-tickets/:ticketId`를 mock에서 실제 API로 바꾸고 상태 전이 409, 담당자 배정, audit log를 구현한다. | 4번, 5번 |
+| MVP | AdminShell/공통 관리자 | 8개 메뉴, guard, dashboard, audit logs, owner route 연결, 권한 분기를 최종 고정한다. | 5번, 2/3/4번 협업 |
+| MVP | 인프라/검증 | Docker compose, Redis/RabbitMQ/Mailpit smoke, CI, OpenAPI 검증, Gradle/npm test/build, 실제 E2E를 닫는다. | 5번 |
+| MVP 이후 | Google OAuth 확장 | Google start/callback/exchange, Redis one-time code TTL, 계정 연결 정책, OAuth 오류/보안 테스트를 구현한다. MVP에 포함할지는 팀 결정 필요. | 1번, 5번 |
+| MVP 이후 | 실제 queue worker | Agent job, price job, mail job을 RabbitMQ publish/consume/ack/retry/dead-letter 정책으로 확장한다. | 2번, 3번, 5번 |
+| MVP 이후 | 가격 수집 고도화 | 가격 동향 그래프, 배송비/쿠폰/품절 반영, 수집 대상 확대, 다나와 크롤링 안정화, 가격 이력 분석을 추가한다. | 2번 |
+| MVP 이후 | 부하 테스트 확장 | k6 300명/1000명 시나리오, 병목 분석, p95/에러율 리포트, mock worker 부하 검증을 실행한다. | 5번, 전체 |
+| MVP 이후 | PC Agent 고도화 | 실제 센서 수집, Windows Event Log, NVML, 문제 상황 profile, 자동 로그 보관 삭제 스케줄러를 붙인다. | 4번 |
+| MVP 이후 | AS 고도화 | 상담원 답변 등록, 티켓 종료 요청, 업그레이드 후보 반영, AS Chat 결과를 티켓 후보로 승인 반영하는 workflow를 만든다. | 4번, 3번 |
+| MVP 이후 | 관리자 운영 고도화 | 전역 검색, export/action button, 운영 작업 패널 실시간화, dashboard degraded 원인 드릴다운을 구현한다. | 5번, 2/3/4번 |
+| MVP 이후 | 메일/알림 확장 | 회원가입 인증 메일, 가격 알림 템플릿, 재발송/수신거부, Mailpit 이후 실제 SMTP 연동을 구현한다. | 1번, 2번, 5번 |
+| MVP 이후 | 제외 범위 유지 | 결제/배송/거래, 커뮤니티, 원격제어, 정확한 FPS 보장, 최저가 보장, 자동 모델 학습은 MVP 이후에도 별도 기획 없이는 구현하지 않는다. | 팀 결정 필요 |
+
+#### 2026-07-01 `last.md` 최종 남은 작업 문서 생성 기록
+
+- [x] 저장소 루트에 `last.md`를 새로 만들었다.
+- [x] MVP를 끝내기 위한 작업과 MVP 이후 기능 구현을 끝내기 위한 작업을 분리했다.
+- [x] 각 작업에 현재 상태, 남은 작업, 완료 기준, 담당/협업자를 정리했다.
+- [x] MVP 이후에도 별도 기획 없이는 구현하지 않을 제외 범위를 따로 정리했다.
+
+#### 2026-07-01 구매 상담 AI 챗봇 사용자 격리 및 로그인 오류 UX 수정
+
+- [x] Playwright 회귀 테스트를 먼저 추가했다.
+  - [x] A 사용자 구매 상담 세션이 있어도 B 사용자 로그인 상태에서는 A 메시지가 보이지 않는다.
+  - [x] legacy global key `buildgraph.ai.assistantSession`에 남은 이전 대화가 현재 사용자에게 표시되지 않는다.
+  - [x] 챗봇 화면이 열린 뒤 token이 사라진 상태에서 질문하면 API 호출 없이 로그인 필요 문구를 보여준다.
+  - [x] `/api/ai/build-chat`가 401을 반환하면 일반 실패 문구 대신 로그인 필요 문구를 보여준다.
+- [x] `buildgraph.ai.assistantSession:{userIdOrEmail}` 방식으로 구매 상담 챗봇 대화 저장소를 사용자별로 분리했다.
+- [x] `buildgraph.ai.selectedBuild:{userIdOrEmail}` 방식으로 AI 선택 Build 저장소도 사용자별로 분리했다.
+- [x] 기존 unscoped `buildgraph.ai.assistantSession`, `buildgraph.ai.selectedBuild`는 현재 로그인 사용자에게 fallback하지 않고 정리 대상으로 처리했다.
+- [x] token 없음 또는 401 응답에서는 optimistic user message를 남기지 않고 `로그인이 필요합니다. 다시 로그인해 주세요.`를 표시하도록 수정했다.
+- [x] 검증: `cd apps/web && npm run test -- home.spec.ts` 통과.
+- [x] 추가 검증: `cd apps/web && npm run test`, `cd apps/web && npm run build`, `git diff --check` 통과.
+
+#### 2026-07-01 커밋 메시지 요청 전 점검 기록
+
+- [x] 현재 브랜치가 `main`이고, 마지막 커밋이 `Merge pull request #26 from jungle-final-project/feat/popular-part-detail-links`임을 확인했다.
+- [x] 현재 변경은 구매 상담 AI 세션 사용자별 저장소 분리, 로그인 만료 오류 UX, 관련 Playwright 테스트, 남은 작업 최종 정리 문서, 오래된 hoseok/hosoek 문서 자산 삭제로 구분된다.
+- [x] 코드/테스트 변경과 문서 정리 변경은 성격이 달라 별도 커밋으로 나누는 것이 적절하다.
+
 ## 우선순위
 
 ### P0
