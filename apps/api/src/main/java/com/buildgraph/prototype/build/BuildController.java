@@ -73,6 +73,10 @@ public class BuildController {
             @RequestHeader(value = "X-BuildGraph-AI-Profile", required = false) String aiProfile
     ) {
         currentUserService.requireUser(authorization);
-        return buildChatService.chat(request == null ? Map.of() : request, aiProfile);
+        Map<String, Object> body = request == null ? Map.of() : request;
+        if (aiProfile == null || aiProfile.isBlank()) {
+            return buildChatService.chat(body);
+        }
+        return buildChatService.chat(body, aiProfile);
     }
 }
