@@ -631,11 +631,14 @@ test('chatbot uses build-chat API and updates latest home AI recommendations', a
   expect(graphPaneBox?.height).toBeGreaterThanOrEqual(680);
   const gpuGraphNode = graphCanvas.locator('.react-flow__node').filter({ hasText: 'RTX 5070' }).first();
   await expect(gpuGraphNode).toHaveClass(/buildgraph-flow-node/);
-  await expect(gpuGraphNode).toHaveCSS('border-radius', '999px');
-  await expect(gpuGraphNode.locator('.buildgraph-node-status-orb')).toHaveCount(1);
+  await expect(gpuGraphNode).toHaveCSS('border-radius', '50%');
+  const gpuGraphNodeBox = await gpuGraphNode.boundingBox();
+  expect(gpuGraphNodeBox).not.toBeNull();
+  expect(Math.abs((gpuGraphNodeBox?.width ?? 0) - (gpuGraphNodeBox?.height ?? 0))).toBeLessThanOrEqual(2);
+  await expect(gpuGraphNode.locator('.buildgraph-node-status-orb')).toHaveCount(0);
   const graphEdgePath = graphCanvas.locator('.react-flow__edge.buildgraph-flow-edge .react-flow__edge-path').first();
   await expect(graphEdgePath).toHaveCSS('stroke-linecap', 'round');
-  await expect(graphEdgePath).toHaveCSS('stroke-width', '3px');
+  await expect(graphEdgePath).toHaveCSS('stroke-width', '2px');
   const candidatePanel = graphCanvas.getByTestId('graph-node-candidate-panel');
   await expect(candidatePanel).toContainText('선택한 부품 상세');
   await expect(candidatePanel).toContainText('250W · 길이 304mm');

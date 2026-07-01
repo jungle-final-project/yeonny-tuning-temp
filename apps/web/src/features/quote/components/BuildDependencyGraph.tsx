@@ -5,6 +5,7 @@ import {
   Controls,
   MarkerType,
   MiniMap,
+  Position,
   ReactFlow,
   type Edge,
   type Node
@@ -40,16 +41,17 @@ type BuildDependencyGraphProps = {
 type CandidateContext = NonNullable<BuildDependencyGraphProps['candidateContext']>;
 
 const categoryOrder = ['CPU', 'MOTHERBOARD', 'RAM', 'GPU', 'PSU', 'CASE', 'COOLER', 'STORAGE', 'PRICE'];
+const DEFAULT_NODE_DIAMETER = 112;
 const categoryPositions: Record<string, { x: number; y: number }> = {
-  CPU: { x: 40, y: 40 },
-  MOTHERBOARD: { x: 300, y: 40 },
-  RAM: { x: 560, y: 40 },
-  GPU: { x: 40, y: 210 },
-  PSU: { x: 300, y: 210 },
-  CASE: { x: 560, y: 210 },
-  COOLER: { x: 300, y: 380 },
-  STORAGE: { x: 560, y: 380 },
-  PRICE: { x: 40, y: 380 }
+  CPU: { x: 20, y: 170 },
+  MOTHERBOARD: { x: 300, y: 36 },
+  RAM: { x: 640, y: 56 },
+  GPU: { x: 300, y: 270 },
+  PSU: { x: 640, y: 250 },
+  CASE: { x: 640, y: 440 },
+  COOLER: { x: 300, y: 500 },
+  STORAGE: { x: 20, y: 650 },
+  PRICE: { x: 300, y: 660 }
 };
 
 export function BuildDependencyGraph({
@@ -197,8 +199,10 @@ export function BuildDependencyGraph({
                 onEdgeClick={(_, edge: Edge) => handleEdgeClick(edge)}
               >
                 <Background color="#dbe4f0" gap={18} />
-                <MiniMap pannable zoomable nodeColor={(node) => statusColor(String(node.data.status ?? 'PASS'))} />
-                <Controls showInteractive={false} />
+                {isDesktopViewport ? (
+                  <MiniMap pannable zoomable nodeColor={(node) => statusColor(String(node.data.status ?? 'PASS'))} />
+                ) : null}
+                {isDesktopViewport ? <Controls showInteractive={false} /> : null}
               </ReactFlow>
             </div>
 
@@ -383,19 +387,21 @@ function toFlowElements(graph?: BuildGraphResolveResponse | null): { nodes: Node
   const nodes = graph.nodes.map((node, index) => {
     const category = String(node.category ?? node.id).toUpperCase();
     const basePosition = categoryPositions[category] ?? {
-      x: 40 + (index % 3) * 260,
-      y: 40 + Math.floor(index / 3) * 170
+      x: 20 + (index % 3) * 300,
+      y: 80 + Math.floor(index / 3) * 210
     };
     return {
       id: node.id,
       position: basePosition,
+      sourcePosition: Position.Right,
+      targetPosition: Position.Left,
       data: {
         label: nodeLabel(node),
         category: node.category,
         status: node.status
       },
       className: focusNodeIds.has(node.id) ? 'buildgraph-flow-node buildgraph-flow-node--focus' : 'buildgraph-flow-node',
-      style: nodeStyle(node.status, node.type === 'CONSTRAINT')
+      style: nodeStyle(node)
     } satisfies Node;
   });
   const edges = graph.edges.map((edge) => ({
@@ -404,64 +410,64 @@ function toFlowElements(graph?: BuildGraphResolveResponse | null): { nodes: Node
     target: edge.target,
     label: edge.label,
     type: 'bezier',
-    animated: edge.status !== 'PASS',
+    animated: false,
     className: `buildgraph-flow-edge buildgraph-flow-edge--${edge.status.toLowerCase()}`,
-    interactionWidth: 18,
+    interactionWidth: 20,
     markerEnd: {
       type: MarkerType.ArrowClosed,
-      color: statusColor(edge.status)
+      color: statusColor(edge.status),
+      width: 18,
+      height: 18
     },
     style: {
       stroke: statusColor(edge.status),
-      strokeWidth: edge.status === 'PASS' ? 2.5 : 3,
+      strokeWidth: edge.status === 'PASS' ? 1.75 : 2,
       strokeLinecap: 'round',
       strokeLinejoin: 'round',
-      filter: 'drop-shadow(0 2px 3px rgba(37, 99, 235, 0.16))'
+      filter: 'drop-shadow(0 1px 2px rgba(15, 23, 42, 0.12))'
     },
     labelStyle: {
       fill: statusColor(edge.status),
-      fontSize: 12,
+      fontSize: 13,
       fontWeight: 800
     },
     labelBgStyle: {
       fill: '#ffffff',
-      fillOpacity: 0.92
+      fillOpacity: 0.86
     },
-    labelBgPadding: [8, 4],
-    labelBgBorderRadius: 10
+    labelBgPadding: [10, 5],
+    labelBgBorderRadius: 8
   } satisfies Edge));
   return { nodes, edges };
 }
 
 function nodeLabel(node: BuildGraphResolveResponse['nodes'][number]) {
-  const category = typeof node.category === 'string' && isPartCategory(node.category)
-    ? PART_CATEGORY_LABELS[node.category]
-    : node.category;
   return (
-    <div className="buildgraph-node-card flex min-h-[78px] w-[204px] items-center gap-3 px-3 py-2.5">
-      <span className={`buildgraph-node-status-orb ${statusOrbTone(node.status)}`} aria-hidden="true" />
-      <div className="min-w-0 flex-1">
-        <div className="mb-1 flex items-center justify-between gap-2">
-          <span className="truncate text-[11px] font-black text-slate-500">{category ?? node.type}</span>
-          <span className={`rounded-full px-2 py-0.5 text-[10px] font-black ${statusBadgeTone(node.status)}`}>{statusLabel(node.status)}</span>
-        </div>
-        <div className="line-clamp-2 text-xs font-black leading-4 text-commerce-ink">{node.label}</div>
-      </div>
+    <div className="buildgraph-node-card buildgraph-node-circle">
+      <div className="buildgraph-node-main-label">{node.label}</div>
+      <div className={`buildgraph-node-status-label ${statusBadgeTone(node.status)}`}>{statusLabel(node.status)}</div>
     </div>
   );
 }
 
-function nodeStyle(status: BuildGraphStatus, constraint: boolean) {
+function nodeStyle(node: BuildGraphResolveResponse['nodes'][number]) {
+  const status = node.status;
+  const diameter = nodeDiameter(node);
   const base = {
-    borderRadius: 999,
-    borderWidth: 2,
+    borderRadius: '50%',
+    borderWidth: status === 'WARN' ? 4 : 3,
     borderStyle: 'solid',
     padding: 0,
-    width: 204,
-    minHeight: 78,
-    boxShadow: '0 14px 30px rgba(15, 23, 42, 0.08)'
+    width: diameter,
+    height: diameter,
+    minWidth: diameter,
+    minHeight: diameter,
+    aspectRatio: '1 / 1',
+    boxShadow: status === 'WARN'
+      ? '0 14px 30px rgba(245, 158, 11, 0.14)'
+      : '0 14px 30px rgba(15, 23, 42, 0.08)'
   };
-  if (constraint) {
+  if (node.type === 'CONSTRAINT') {
     return {
       ...base,
       background: 'linear-gradient(135deg, #f8fafc 0%, #ffffff 100%)',
@@ -477,6 +483,14 @@ function nodeStyle(status: BuildGraphStatus, constraint: boolean) {
         : 'linear-gradient(135deg, #ffffff 0%, #fef2f2 100%)',
     borderColor: status === 'PASS' ? '#dbeafe' : status === 'WARN' ? '#f59e0b' : '#ef4444'
   };
+}
+
+function nodeDiameter(node: BuildGraphResolveResponse['nodes'][number]) {
+  const category = String(node.category ?? node.id).toUpperCase();
+  if (category === 'MOTHERBOARD') return 136;
+  if (category === 'CASE') return 124;
+  if (String(node.label).length >= 8) return 118;
+  return DEFAULT_NODE_DIAMETER;
 }
 
 function SelectedNodePanel({ node }: { node: BuildGraphNode }) {
@@ -750,12 +764,6 @@ function statusBadgeTone(status: BuildGraphStatus) {
   if (status === 'FAIL') return 'bg-red-100 text-red-700';
   if (status === 'WARN') return 'bg-amber-100 text-amber-700';
   return 'bg-emerald-50 text-emerald-700';
-}
-
-function statusOrbTone(status: BuildGraphStatus) {
-  if (status === 'FAIL') return 'bg-red-500 shadow-[0_0_0_5px_rgba(239,68,68,0.14)]';
-  if (status === 'WARN') return 'bg-amber-500 shadow-[0_0_0_5px_rgba(245,158,11,0.16)]';
-  return 'bg-emerald-500 shadow-[0_0_0_5px_rgba(16,185,129,0.14)]';
 }
 
 function statusLabel(status: BuildGraphStatus) {

@@ -53,11 +53,35 @@ function buildGraphResponse(mode = 'ISSUE_PATH') {
     mode,
     summary: '현재 장바구니 기준으로 GPU, 파워, 케이스 영향 관계를 확인했습니다.',
     nodes: [
+      { id: 'part-CPU', type: 'PART', category: 'CPU', label: 'CPU', status: 'PASS', detail: '소켓 기준 부품' },
+      { id: 'part-MOTHERBOARD', type: 'PART', category: 'MOTHERBOARD', label: '메인보드', status: 'PASS', detail: 'DDR 규격 확인' },
+      { id: 'part-RAM', type: 'PART', category: 'RAM', label: 'RAM', status: 'PASS', detail: '메모리 규격' },
       { id: 'part-GPU', type: 'PART', category: 'GPU', label: 'RTX 5070', status: 'PASS', detail: '선택한 그래픽카드' },
       { id: 'part-PSU', type: 'PART', category: 'PSU', label: '750W 파워', status: 'WARN', detail: '전력 여유 확인' },
-      { id: 'part-CASE', type: 'PART', category: 'CASE', label: 'Airflow Case', status: 'PASS', detail: '장착 길이 확인' }
+      { id: 'part-CASE', type: 'PART', category: 'CASE', label: 'Airflow Case', status: 'PASS', detail: '장착 길이 확인' },
+      { id: 'part-COOLER', type: 'PART', category: 'COOLER', label: '쿨러', status: 'PASS', detail: '높이 여유 확인' },
+      { id: 'part-STORAGE', type: 'PART', category: 'STORAGE', label: 'SSD', status: 'PASS', detail: '저장장치' },
+      { id: 'constraint-PRICE', type: 'CONSTRAINT', category: 'PRICE', label: '총액', status: 'PASS', detail: '예산 범위 확인' }
     ],
     edges: [
+      {
+        id: 'edge-cpu-board-socket',
+        source: 'part-CPU',
+        target: 'part-MOTHERBOARD',
+        type: 'REQUIRES',
+        status: 'PASS',
+        label: '소켓 일치',
+        summary: 'CPU와 메인보드 소켓이 일치합니다.'
+      },
+      {
+        id: 'edge-board-ram-ddr',
+        source: 'part-MOTHERBOARD',
+        target: 'part-RAM',
+        type: 'REQUIRES',
+        status: 'PASS',
+        label: 'DDR 규격',
+        summary: '메인보드와 RAM 규격을 확인합니다.'
+      },
       {
         id: 'edge-gpu-psu-power',
         source: 'part-GPU',
@@ -75,6 +99,15 @@ function buildGraphResponse(mode = 'ISSUE_PATH') {
         status: 'PASS',
         label: '장착 길이',
         summary: 'GPU 길이가 케이스 허용 길이 안에 있습니다.'
+      },
+      {
+        id: 'edge-cooler-case-height',
+        source: 'part-COOLER',
+        target: 'part-CASE',
+        type: 'REQUIRES',
+        status: 'PASS',
+        label: '높이 여유',
+        summary: '쿨러 높이가 케이스 허용 높이 안에 있습니다.'
       }
     ],
     focusNodeIds: ['part-GPU', 'part-PSU'],
@@ -1151,9 +1184,80 @@ test('keeps self quote shopping workspace usable on mobile width', async ({ page
   await expect(page.getByText('GPU 부품 목록')).toBeVisible();
   await expect(page.getByRole('link', { name: '모바일 RTX 테스트', exact: true })).toBeVisible();
   await expect(page.getByRole('heading', { name: '견적 장바구니', exact: true })).toBeVisible();
+  await expect(page.getByTestId('graph-flow-canvas').locator('.react-flow__minimap')).toHaveCount(0);
+  await expect(page.getByTestId('graph-flow-canvas').locator('.react-flow__controls')).toHaveCount(0);
 
   const hasBodyOverflow = await page.evaluate(() => document.documentElement.scrollWidth > window.innerWidth + 1);
   expect(hasBodyOverflow).toBe(false);
+});
+
+test('renders quote dependency graph with circular nodes in the reference layout', async ({ page }) => {
+  await page.addInitScript(() => {
+    localStorage.setItem('buildgraph.token', 'jwt-user-token');
+  });
+
+  await page.route('**/api/quote-drafts/current**', async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        id: 'draft-layout-test',
+        status: 'ACTIVE',
+        name: '셀프 견적',
+        items: [],
+        totalPrice: 0,
+        itemCount: 0
+      })
+    });
+  });
+
+  await page.route('**/api/parts**', async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({ items: [], page: 0, size: 20, total: 0 })
+    });
+  });
+
+  await page.goto('/self-quote');
+
+  const graphCanvas = page.getByTestId('graph-flow-canvas');
+  await expect(graphCanvas.getByText('소켓 일치')).toBeVisible();
+
+  const nodeBox = async (label: string) => {
+    const node = graphCanvas.locator('.react-flow__node').filter({ hasText: label }).first();
+    await expect(node).toHaveClass(/buildgraph-flow-node/);
+    await expect(node).toHaveCSS('border-radius', '50%');
+    const box = await node.boundingBox();
+    expect(box).not.toBeNull();
+    expect(Math.abs((box?.width ?? 0) - (box?.height ?? 0))).toBeLessThanOrEqual(2);
+    return box!;
+  };
+  const center = (box: { x: number; y: number; width: number; height: number }) => ({
+    x: box.x + box.width / 2,
+    y: box.y + box.height / 2
+  });
+
+  const cpu = center(await nodeBox('CPU'));
+  const motherboard = center(await nodeBox('메인보드'));
+  const ram = center(await nodeBox('RAM'));
+  const gpu = center(await nodeBox('RTX 5070'));
+  const psu = center(await nodeBox('750W 파워'));
+  const pcCase = center(await nodeBox('Airflow Case'));
+  const cooler = center(await nodeBox('쿨러'));
+  const storage = center(await nodeBox('SSD'));
+  const price = center(await nodeBox('총액'));
+
+  expect(cpu.x).toBeLessThan(motherboard.x);
+  expect(motherboard.x).toBeLessThan(ram.x);
+  expect(motherboard.y).toBeLessThan(gpu.y);
+  expect(gpu.x).toBeLessThan(psu.x);
+  expect(psu.y).toBeLessThan(pcCase.y);
+  expect(cooler.x).toBeLessThan(pcCase.x);
+  expect(cooler.y).toBeGreaterThan(gpu.y);
+  expect(storage.x).toBeLessThan(price.x);
+  expect(price.x).toBeLessThan(pcCase.x);
+  expect(price.y).toBeGreaterThan(cooler.y);
 });
 
 test('updates quantity only for repeatable quote draft categories', async ({ page }) => {
