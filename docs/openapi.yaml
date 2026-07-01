@@ -313,7 +313,7 @@ paths:
   /api/parts/{id}/price-history:
     get:
       summary: 부품 가격 이력
-      description: 저장된 price_snapshots를 기준으로 상품별 가격변동 추이를 조회한다. 외부 검색 API를 실시간 호출하지 않는다.
+      description: 저장된 price_snapshots를 기준으로 상품별 가격변동 추이를 조회한다. 외부 검색 API를 실시간 호출하지 않는다. source를 생략하면 네이버 현재가 이력, 다나와 백업, 다나와 월별 추이, 수동 seed를 함께 반환할 수 있다.
       security:
         - bearerAuth: []
       parameters:
@@ -329,7 +329,7 @@ paths:
           name: source
           schema:
             type: string
-          description: "특정 가격 출처만 조회할 때 사용한다. 예: NAVER_SHOPPING_SEARCH"
+          description: "특정 가격 출처만 조회할 때 사용한다. 생략하면 NAVER_SHOPPING_SEARCH, DANAWA_BACKUP, DANAWA_PRICE_TREND, MANUAL_CURRENT_LINEUP 등 저장된 전체 이력을 조회한다."
         - in: query
           name: limit
           schema:
@@ -537,6 +537,72 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ExternalOfferRefreshResponse"
+  /api/admin/parts/danawa-price-snapshots/refresh:
+    post:
+      summary: 다나와 백업 가격 이력 수집
+      description: 공개 검색 페이지에서 확인 가능한 가격 후보를 DANAWA_BACKUP source로 저장한다. parts.price는 갱신하지 않고 price_snapshots와 part_external_offers 백업 row만 갱신한다.
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: query
+          name: category
+          schema:
+            $ref: "#/components/schemas/PartCategory"
+        - in: query
+          name: limit
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 20
+        - in: query
+          name: force
+          schema:
+            type: boolean
+            default: false
+      responses:
+        "200":
+          description: 다나와 백업 가격 이력 수집 결과
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DanawaPriceSnapshotRefreshResponse"
+  /api/admin/parts/danawa-price-trends/refresh:
+    post:
+      summary: 다나와 월별 가격 추이 수집
+      description: 다나와 상품 상세의 공개 6/12/24개월 최저가 추이 그래프 포인트와 현재가를 DANAWA_PRICE_TREND source로 저장한다. parts.price는 갱신하지 않는다.
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: query
+          name: category
+          schema:
+            $ref: "#/components/schemas/PartCategory"
+        - in: query
+          name: limit
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 500
+            default: 286
+        - in: query
+          name: months
+          schema:
+            type: integer
+            enum: [6, 12, 24]
+            default: 6
+        - in: query
+          name: force
+          schema:
+            type: boolean
+            default: false
+      responses:
+        "200":
+          description: 다나와 월별 가격 추이 수집 결과
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DanawaPriceTrendRefreshResponse"
   /api/admin/parts/catalog/refresh:
     post:
       summary: 내부 자산 카탈로그 후보 갱신
@@ -573,6 +639,213 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/PartCatalogRefreshResponse"
+  /api/admin/manufacturer-sources:
+    get:
+      summary: 제조사 신제품 감지 source 목록
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: query
+          name: enabled
+          schema:
+            type: boolean
+      responses:
+        "200":
+          description: 제조사 source 목록
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ManufacturerSourceListResponse"
+    post:
+      summary: 제조사 신제품 감지 source 생성
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ManufacturerSourceRequest"
+      responses:
+        "200":
+          description: 생성 또는 갱신된 제조사 source
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ManufacturerSourceDto"
+  /api/admin/manufacturer-sources/{id}:
+    patch:
+      summary: 제조사 신제품 감지 source 수정
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/PublicId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ManufacturerSourceRequest"
+      responses:
+        "200":
+          description: 수정된 제조사 source
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ManufacturerSourceDto"
+  /api/admin/manufacturer-sources/{id}/scan:
+    post:
+      summary: 단일 제조사 source scan
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/PublicId"
+        - in: query
+          name: limit
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 20
+        - in: query
+          name: createCandidates
+          schema:
+            type: boolean
+            default: true
+      responses:
+        "200":
+          description: source scan 결과
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ManufacturerSourceScanResponse"
+  /api/admin/manufacturer-sources/scan:
+    post:
+      summary: 활성 제조사 source 전체 scan
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: query
+          name: limitPerSource
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 20
+        - in: query
+          name: createCandidates
+          schema:
+            type: boolean
+            default: true
+      responses:
+        "200":
+          description: 전체 source scan 결과
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ManufacturerSourcesScanResponse"
+  /api/admin/manufacturer-posts:
+    get:
+      summary: 제조사 공식 게시글 감지 목록
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: query
+          name: status
+          schema:
+            $ref: "#/components/schemas/ManufacturerPostClassificationStatus"
+        - in: query
+          name: category
+          schema:
+            $ref: "#/components/schemas/PartCategory"
+        - $ref: "#/components/parameters/Page"
+        - $ref: "#/components/parameters/Size"
+      responses:
+        "200":
+          description: 제조사 게시글 목록
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ManufacturerPostListResponse"
+  /api/admin/part-catalog-candidates:
+    get:
+      summary: 내부 자산 후보 목록
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: query
+          name: status
+          schema:
+            type: string
+            enum: [DISCOVERED, PUBLISHED, REJECTED]
+        - in: query
+          name: category
+          schema:
+            $ref: "#/components/schemas/PartCategory"
+        - in: query
+          name: source
+          schema:
+            type: string
+        - $ref: "#/components/parameters/Page"
+        - $ref: "#/components/parameters/Size"
+      responses:
+        "200":
+          description: 후보 목록
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PartCatalogCandidateListResponse"
+  /api/admin/part-catalog-candidates/{id}/approve:
+    post:
+      summary: 후보를 INACTIVE 내부 자산 초안으로 승인
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/PublicId"
+      responses:
+        "200":
+          description: 승인 결과
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PartCatalogCandidateDecisionResponse"
+  /api/admin/part-catalog-candidates/{id}/reject:
+    post:
+      summary: 내부 자산 후보 거절
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/PublicId"
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                reason:
+                  type: string
+      responses:
+        "200":
+          description: 거절 결과
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PartCatalogCandidateDecisionResponse"
+  /api/admin/part-catalog-candidates/{id}/refresh-offers:
+    post:
+      summary: 후보의 네이버 쇼핑 offer 재검색
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/PublicId"
+      responses:
+        "200":
+          description: offer 재검색 결과
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PartCatalogCandidateOfferRefreshResponse"
   /api/tools/compatibility/check:
     post:
       summary: 호환성 Tool check
@@ -2059,6 +2332,75 @@ components:
           type: integer
         message:
           type: string
+    DanawaPriceSnapshotRefreshResponse:
+      type: object
+      required: [configured, limit, attempted, collected, skipped, failed]
+      properties:
+        configured:
+          type: boolean
+        category:
+          $ref: "#/components/schemas/PartCategory"
+          nullable: true
+        limit:
+          type: integer
+        force:
+          type: boolean
+        attempted:
+          type: integer
+        collected:
+          type: integer
+        skipped:
+          type: integer
+        failed:
+          type: integer
+    DanawaPriceTrendRefreshResponse:
+      type: object
+      required: [configured, months, limit, attempted, collectedParts, collectedPoints, skipped, missing, failed]
+      properties:
+        configured:
+          type: boolean
+        category:
+          $ref: "#/components/schemas/PartCategory"
+          nullable: true
+        months:
+          type: integer
+          enum: [6, 12, 24]
+        limit:
+          type: integer
+        force:
+          type: boolean
+        attempted:
+          type: integer
+        collectedParts:
+          type: integer
+        collectedPoints:
+          type: integer
+        skipped:
+          type: integer
+        missing:
+          type: integer
+        failed:
+          type: integer
+        missingItems:
+          type: array
+          items:
+            $ref: "#/components/schemas/RefreshIssue"
+        failedItems:
+          type: array
+          items:
+            $ref: "#/components/schemas/RefreshIssue"
+    RefreshIssue:
+      type: object
+      properties:
+        partId:
+          type: string
+          format: uuid
+        category:
+          $ref: "#/components/schemas/PartCategory"
+        name:
+          type: string
+        reason:
+          type: string
     PartCatalogRefreshResponse:
       type: object
       required: [configured, category, queryCount, limitPerQuery, attempted, discovered, published, failed]
@@ -2087,6 +2429,240 @@ components:
         errorSummary:
           type: string
           nullable: true
+        message:
+          type: string
+    ManufacturerSourceType:
+      type: string
+      enum: [NEWS, PRODUCT_RELEASE, SUPPORT_NEWS, RSS, SITEMAP]
+    ManufacturerSourceStatus:
+      type: string
+      enum: [ACTIVE, PAUSED, ERROR]
+    ManufacturerPostClassificationStatus:
+      type: string
+      enum: [PENDING, PRODUCT_CANDIDATE, IGNORED, FAILED]
+    ManufacturerSourceRequest:
+      type: object
+      properties:
+        manufacturer:
+          type: string
+        categoryScope:
+          oneOf:
+            - $ref: "#/components/schemas/PartCategory"
+            - type: string
+              enum: [ALL]
+        sourceType:
+          $ref: "#/components/schemas/ManufacturerSourceType"
+        sourceUrl:
+          type: string
+        enabled:
+          type: boolean
+        pollIntervalMinutes:
+          type: integer
+          minimum: 30
+          maximum: 10080
+        parserConfig:
+          type: object
+          additionalProperties: true
+        status:
+          $ref: "#/components/schemas/ManufacturerSourceStatus"
+    ManufacturerSourceDto:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        manufacturer:
+          type: string
+        categoryScope:
+          type: string
+        sourceType:
+          $ref: "#/components/schemas/ManufacturerSourceType"
+        sourceUrl:
+          type: string
+        enabled:
+          type: boolean
+        pollIntervalMinutes:
+          type: integer
+        lastCheckedAt:
+          type: string
+          format: date-time
+          nullable: true
+        status:
+          $ref: "#/components/schemas/ManufacturerSourceStatus"
+        errorSummary:
+          type: string
+          nullable: true
+    ManufacturerSourceListResponse:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/ManufacturerSourceDto"
+    ManufacturerSourceScanResponse:
+      type: object
+      properties:
+        sourceId:
+          type: string
+          format: uuid
+        manufacturer:
+          type: string
+        unchanged:
+          type: boolean
+        parsedPosts:
+          type: integer
+        newPosts:
+          type: integer
+        updatedPosts:
+          type: integer
+        ignoredPosts:
+          type: integer
+        productPosts:
+          type: integer
+        createdCandidates:
+          type: integer
+        posts:
+          type: array
+          items:
+            type: object
+            additionalProperties: true
+    ManufacturerSourcesScanResponse:
+      type: object
+      properties:
+        scannedSources:
+          type: integer
+        newPosts:
+          type: integer
+        createdCandidates:
+          type: integer
+        results:
+          type: array
+          items:
+            $ref: "#/components/schemas/ManufacturerSourceScanResponse"
+    ManufacturerPostDto:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        manufacturer:
+          type: string
+        sourceUrl:
+          type: string
+        externalUrl:
+          type: string
+        title:
+          type: string
+        classificationStatus:
+          $ref: "#/components/schemas/ManufacturerPostClassificationStatus"
+        detectedCategory:
+          $ref: "#/components/schemas/PartCategory"
+        detectedProductName:
+          type: string
+        confidence:
+          type: number
+          format: double
+        catalogCandidateId:
+          type: string
+          format: uuid
+          nullable: true
+    ManufacturerPostListResponse:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/ManufacturerPostDto"
+        page:
+          type: integer
+        size:
+          type: integer
+        total:
+          type: integer
+    PartCatalogCandidateDto:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        source:
+          type: string
+        category:
+          $ref: "#/components/schemas/PartCategory"
+        searchQuery:
+          type: string
+        title:
+          type: string
+        manufacturerGuess:
+          type: string
+        imageUrl:
+          type: string
+        supplierName:
+          type: string
+        offerUrl:
+          type: string
+        lowPrice:
+          type: integer
+        candidateStatus:
+          type: string
+          enum: [DISCOVERED, PUBLISHED, REJECTED]
+        publishedPartId:
+          type: string
+          format: uuid
+          nullable: true
+        publishedPartStatus:
+          type: string
+          nullable: true
+    PartCatalogCandidateListResponse:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/PartCatalogCandidateDto"
+        page:
+          type: integer
+        size:
+          type: integer
+        total:
+          type: integer
+    PartCatalogCandidateDecisionResponse:
+      type: object
+      properties:
+        candidateId:
+          type: string
+          format: uuid
+        publishedPartId:
+          type: string
+          format: uuid
+          nullable: true
+        created:
+          type: boolean
+        partStatus:
+          type: string
+          enum: [ACTIVE, INACTIVE, DISCONTINUED]
+        status:
+          type: string
+          enum: [PUBLISHED, REJECTED]
+        reason:
+          type: string
+          nullable: true
+    PartCatalogCandidateOfferRefreshResponse:
+      type: object
+      properties:
+        configured:
+          type: boolean
+        candidateId:
+          type: string
+          format: uuid
+        updated:
+          type: boolean
+        attempted:
+          type: integer
+        title:
+          type: string
+        lowPrice:
+          type: integer
         message:
           type: string
     ToolCheckRequest:

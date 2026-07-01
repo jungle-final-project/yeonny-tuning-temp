@@ -9,6 +9,7 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import java.util.UUID;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import org.springframework.http.HttpStatus;
@@ -118,6 +119,219 @@ public class NaverShoppingOfferService {
                 "published", published,
                 "failed", failed,
                 "errorSummary", errorSummary
+        );
+    }
+
+    public Map<String, Object> createManufacturerReleaseCandidate(
+            long jobId,
+            String category,
+            String searchQuery,
+            Map<String, Object> releaseContext
+    ) {
+        String normalizedCategory = requireCategory(category);
+        String normalizedQuery = requireText(searchQuery, "searchQuery");
+        if (!configured()) {
+            return MockData.map(
+                    "configured", false,
+                    "created", false,
+                    "message", "NAVER_SEARCH_CLIENT_ID 또는 NAVER_SEARCH_CLIENT_SECRET이 설정되지 않았습니다."
+            );
+        }
+
+        int attempted = 0;
+        for (Map<String, Object> offer : fetchOffers(normalizedQuery, 5)) {
+            attempted += 1;
+            if (!isAcceptableCatalogOffer(normalizedCategory, offer)) {
+                continue;
+            }
+            Map<String, Object> enrichedOffer = withReleaseContext(offer, releaseContext);
+            CatalogCandidate candidate = upsertCandidate(
+                    jobId,
+                    "MANUFACTURER_RELEASE_NAVER_SEARCH",
+                    normalizedCategory,
+                    normalizedQuery,
+                    enrichedOffer
+            );
+            return MockData.map(
+                    "configured", true,
+                    "created", true,
+                    "attempted", attempted,
+                    "candidateId", candidate.publicId(),
+                    "title", enrichedOffer.get("title"),
+                    "lowPrice", enrichedOffer.get("lowPrice")
+            );
+        }
+        return MockData.map(
+                "configured", true,
+                "created", false,
+                "attempted", attempted,
+                "message", "네이버 쇼핑에서 등록 후보로 쓸 만한 상품을 찾지 못했습니다."
+        );
+    }
+
+    public Map<String, Object> approveCatalogCandidateAsInactive(String candidateId) {
+        Map<String, Object> candidate = catalogCandidate(candidateId);
+        Long publishedPartId = longValue(candidate.get("published_part_id"));
+        if (publishedPartId != null) {
+            return MockData.map(
+                    "candidateId", candidate.get("public_id"),
+                    "publishedPartId", candidate.get("published_part_public_id"),
+                    "created", false,
+                    "status", "PUBLISHED",
+                    "message", "이미 parts에 연결된 후보입니다."
+            );
+        }
+
+        Integer lowPrice = integerValue(candidate.get("low_price"));
+        if (lowPrice == null) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "가격이 없는 후보는 내부 자산 초안으로 승인할 수 없습니다.");
+        }
+        String category = stringValue(candidate.get("category"));
+        String title = stringValue(candidate.get("title"));
+        String query = stringValue(candidate.get("search_query"));
+        Map<String, Object> offer = offerFromCandidate(candidate);
+        Long existingPartId = findExistingPartId(category, title);
+        long partId = existingPartId == null
+                ? insertPartWithStatus(category, title, stringValue(candidate.get("manufacturer_guess")), lowPrice, query, offer, "INACTIVE")
+                : existingPartId;
+        jdbcTemplate.update("""
+                UPDATE part_catalog_candidates
+                SET candidate_status = 'PUBLISHED',
+                    published_part_id = ?,
+                    updated_at = now()
+                WHERE public_id = ?::uuid
+                """, partId, candidateId);
+        upsertOffer(partId, query, offer);
+        String publicPartId = jdbcTemplate.queryForObject(
+                "SELECT public_id::text FROM parts WHERE id = ?",
+                String.class,
+                partId
+        );
+        return MockData.map(
+                "candidateId", candidate.get("public_id"),
+                "publishedPartId", publicPartId,
+                "created", existingPartId == null,
+                "partStatus", existingPartId == null ? "INACTIVE" : candidate.get("published_part_status"),
+                "status", "PUBLISHED"
+        );
+    }
+
+    public Map<String, Object> rejectCatalogCandidate(String candidateId, Map<String, Object> request) {
+        String reason = request == null ? null : stringValue(request.get("reason"));
+        Map<String, Object> candidate = catalogCandidate(candidateId);
+        jdbcTemplate.update("""
+                UPDATE part_catalog_candidates
+                SET candidate_status = 'REJECTED',
+                    raw_payload = coalesce(raw_payload, '{}'::jsonb) || ?::jsonb,
+                    updated_at = now()
+                WHERE public_id = ?::uuid
+                  AND deleted_at IS NULL
+                """,
+                json(MockData.map(
+                        "adminReview", MockData.map(
+                                "decision", "REJECTED",
+                                "reason", reason,
+                                "reviewedAt", MockData.now()
+                        )
+                )),
+                candidateId
+        );
+        return MockData.map(
+                "candidateId", candidate.get("public_id"),
+                "status", "REJECTED",
+                "reason", reason
+        );
+    }
+
+    public Map<String, Object> refreshCatalogCandidateOffer(String candidateId) {
+        Map<String, Object> candidate = catalogCandidate(candidateId);
+        if (!configured()) {
+            return MockData.map(
+                    "configured", false,
+                    "candidateId", candidate.get("public_id"),
+                    "updated", false,
+                    "message", "NAVER_SEARCH_CLIENT_ID 또는 NAVER_SEARCH_CLIENT_SECRET이 설정되지 않았습니다."
+            );
+        }
+        String category = stringValue(candidate.get("category"));
+        String searchQuery = stringValue(candidate.get("search_query"));
+        int attempted = 0;
+        for (Map<String, Object> offer : fetchOffers(searchQuery, 5)) {
+            attempted += 1;
+            if (!isAcceptableCatalogOffer(category, offer)) {
+                continue;
+            }
+            Map<String, Object> enrichedOffer = withReleaseContext(offer, releaseContextFromCandidate(candidate));
+            jdbcTemplate.update("""
+                    UPDATE part_catalog_candidates
+                    SET source_product_key = ?,
+                        title = ?,
+                        manufacturer_guess = ?,
+                        image_url = ?,
+                        supplier_name = ?,
+                        offer_url = ?,
+                        low_price = ?,
+                        raw_payload = ?::jsonb,
+                        last_seen_at = now(),
+                        updated_at = now()
+                    WHERE public_id = ?::uuid
+                      AND deleted_at IS NULL
+                    """,
+                    limited(stringValue(enrichedOffer.get("sourceProductKey")), 500),
+                    limited(stringValue(enrichedOffer.get("title")), 500),
+                    limited(stringValue(enrichedOffer.get("manufacturerGuess")), 100),
+                    enrichedOffer.get("imageUrl"),
+                    limited(stringValue(enrichedOffer.get("supplierName")), 255),
+                    enrichedOffer.get("offerUrl"),
+                    enrichedOffer.get("lowPrice"),
+                    json(enrichedOffer.get("rawPayload")),
+                    candidateId
+            );
+            return MockData.map(
+                    "configured", true,
+                    "candidateId", candidate.get("public_id"),
+                    "updated", true,
+                    "attempted", attempted,
+                    "title", enrichedOffer.get("title"),
+                    "lowPrice", enrichedOffer.get("lowPrice")
+            );
+        }
+        return MockData.map(
+                "configured", true,
+                "candidateId", candidate.get("public_id"),
+                "updated", false,
+                "attempted", attempted,
+                "message", "네이버 쇼핑에서 갱신 가능한 후보를 찾지 못했습니다."
+        );
+    }
+
+    private static Map<String, Object> withReleaseContext(Map<String, Object> offer, Map<String, Object> releaseContext) {
+        Map<String, Object> enriched = new LinkedHashMap<>(offer);
+        enriched.put("rawPayload", MockData.map(
+                "offer", offer.get("rawPayload"),
+                "manufacturerRelease", releaseContext == null ? Map.of() : releaseContext
+        ));
+        return enriched;
+    }
+
+    private static Map<String, Object> releaseContextFromCandidate(Map<String, Object> candidate) {
+        return MockData.map(
+                "candidateId", candidate.get("public_id"),
+                "candidateSource", candidate.get("source"),
+                "previousRawPayload", stringValue(candidate.get("raw_payload"))
+        );
+    }
+
+    private static Map<String, Object> offerFromCandidate(Map<String, Object> candidate) {
+        return MockData.map(
+                "sourceProductKey", candidate.get("source_product_key"),
+                "title", candidate.get("title"),
+                "manufacturerGuess", candidate.get("manufacturer_guess"),
+                "imageUrl", candidate.get("image_url"),
+                "supplierName", candidate.get("supplier_name"),
+                "offerUrl", candidate.get("offer_url"),
+                "lowPrice", candidate.get("low_price"),
+                "rawPayload", candidate.get("raw_payload")
         );
     }
 
@@ -329,6 +543,10 @@ public class NaverShoppingOfferService {
     }
 
     private CatalogCandidate upsertCandidate(long jobId, String category, String query, Map<String, Object> offer) {
+        return upsertCandidate(jobId, SOURCE, category, query, offer);
+    }
+
+    private CatalogCandidate upsertCandidate(long jobId, String source, String category, String query, Map<String, Object> offer) {
         String title = limited(stringValue(offer.get("title")), 500);
         String sourceProductKey = limited(stringValue(offer.get("sourceProductKey")), 500);
         Map<String, Object> row = jdbcTemplate.queryForMap("""
@@ -367,7 +585,7 @@ public class NaverShoppingOfferService {
                 RETURNING id, public_id::text AS public_id, published_part_id
                 """,
                 jobId,
-                SOURCE,
+                source,
                 category,
                 sourceProductKey,
                 query,
@@ -381,6 +599,38 @@ public class NaverShoppingOfferService {
         );
         Long publishedPartId = row.get("published_part_id") instanceof Number number ? number.longValue() : null;
         return new CatalogCandidate(((Number) row.get("id")).longValue(), stringValue(row.get("public_id")), publishedPartId);
+    }
+
+    private Map<String, Object> catalogCandidate(String candidateId) {
+        requireUuid(candidateId, "candidateId");
+        List<Map<String, Object>> rows = jdbcTemplate.queryForList("""
+                SELECT c.id,
+                       c.public_id::text AS public_id,
+                       c.published_part_id,
+                       p.public_id::text AS published_part_public_id,
+                       p.status AS published_part_status,
+                       c.source,
+                       c.category,
+                       c.source_product_key,
+                       c.search_query,
+                       c.title,
+                       c.manufacturer_guess,
+                       c.image_url,
+                       c.supplier_name,
+                       c.offer_url,
+                       c.low_price,
+                       c.candidate_status,
+                       c.raw_payload
+                FROM part_catalog_candidates c
+                LEFT JOIN parts p ON p.id = c.published_part_id
+                WHERE c.public_id = ?::uuid
+                  AND c.deleted_at IS NULL
+                LIMIT 1
+                """, candidateId);
+        if (rows.isEmpty()) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "카탈로그 후보를 찾을 수 없습니다.");
+        }
+        return rows.get(0);
     }
 
     private boolean publishCandidate(CatalogCandidate candidate, String category, String query, Map<String, Object> offer) {
@@ -421,7 +671,12 @@ public class NaverShoppingOfferService {
     }
 
     private long insertPart(String category, String title, String manufacturer, int price, String query, Map<String, Object> offer) {
+        return insertPartWithStatus(category, title, manufacturer, price, query, offer, "ACTIVE");
+    }
+
+    private long insertPartWithStatus(String category, String title, String manufacturer, int price, String query, Map<String, Object> offer, String status) {
         Map<String, Object> attributes = attributesFor(category, title, query, offer);
+        attributes.put("catalogApprovalStatus", "INACTIVE".equals(status) ? "ADMIN_SPEC_REVIEW_REQUIRED" : "PUBLISHED");
         Map<String, Object> row = jdbcTemplate.queryForMap("""
                 INSERT INTO parts (
                   category,
@@ -433,13 +688,14 @@ public class NaverShoppingOfferService {
                   created_at,
                   updated_at
                 )
-                VALUES (?, ?, ?, ?, 'ACTIVE', ?::jsonb, now(), now())
+                VALUES (?, ?, ?, ?, ?, ?::jsonb, now(), now())
                 RETURNING id
                 """,
                 category,
                 limited(title, 255),
                 blankToNull(limited(manufacturer, 100)),
                 price,
+                status,
                 json(attributes)
         );
         return ((Number) row.get("id")).longValue();
@@ -1380,6 +1636,35 @@ public class NaverShoppingOfferService {
             return Integer.valueOf(String.valueOf(value));
         } catch (NumberFormatException ignored) {
             return null;
+        }
+    }
+
+    private static Long longValue(Object value) {
+        if (value == null) {
+            return null;
+        }
+        if (value instanceof Number number) {
+            return number.longValue();
+        }
+        try {
+            return Long.valueOf(String.valueOf(value));
+        } catch (NumberFormatException ignored) {
+            return null;
+        }
+    }
+
+    private static String requireText(String value, String fieldName) {
+        if (!StringUtils.hasText(value)) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, fieldName + " 값이 필요합니다.");
+        }
+        return value.trim();
+    }
+
+    private static void requireUuid(String value, String fieldName) {
+        try {
+            UUID.fromString(value);
+        } catch (RuntimeException exception) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, fieldName + "는 UUID 형식이어야 합니다.");
         }
     }
 

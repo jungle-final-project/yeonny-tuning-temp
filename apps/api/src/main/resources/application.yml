@@ -95,3 +95,21 @@ part:
     enabled: ${PART_PRICE_REFRESH_ENABLED:true}
     cron: "${PART_PRICE_REFRESH_CRON:0 0 4 * * *}"
     zone: "${PART_PRICE_REFRESH_ZONE:Asia/Seoul}"
+  danawa-refresh:
+    enabled: ${PART_DANAWA_REFRESH_ENABLED:false}
+    cron: "${PART_DANAWA_REFRESH_CRON:0 30 4 * * *}"
+    zone: "${PART_DANAWA_REFRESH_ZONE:Asia/Seoul}"
+    base-url: ${PART_DANAWA_BASE_URL:https://search.danawa.com}
+    rate-limit-ms: ${PART_DANAWA_RATE_LIMIT_MS:3000}
+  danawa-trend-refresh:
+    enabled: ${PART_DANAWA_TREND_REFRESH_ENABLED:false}
+    cron: "${PART_DANAWA_TREND_REFRESH_CRON:0 30 5 1 * *}"
+    zone: "${PART_DANAWA_TREND_REFRESH_ZONE:Asia/Seoul}"
+    base-url: ${PART_DANAWA_TREND_BASE_URL:https://prod.danawa.com}
+    search-base-url: ${PART_DANAWA_TREND_SEARCH_BASE_URL:https://search.danawa.com}
+    rate-limit-ms: ${PART_DANAWA_TREND_RATE_LIMIT_MS:3000}
+  manufacturer-release-intake:
+    enabled: ${PART_MANUFACTURER_RELEASE_INTAKE_ENABLED:false}
+    cron: "${PART_MANUFACTURER_RELEASE_INTAKE_CRON:0 0 6 * * *}"
+    zone: "${PART_MANUFACTURER_RELEASE_INTAKE_ZONE:Asia/Seoul}"
+    user-agent: ${PART_MANUFACTURER_RELEASE_INTAKE_USER_AGENT:BuildGraphBot/0.1}

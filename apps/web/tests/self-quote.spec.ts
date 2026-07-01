@@ -849,19 +849,20 @@ test('shows price trend chart on product detail page', async ({ page }) => {
           days: 3650,
           source: 'NAVER_SHOPPING_SEARCH',
           items: [
-            { price: 1020000, source: 'NAVER_SHOPPING_SEARCH', collectedAt: '2026-06-27T00:00:00Z' },
-            { price: 990000, source: 'NAVER_SHOPPING_SEARCH', collectedAt: '2026-06-28T00:00:00Z' },
-            { price: 950000, source: 'NAVER_SHOPPING_SEARCH', collectedAt: '2026-06-29T00:00:00Z' }
+            { price: 1030000, source: 'NAVER_SHOPPING_SEARCH', collectedAt: '2026-06-05T00:00:00Z' },
+            { price: 1020000, source: 'DANAWA_PRICE_TREND', collectedAt: '2026-06-01T00:00:00Z' },
+            { price: 990000, source: 'DANAWA_PRICE_TREND', collectedAt: '2026-06-20T00:00:00Z' },
+            { price: 950000, source: 'DANAWA_PRICE_TREND', collectedAt: '2026-07-01T00:00:00Z' }
           ],
           summary: {
-            sampleCount: 3,
+            sampleCount: 4,
             currentPrice: 950000,
             minPrice: 950000,
-            maxPrice: 1020000,
-            firstPrice: 1020000,
+            maxPrice: 1030000,
+            firstPrice: 1030000,
             lastPrice: 950000,
-            changeAmount: -70000,
-            changeRatePercent: -6.86
+            changeAmount: -80000,
+            changeRatePercent: -7.77
           }
         })
       });
@@ -902,7 +903,16 @@ test('shows price trend chart on product detail page', async ({ page }) => {
   await expect(page.getByRole('heading', { name: '가격 변동 추이' })).toBeVisible();
   await expect(page.getByRole('img', { name: '가격 변동 추이 그래프' })).toBeVisible();
   await expect(page.getByText('950,000원').first()).toBeVisible();
-  await expect(page.getByText('-70,000원 (-6.86%)')).toBeVisible();
+  await expect(page.getByText('26.06')).toBeVisible();
+  await expect(page.getByText('26.07')).toBeVisible();
+  await expect(page.getByLabel('가격 변동 추이 그래프').getByText('현재가')).toBeVisible();
+  await expect(page.getByText('103만')).toBeVisible();
+  await expect(page.getByText('99만')).toBeVisible();
+  await expect(page.getByText('95만')).toBeVisible();
+  await expect(page.getByText('-80,000원 (-7.77%)')).toBeVisible();
+  await page.getByTestId('price-trend-point').first().hover();
+  await expect(page.getByTestId('price-trend-tooltip')).toBeVisible();
+  await expect(page.getByTestId('price-trend-tooltip').getByText(/다나와 추이/)).toBeVisible();
   await expect(page.getByText('전체 내부 스펙')).toHaveCount(0);
 });
 

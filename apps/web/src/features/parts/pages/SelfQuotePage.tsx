@@ -443,8 +443,8 @@ function partRows(parts: PartRow[], selectedPartIds: Set<string>, onAddPart: (pa
 
 function PriceTrendBadge({ partId }: { partId: string }) {
   const { data, isLoading, isError } = useQuery({
-    queryKey: ['parts', partId, 'price-history', 'NAVER_SHOPPING_SEARCH'],
-    queryFn: () => getPartPriceHistory(partId, { days: 3650, source: 'NAVER_SHOPPING_SEARCH', limit: 60 })
+    queryKey: ['parts', partId, 'price-history', 'all-sources'],
+    queryFn: () => getPartPriceHistory(partId, { days: 3650, limit: 60 })
   });
   if (isLoading) {
     return <div className="mt-2 text-[11px] text-slate-400">가격 기록 확인 중</div>;

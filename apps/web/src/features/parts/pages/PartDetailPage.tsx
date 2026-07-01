@@ -21,8 +21,8 @@ export function PartDetailPage() {
     enabled: Boolean(partId)
   });
   const { data: priceHistory, isLoading: isPriceHistoryLoading, isError: isPriceHistoryError } = useQuery({
-    queryKey: ['parts', partId, 'price-history', 'NAVER_SHOPPING_SEARCH'],
-    queryFn: () => getPartPriceHistory(partId, { days: 3650, source: 'NAVER_SHOPPING_SEARCH', limit: 120 }),
+    queryKey: ['parts', partId, 'price-history', 'all-sources'],
+    queryFn: () => getPartPriceHistory(partId, { days: 3650, limit: 120 }),
     enabled: Boolean(partId)
   });
   const maxQuantity = part ? maxDraftQuantity(part.category) : 9;
@@ -156,7 +156,7 @@ export function PartDetailPage() {
           )}
         </Panel>
 
-        <Panel title="가격 변동 추이" subtitle="저장된 네이버 쇼핑 가격 이력 기준">
+        <Panel title="가격 변동 추이" subtitle="저장된 외부 가격 이력 기준">
           <PriceHistoryPanel
             history={priceHistory}
             currentPrice={part.price}
@@ -203,10 +203,11 @@ function PriceHistoryPanel({
     return <div className="rounded border border-dashed border-slate-300 p-5 text-sm text-slate-500">가격 이력을 확인하지 못했습니다.</div>;
   }
 
-  const points = history.items.length > 0 ? history.items : [{ price: currentPrice, source: history.source ?? 'NAVER_SHOPPING_SEARCH', collectedAt: new Date().toISOString() }];
+  const points = history.items.length > 0 ? history.items : [{ price: currentPrice, source: history.source ?? 'STORED_CURRENT_PRICE', collectedAt: new Date().toISOString() }];
   const summary = history.summary;
   const changeTone = summary.changeAmount > 0 ? 'text-orange-700' : summary.changeAmount < 0 ? 'text-emerald-700' : 'text-slate-600';
   const sign = summary.changeAmount > 0 ? '+' : '';
+  const sourceLabels = Array.from(new Set(points.map((point) => sourceLabel(point.source)))).join(' · ');
 
   return (
     <div className="space-y-4">
@@ -218,9 +219,9 @@ function PriceHistoryPanel({
       </div>
 
       <div className="rounded-lg border border-slate-200 bg-slate-50 p-4">
-        <PriceTrendChart points={points} minPrice={summary.minPrice} maxPrice={summary.maxPrice} />
+        <PriceTrendChart points={points} currentPrice={history.currentPrice} minPrice={summary.minPrice} maxPrice={summary.maxPrice} />
         <div className="mt-3 flex flex-wrap items-center justify-between gap-2 text-xs">
-          <span className="font-bold text-slate-500">{supplierName ?? '저장된 공급처 없음'}</span>
+          <span className="font-bold text-slate-500">{supplierName ?? '저장된 공급처 없음'} · {sourceLabels}</span>
           <span className={`font-black ${changeTone}`}>
             {sign}{summary.changeAmount.toLocaleString()}원 ({sign}{summary.changeRatePercent.toFixed(2)}%)
           </span>
@@ -239,37 +240,194 @@ function PriceSummary({ label, value }: { label: string; value: string }) {
   );
 }
 
-function PriceTrendChart({ points, minPrice, maxPrice }: { points: PartPriceHistoryPoint[]; minPrice: number; maxPrice: number }) {
-  const width = 640;
-  const height = 220;
-  const padding = 22;
-  const prices = points.map((point) => point.price);
+type ChartPoint = PartPriceHistoryPoint & {
+  id: string;
+  label: string;
+  tooltipLabel: string;
+  isCurrent: boolean;
+};
+
+function PriceTrendChart({
+  points,
+  currentPrice,
+  minPrice,
+  maxPrice
+}: {
+  points: PartPriceHistoryPoint[];
+  currentPrice: number;
+  minPrice: number;
+  maxPrice: number;
+}) {
+  const [activeIndex, setActiveIndex] = useState<number | null>(null);
+  const width = 720;
+  const height = 270;
+  const paddingLeft = 78;
+  const paddingRight = 28;
+  const paddingTop = 34;
+  const paddingBottom = 48;
+  const chartPoints = normalizePriceTrendPoints(points, currentPrice);
+  const prices = chartPoints.map((point) => point.price);
   const safeMin = Math.min(minPrice, ...prices);
   const safeMax = Math.max(maxPrice, ...prices);
   const range = Math.max(1, safeMax - safeMin);
-  const coordinates = points.map((point, index) => {
-    const x = points.length === 1 ? width / 2 : padding + (index / (points.length - 1)) * (width - padding * 2);
-    const y = padding + ((safeMax - point.price) / range) * (height - padding * 2);
-    return { x, y };
+  const axisTicks = [
+    { label: '최고가', price: safeMax },
+    { label: '중간값', price: Math.round((safeMax + safeMin) / 2) },
+    { label: '최저가', price: safeMin }
+  ];
+  const coordinates = chartPoints.map((point, index) => {
+    const x = chartPoints.length === 1 ? (paddingLeft + width - paddingRight) / 2 : paddingLeft + (index / (chartPoints.length - 1)) * (width - paddingLeft - paddingRight);
+    const y = paddingTop + ((safeMax - point.price) / range) * (height - paddingTop - paddingBottom);
+    return { ...point, x, y };
   });
   const path = coordinates.map((point) => `${point.x},${point.y}`).join(' ');
+  const activePoint = activeIndex === null ? null : coordinates[activeIndex];
+  const tooltipWidth = 190;
+  const tooltipX = activePoint ? Math.min(Math.max(activePoint.x - tooltipWidth / 2, paddingLeft), width - tooltipWidth - paddingRight) : 0;
+  const tooltipY = activePoint ? Math.max(10, activePoint.y - 78) : 0;
 
   return (
     <div>
       <svg viewBox={`0 0 ${width} ${height}`} role="img" aria-label="가격 변동 추이 그래프" className="h-56 w-full overflow-visible">
-        <line x1={padding} y1={padding} x2={padding} y2={height - padding} stroke="#cbd5e1" strokeWidth="1" />
-        <line x1={padding} y1={height - padding} x2={width - padding} y2={height - padding} stroke="#cbd5e1" strokeWidth="1" />
+        {axisTicks.map((tick) => {
+          const y = paddingTop + ((safeMax - tick.price) / range) * (height - paddingTop - paddingBottom);
+          return (
+            <g key={tick.label}>
+              <line x1={paddingLeft} y1={y} x2={width - paddingRight} y2={y} stroke="#dbe3ef" strokeDasharray="4 4" strokeWidth="1" />
+              <text x={paddingLeft - 10} y={y + 4} textAnchor="end" className="fill-slate-500 text-[11px] font-bold">
+                {formatCompactPrice(tick.price)}
+              </text>
+            </g>
+          );
+        })}
+        <line x1={paddingLeft} y1={paddingTop} x2={paddingLeft} y2={height - paddingBottom} stroke="#cbd5e1" strokeWidth="1" />
+        <line x1={paddingLeft} y1={height - paddingBottom} x2={width - paddingRight} y2={height - paddingBottom} stroke="#cbd5e1" strokeWidth="1" />
         <polyline points={path} fill="none" stroke="#2563eb" strokeWidth="4" strokeLinecap="round" strokeLinejoin="round" />
         {coordinates.map((point, index) => (
-          <circle key={`${points[index].collectedAt}-${index}`} cx={point.x} cy={point.y} r="4" fill="#ffffff" stroke="#2563eb" strokeWidth="3">
-            <title>{`${formatDate(points[index].collectedAt)} · ${points[index].price.toLocaleString()}원`}</title>
-          </circle>
+          <g key={point.id}>
+            <line x1={point.x} y1={height - paddingBottom} x2={point.x} y2={height - paddingBottom + 5} stroke="#94a3b8" strokeWidth="1" />
+            <text x={point.x} y={height - 18} textAnchor="middle" className={`text-[11px] font-black ${point.isCurrent ? 'fill-red-600' : 'fill-slate-500'}`}>
+              {point.label}
+            </text>
+            <circle
+              data-testid={point.isCurrent ? 'price-trend-point-current' : 'price-trend-point'}
+              aria-label={`${point.tooltipLabel} ${point.price.toLocaleString()}원`}
+              tabIndex={0}
+              cx={point.x}
+              cy={point.y}
+              r={activeIndex === index ? 7 : 5}
+              fill="#ffffff"
+              stroke={point.isCurrent ? '#dc2626' : '#2563eb'}
+              strokeWidth={point.isCurrent ? 4 : 3}
+              className="cursor-pointer outline-none"
+              onMouseEnter={() => setActiveIndex(index)}
+              onMouseLeave={() => setActiveIndex(null)}
+              onFocus={() => setActiveIndex(index)}
+              onBlur={() => setActiveIndex(null)}
+            />
+          </g>
         ))}
+        {activePoint ? (
+          <g data-testid="price-trend-tooltip" pointerEvents="none">
+            <rect x={tooltipX} y={tooltipY} width={tooltipWidth} height="64" rx="8" fill="#0f172a" opacity="0.94" />
+            <text x={tooltipX + 12} y={tooltipY + 20} className="fill-white text-[12px] font-black">
+              {activePoint.tooltipLabel}
+            </text>
+            <text x={tooltipX + 12} y={tooltipY + 39} className="fill-white text-[13px] font-black">
+              {activePoint.price.toLocaleString()}원
+            </text>
+            <text x={tooltipX + 12} y={tooltipY + 56} className="fill-slate-300 text-[11px] font-bold">
+              {sourceLabel(activePoint.source)} · {formatDate(activePoint.collectedAt)}
+            </text>
+          </g>
+        ) : null}
       </svg>
-      <div className="mt-2 flex justify-between text-[11px] font-bold text-slate-500">
-        <span>{formatDate(points[0].collectedAt)}</span>
-        <span>{formatDate(points[points.length - 1].collectedAt)}</span>
+      <div className="mt-2 flex items-center justify-between text-[11px] font-bold text-slate-500">
+        <span>월별 대표 최저가</span>
+        <span>점에 마우스를 올리면 가격정보를 확인할 수 있습니다.</span>
       </div>
     </div>
   );
+}
+
+function normalizePriceTrendPoints(points: PartPriceHistoryPoint[], currentPrice: number): ChartPoint[] {
+  const trendSource = points.some((point) => point.source === 'DANAWA_PRICE_TREND') ? 'DANAWA_PRICE_TREND' : null;
+  const sourcePoints = (trendSource ? points.filter((point) => point.source === trendSource) : points)
+    .filter((point) => point.price > 0)
+    .sort((a, b) => new Date(a.collectedAt).getTime() - new Date(b.collectedAt).getTime());
+  const monthMap = new Map<string, PartPriceHistoryPoint>();
+
+  for (const point of sourcePoints) {
+    const key = monthKey(point.collectedAt);
+    const previous = monthMap.get(key);
+    if (!previous || new Date(point.collectedAt).getTime() >= new Date(previous.collectedAt).getTime()) {
+      monthMap.set(key, point);
+    }
+  }
+
+  const monthlyPoints = Array.from(monthMap.values())
+    .sort((a, b) => new Date(a.collectedAt).getTime() - new Date(b.collectedAt).getTime())
+    .map((point) => ({
+      ...point,
+      id: `month-${monthKey(point.collectedAt)}`,
+      label: formatMonthLabel(point.collectedAt),
+      tooltipLabel: `${formatMonthLabel(point.collectedAt)} 월별가`,
+      isCurrent: false
+    }));
+
+  return [
+    ...monthlyPoints,
+    {
+      price: currentPrice,
+      source: 'STORED_CURRENT_PRICE',
+      collectedAt: new Date().toISOString(),
+      id: 'current-price',
+      label: '현재가',
+      tooltipLabel: '현재가',
+      isCurrent: true
+    }
+  ];
+}
+
+function monthKey(value: string) {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) {
+    return value.slice(0, 7);
+  }
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+}
+
+function formatMonthLabel(value: string) {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) {
+    const [year, month] = value.split('-');
+    return year && month ? `${year.slice(-2)}.${month}` : value;
+  }
+  return `${String(date.getFullYear()).slice(-2)}.${String(date.getMonth() + 1).padStart(2, '0')}`;
+}
+
+function formatCompactPrice(value: number) {
+  if (value >= 10000) {
+    return `${Math.round(value / 10000).toLocaleString()}만`;
+  }
+  return value.toLocaleString();
+}
+
+function sourceLabel(source: string) {
+  if (source === 'NAVER_SHOPPING_SEARCH') {
+    return '네이버 쇼핑';
+  }
+  if (source === 'DANAWA_BACKUP') {
+    return '다나와 백업';
+  }
+  if (source === 'DANAWA_PRICE_TREND') {
+    return '다나와 추이';
+  }
+  if (source === 'MANUAL_CURRENT_LINEUP') {
+    return '수동 기준가';
+  }
+  if (source === 'STORED_CURRENT_PRICE') {
+    return '저장 현재가';
+  }
+  return source;
 }
