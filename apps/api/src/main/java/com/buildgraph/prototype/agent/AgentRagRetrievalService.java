@@ -137,9 +137,8 @@ public class AgentRagRetrievalService {
     ) {
         Map<String, Object> sourceMetadata = metadata(row);
         String sourceType = stringValue(sourceMetadata.get("sourceType"));
-        String purpose = stringValue(sourceMetadata.get("purpose"));
+        boolean purposeMatched = purposeMatches(sourceMetadata, profile.purpose().name());
         boolean sourceTypeAllowed = sourceType != null && profile.ragSourceTypes().contains(sourceType);
-        boolean purposeMatched = purpose == null || purpose.equals(profile.purpose().name());
         boolean allowed = sourceTypeAllowed && purposeMatched;
 
         String searchableText = String.join(" ",
@@ -166,7 +165,7 @@ public class AgentRagRetrievalService {
         double baseScore = score(row);
         Double vectorScore = vectorScore(row);
         double keywordRank = (baseScore * 0.50)
-                + (purpose != null && purpose.equals(profile.purpose().name()) ? 0.25 : 0.0)
+                + (purposeMatched ? 0.25 : 0.0)
                 + (sourceTypeAllowed ? 0.10 : 0.0)
                 + tokenScore
                 + (metadataScore * 0.35);
@@ -174,7 +173,7 @@ public class AgentRagRetrievalService {
                 ? keywordRank
                 : (vectorScore * 0.65)
                 + (baseScore * 0.15)
-                + (purpose != null && purpose.equals(profile.purpose().name()) ? 0.10 : 0.0)
+                + (purposeMatched ? 0.10 : 0.0)
                 + (sourceTypeAllowed ? 0.05 : 0.0)
                 + (tokenScore * 0.15)
                 + (metadataScore * 0.05);
@@ -400,6 +399,22 @@ public class AgentRagRetrievalService {
 
     private static String stringValue(Object value) {
         return value == null ? null : value.toString();
+    }
+
+    private static boolean purposeMatches(Map<String, Object> metadata, String targetPurpose) {
+        String purpose = stringValue(metadata.get("purpose"));
+        if (purpose == null || purpose.equals(targetPurpose)) {
+            return true;
+        }
+        Object purposes = metadata.get("purposes");
+        if (purposes instanceof Iterable<?> iterable) {
+            for (Object item : iterable) {
+                if (targetPurpose.equals(stringValue(item))) {
+                    return true;
+                }
+            }
+        }
+        return false;
     }
 
     private static String safe(String value) {

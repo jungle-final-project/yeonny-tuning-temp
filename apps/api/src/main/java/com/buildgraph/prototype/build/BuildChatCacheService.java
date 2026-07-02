@@ -12,6 +12,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.ObjectProvider;
@@ -33,6 +34,7 @@ public class BuildChatCacheService {
     private final boolean enabled;
     private final Duration ttl;
 
+    @Autowired
     public BuildChatCacheService(
             ObjectProvider<StringRedisTemplate> redisTemplateProvider,
             JdbcTemplate jdbcTemplate,
@@ -45,6 +47,7 @@ public class BuildChatCacheService {
         this.aiProfileConfig = aiProfileConfig;
         this.enabled = enabled;
         this.ttl = Duration.ofSeconds(Math.max(1, ttlSeconds));
+        log.info("Build Chat cache initialized: enabled={}, ttlSeconds={}", enabled, this.ttl.toSeconds());
     }
 
     private BuildChatCacheService() {
@@ -64,12 +67,15 @@ public class BuildChatCacheService {
     }
 
     public Optional<Map<String, Object>> lookup(Map<String, Object> request, String requestedAiProfile, Long userId) {
+        log.debug("Build Chat cache lookup entered: enabled={}, userId={}, requestedAiProfile={}", enabled, userId, requestedAiProfile);
         if (!enabled) {
+            log.info("Build Chat cache lookup skipped: disabled");
             return Optional.empty();
         }
         try {
             StringRedisTemplate redisTemplate = redisTemplateProvider.getIfAvailable();
             if (redisTemplate == null) {
+                log.warn("Build Chat cache lookup skipped: Redis template is not available while cache is enabled");
                 return Optional.empty();
             }
             String key = cacheKey(request, requestedAiProfile, userId);
@@ -91,12 +97,19 @@ public class BuildChatCacheService {
     }
 
     public void store(Map<String, Object> request, String requestedAiProfile, Long userId, Map<String, Object> response) {
-        if (!enabled || response == null || response.isEmpty()) {
+        log.debug("Build Chat cache store entered: enabled={}, userId={}, requestedAiProfile={}", enabled, userId, requestedAiProfile);
+        if (!enabled) {
+            log.info("Build Chat cache store skipped: disabled");
+            return;
+        }
+        if (response == null || response.isEmpty()) {
+            log.debug("Build Chat cache store skipped: empty response");
             return;
         }
         try {
             StringRedisTemplate redisTemplate = redisTemplateProvider.getIfAvailable();
             if (redisTemplate == null) {
+                log.warn("Build Chat cache store skipped: Redis template is not available while cache is enabled");
                 return;
             }
             String key = cacheKey(request, requestedAiProfile, userId);

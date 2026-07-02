@@ -1461,10 +1461,12 @@ test('shows selected AI build separately from the manual quote draft and marks d
   await expect(aiPanel.getByText('균형 추천 조합')).toBeVisible();
   await expect(aiPanel.getByText('GPU 반영됨')).toBeVisible();
   await expect(aiPanel.getByText('실제 장바구니 적용 기록')).toBeVisible();
-  await expect(aiPanel.getByText('이미 담김', { exact: true })).toBeVisible();
-  await expect(aiPanel.getByText('별도 표시')).toBeVisible();
+  await expect(aiPanel.getByText('현재 견적 합계')).toBeVisible();
+  await expect(aiPanel.getByText('최초 AI 조합: 1,310,000원')).toBeVisible();
+  await expect(aiPanel.getByText('담김', { exact: true })).toBeVisible();
+  await expect(aiPanel.getByText('미반영', { exact: true })).toBeVisible();
   await expect(page.getByRole('heading', { name: '견적 장바구니', exact: true })).toBeVisible();
-  await expect(page.getByText('견적 합계')).toBeVisible();
+  await expect(page.getByText('견적 합계', { exact: true })).toBeVisible();
 });
 
 test('keeps selected AI build current total without cart AI price movement summary', async ({ page }) => {
@@ -1593,7 +1595,8 @@ test('keeps selected AI build current total without cart AI price movement summa
   const cartPanel = page.getByRole('heading', { name: '견적 장바구니', exact: true }).locator('xpath=ancestor::section[1]');
 
   await expect(aiPanel.getByTestId('ai-selected-build-current-total')).toHaveText('1,260,000원');
-  await expect(aiPanel.getByText('현재 저장가 기준')).toBeVisible();
+  await expect(aiPanel.getByText('현재 견적 합계')).toBeVisible();
+  await expect(aiPanel.getByText('최초 AI 조합: 1,310,000원')).toBeVisible();
   await expect(cartPanel.getByTestId('quote-price-change-summary')).toHaveCount(0);
   await expect(cartPanel.getByTestId('quote-price-change-list')).toHaveCount(0);
   await expect(cartPanel.getByText(/AI 추천 시점 대비/)).toHaveCount(0);
@@ -1812,6 +1815,133 @@ test('does not show selected AI build no-movement summary in the cart total area
   await expect(cartPanel.getByTestId('quote-price-change-summary')).toHaveCount(0);
   await expect(cartPanel.getByTestId('quote-price-change-list')).toHaveCount(0);
   await expect(cartPanel.getByText(/AI 추천 시점 대비/)).toHaveCount(0);
+});
+
+test('syncs selected AI panel total and item state after chatbot part replacement', async ({ page }) => {
+  await page.addInitScript(() => {
+    localStorage.setItem('buildgraph.token', 'jwt-user-token');
+    localStorage.setItem('buildgraph.authUser', JSON.stringify({
+      id: 'user-test',
+      email: 'user@example.com',
+      name: 'Demo User',
+      role: 'USER'
+    }));
+    sessionStorage.setItem('buildgraph.ai.selectedBuild:user-test', JSON.stringify({
+      id: 'ai-performance',
+      tier: 'performance',
+      title: '고성능형 추천 조합',
+      summary: 'RTX 5090을 포함한 AI 추천 조합입니다.',
+      totalPrice: 11606530,
+      appliedPartCategories: ['GPU'],
+      selectedAt: '2026-06-30T09:00:00.000Z',
+      items: [
+        {
+          partId: 'part-gpu-5090-original',
+          category: 'GPU',
+          name: '조텍 GAMING 지포스 RTX 5090 SOLID OC D7 32GB',
+          manufacturer: '조텍',
+          quantity: 1,
+          price: 5002190,
+          note: 'AI 최초 추천 GPU'
+        },
+        {
+          partId: 'part-cpu-ai-original',
+          category: 'CPU',
+          name: 'AI 최초 추천 CPU',
+          manufacturer: 'AMD',
+          quantity: 1,
+          price: 6604340,
+          note: 'AI 최초 추천 CPU'
+        }
+      ]
+    }));
+  });
+
+  await page.route('**/api/auth/me', async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        id: 'user-test',
+        email: 'user@example.com',
+        name: 'Demo User',
+        role: 'USER'
+      })
+    });
+  });
+
+  await page.route('**/api/quote-drafts/current**', async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        id: 'draft-ai-replaced-panel-test',
+        status: 'ACTIVE',
+        name: '셀프 견적',
+        items: [
+          {
+            id: 'draft-item-gpu-5080',
+            partId: 'part-gpu-5080-replaced',
+            category: 'GPU',
+            name: 'MSI 지포스 RTX 5080 쉐도우 3X OC D7 16GB MSI코리아',
+            manufacturer: 'MSI',
+            quantity: 1,
+            unitPriceAtAdd: 2078000,
+            currentPrice: 2078000,
+            lineTotal: 2078000,
+            attributes: {}
+          }
+        ],
+        totalPrice: 8682340,
+        itemCount: 1
+      })
+    });
+  });
+
+  await page.route('**/api/parts**', async (route) => {
+    const url = new URL(route.request().url());
+    if (url.pathname.includes('/price-history')) {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          partId: 'part-gpu-5080-replaced',
+          partName: 'MSI 지포스 RTX 5080 쉐도우 3X OC D7 16GB MSI코리아',
+          currentPrice: 2078000,
+          days: 3650,
+          source: 'NAVER_SHOPPING_SEARCH',
+          items: [],
+          summary: {
+            sampleCount: 0,
+            currentPrice: 2078000,
+            minPrice: 2078000,
+            maxPrice: 2078000,
+            firstPrice: 2078000,
+            lastPrice: 2078000,
+            changeAmount: 0,
+            changeRatePercent: 0
+          }
+        })
+      });
+      return;
+    }
+
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({ items: [], page: 0, size: 20, total: 0 })
+    });
+  });
+
+  await page.goto('/self-quote?category=GPU');
+
+  const aiPanel = page.getByTestId('ai-selected-build-panel');
+  await expect(aiPanel.getByText('현재 견적 합계')).toBeVisible();
+  await expect(aiPanel.getByText('8,682,340원')).toBeVisible();
+  await expect(aiPanel).toContainText('교체');
+  await expect(aiPanel).toContainText('RTX 5080');
+  await expect(page.getByText('견적 합계', { exact: true })).toBeVisible();
+  await expect(page.getByText('8,682,340원').first()).toBeVisible();
 });
 
 test('paginates self quote assets in 20 item pages', async ({ page }) => {

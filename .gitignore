@@ -15,6 +15,7 @@ __pycache__/
 seed/generated-*.jsonl
 test-results/
 playwright-report/
+.playwright-cli/
 .cache/
 .idea/
 .vscode/

@@ -299,6 +299,55 @@ class DefaultAiChatEngineTest {
     }
 
     @Test
+    void buildModifyBetterMotherboardKeepsCurrentCpuSocketAndMemoryType() {
+        AiChatEngineResponse response = engine.respond(new AiChatEngineRequest(
+                "보드 더 좋은 걸로 추천해줘",
+                "SELF_QUOTE",
+                null,
+                null,
+                "draft-1",
+                Map.of("currentQuoteDraft", Map.of(
+                        "items", List.of(
+                                Map.of(
+                                        "partId", "cpu-mid",
+                                        "category", "CPU",
+                                        "name", "CPU Mid",
+                                        "currentPrice", 300_000,
+                                        "quantity", 1,
+                                        "attributes", Map.of("socket", "AM5")
+                                ),
+                                Map.of(
+                                        "partId", "motherboard-mid",
+                                        "category", "MOTHERBOARD",
+                                        "name", "AM5 B850 Board",
+                                        "currentPrice", 240_000,
+                                        "quantity", 1,
+                                        "attributes", Map.of("socket", "AM5", "memoryType", "DDR5", "chipset", "B850", "pcieGeneration", "4.0")
+                                ),
+                                Map.of(
+                                        "partId", "ram-ddr5",
+                                        "category", "RAM",
+                                        "name", "DDR5 RAM",
+                                        "currentPrice", 180_000,
+                                        "quantity", 2,
+                                        "attributes", Map.of("memoryType", "DDR5")
+                                )
+                        )
+                )),
+                1L
+        ));
+
+        assertThat(response.intent()).isEqualTo(AiChatIntent.BUILD_MODIFY);
+        assertThat(response.partRecommendations())
+                .extracting(AiChatEngineResponse.PartRecommendation::partId)
+                .containsExactly("motherboard-am5-high");
+        assertThat(response.partRecommendations())
+                .extracting(part -> String.valueOf(part.attributes().get("socket")))
+                .containsOnly("AM5");
+        verifyNoJdbcWrites();
+    }
+
+    @Test
     void buildModifyCheaperPsuKeepsStrongestLowerPriceCandidate() {
         AiChatEngineResponse response = engine.respond(new AiChatEngineRequest(
                 "파워가 너무 비싸니 더 싼 걸로 추천해줘",
@@ -539,9 +588,17 @@ class DefaultAiChatEngineTest {
         }
         if ("CPU".equals(category)) {
             return List.of(
-                    partRow(category, "cpu-high", "CPU High", 500_000, Map.of("toolReady", true, "cpuClass", "RYZEN_9", "coreCount", 16, "threadCount", 32)),
-                    partRow(category, "cpu-mid", "CPU Mid", 300_000, Map.of("toolReady", true, "cpuClass", "RYZEN_7", "coreCount", 8, "threadCount", 16)),
-                    partRow(category, "cpu-low", "CPU Low", 180_000, Map.of("toolReady", true, "cpuClass", "RYZEN_5", "coreCount", 6, "threadCount", 12))
+                    partRow(category, "cpu-high", "CPU High", 500_000, Map.of("toolReady", true, "cpuClass", "RYZEN_9", "coreCount", 16, "threadCount", 32, "socket", "AM5")),
+                    partRow(category, "cpu-mid", "CPU Mid", 300_000, Map.of("toolReady", true, "cpuClass", "RYZEN_7", "coreCount", 8, "threadCount", 16, "socket", "AM5")),
+                    partRow(category, "cpu-low", "CPU Low", 180_000, Map.of("toolReady", true, "cpuClass", "RYZEN_5", "coreCount", 6, "threadCount", 12, "socket", "AM5"))
+            );
+        }
+        if ("MOTHERBOARD".equals(category)) {
+            return List.of(
+                    partRow(category, "motherboard-intel-high", "Intel Z890 Board", 520_000, Map.of("toolReady", true, "socket", "LGA1851", "chipset", "Z890", "memoryType", "DDR5", "pcieGeneration", "5.0", "hasWifi", true, "formFactor", "ATX")),
+                    partRow(category, "motherboard-am5-high", "AM5 X870E Board", 410_000, Map.of("toolReady", true, "socket", "AM5", "chipset", "X870E", "memoryType", "DDR5", "pcieGeneration", "5.0", "hasWifi", true, "formFactor", "ATX")),
+                    partRow(category, "motherboard-mid", "AM5 B850 Board", 240_000, Map.of("toolReady", true, "socket", "AM5", "chipset", "B850", "memoryType", "DDR5", "pcieGeneration", "4.0", "hasWifi", true, "formFactor", "ATX")),
+                    partRow(category, "motherboard-ddr4", "AM5 DDR4 Invalid Board", 190_000, Map.of("toolReady", true, "socket", "AM5", "chipset", "B850", "memoryType", "DDR4", "pcieGeneration", "4.0", "hasWifi", false, "formFactor", "ATX"))
             );
         }
         if ("PSU".equals(category)) {

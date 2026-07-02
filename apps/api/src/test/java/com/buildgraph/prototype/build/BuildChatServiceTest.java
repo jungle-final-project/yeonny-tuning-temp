@@ -18,6 +18,7 @@ import com.buildgraph.prototype.agent.AiChatEngine;
 import com.buildgraph.prototype.agent.AiChatEngineRequest;
 import com.buildgraph.prototype.agent.AiChatEngineResponse;
 import com.buildgraph.prototype.agent.AiChatIntent;
+import com.buildgraph.prototype.part.ToolBuildPart;
 import com.buildgraph.prototype.part.ToolCheckService;
 import com.buildgraph.prototype.user.CurrentUserService;
 import java.util.LinkedHashMap;
@@ -49,7 +50,7 @@ class BuildChatServiceTest {
         JdbcTemplate jdbcTemplate = mock(JdbcTemplate.class);
         ToolCheckService toolCheckService = mock(ToolCheckService.class);
         AiChatEngine aiChatEngine = mock(AiChatEngine.class);
-        BuildChatService service = new BuildChatService(jdbcTemplate, toolCheckService, aiChatEngine);
+        BuildChatService service = new BuildChatService(jdbcTemplate, toolCheckService, aiChatEngine, BuildChatCacheService.disabled());
         when(aiChatEngine.respondLlmRequired(any(AiChatEngineRequest.class), nullable(String.class))).thenReturn(buildResponse());
         when(toolCheckService.checkBuild(anyList(), anyInt())).thenReturn(List.of(Map.of(
                 "tool", "price",
@@ -77,7 +78,7 @@ class BuildChatServiceTest {
         JdbcTemplate jdbcTemplate = mock(JdbcTemplate.class);
         ToolCheckService toolCheckService = mock(ToolCheckService.class);
         AiChatEngine aiChatEngine = mock(AiChatEngine.class);
-        BuildChatService service = new BuildChatService(jdbcTemplate, toolCheckService, aiChatEngine);
+        BuildChatService service = new BuildChatService(jdbcTemplate, toolCheckService, aiChatEngine, BuildChatCacheService.disabled());
         when(aiChatEngine.respondLlmRequired(any(AiChatEngineRequest.class), nullable(String.class))).thenReturn(partResponse());
 
         Map<String, Object> response = service.chat(Map.of(
@@ -100,7 +101,7 @@ class BuildChatServiceTest {
         JdbcTemplate jdbcTemplate = mock(JdbcTemplate.class);
         ToolCheckService toolCheckService = mock(ToolCheckService.class);
         AiChatEngine aiChatEngine = mock(AiChatEngine.class);
-        BuildChatService service = new BuildChatService(jdbcTemplate, toolCheckService, aiChatEngine);
+        BuildChatService service = new BuildChatService(jdbcTemplate, toolCheckService, aiChatEngine, BuildChatCacheService.disabled());
         when(aiChatEngine.respondLlmRequired(any(AiChatEngineRequest.class), eq("BUILD_CHAT_54_MINI_FAST"))).thenReturn(buildResponse());
         when(toolCheckService.checkBuild(anyList(), anyInt())).thenReturn(List.of());
 
@@ -114,7 +115,7 @@ class BuildChatServiceTest {
         JdbcTemplate jdbcTemplate = mock(JdbcTemplate.class);
         ToolCheckService toolCheckService = mock(ToolCheckService.class);
         AiChatEngine aiChatEngine = mock(AiChatEngine.class);
-        BuildChatService service = new BuildChatService(jdbcTemplate, toolCheckService, aiChatEngine);
+        BuildChatService service = new BuildChatService(jdbcTemplate, toolCheckService, aiChatEngine, BuildChatCacheService.disabled());
         when(aiChatEngine.respondLlmRequired(any(AiChatEngineRequest.class), nullable(String.class))).thenReturn(partResponse());
 
         Map<String, Object> response = service.chat(Map.of(
@@ -136,7 +137,7 @@ class BuildChatServiceTest {
         JdbcTemplate jdbcTemplate = mock(JdbcTemplate.class);
         ToolCheckService toolCheckService = mock(ToolCheckService.class);
         AiChatEngine aiChatEngine = mock(AiChatEngine.class);
-        BuildChatService service = new BuildChatService(jdbcTemplate, toolCheckService, aiChatEngine);
+        BuildChatService service = new BuildChatService(jdbcTemplate, toolCheckService, aiChatEngine, BuildChatCacheService.disabled());
         when(aiChatEngine.respondLlmRequired(any(AiChatEngineRequest.class), nullable(String.class))).thenReturn(partResponse());
 
         Map<String, Object> response = service.chat(Map.of("message", "GPU 추천해줘"));
@@ -147,11 +148,60 @@ class BuildChatServiceTest {
     }
 
     @Test
+    void buildChatExcludesPartRecommendationAndDraftActionWhenToolReturnsBlockingFail() {
+        JdbcTemplate jdbcTemplate = mock(JdbcTemplate.class);
+        ToolCheckService toolCheckService = mock(ToolCheckService.class);
+        AiChatEngine aiChatEngine = mock(AiChatEngine.class);
+        BuildChatService service = new BuildChatService(jdbcTemplate, toolCheckService, aiChatEngine, BuildChatCacheService.disabled());
+        when(aiChatEngine.respondLlmRequired(any(AiChatEngineRequest.class), nullable(String.class))).thenReturn(partResponse());
+        when(toolCheckService.checkBuild(anyList(), anyInt())).thenAnswer(invocation -> {
+            @SuppressWarnings("unchecked")
+            List<ToolBuildPart> parts = (List<ToolBuildPart>) invocation.getArgument(0);
+            boolean unsafeGpu = parts.stream().anyMatch(part -> "gpu-1".equals(part.publicId()));
+            return List.of(Map.of(
+                    "tool", "size",
+                    "status", unsafeGpu ? "FAIL" : "PASS",
+                    "confidence", "HIGH",
+                    "summary", unsafeGpu
+                            ? "케이스 장착 한계를 초과해 해당 조합은 장착할 수 없습니다."
+                            : "GPU 길이와 쿨러 높이가 케이스 제약 안에 있습니다."
+            ));
+        });
+
+        Map<String, Object> response = service.chat(Map.of(
+                "message", "그래픽카드 더 좋은 걸로 추천해줘",
+                "currentQuoteDraft", draftWithItems(List.of(
+                        draftItem("part-gpu-current", "GPU", "RTX 5070", 1, Map.of()),
+                        draftItem("part-case-current", "CASE", "Compact Case", 1, Map.of("maxGpuLengthMm", 330))
+                ))
+        ));
+
+        @SuppressWarnings("unchecked")
+        Map<String, Object> partRecommendation = (Map<String, Object>) response.get("partRecommendation");
+        @SuppressWarnings("unchecked")
+        List<Map<String, Object>> options = (List<Map<String, Object>>) partRecommendation.get("options");
+        assertThat(options)
+                .extracting(option -> option.get("partId"))
+                .containsExactly("gpu-2", "gpu-3");
+
+        @SuppressWarnings("unchecked")
+        List<Map<String, Object>> actions = (List<Map<String, Object>>) response.get("actions");
+        List<String> actionPartIds = actions.stream()
+                .map(action -> (Map<?, ?>) action.get("payload"))
+                .map(payload -> String.valueOf(payload.get("partId")))
+                .toList();
+        assertThat(actionPartIds).containsExactly("gpu-2");
+        @SuppressWarnings("unchecked")
+        List<String> warnings = (List<String>) response.get("warnings");
+        assertThat(warnings).contains("Tool FAIL 후보 1개를 추천/적용 후보에서 제외했습니다.");
+    }
+
+    @Test
     void missingOpenAiKeyPropagatesPreconditionRequired() {
         JdbcTemplate jdbcTemplate = mock(JdbcTemplate.class);
         ToolCheckService toolCheckService = mock(ToolCheckService.class);
         AiChatEngine aiChatEngine = mock(AiChatEngine.class);
-        BuildChatService service = new BuildChatService(jdbcTemplate, toolCheckService, aiChatEngine);
+        BuildChatService service = new BuildChatService(jdbcTemplate, toolCheckService, aiChatEngine, BuildChatCacheService.disabled());
         when(aiChatEngine.respondLlmRequired(any(AiChatEngineRequest.class), nullable(String.class)))
                 .thenThrow(new ResponseStatusException(HttpStatus.PRECONDITION_REQUIRED, "OPENAI_API_KEY가 필요합니다."));
 

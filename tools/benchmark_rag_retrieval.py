@@ -187,6 +187,39 @@ def write_report(output_dir: Path, results: list[dict[str, Any]]) -> Path:
             f"{row['retrievalModes']} | {row['topSources']} | {error} |"
         )
 
+    failed_rows = [row for row in results if not row["topKHit"]]
+    if failed_rows:
+        lines.extend([
+            "",
+            "## Failure Summary",
+            "",
+            "| variant | purpose | bucket | failed | cases |",
+            "|---|---|---|---:|---|",
+        ])
+        grouped_failures: dict[tuple[str, str, str], list[dict[str, Any]]] = {}
+        for row in failed_rows:
+            grouped_failures.setdefault((row["variant"], row["purpose"], failure_bucket(row)), []).append(row)
+        for (variant, purpose, bucket), rows in sorted(grouped_failures.items()):
+            case_ids = ", ".join(row["caseId"] for row in rows[:12])
+            if len(rows) > 12:
+                case_ids += f", +{len(rows) - 12} more"
+            lines.append(f"| {variant} | {purpose} | {bucket} | {len(rows)} | {case_ids} |")
+
+        lines.extend([
+            "",
+            "### Failed Cases",
+            "",
+            "| variant | purpose | case | bucket | query | topSources |",
+            "|---|---|---|---|---|---|",
+        ])
+        for row in failed_rows:
+            query = row["query"].replace("|", "/")
+            top_sources = row["topSources"].replace("|", "/")
+            lines.append(
+                f"| {row['variant']} | {row['purpose']} | {row['caseId']} | "
+                f"{failure_bucket(row)} | {query} | {top_sources} |"
+            )
+
     lines.extend([
         "",
         "## Policy Reading Guide",
@@ -198,6 +231,38 @@ def write_report(output_dir: Path, results: list[dict[str, Any]]) -> Path:
     ])
     output_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
     return output_path
+
+
+def failure_bucket(row: dict[str, Any]) -> str:
+    query = str(row.get("query") or "").lower()
+    purpose = str(row.get("purpose") or "")
+    if row.get("error"):
+        return "api-error"
+    if int(row.get("resultCount") or 0) == 0:
+        return "empty-result"
+    if purpose == "REQUIREMENT_PARSE":
+        if any(term in query for term in ("5090", "5080", "rtx", "글카")):
+            return "hard-part-constraint"
+        if any(term in query for term in ("예산", "가격", "만원", "최고급", "하이엔드", "플래그십", "끝판왕")):
+            return "budget-performance-intent"
+        if any(term in query for term in ("qhd", "4k", "144", "게임", "배그", "프레임")):
+            return "game-resolution"
+        if any(term in query for term in ("저소음", "조용", "소음", "업그레이드", "브랜드", "nvidia", "엔비디아")):
+            return "brand-noise-upgrade"
+        return "workload-followup"
+    if purpose == "BUILD_RECOMMEND":
+        if any(term in query for term in ("케이스", "쿨링", "컴팩트", "길이", "높이")):
+            return "case-cooling-fit"
+        if any(term in query for term in ("가격", "스냅샷", "현재가", "외부 api", "저장")):
+            return "saved-price-policy"
+        if any(term in query for term in ("파워", "전력", "psu", "헤드룸")):
+            return "power-headroom"
+        return "recommend-policy"
+    if purpose == "AS_ANALYZE":
+        if any(term in query for term in ("먼지", "흡기", "팬", "쿨러", "케이스", "발열")):
+            return "thermal-airflow"
+        return "as-symptom"
+    return "public-search"
 
 
 def login(base_url: str, email: str, password: str) -> str:

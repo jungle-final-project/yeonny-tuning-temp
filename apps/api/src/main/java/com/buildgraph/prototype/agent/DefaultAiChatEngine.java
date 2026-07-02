@@ -310,6 +310,7 @@ public class DefaultAiChatEngine implements AiChatEngine {
         PartReplacementRanker.SelectionResult selection = draftEditPartRecommendations(
                 effectiveCategory,
                 currentItem,
+                context,
                 priceDirection,
                 targetMaxPrice,
                 3
@@ -553,12 +554,125 @@ public class DefaultAiChatEngine implements AiChatEngine {
     private PartReplacementRanker.SelectionResult draftEditPartRecommendations(
             String category,
             Map<String, Object> currentItem,
+            Map<String, Object> context,
             String priceDirection,
             Integer targetMaxPrice,
             int limit
     ) {
-        List<AiChatEngineResponse.PartRecommendation> parts = partRecommendations(category, 50);
+        List<AiChatEngineResponse.PartRecommendation> parts = compatibleReplacementParts(category, context, partRecommendations(category, 50));
         return partReplacementRanker.select(category, currentItem, priceDirection, targetMaxPrice, parts, limit);
+    }
+
+    private static List<AiChatEngineResponse.PartRecommendation> compatibleReplacementParts(
+            String category,
+            Map<String, Object> context,
+            List<AiChatEngineResponse.PartRecommendation> parts
+    ) {
+        if (parts.isEmpty()) {
+            return parts;
+        }
+        List<AiChatEngineResponse.PartRecommendation> filtered = switch (category) {
+            case "CPU" -> filterByCpuSocket(context, parts);
+            case "MOTHERBOARD" -> filterByMotherboardPlatform(context, parts);
+            case "RAM" -> filterByMemoryType(context, parts);
+            case "GPU" -> filterByGpuFit(context, parts);
+            case "PSU" -> filterByPsuCapacity(context, parts);
+            case "CASE" -> filterByCaseFit(context, parts);
+            case "COOLER" -> filterByCoolerFit(context, parts);
+            default -> parts;
+        };
+        return filtered;
+    }
+
+    private static List<AiChatEngineResponse.PartRecommendation> filterByCpuSocket(
+            Map<String, Object> context,
+            List<AiChatEngineResponse.PartRecommendation> parts
+    ) {
+        String motherboardSocket = attrText(draftItem(context, "MOTHERBOARD"), "socket");
+        if (motherboardSocket == null) {
+            return parts;
+        }
+        return parts.stream()
+                .filter(part -> sameRequired(attrText(part.attributes(), "socket"), motherboardSocket))
+                .toList();
+    }
+
+    private static List<AiChatEngineResponse.PartRecommendation> filterByMotherboardPlatform(
+            Map<String, Object> context,
+            List<AiChatEngineResponse.PartRecommendation> parts
+    ) {
+        String cpuSocket = attrText(draftItem(context, "CPU"), "socket");
+        String memoryType = attrText(draftItem(context, "RAM"), "memoryType");
+        return parts.stream()
+                .filter(part -> sameRequired(attrText(part.attributes(), "socket"), cpuSocket))
+                .filter(part -> sameRequired(attrText(part.attributes(), "memoryType"), memoryType))
+                .toList();
+    }
+
+    private static List<AiChatEngineResponse.PartRecommendation> filterByMemoryType(
+            Map<String, Object> context,
+            List<AiChatEngineResponse.PartRecommendation> parts
+    ) {
+        String motherboardMemoryType = attrText(draftItem(context, "MOTHERBOARD"), "memoryType");
+        if (motherboardMemoryType == null) {
+            return parts;
+        }
+        return parts.stream()
+                .filter(part -> sameRequired(attrText(part.attributes(), "memoryType"), motherboardMemoryType))
+                .toList();
+    }
+
+    private static List<AiChatEngineResponse.PartRecommendation> filterByGpuFit(
+            Map<String, Object> context,
+            List<AiChatEngineResponse.PartRecommendation> parts
+    ) {
+        Map<String, Object> currentCase = draftItem(context, "CASE");
+        Map<String, Object> currentPsu = draftItem(context, "PSU");
+        Integer maxGpuLengthMm = attrNumber(currentCase, "maxGpuLengthMm");
+        Integer psuCapacityW = firstPositiveNumber(attrNumber(currentPsu, "capacityW"), attrNumber(currentPsu, "wattage"));
+        return parts.stream()
+                .filter(part -> lessOrEqualRequired(attrNumber(part.attributes(), "lengthMm"), maxGpuLengthMm))
+                .filter(part -> lessOrEqualRequired(attrNumber(part.attributes(), "requiredSystemPowerW"), psuCapacityW))
+                .toList();
+    }
+
+    private static List<AiChatEngineResponse.PartRecommendation> filterByPsuCapacity(
+            Map<String, Object> context,
+            List<AiChatEngineResponse.PartRecommendation> parts
+    ) {
+        Integer requiredPsuW = attrNumber(draftItem(context, "GPU"), "requiredSystemPowerW");
+        if (requiredPsuW == null) {
+            return parts;
+        }
+        return parts.stream()
+                .filter(part -> greaterOrEqualRequired(firstPositiveNumber(attrNumber(part.attributes(), "capacityW"), attrNumber(part.attributes(), "wattage")), requiredPsuW))
+                .toList();
+    }
+
+    private static List<AiChatEngineResponse.PartRecommendation> filterByCaseFit(
+            Map<String, Object> context,
+            List<AiChatEngineResponse.PartRecommendation> parts
+    ) {
+        Integer gpuLengthMm = attrNumber(draftItem(context, "GPU"), "lengthMm");
+        Integer coolerHeightMm = firstPositiveNumber(attrNumber(draftItem(context, "COOLER"), "heightMm"), attrNumber(draftItem(context, "COOLER"), "coolerHeightMm"));
+        Integer psuDepthMm = attrNumber(draftItem(context, "PSU"), "depthMm");
+        return parts.stream()
+                .filter(part -> greaterOrEqualRequired(attrNumber(part.attributes(), "maxGpuLengthMm"), gpuLengthMm))
+                .filter(part -> greaterOrEqualRequired(attrNumber(part.attributes(), "maxCpuCoolerHeightMm"), coolerHeightMm))
+                .filter(part -> greaterOrEqualRequired(attrNumber(part.attributes(), "maxPsuLengthMm"), psuDepthMm))
+                .toList();
+    }
+
+    private static List<AiChatEngineResponse.PartRecommendation> filterByCoolerFit(
+            Map<String, Object> context,
+            List<AiChatEngineResponse.PartRecommendation> parts
+    ) {
+        String cpuSocket = attrText(draftItem(context, "CPU"), "socket");
+        Integer maxCoolerHeightMm = attrNumber(draftItem(context, "CASE"), "maxCpuCoolerHeightMm");
+        return parts.stream()
+                .filter(part -> socketSupportedRequired(part.attributes().get("socketSupport"), cpuSocket))
+                .filter(part -> lessOrEqualRequired(firstPositiveNumber(attrNumber(part.attributes(), "heightMm"), attrNumber(part.attributes(), "coolerHeightMm")), maxCoolerHeightMm))
+                .toList();
     }
 
     private static String buildModifyMessage(
@@ -999,6 +1113,66 @@ public class DefaultAiChatEngine implements AiChatEngine {
                 .filter(item -> category.equals(text(item.get("category"))))
                 .findFirst()
                 .orElse(Map.of());
+    }
+
+    private static Map<String, Object> draftItem(Map<String, Object> context, String category) {
+        return currentDraftItem(context, category);
+    }
+
+    private static String attrText(Map<String, Object> item, String key) {
+        return text(attributesOf(item).get(key));
+    }
+
+    private static Integer attrNumber(Map<String, Object> item, String key) {
+        return numberValue(attributesOf(item).get(key));
+    }
+
+    private static Map<String, Object> attributesOf(Map<String, Object> item) {
+        if (item == null || item.isEmpty()) {
+            return Map.of();
+        }
+        if (item.containsKey("attributes")) {
+            return objectMap(item.get("attributes"));
+        }
+        return item;
+    }
+
+    private static boolean sameRequired(String candidateValue, String requiredValue) {
+        return requiredValue == null || candidateValue != null && requiredValue.equalsIgnoreCase(candidateValue);
+    }
+
+    private static boolean lessOrEqualRequired(Integer candidateValue, Integer maxValue) {
+        return maxValue == null || candidateValue != null && candidateValue <= maxValue;
+    }
+
+    private static boolean greaterOrEqualRequired(Integer candidateValue, Integer minValue) {
+        return minValue == null || candidateValue != null && candidateValue >= minValue;
+    }
+
+    private static Integer firstPositiveNumber(Integer... values) {
+        for (Integer value : values) {
+            if (value != null && value > 0) {
+                return value;
+            }
+        }
+        return null;
+    }
+
+    private static boolean socketSupported(Object socketSupport, String socket) {
+        if (socket == null || socketSupport == null) {
+            return true;
+        }
+        if (socketSupport instanceof List<?> list) {
+            return list.stream().anyMatch(item -> socket.equalsIgnoreCase(String.valueOf(item)));
+        }
+        return String.valueOf(socketSupport).toUpperCase(Locale.ROOT).contains(socket.toUpperCase(Locale.ROOT));
+    }
+
+    private static boolean socketSupportedRequired(Object socketSupport, String socket) {
+        if (socket == null) {
+            return true;
+        }
+        return socketSupport != null && socketSupported(socketSupport, socket);
     }
 
     private static Map<String, Object> mostExpensiveDraftItem(Map<String, Object> context) {

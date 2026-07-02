@@ -11,6 +11,7 @@ import {
   PART_CATEGORY_LABELS,
   clearSelectedAiBuild,
   readSelectedAiBuild,
+  type AiBuildItem,
   type BuildGraphFocus,
   type PartCategory,
   type AiSelectedBuild
@@ -80,7 +81,6 @@ export function SelfQuotePage() {
   const toIndex = total === 0 ? 0 : Math.min((safePage + 1) * PAGE_SIZE, total);
   const draftItems = quoteDraft?.items ?? [];
   const selectedTotal = quoteDraft?.totalPrice ?? 0;
-  const aiBuildDisplayTotal = currentPriceTotalForAiBuild(aiBuild, draftItems);
   const selectedPartIds = new Set(draftItems.map((part) => part.partId));
   const graphFocus = quoteGraphFocus(category);
   const graphQuery = useQuery({
@@ -252,8 +252,8 @@ export function SelfQuotePage() {
         {aiBuild ? (
           <AiSelectedBuildPanel
             build={aiBuild}
-            selectedPartIds={selectedPartIds}
-            displayTotal={aiBuildDisplayTotal}
+            draftItems={draftItems}
+            currentTotal={selectedTotal}
             onClear={() => {
               clearSelectedAiBuild();
               setAiBuild(null);
@@ -416,17 +416,19 @@ export function SelfQuotePage() {
 
 function AiSelectedBuildPanel({
   build,
-  selectedPartIds,
-  displayTotal,
+  draftItems,
+  currentTotal,
   onClear
 }: {
   build: AiSelectedBuild;
-  selectedPartIds: Set<string>;
-  displayTotal: AiBuildDisplayTotal;
+  draftItems: QuoteDraftItem[];
+  currentTotal: number;
   onClear: () => void;
 }) {
-  const duplicateCount = build.items.filter((item) => selectedPartIds.has(item.partId)).length;
+  const displayItems = build.items.map((item) => createAiBuildDisplayItem(item, draftItems));
+  const reflectedCount = displayItems.filter((item) => item.status !== '미반영').length;
   const appliedPartCategories = build.appliedPartCategories ?? [];
+  const initialTotalDiffers = build.totalPrice > 0 && currentTotal !== build.totalPrice;
 
   return (
     <section data-testid="ai-selected-build-panel" className="panel overflow-hidden border-blue-100 bg-blue-50/60">
@@ -440,18 +442,20 @@ function AiSelectedBuildPanel({
                 {PART_CATEGORY_LABELS[category]} 반영됨
               </span>
             ))}
-            {duplicateCount > 0 ? <span className="rounded bg-emerald-50 px-2 py-1 text-[11px] font-black text-emerald-700">중복 {duplicateCount}개 감지</span> : null}
+            {reflectedCount > 0 ? <span className="rounded bg-emerald-50 px-2 py-1 text-[11px] font-black text-emerald-700">현재 견적 {reflectedCount}개 반영</span> : null}
           </div>
           <h2 className="text-xl font-black text-commerce-ink">AI 선택 조합</h2>
           <p className="mt-2 max-w-3xl break-keep text-sm leading-6 text-slate-600">
-            {build.title} · {build.summary} 선택 시점의 AI 조합과 현재 견적 장바구니 반영 상태를 비교합니다.
+            {build.title} · {build.summary} AI로 시작한 조합을 현재 견적 장바구니 기준으로 보여줍니다.
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
           <div className="rounded-md bg-white px-4 py-3 text-right">
-            <div className="text-xs font-bold text-slate-500">AI 조합 합계</div>
-            <div data-testid="ai-selected-build-current-total" className="text-lg font-black text-commerce-sale">{displayTotal.totalPrice.toLocaleString()}원</div>
-            <div className="mt-1 text-[11px] font-bold text-slate-500">{displayTotalLabel(displayTotal)}</div>
+            <div className="text-xs font-bold text-slate-500">현재 견적 합계</div>
+            <div data-testid="ai-selected-build-current-total" className="text-lg font-black text-commerce-sale">{currentTotal.toLocaleString()}원</div>
+            {initialTotalDiffers ? (
+              <div className="mt-1 text-[11px] font-bold text-slate-400">최초 AI 조합: {build.totalPrice.toLocaleString()}원</div>
+            ) : null}
           </div>
           <button
             type="button"
@@ -465,21 +469,20 @@ function AiSelectedBuildPanel({
       </div>
 
       <div className="grid gap-3 border-t border-blue-100 bg-white/75 p-5 md:grid-cols-2 xl:grid-cols-4">
-        {build.items.map((item) => {
-          const alreadySelected = selectedPartIds.has(item.partId);
+        {displayItems.map((item) => {
           const categoryLabel = PART_CATEGORY_LABELS[item.category] ?? item.category;
           return (
-            <div key={item.partId} className="rounded-lg border border-commerce-line bg-white p-3 text-xs">
+            <div key={item.key} className="rounded-lg border border-commerce-line bg-white p-3 text-xs">
               <div className="mb-2 flex items-center justify-between gap-2">
                 <span className="rounded bg-slate-100 px-2 py-1 font-black text-slate-700">{categoryLabel}</span>
-                <span className={`rounded px-2 py-1 font-black ${alreadySelected ? 'bg-emerald-50 text-emerald-700' : 'bg-blue-50 text-brand-blue'}`}>
-                  {alreadySelected ? '이미 담김' : '별도 표시'}
+                <span className={`rounded px-2 py-1 font-black ${aiStatusClass(item.status)}`}>
+                  {item.status}
                 </span>
               </div>
               <div className="min-h-10 font-black leading-5 text-commerce-ink">{item.name}</div>
               <div className="mt-1 text-slate-500">{item.manufacturer} · 수량 {item.quantity}</div>
               <div className="mt-2 break-keep text-slate-500">{item.note}</div>
-              <div className="mt-3 font-black text-brand-blue">{item.price.toLocaleString()}원</div>
+              <div className="mt-3 font-black text-brand-blue">{item.lineTotal.toLocaleString()}원</div>
             </div>
           );
         })}
@@ -487,7 +490,7 @@ function AiSelectedBuildPanel({
 
       <div className="flex flex-col gap-2 border-t border-blue-100 bg-white px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
         <div className="break-keep text-xs font-bold leading-5 text-slate-500">
-          AI 조합 적용은 서버 batch API로 처리되며, 현재 견적 장바구니에 있는 부품은 이미 담김으로 표시합니다.
+          AI 조합 이후 챗봇으로 바꾼 부품까지 현재 견적 장바구니 기준으로 표시합니다.
         </div>
         <Link to="/my/quotes" className="inline-flex min-h-10 items-center justify-center gap-2 rounded-md border border-commerce-line bg-white px-4 text-sm font-black text-commerce-ink hover:border-commerce-ink">
           <Bell size={16} />
@@ -498,41 +501,56 @@ function AiSelectedBuildPanel({
   );
 }
 
-type AiBuildDisplayTotal = {
-  totalPrice: number;
-  matchedItemCount: number;
-  itemCount: number;
+type AiBuildDisplayItem = {
+  key: string;
+  category: AiBuildItem['category'];
+  name: string;
+  manufacturer: string;
+  quantity: number;
+  lineTotal: number;
+  note: string;
+  status: '담김' | '교체됨' | '미반영';
 };
 
-function currentPriceTotalForAiBuild(aiBuild: AiSelectedBuild | null, draftItems: QuoteDraftItem[]): AiBuildDisplayTotal {
-  if (!aiBuild) {
-    return { totalPrice: 0, matchedItemCount: 0, itemCount: 0 };
+function createAiBuildDisplayItem(item: AiBuildItem, draftItems: QuoteDraftItem[]): AiBuildDisplayItem {
+  const matchingDraftItems = draftItems.filter((draftItem) => draftItem.category === item.category);
+  const samePart = matchingDraftItems.find((draftItem) => draftItem.partId === item.partId);
+  const currentItem = samePart ?? matchingDraftItems[0];
+
+  if (!currentItem) {
+    return {
+      key: item.partId,
+      category: item.category,
+      name: item.name,
+      manufacturer: item.manufacturer,
+      quantity: item.quantity,
+      lineTotal: item.price * item.quantity,
+      note: item.note,
+      status: '미반영'
+    };
   }
-  const draftItemsByPartId = new Map(draftItems.map((item) => [item.partId, item]));
-  let matchedItemCount = 0;
-  const totalPrice = aiBuild.items.reduce((sum, item) => {
-    const draftItem = draftItemsByPartId.get(item.partId);
-    if (draftItem) {
-      matchedItemCount += 1;
-      return sum + draftItem.currentPrice * draftItem.quantity;
-    }
-    return sum + item.price * item.quantity;
-  }, 0);
+
+  const categoryLineTotal = matchingDraftItems.reduce((sum, draftItem) => sum + draftItem.lineTotal, 0);
+  const hasMultiple = matchingDraftItems.length > 1;
+  const sameQuantity = currentItem.quantity === item.quantity;
+  const unchanged = currentItem.partId === item.partId && sameQuantity && !hasMultiple;
+
   return {
-    totalPrice,
-    matchedItemCount,
-    itemCount: aiBuild.items.length
+    key: `${item.category}-${currentItem.partId}`,
+    category: item.category,
+    name: hasMultiple ? `${currentItem.name} 외 ${matchingDraftItems.length - 1}개` : currentItem.name,
+    manufacturer: currentItem.manufacturer ?? item.manufacturer,
+    quantity: hasMultiple ? matchingDraftItems.reduce((sum, draftItem) => sum + draftItem.quantity, 0) : currentItem.quantity,
+    lineTotal: hasMultiple ? categoryLineTotal : currentItem.lineTotal,
+    note: unchanged ? item.note : 'AI 이후 챗봇 변경 반영',
+    status: unchanged ? '담김' : '교체됨'
   };
 }
 
-function displayTotalLabel(total: AiBuildDisplayTotal) {
-  if (total.itemCount > 0 && total.matchedItemCount === total.itemCount) {
-    return '현재 저장가 기준';
-  }
-  if (total.matchedItemCount > 0) {
-    return '현재 저장가 일부 반영';
-  }
-  return '추천 시점 기준';
+function aiStatusClass(status: AiBuildDisplayItem['status']) {
+  if (status === '담김') return 'bg-emerald-50 text-emerald-700';
+  if (status === '교체됨') return 'bg-amber-50 text-amber-700';
+  return 'bg-slate-100 text-slate-500';
 }
 
 function QuoteTotalCard({ totalPrice }: { totalPrice: number }) {

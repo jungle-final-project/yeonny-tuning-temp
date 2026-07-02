@@ -123,6 +123,33 @@ class ToolCheckServiceBenchmarkTest {
         assertThat(match.get("evidenceExactness")).isEqualTo("GPU_CLASS_RESOLUTION_FALLBACK");
     }
 
+    @Test
+    void sizeToolFailsWhenCaseClearanceIsExceeded() {
+        JdbcTemplate jdbcTemplate = mock(JdbcTemplate.class);
+        ToolCheckService service = new ToolCheckService(jdbcTemplate);
+
+        List<Map<String, Object>> results = service.checkBuild(List.of(
+                new ToolBuildPart(1L, "gpu-public-id", "GPU", "Oversized GPU", "BuildGraph", 2_000_000, Map.of("lengthMm", 360)),
+                new ToolBuildPart(2L, "case-public-id", "CASE", "Compact Case", "BuildGraph", 150_000, Map.of(
+                        "maxGpuLengthMm", 330,
+                        "maxCpuCoolerHeightMm", 160
+                )),
+                new ToolBuildPart(3L, "cooler-public-id", "COOLER", "Tall Cooler", "BuildGraph", 120_000, Map.of("heightMm", 170))
+        ), 3_000_000);
+
+        Map<String, Object> size = results.stream()
+                .filter(result -> "size".equals(result.get("tool")))
+                .findFirst()
+                .orElseThrow();
+        @SuppressWarnings("unchecked")
+        Map<String, Object> details = (Map<String, Object>) size.get("details");
+
+        assertThat(size.get("status")).isEqualTo("FAIL");
+        assertThat(size.get("summary")).isEqualTo("케이스 장착 한계를 초과해 해당 조합은 장착할 수 없습니다.");
+        assertThat(details.get("gpuHeadroomMm")).isEqualTo(-30);
+        assertThat(details.get("coolerHeadroomMm")).isEqualTo(-10);
+    }
+
     private static Entry<String, Object> entry(String key, Object value) {
         return Map.entry(key, value);
     }
