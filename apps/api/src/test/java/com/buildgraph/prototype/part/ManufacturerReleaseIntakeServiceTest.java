@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.Mockito.mock;
 
 import com.buildgraph.prototype.agent.OpenAiResponsesClient;
+import com.buildgraph.prototype.part.util.NaverShoppingOfferService;
 import java.util.Map;
 import org.junit.jupiter.api.Test;
 import org.springframework.http.HttpStatus;

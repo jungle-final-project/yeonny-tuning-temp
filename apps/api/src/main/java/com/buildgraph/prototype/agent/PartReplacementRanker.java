@@ -1,7 +1,5 @@
 package com.buildgraph.prototype.agent;
 
-import com.buildgraph.prototype.common.MockData;
-import com.buildgraph.prototype.part.PartAliasReviewService;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.LinkedHashMap;
@@ -16,12 +14,6 @@ public class PartReplacementRanker {
     static final String WARNING_NO_HIGHER_RANK_CANDIDATE = "NO_HIGHER_RANK_CANDIDATE";
     static final String WARNING_RANK_FALLBACK_USED = "RANK_FALLBACK_USED";
     static final String WARNING_ALIAS_REVIEW_REQUIRED = "ALIAS_REVIEW_REQUIRED";
-
-    private final PartAliasReviewService aliasReviewService;
-
-    public PartReplacementRanker(PartAliasReviewService aliasReviewService) {
-        this.aliasReviewService = aliasReviewService;
-    }
 
     public SelectionResult select(
             String category,
@@ -49,7 +41,6 @@ public class PartReplacementRanker {
         Double currentTier = currentPart == null ? tierCurrentItem(normalizedCategory, currentItem) : tierRank(currentPart);
         if (currentRank == null) {
             warnings.add(WARNING_ALIAS_REVIEW_REQUIRED);
-            queueReview(normalizedCategory, currentItem, "현재 견적 부품의 성능/스펙 rank 기준을 계산하지 못했습니다.");
         }
 
         List<ScoredPart> scored = candidates.stream()
@@ -59,15 +50,6 @@ public class PartReplacementRanker {
                 .toList();
         if (scored.isEmpty()) {
             warnings.add(WARNING_ALIAS_REVIEW_REQUIRED);
-            aliasReviewService.queueReviewItem(
-                    "AI_BUILD_CHAT",
-                    normalizedCategory,
-                    "rank",
-                    null,
-                    null,
-                    "교체 후보 전체에서 rank 계산 가능한 부품을 찾지 못했습니다.",
-                    MockData.map("category", normalizedCategory, "priceDirection", priceDirection)
-            );
             return new SelectionResult(List.of(), warnings);
         }
 
@@ -386,21 +368,6 @@ public class PartReplacementRanker {
                 + height * 0.8
                 + benchmarkScore(attributes) * 10.0
                 + ("AIO".equalsIgnoreCase(text(attributes.get("coolerType"))) ? 120.0 : 0.0);
-    }
-
-    private void queueReview(String category, Map<String, Object> currentItem, String message) {
-        aliasReviewService.queueReviewItem(
-                "AI_BUILD_CHAT",
-                category,
-                "rank",
-                text(currentItem == null ? null : currentItem.get("name")),
-                text(currentItem == null ? null : currentItem.get("partId")),
-                message,
-                MockData.map(
-                        "category", category,
-                        "currentItem", currentItem == null ? Map.of() : currentItem
-                )
-        );
     }
 
     private static double gpuClassRank(String value) {

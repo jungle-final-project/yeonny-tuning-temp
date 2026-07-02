@@ -14,6 +14,7 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
+import com.buildgraph.prototype.part.util.NaverShoppingOfferService;
 import com.buildgraph.prototype.user.CurrentUserService;
 import java.util.Map;
 import org.junit.jupiter.api.BeforeEach;
@@ -26,7 +27,7 @@ import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.web.server.ResponseStatusException;
 
-@WebMvcTest(PartController.class)
+@WebMvcTest(ToolController.class)
 class PartControllerTest {
     private static final String USER_TOKEN = "Bearer jwt-user-token";
     private static final String ADMIN_TOKEN = "Bearer jwt-admin-token";
@@ -38,7 +39,7 @@ class PartControllerTest {
     private PartQueryService partQueryService;
 
     @MockitoBean
-    private ToolCheckService toolCheckService;
+    private ToolService toolCheckService;
 
     @MockitoBean
     private NaverShoppingOfferService naverShoppingOfferService;

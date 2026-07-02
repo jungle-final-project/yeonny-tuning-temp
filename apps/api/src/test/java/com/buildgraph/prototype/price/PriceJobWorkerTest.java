@@ -10,7 +10,7 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 
 import com.buildgraph.prototype.part.DanawaPriceSnapshotService;
-import com.buildgraph.prototype.part.NaverShoppingOfferService;
+import com.buildgraph.prototype.part.util.NaverShoppingOfferService;
 import java.util.Map;
 import org.junit.jupiter.api.Test;
 import org.mockito.InOrder;
