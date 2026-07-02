@@ -83,7 +83,7 @@ public class PartCompatibleCandidateService {
         List<String> checkedTools = checkedTools(normalizedCategory);
         return rows.stream()
                 .map(row -> {
-                    CandidateEvaluation evaluation = evaluate(baseParts, new CandidatePart(toolPart(row), partMap(row)), normalizedCategory, checkedTools);
+                    CandidateEvaluation evaluation = evaluate(baseParts, new CandidatePart(toolPart(row), responsePart(row)), normalizedCategory, checkedTools);
                     Map<String, Object> part = new LinkedHashMap<>(evaluation.partMap());
                     part.put("compatibility", evaluation.partListCompatibility());
                     return part;
@@ -295,6 +295,13 @@ public class PartCompatibleCandidateService {
                 "latestPriceCollectedAt", DbValueMapper.timestamp(row, "latest_price_collected_at"),
                 "externalOffer", externalOffer(row)
         );
+    }
+
+    private Map<String, Object> responsePart(Map<String, Object> row) {
+        if (row.containsKey("externalOffer") || row.containsKey("latestPriceSource") || row.containsKey("benchmarkSummary")) {
+            return new LinkedHashMap<>(row);
+        }
+        return partMap(row);
     }
 
     private ToolBuildPart toolPart(Map<String, Object> row) {

@@ -170,6 +170,46 @@ class PartCompatibleCandidateServiceTest {
         assertThat(compatibility(items.get(2)).get("statusLabel")).isEqualTo("간섭 주의");
     }
 
+    @Test
+    void partRowsWithCompatibilityPreservesApiDtoExternalOfferForCategoryList() {
+        when(jdbcTemplate.queryForList(anyString(), eq(1004L))).thenReturn(List.of(activeDraft()));
+        when(jdbcTemplate.queryForList(anyString(), eq(700L))).thenReturn(List.of(
+                draftItem("draft-cpu", 301L, "CPU", "Ryzen 7", 420000, MockData.map("socket", "AM5")),
+                draftItem("draft-gpu", 302L, "GPU", "RTX 5070", 900000, MockData.map("wattage", 250))
+        ));
+        when(toolCheckService.checkBuild(anyList(), anyInt()))
+                .thenReturn(List.of(tool("power", "PASS", "파워 후보를 확인했습니다.")));
+        Map<String, Object> externalOffer = MockData.map(
+                "title", "AONE 컴퓨터 파워 ATX 300W 600T",
+                "imageUrl", "https://shopping-phinf.pstatic.net/main_1234567/1234567.jpg",
+                "supplierName", "네이버",
+                "offerUrl", "https://shopping.naver.com/catalog/1234567",
+                "lowPrice", 35500,
+                "source", "NAVER_SHOPPING_SEARCH",
+                "refreshedAt", "2026-07-02T12:00:00Z"
+        );
+        List<Map<String, Object>> rows = List.of(MockData.map(
+                "id", "psu-image",
+                "category", "PSU",
+                "name", "AONE 컴퓨터 파워 ATX 300W 600T",
+                "manufacturer", "AONE",
+                "price", 35500,
+                "status", "ACTIVE",
+                "attributes", MockData.map("capacityW", 300),
+                "externalOffer", externalOffer
+        ));
+
+        List<Map<String, Object>> items = service.partRowsWithCompatibility(user(), "QUOTE_DRAFT_CURRENT", "PSU", rows);
+
+        assertThat(items).hasSize(1);
+        assertThat(items.get(0).get("externalOffer")).isEqualTo(externalOffer);
+        assertThat(externalOffer(items.get(0)).get("imageUrl")).isEqualTo("https://shopping-phinf.pstatic.net/main_1234567/1234567.jpg");
+        assertThat(externalOffer(items.get(0)).get("supplierName")).isEqualTo("네이버");
+        assertThat(externalOffer(items.get(0)).get("offerUrl")).isEqualTo("https://shopping.naver.com/catalog/1234567");
+        assertThat(externalOffer(items.get(0)).get("source")).isEqualTo("NAVER_SHOPPING_SEARCH");
+        assertThat(compatibility(items.get(0)).get("status")).isEqualTo("PASS");
+    }
+
     private void stubPart(String publicId, Map<String, Object> row) {
         when(jdbcTemplate.queryForList(anyString(), eq(publicId))).thenReturn(List.of(row));
     }
@@ -241,6 +281,11 @@ class PartCompatibleCandidateServiceTest {
     @SuppressWarnings("unchecked")
     private static Map<String, Object> part(Map<String, Object> candidate) {
         return (Map<String, Object>) candidate.get("part");
+    }
+
+    @SuppressWarnings("unchecked")
+    private static Map<String, Object> externalOffer(Map<String, Object> part) {
+        return (Map<String, Object>) part.get("externalOffer");
     }
 
     @SuppressWarnings("unchecked")
