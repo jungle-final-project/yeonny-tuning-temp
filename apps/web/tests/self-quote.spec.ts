@@ -1085,7 +1085,7 @@ test('shows checkout empty state and keeps mobile layout within viewport', async
   expect(hasBodyOverflow).toBe(false);
 });
 
-test('self quote chatbot sends current draft and applies a remove action after confirmation', async ({ page }) => {
+test('self quote chatbot sends current draft and automatically applies a remove action', async ({ page }) => {
   const buildChatBodies: unknown[] = [];
   let deleteRequests = 0;
   const gpuDraft = {
@@ -1208,7 +1208,7 @@ test('self quote chatbot sends current draft and applies a remove action after c
             label: 'GPU 빼기',
             description: 'RTX 5070 챗봇 테스트를 견적에서 제거합니다.',
             payload: { partId: 'part-gpu-chat', category: 'GPU', source: 'AI_BUILD_CHAT' },
-            requiresConfirmation: true
+            requiresConfirmation: false
           }
         ],
         warnings: []
@@ -1224,10 +1224,10 @@ test('self quote chatbot sends current draft and applies a remove action after c
 
   await expect.poll(() => buildChatBodies.length).toBe(1);
   expect((buildChatBodies[0] as { currentQuoteDraft?: { items?: Array<{ partId: string }> } }).currentQuoteDraft?.items?.[0]?.partId).toBe('part-gpu-chat');
-  await expect(page.getByText('견적 장바구니 변경안')).toBeVisible();
-  await page.getByRole('button', { name: '적용' }).click();
+  await expect(page.getByText('견적 장바구니 자동 실행')).toBeVisible();
 
   await expect.poll(() => deleteRequests).toBe(1);
+  await expect(page.getByText('견적 장바구니에 적용됨')).toBeVisible();
   await expect(page.getByText('왼쪽 목록에서 부품을 담으면 이곳에 내 견적이 쌓입니다.')).toBeVisible();
 });
 

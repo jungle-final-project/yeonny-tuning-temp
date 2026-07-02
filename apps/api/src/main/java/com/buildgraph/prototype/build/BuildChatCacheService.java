@@ -131,7 +131,7 @@ public class BuildChatCacheService {
         fingerprint.put("appliedPartPreferences", request.get("appliedPartPreferences"));
         fingerprint.put("versions", dataVersions());
         String json = OBJECT_MAPPER.writeValueAsString(fingerprint);
-        return "buildgraph:build-chat:v6:" + sha256(json);
+        return "buildgraph:build-chat:v7:" + sha256(json);
     }
 
     private String effectiveProfile(String requestedAiProfile) {

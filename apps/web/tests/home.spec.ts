@@ -812,6 +812,169 @@ test('chatbot asks for login when token disappears before submit', async ({ page
   expect(buildChatCalls).toBe(0);
 });
 
+test('chatbot routes simple part screen commands without build-chat API call', async ({ page }) => {
+  let buildChatCalls = 0;
+  await mockSelfQuoteApis(page);
+  await openHomeAsUser(page);
+  await page.route('**/api/ai/build-chat', async (route) => {
+    buildChatCalls += 1;
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        answerType: 'GENERAL',
+        message: '빠른 라우팅에서는 호출되면 안 됩니다.',
+        builds: [],
+        partRecommendation: null,
+        actions: [],
+        warnings: []
+      })
+    });
+  });
+
+  await page.getByRole('button', { name: 'AI 견적 챗봇 열기' }).click();
+  await page.getByRole('textbox', { name: 'AI 챗봇에게 PC 사양 질문' }).fill('GPU 보여줘');
+  await page.getByRole('button', { name: '질문 보내기' }).click();
+
+  await page.waitForURL(/\/self-quote\?category=GPU$/);
+  await page.getByRole('button', { name: 'AI 견적 챗봇 열기' }).click();
+  await expect(page.getByTestId('ai-chat-messages')).toContainText('GPU 부품 화면으로 이동했습니다.');
+  expect(buildChatCalls).toBe(0);
+});
+
+test('chatbot does not fast-route recommendation requests', async ({ page }) => {
+  let buildChatCalls = 0;
+  await openHomeAsUser(page);
+  await page.route('**/api/ai/build-chat', async (route) => {
+    buildChatCalls += 1;
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        answerType: 'PART',
+        message: 'GPU 후보를 정리했습니다.',
+        builds: [],
+        partRecommendation: {
+          category: 'GPU',
+          label: 'GPU',
+          intro: 'GPU 후보입니다.',
+          options: [item('GPU', 'balanced', 2_000_000)]
+        },
+        actions: [],
+        warnings: []
+      })
+    });
+  });
+
+  await page.getByRole('button', { name: 'AI 견적 챗봇 열기' }).click();
+  await page.getByRole('textbox', { name: 'AI 챗봇에게 PC 사양 질문' }).fill('GPU 추천해줘');
+  await page.getByRole('button', { name: '질문 보내기' }).click();
+
+  await expect.poll(() => buildChatCalls).toBe(1);
+  await expect(page).toHaveURL(/\/$/);
+  await expect(page.getByTestId('ai-chat-messages')).toContainText('GPU 후보를 정리했습니다.');
+});
+
+test('chatbot does not fast-route cart mutation requests', async ({ page }) => {
+  let buildChatCalls = 0;
+  await openHomeAsUser(page);
+  await page.route('**/api/ai/build-chat', async (route) => {
+    buildChatCalls += 1;
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        answerType: 'GENERAL',
+        message: '추천 조합 담기 action을 확인합니다.',
+        builds: [],
+        partRecommendation: null,
+        actions: [],
+        warnings: []
+      })
+    });
+  });
+
+  await page.getByRole('button', { name: 'AI 견적 챗봇 열기' }).click();
+  await page.getByRole('textbox', { name: 'AI 챗봇에게 PC 사양 질문' }).fill('장바구니에 추가해줘');
+  await page.getByRole('button', { name: '질문 보내기' }).click();
+
+  await expect.poll(() => buildChatCalls).toBe(1);
+  await expect(page).toHaveURL(/\/$/);
+  await expect(page.getByTestId('ai-chat-messages')).toContainText('추천 조합 담기 action을 확인합니다.');
+});
+
+test('chatbot lets concrete product detail requests go through build-chat route resolver', async ({ page }) => {
+  let buildChatCalls = 0;
+  await openHomeAsUser(page);
+  await page.route('**/api/ai/build-chat', async (route) => {
+    buildChatCalls += 1;
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        answerType: 'GENERAL',
+        message: '상품 상세로 이동하겠습니다.',
+        builds: [],
+        partRecommendation: null,
+        actions: [
+          {
+            id: 'route-part-detail',
+            type: 'OPEN_ROUTE',
+            label: '상품 상세 보기',
+            description: '상품 상세 화면으로 이동합니다.',
+            payload: { route: '/parts/00000000-0000-4000-8000-000000005090', source: 'AI_BUILD_CHAT' },
+            requiresConfirmation: false
+          }
+        ],
+        warnings: []
+      })
+    });
+  });
+
+  await page.getByRole('button', { name: 'AI 견적 챗봇 열기' }).click();
+  await page.getByRole('textbox', { name: 'AI 챗봇에게 PC 사양 질문' }).fill('ASUS Astral 5090 상세 보여줘');
+  await page.getByRole('button', { name: '질문 보내기' }).click();
+
+  await expect.poll(() => buildChatCalls).toBe(1);
+  await page.waitForURL(/\/parts\/00000000-0000-4000-8000-000000005090$/);
+});
+
+test('chatbot follows server OPEN_ROUTE action after allowlist validation', async ({ page }) => {
+  let buildChatCalls = 0;
+  await openHomeAsUser(page);
+  await page.route('**/api/ai/build-chat', async (route) => {
+    buildChatCalls += 1;
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        answerType: 'GENERAL',
+        message: '내 견적함으로 이동하겠습니다.',
+        builds: [],
+        partRecommendation: null,
+        actions: [
+          {
+            id: 'route-my-quotes',
+            type: 'OPEN_ROUTE',
+            label: '내 견적함 열기',
+            description: '내 견적함 화면으로 이동합니다.',
+            payload: { route: '/my/quotes', source: 'AI_BUILD_CHAT' },
+            requiresConfirmation: false
+          }
+        ],
+        warnings: []
+      })
+    });
+  });
+
+  await page.getByRole('button', { name: 'AI 견적 챗봇 열기' }).click();
+  await page.getByRole('textbox', { name: 'AI 챗봇에게 PC 사양 질문' }).fill('지난번 만든 조합 목록 열어줘');
+  await page.getByRole('button', { name: '질문 보내기' }).click();
+
+  await expect.poll(() => buildChatCalls).toBe(1);
+  await page.waitForURL(/\/my\/quotes$/);
+});
+
 test('chatbot maps build-chat 401 to login required instead of generic failure', async ({ page }) => {
   let buildChatCalls = 0;
   await openHomeAsUser(page);

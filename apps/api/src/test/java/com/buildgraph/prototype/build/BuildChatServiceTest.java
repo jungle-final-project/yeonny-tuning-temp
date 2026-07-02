@@ -14,6 +14,7 @@ import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 import com.buildgraph.prototype.agent.AiChatAction;
+import com.buildgraph.prototype.agent.AiChatActionType;
 import com.buildgraph.prototype.agent.AiChatEngine;
 import com.buildgraph.prototype.agent.AiChatEngineRequest;
 import com.buildgraph.prototype.agent.AiChatEngineResponse;
@@ -90,10 +91,118 @@ class BuildChatServiceTest {
         List<Map<String, Object>> actions = (List<Map<String, Object>>) response.get("actions");
         assertThat(actions).hasSize(1);
         assertThat(actions.get(0)).containsEntry("type", "REMOVE_DRAFT_PART");
-        assertThat(actions.get(0)).containsEntry("requiresConfirmation", true);
+        assertThat(actions.get(0)).containsEntry("requiresConfirmation", false);
         assertThat(actions.get(0).get("payload")).asInstanceOf(org.assertj.core.api.InstanceOfAssertFactories.MAP)
                 .containsEntry("partId", "part-gpu-1")
                 .containsEntry("category", "GPU");
+    }
+
+    @Test
+    void buildChatReturnsOpenRouteFastPathWithoutCallingLlmOrCache() {
+        JdbcTemplate jdbcTemplate = mock(JdbcTemplate.class);
+        ToolCheckService toolCheckService = mock(ToolCheckService.class);
+        AiChatEngine aiChatEngine = mock(AiChatEngine.class);
+        BuildChatCacheService cacheService = mock(BuildChatCacheService.class);
+        BuildChatService service = new BuildChatService(jdbcTemplate, toolCheckService, aiChatEngine, cacheService);
+
+        Map<String, Object> response = service.chat(Map.of("message", "GPU 보여줘"));
+
+        assertThat(response).containsEntry("answerType", "GENERAL");
+        assertThat(response).containsEntry("message", "GPU 부품 화면으로 이동했습니다.");
+        @SuppressWarnings("unchecked")
+        List<Map<String, Object>> actions = (List<Map<String, Object>>) response.get("actions");
+        assertThat(actions).singleElement()
+                .satisfies(action -> {
+                    assertThat(action)
+                            .containsEntry("type", "OPEN_ROUTE")
+                            .containsEntry("requiresConfirmation", false);
+                    assertThat(action.get("payload")).asInstanceOf(org.assertj.core.api.InstanceOfAssertFactories.MAP)
+                            .containsEntry("route", "/self-quote?category=GPU")
+                            .containsEntry("source", "AI_BUILD_CHAT");
+                });
+        verifyNoInteractions(aiChatEngine, cacheService);
+    }
+
+    @Test
+    void buildChatPublishesEngineOpenRouteActionWhenLocalFastRouteDoesNotMatch() {
+        JdbcTemplate jdbcTemplate = mock(JdbcTemplate.class);
+        ToolCheckService toolCheckService = mock(ToolCheckService.class);
+        AiChatEngine aiChatEngine = mock(AiChatEngine.class);
+        BuildChatService service = new BuildChatService(jdbcTemplate, toolCheckService, aiChatEngine, BuildChatCacheService.disabled());
+        when(aiChatEngine.respondLlmRequired(any(AiChatEngineRequest.class), nullable(String.class))).thenReturn(new AiChatEngineResponse(
+                "저장한 조합 목록으로 이동하겠습니다.",
+                AiChatIntent.ASK_FOLLOW_UP,
+                List.of(new AiChatAction(
+                        AiChatActionType.OPEN_ROUTE,
+                        "내 견적함 열기",
+                        Map.of("route", "/my/quotes", "source", "AI_CHAT_ENGINE_LLM")
+                )),
+                List.of(),
+                List.of(),
+                Map.of(),
+                List.of(),
+                List.of(),
+                null
+        ));
+
+        Map<String, Object> response = service.chat(Map.of("message", "지난번 만든 조합 목록 열어줘"));
+
+        @SuppressWarnings("unchecked")
+        List<Map<String, Object>> actions = (List<Map<String, Object>>) response.get("actions");
+        assertThat(actions).singleElement()
+                .satisfies(action -> {
+                    assertThat(action).containsEntry("type", "OPEN_ROUTE");
+                    assertThat(action.get("payload")).asInstanceOf(org.assertj.core.api.InstanceOfAssertFactories.MAP)
+                            .containsEntry("route", "/my/quotes")
+                            .containsEntry("source", "AI_BUILD_CHAT");
+                });
+        verify(aiChatEngine).respondLlmRequired(any(AiChatEngineRequest.class), nullable(String.class));
+    }
+
+    @Test
+    void buildChatDoesNotFastRouteCartMutationCommands() {
+        JdbcTemplate jdbcTemplate = mock(JdbcTemplate.class);
+        ToolCheckService toolCheckService = mock(ToolCheckService.class);
+        AiChatEngine aiChatEngine = mock(AiChatEngine.class);
+        BuildChatService service = new BuildChatService(jdbcTemplate, toolCheckService, aiChatEngine, BuildChatCacheService.disabled());
+        when(aiChatEngine.respondLlmRequired(any(AiChatEngineRequest.class), nullable(String.class))).thenReturn(buildResponse());
+        when(toolCheckService.checkBuild(anyList(), anyInt())).thenReturn(List.of());
+
+        service.chat(Map.of("message", "추천 조합 장바구니에 넣어줘"));
+
+        verify(aiChatEngine).respondLlmRequired(any(AiChatEngineRequest.class), nullable(String.class));
+    }
+
+    @Test
+    void buildChatDoesNotFastRouteConcreteProductDetailRequests() {
+        JdbcTemplate jdbcTemplate = mock(JdbcTemplate.class);
+        ToolCheckService toolCheckService = mock(ToolCheckService.class);
+        AiChatEngine aiChatEngine = mock(AiChatEngine.class);
+        BuildChatService service = new BuildChatService(jdbcTemplate, toolCheckService, aiChatEngine, BuildChatCacheService.disabled());
+        when(aiChatEngine.respondLlmRequired(any(AiChatEngineRequest.class), nullable(String.class))).thenReturn(new AiChatEngineResponse(
+                "상품 상세로 이동하겠습니다.",
+                AiChatIntent.ASK_FOLLOW_UP,
+                List.of(new AiChatAction(
+                        AiChatActionType.OPEN_ROUTE,
+                        "상품 상세 보기",
+                        Map.of("route", "/parts/00000000-0000-4000-8000-000000005090", "source", "AI_CHAT_ENGINE_LLM")
+                )),
+                List.of(),
+                List.of(),
+                Map.of(),
+                List.of(),
+                List.of(),
+                null
+        ));
+
+        Map<String, Object> response = service.chat(Map.of("message", "ASUS Astral 5090 상세 보여줘"));
+
+        @SuppressWarnings("unchecked")
+        List<Map<String, Object>> actions = (List<Map<String, Object>>) response.get("actions");
+        assertThat(actions).singleElement()
+                .satisfies(action -> assertThat(action.get("payload")).asInstanceOf(org.assertj.core.api.InstanceOfAssertFactories.MAP)
+                        .containsEntry("route", "/parts/00000000-0000-4000-8000-000000005090"));
+        verify(aiChatEngine).respondLlmRequired(any(AiChatEngineRequest.class), nullable(String.class));
     }
 
     @Test

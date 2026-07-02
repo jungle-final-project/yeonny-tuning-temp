@@ -517,6 +517,7 @@ class DefaultAiChatEngineEvaluationTest {
 
         private static boolean payloadsValid(List<AiChatAction> actions) {
             return actions.stream().allMatch(action -> switch (action.type()) {
+                case OPEN_ROUTE -> has(action.payload(), "route");
                 case OPEN_SELF_QUOTE -> has(action.payload(), "route");
                 case ADD_PART_TO_DRAFT -> has(action.payload(), "partId") && has(action.payload(), "category") && has(action.payload(), "quantity");
                 case REPLACE_DRAFT_PART -> has(action.payload(), "category") && has(action.payload(), "quantity");

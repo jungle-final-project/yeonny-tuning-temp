@@ -64,6 +64,7 @@
 | Action | 엔진 payload | 실제 실행 주체 |
 | --- | --- | --- |
 | `OPEN_SELF_QUOTE` | `{ route: "/self-quote" }` | UI 라우터 |
+| `OPEN_ROUTE` | `{ route, source, reason? }` | UI 라우터. 공개 Build Chat 응답에서는 사용자 화면 allowlist만 허용 |
 | `ADD_PART_TO_DRAFT` | `{ partId, category, quantity, source }` | `PUT /api/quote-drafts/current/items/{partId}` |
 | `REPLACE_DRAFT_PART` | `{ category, partId?, quantity, source }` | 견적초안 API. 카테고리 중복/교체 규칙은 2번 API가 처리 |
 | `REMOVE_DRAFT_PART` | `{ partId, category, source }` | `DELETE /api/quote-drafts/current/items/{partId}` |
@@ -72,7 +73,19 @@
 | `CREATE_PRICE_ALERT` | `{ partId?, category?, targetPrice, source }` | `POST /api/price-alerts` |
 | `ASK_FOLLOW_UP` | `{ missing, message }` | UI 채팅창에 후속 질문 표시 |
 
-`AiChatEngine` 내부 action 범위는 위 표처럼 넓게 둔다. 다만 공개 `POST /api/ai/build-chat` 응답에서 현재 프론트가 적용하는 action은 `ADD_PART_TO_DRAFT`, `REPLACE_DRAFT_PART`, `REMOVE_DRAFT_PART`, `UPDATE_DRAFT_QUANTITY`, `ASK_FOLLOW_UP` subset이다. `OPEN_SELF_QUOTE`, `ADD_BUILD_TO_DRAFT`, `CREATE_PRICE_ALERT`는 엔진 공통화와 후속 UI 연결을 위한 내부 계약으로 남긴다.
+`AiChatEngine` 내부 action 범위는 위 표처럼 넓게 둔다. 공개 `POST /api/ai/build-chat` 응답에서 현재 프론트가 자동 실행하는 action은 `OPEN_ROUTE`, `ADD_BUILD_TO_DRAFT`, `ADD_PART_TO_DRAFT`, `REPLACE_DRAFT_PART`, `REMOVE_DRAFT_PART`, `UPDATE_DRAFT_QUANTITY`, `ASK_FOLLOW_UP` subset이다. `OPEN_SELF_QUOTE`, `CREATE_PRICE_ALERT`는 엔진 공통화와 후속 UI 연결을 위한 내부 계약으로 남긴다.
+
+## 자연어 화면 이동 정책
+
+- 프론트 fast route는 `GPU 보여줘`, `내 견적함 열어줘`처럼 명확한 이동 표현만 0초대 shortcut으로 처리한다.
+- `GPU 추천해줘`, `GPU 더 싼 걸로`, `RAM 64GB로`, `이 견적 담아줘` 같은 추천/교체/삭제/담기 명령은 화면 이동으로 오탐하면 안 된다.
+- fast route가 잡지 못한 이동 표현은 Build Chat LLM structured output의 `routeIntent`가 담당한다.
+- 내부 `routeIntent` shape는 `{ shouldNavigate, routeType, category, partQuery, confidence, reason }`다.
+- 서버는 `shouldNavigate=true`이고 `confidence=HIGH`일 때만 `OPEN_ROUTE` action으로 변환한다.
+- route는 사용자 화면 allowlist만 허용한다. 관리자 화면, 임의 URL, 결제 확정/주문 확정 route는 자동 실행하지 않는다.
+- 상품 상세 이동은 `PART_DETAIL` routeIntent가 오더라도 서버 `PartRouteResolver`가 단일 고확신 `ACTIVE` 부품을 찾은 경우에만 `/parts/{partId}`로 변환한다.
+- `5090 보여줘`, `MSI 보드 보여줘`처럼 후보가 여러 개인 표현은 `/parts/{partId}`로 자동 이동하지 않는다. 카테고리가 명확하면 `/self-quote?category=...`로 낮추거나 일반 답변으로 처리한다.
+- UI는 서버가 내려준 `OPEN_ROUTE`도 반드시 프론트 allowlist로 재검증한 뒤 `navigate()`해야 한다.
 
 ## 소유권 원칙
 
@@ -80,7 +93,7 @@
 - 1번 `BuildQueryService`는 AI 엔진 결과를 사용하되 `builds`, `build_items` 저장 책임을 유지한다.
 - 2번 `parts`, `ToolCheckService`, `quote_drafts` 저장 규칙은 3번이 직접 수정하지 않는다.
 - AI 엔진은 `quote_drafts`, `quote_draft_items`, `parts`를 직접 쓰지 않는다.
-- `/self-quote` 챗봇이 `currentQuoteDraft`를 전달하면 3번 엔진은 장바구니 변경안을 `actions`로만 반환한다. 사용자가 적용 버튼을 누를 때 UI가 기존 quote draft API를 호출한다.
+- `/self-quote` 챗봇이 `currentQuoteDraft`를 전달하면 3번 엔진은 장바구니 변경안을 `actions`로만 반환한다. UI는 응답 수신 즉시 기존 quote draft API를 자동 호출하며, 실패 시 재시도 상태만 제공한다.
 - AI build의 표시 가격은 `items[].price * items[].quantity` 합계다. `estimatedTotalPrice`는 LLM/엔진 참고값이며 홈 추천 카드나 견적초안 총액의 기준으로 사용하지 않는다.
 - 직접 Tool check API 호출 결과는 `tool_invocations`에 저장하지 않는다. Agent 또는 추천 흐름 내부에서 실행된 Tool trace만 저장한다.
 - AS Chat은 이번 문서의 직접 범위가 아니다. 다만 향후 `AsChatEngine`으로 분리해도 `assistantMessage`, `actions`, `evidenceIds`, `toolResults`, `agentSessionId` 형태는 재사용한다.

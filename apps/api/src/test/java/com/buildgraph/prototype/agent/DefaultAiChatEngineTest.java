@@ -101,6 +101,136 @@ class DefaultAiChatEngineTest {
     }
 
     @Test
+    void fullBuildRecommendationHonorsExplicitCpuModelToken() {
+        AiChatEngineResponse response = engine.respond(new AiChatEngineRequest(
+                "CPU 9700X 들어간 PC 추천해줘",
+                "HOME",
+                null,
+                null,
+                null,
+                Map.of(),
+                1L
+        ));
+
+        assertThat(response.intent()).isEqualTo(AiChatIntent.FULL_BUILD_RECOMMEND);
+        assertThat(response.parsedContext()).containsEntry("hardConstraintPolicy", "MUST_INCLUDE");
+        assertThat(response.parsedContext().get("requiredPartKeywords")).asList().contains("9700X");
+        assertThat(response.recommendations()).hasSize(3);
+        assertThat(response.recommendations())
+                .allSatisfy(recommendation -> assertThat(recommendation.items())
+                        .filteredOn(part -> "CPU".equals(part.category()))
+                        .singleElement()
+                        .satisfies(part -> assertThat(part.name()).contains("9700X")));
+        verifyNoJdbcWrites();
+    }
+
+    @Test
+    void fullBuildRecommendationHonorsMotherboardBrandToken() {
+        AiChatEngineResponse response = engine.respond(new AiChatEngineRequest(
+                "MSI 메인보드 들어간 PC 추천해줘",
+                "HOME",
+                null,
+                null,
+                null,
+                Map.of(),
+                1L
+        ));
+
+        assertThat(response.intent()).isEqualTo(AiChatIntent.FULL_BUILD_RECOMMEND);
+        assertThat(response.parsedContext()).containsEntry("hardConstraintPolicy", "MUST_INCLUDE");
+        assertThat(response.parsedContext().get("requiredPartKeywords")).asList().contains("MSI");
+        assertThat(response.recommendations()).hasSize(3);
+        assertThat(response.recommendations())
+                .allSatisfy(recommendation -> assertThat(recommendation.items())
+                        .filteredOn(part -> "MOTHERBOARD".equals(part.category()))
+                        .singleElement()
+                        .satisfies(part -> assertThat(part.name()).contains("MSI")));
+        verifyNoJdbcWrites();
+    }
+
+    @Test
+    void fullBuildRecommendationHonorsRamSingleModuleConstraint() {
+        AiChatEngineResponse response = engine.respond(new AiChatEngineRequest(
+                "RAM 32GB 한 개 들어간 PC 추천해줘",
+                "HOME",
+                null,
+                null,
+                null,
+                Map.of(),
+                1L
+        ));
+
+        assertThat(response.intent()).isEqualTo(AiChatIntent.FULL_BUILD_RECOMMEND);
+        assertThat(response.parsedContext())
+                .containsEntry("hardConstraintPolicy", "MUST_INCLUDE")
+                .containsEntry("targetCapacityGb", 32)
+                .containsEntry("targetModuleCount", 1)
+                .containsEntry("targetQuantity", 1);
+        assertThat(response.recommendations()).hasSize(3);
+        assertThat(response.recommendations())
+                .allSatisfy(recommendation -> assertThat(recommendation.items())
+                        .filteredOn(part -> "RAM".equals(part.category()))
+                        .singleElement()
+                        .satisfies(part -> assertThat(part.attributes())
+                                .containsEntry("capacityGb", 32)
+                                .containsEntry("moduleCount", 1)));
+        assertThat(response.actions())
+                .filteredOn(action -> action.type() == AiChatActionType.ADD_BUILD_TO_DRAFT)
+                .singleElement()
+                .satisfies(action -> assertThat(objectMaps(action.payload().get("items")))
+                        .filteredOn(item -> "RAM".equals(item.get("category")))
+                        .singleElement()
+                        .satisfies(item -> assertThat(item).containsEntry("quantity", 1)));
+        verifyNoJdbcWrites();
+    }
+
+    @Test
+    void fullBuildRecommendationHonorsCaseBrandAndModelToken() {
+        AiChatEngineResponse response = engine.respond(new AiChatEngineRequest(
+                "케이스 리안리 216 모델 포함해서 PC 추천해줘",
+                "HOME",
+                null,
+                null,
+                null,
+                Map.of(),
+                1L
+        ));
+
+        assertThat(response.intent()).isEqualTo(AiChatIntent.FULL_BUILD_RECOMMEND);
+        assertThat(response.parsedContext()).containsEntry("hardConstraintPolicy", "MUST_INCLUDE");
+        assertThat(response.recommendations()).hasSize(3);
+        assertThat(response.recommendations())
+                .allSatisfy(recommendation -> assertThat(recommendation.items())
+                        .filteredOn(part -> "CASE".equals(part.category()))
+                        .singleElement()
+                        .satisfies(part -> assertThat(part.partId()).isEqualTo("case-lianli-216")));
+        verifyNoJdbcWrites();
+    }
+
+    @Test
+    void fullBuildRecommendationDoesNotFallbackWhenRequiredCaseUnavailable() {
+        AiChatEngineResponse response = engine.respond(new AiChatEngineRequest(
+                "케이스 리안리 999 모델 포함해서 PC 추천해줘",
+                "HOME",
+                null,
+                null,
+                null,
+                Map.of(),
+                1L
+        ));
+
+        assertThat(response.intent()).isEqualTo(AiChatIntent.FULL_BUILD_RECOMMEND);
+        assertThat(response.parsedContext()).containsEntry("hardConstraintPolicy", "MUST_INCLUDE");
+        assertThat(response.parsedContext().get("requiredPartKeywords")).asList().contains("LIANLI", "999");
+        assertThat(response.recommendations()).isEmpty();
+        assertThat(response.actions())
+                .extracting(AiChatAction::type)
+                .containsExactly(AiChatActionType.OPEN_SELF_QUOTE);
+        assertThat(response.assistantMessage()).contains("조건을 만족하는 내부 자산 후보를 찾지 못했습니다");
+        verifyNoJdbcWrites();
+    }
+
+    @Test
     void openBudgetEnthusiastRequestDoesNotCreateDefaultBudget() {
         AiChatEngineResponse response = engine.respond(new AiChatEngineRequest(
                 "끝판왕 컴퓨터 만들어줘",
@@ -701,6 +831,289 @@ class DefaultAiChatEngineTest {
     }
 
     @Test
+    void llmRequiredBuildChatCanReturnOpenRouteForNonFastNavigationIntent() {
+        stubBuildChatPlan("""
+                {
+                  "intent": "ASK_FOLLOW_UP",
+                  "assistantMessage": "내 견적함으로 이동하겠습니다.",
+                  "selectedCategory": null,
+                  "parsedContext": {
+                    "budget": null,
+                    "usageTags": [],
+                    "resolution": null,
+                    "preferredVendors": [],
+                    "priority": null,
+                    "performanceTier": "STANDARD",
+                    "budgetPolicy": "UNSPECIFIED",
+                    "mustHave": [],
+                    "requiredGpuClasses": [],
+                    "requiredPartKeywords": [],
+                    "hardConstraintPolicy": "NONE",
+                    "confidence": {}
+                  },
+                  "draftEdit": {
+                    "operation": "NONE",
+                    "category": null,
+                    "priceDirection": "ANY",
+                    "targetMaxPrice": null,
+                    "targetQuantity": null,
+                    "reason": null
+                  },
+                  "routeIntent": {
+                    "shouldNavigate": true,
+                    "routeType": "MY_QUOTES",
+                    "category": null,
+                    "partQuery": null,
+                    "confidence": "HIGH",
+                    "reason": "사용자가 견적함 위치를 물었습니다."
+                  }
+                }
+                """);
+
+        AiChatEngineResponse response = engine.respondLlmRequired(new AiChatEngineRequest(
+                "견적함 어디야",
+                "HOME",
+                null,
+                null,
+                null,
+                Map.of(),
+                1L
+        ));
+
+        assertThat(response.actions())
+                .filteredOn(action -> action.type() == AiChatActionType.OPEN_ROUTE)
+                .singleElement()
+                .satisfies(action -> assertThat(action.payload()).containsEntry("route", "/my/quotes"));
+        verifyNoJdbcWrites();
+    }
+
+    @Test
+    void llmRequiredPartDetailRouteUsesSingleHighConfidenceActivePartMatch() {
+        stubBuildChatPlan("""
+                {
+                  "intent": "ASK_FOLLOW_UP",
+                  "assistantMessage": "상품 상세로 이동하겠습니다.",
+                  "selectedCategory": "GPU",
+                  "parsedContext": {
+                    "budget": null,
+                    "usageTags": [],
+                    "resolution": null,
+                    "preferredVendors": [],
+                    "priority": null,
+                    "performanceTier": "STANDARD",
+                    "budgetPolicy": "UNSPECIFIED",
+                    "mustHave": [],
+                    "requiredGpuClasses": [],
+                    "requiredPartKeywords": [],
+                    "hardConstraintPolicy": "NONE",
+                    "confidence": {}
+                  },
+                  "draftEdit": {
+                    "operation": "NONE",
+                    "category": null,
+                    "priceDirection": "ANY",
+                    "targetMaxPrice": null,
+                    "targetQuantity": null,
+                    "reason": null
+                  },
+                  "routeIntent": {
+                    "shouldNavigate": true,
+                    "routeType": "PART_DETAIL",
+                    "category": "GPU",
+                    "partQuery": "ASUS Astral RTX 5090",
+                    "confidence": "HIGH",
+                    "reason": "사용자가 특정 상품 상세를 요청했습니다."
+                  }
+                }
+                """);
+        when(jdbcTemplate.queryForList(
+                anyString(),
+                eq("GPU"),
+                eq("GPU"),
+                eq("5090"),
+                eq("5090"),
+                eq("5090")
+        )).thenReturn(List.of(Map.of(
+                "id", "00000000-0000-4000-8000-000000005090",
+                "category", "GPU",
+                "name", "ASUS ROG Astral GeForce RTX 5090 OC 32GB",
+                "manufacturer", "ASUS"
+        )));
+
+        AiChatEngineResponse response = engine.respondLlmRequired(new AiChatEngineRequest(
+                "ASUS Astral 5090 상세 보여줘",
+                "HOME",
+                null,
+                null,
+                null,
+                Map.of(),
+                1L
+        ));
+
+        assertThat(response.actions())
+                .filteredOn(action -> action.type() == AiChatActionType.OPEN_ROUTE)
+                .singleElement()
+                .satisfies(action -> assertThat(action.payload()).containsEntry("route", "/parts/00000000-0000-4000-8000-000000005090"));
+        verifyNoJdbcWrites();
+    }
+
+    @Test
+    void llmRequiredPartDetailRoutePrefersExactKoreanModelOverPrefixModel() {
+        stubBuildChatPlan("""
+                {
+                  "intent": "ASK_FOLLOW_UP",
+                  "assistantMessage": "해당 CPU 상세페이지로 이동하겠습니다.",
+                  "selectedCategory": "CPU",
+                  "parsedContext": {
+                    "budget": null,
+                    "usageTags": [],
+                    "resolution": null,
+                    "preferredVendors": [],
+                    "priority": null,
+                    "performanceTier": "STANDARD",
+                    "budgetPolicy": "UNSPECIFIED",
+                    "mustHave": [],
+                    "requiredGpuClasses": [],
+                    "requiredPartKeywords": [],
+                    "hardConstraintPolicy": "NONE",
+                    "confidence": {}
+                  },
+                  "draftEdit": {
+                    "operation": "NONE",
+                    "category": null,
+                    "priceDirection": "ANY",
+                    "targetMaxPrice": null,
+                    "targetQuantity": null,
+                    "reason": null
+                  },
+                  "routeIntent": {
+                    "shouldNavigate": true,
+                    "routeType": "PART_DETAIL",
+                    "category": "CPU",
+                    "partQuery": "AMD 라이젠9-6세대 9950X3D 그래니트 릿지 정품(멀티팩)",
+                    "confidence": "HIGH",
+                    "reason": "사용자가 특정 CPU 상품 상세를 요청했습니다."
+                  }
+                }
+                """);
+        when(jdbcTemplate.queryForList(
+                anyString(),
+                eq("CPU"),
+                eq("CPU"),
+                eq("9950X3D"),
+                eq("9950X3D"),
+                eq("9950X3D")
+        )).thenReturn(List.of(
+                Map.of(
+                        "id", "a75d6544-2296-4c4c-a7cd-64596e66f6d7",
+                        "category", "CPU",
+                        "name", "AMD 라이젠9-6세대 9950X3D 그래니트 릿지 정품(멀티팩)",
+                        "manufacturer", "AMD"
+                ),
+                Map.of(
+                        "id", "4d3f5a5f-4580-4a1c-a514-be7b34ac97c9",
+                        "category", "CPU",
+                        "name", "AMD 라이젠9-6세대 9950X3D2 Dual Edition 그래니트 릿지 정품(멀티팩)",
+                        "manufacturer", "AMD"
+                )
+        ));
+
+        AiChatEngineResponse response = engine.respondLlmRequired(new AiChatEngineRequest(
+                "AMD 라이젠9-6세대 9950X3D 그래니트 릿지 정품(멀티팩) 상세페이지로 이동해",
+                "HOME",
+                null,
+                null,
+                null,
+                Map.of(),
+                1L
+        ));
+
+        assertThat(response.actions())
+                .filteredOn(action -> action.type() == AiChatActionType.OPEN_ROUTE)
+                .singleElement()
+                .satisfies(action -> assertThat(action.payload()).containsEntry("route", "/parts/a75d6544-2296-4c4c-a7cd-64596e66f6d7"));
+        verifyNoJdbcWrites();
+    }
+
+    @Test
+    void llmRequiredPartDetailRouteAvoidsAmbiguousProductAutoNavigation() {
+        stubBuildChatPlan("""
+                {
+                  "intent": "ASK_FOLLOW_UP",
+                  "assistantMessage": "GPU 목록으로 이동하겠습니다.",
+                  "selectedCategory": "GPU",
+                  "parsedContext": {
+                    "budget": null,
+                    "usageTags": [],
+                    "resolution": null,
+                    "preferredVendors": [],
+                    "priority": null,
+                    "performanceTier": "STANDARD",
+                    "budgetPolicy": "UNSPECIFIED",
+                    "mustHave": [],
+                    "requiredGpuClasses": [],
+                    "requiredPartKeywords": [],
+                    "hardConstraintPolicy": "NONE",
+                    "confidence": {}
+                  },
+                  "draftEdit": {
+                    "operation": "NONE",
+                    "category": null,
+                    "priceDirection": "ANY",
+                    "targetMaxPrice": null,
+                    "targetQuantity": null,
+                    "reason": null
+                  },
+                  "routeIntent": {
+                    "shouldNavigate": true,
+                    "routeType": "PART_DETAIL",
+                    "category": "GPU",
+                    "partQuery": "5090",
+                    "confidence": "HIGH",
+                    "reason": "상품 후보가 여러 개일 수 있습니다."
+                  }
+                }
+                """);
+        when(jdbcTemplate.queryForList(
+                anyString(),
+                eq("GPU"),
+                eq("GPU"),
+                eq("5090"),
+                eq("5090"),
+                eq("5090")
+        )).thenReturn(List.of(
+                Map.of(
+                        "id", "00000000-0000-4000-8000-000000005090",
+                        "category", "GPU",
+                        "name", "ASUS ROG Astral GeForce RTX 5090 OC 32GB",
+                        "manufacturer", "ASUS"
+                ),
+                Map.of(
+                        "id", "00000000-0000-4000-8000-000000005091",
+                        "category", "GPU",
+                        "name", "MSI GeForce RTX 5090 SUPRIM 32GB",
+                        "manufacturer", "MSI"
+                )
+        ));
+
+        AiChatEngineResponse response = engine.respondLlmRequired(new AiChatEngineRequest(
+                "5090 보여줘",
+                "HOME",
+                null,
+                null,
+                null,
+                Map.of(),
+                1L
+        ));
+
+        assertThat(response.actions())
+                .filteredOn(action -> action.type() == AiChatActionType.OPEN_ROUTE)
+                .singleElement()
+                .satisfies(action -> assertThat(action.payload()).containsEntry("route", "/self-quote?category=GPU"));
+        verifyNoJdbcWrites();
+    }
+
+    @Test
     void analyzeQuoteRequirementRecordsRagTraceAndReturnsStructuredContext() {
         when(openAiResponsesClient.isConfigured()).thenReturn(false);
         when(agentTraceService.createQueuedSession(any(), eq("SYSTEM"), eq(AgentPurpose.REQUIREMENT_PARSE), isNull()))
@@ -764,6 +1177,16 @@ class DefaultAiChatEngineTest {
 
     private void verifyNoJdbcWrites() {
         verify(jdbcTemplate, never()).update(anyString(), (Object[]) any());
+    }
+
+    @SuppressWarnings("unchecked")
+    private static List<Map<String, Object>> objectMaps(Object value) {
+        return value instanceof List<?> list
+                ? list.stream()
+                .filter(Map.class::isInstance)
+                .map(item -> (Map<String, Object>) item)
+                .toList()
+                : List.of();
     }
 
     private void stubBuildChatPlan(String json) {

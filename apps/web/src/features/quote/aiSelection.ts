@@ -16,6 +16,8 @@ export type BuildGraphNodeType = 'PART' | 'CONSTRAINT' | 'ISSUE' | 'ACTION';
 export type BuildGraphEdgeType = 'REQUIRES' | 'AFFECTS' | 'BLOCKS' | 'SUGGESTS';
 export type BuildGraphStatus = 'PASS' | 'WARN' | 'FAIL';
 export type AiDraftActionType =
+  | 'OPEN_ROUTE'
+  | 'ADD_BUILD_TO_DRAFT'
   | 'ADD_PART_TO_DRAFT'
   | 'REPLACE_DRAFT_PART'
   | 'REMOVE_DRAFT_PART'
@@ -77,8 +79,10 @@ export type AiDraftAction = {
   description?: string;
   payload: {
     partId?: string;
+    buildId?: string;
     category?: PartCategory;
     quantity?: number;
+    route?: string;
     source?: string;
     [key: string]: unknown;
   };

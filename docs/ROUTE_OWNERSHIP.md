@@ -279,6 +279,8 @@ Auth 화면과 Auth/User API 구현 주 owner는 1번이다. 5번은 `apps/web/s
 - AS Chat 대화 이력은 `as_chat_sessions`, `as_chat_messages`에 저장하고, 원인 후보를 티켓에 반영하는 작업은 4번 API가 별도로 결정한다.
 - AS Chat profile 비교와 `llm_generations` 기록은 3번 owner 범위다. 기본 사용자 요청은 profile 1개만 실행하고, OpenAI profile 비교는 benchmark 명령에서만 수행한다.
 - `/api/ai/build-chat`의 `X-BuildGraph-AI-Profile` header는 3번 benchmark용이다. UI는 header를 보내지 않고, 1번/프론트 owner는 기존 응답 shape만 소비한다.
+- Build Chat의 순수 화면 이동 fast path, LLM `routeIntent` 판정, `OPEN_ROUTE`/quote draft action 생성은 3번 AI 계약이며, 실제 화면 라우팅은 프론트, 실제 견적초안 저장은 2번 quote draft API가 수행한다. 관리자 화면 자동 이동은 허용하지 않는다.
+- `PART_DETAIL` 자동 이동은 3번 서버가 `ACTIVE` 부품 단일 고확신 매칭을 확인한 경우만 허용한다. 후보가 0개 또는 2개 이상이면 상품 상세 route를 만들지 않는다.
 
 ## 1주차 완료 기준
 

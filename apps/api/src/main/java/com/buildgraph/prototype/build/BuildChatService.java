@@ -4,6 +4,7 @@ import com.buildgraph.prototype.agent.AiChatEngine;
 import com.buildgraph.prototype.agent.AiChatEngineRequest;
 import com.buildgraph.prototype.agent.AiChatEngineResponse;
 import com.buildgraph.prototype.agent.AiChatIntent;
+import com.buildgraph.prototype.agent.AiChatAction;
 import com.buildgraph.prototype.common.DbValueMapper;
 import com.buildgraph.prototype.common.MockData;
 import com.buildgraph.prototype.part.ToolBuildPart;
@@ -85,6 +86,10 @@ public class BuildChatService {
                 requestedAiProfile,
                 buildChatCacheService.getClass().getName()
         );
+        RouteIntent routeIntent = routeIntent(message);
+        if (routeIntent != null) {
+            return routeResponse(routeIntent);
+        }
         var cachedResponse = buildChatCacheService.lookup(body, requestedAiProfile, userId);
         if (cachedResponse.isPresent()) {
             return cachedResponse.get();
@@ -148,7 +153,9 @@ public class BuildChatService {
             default -> engineBuilds(engineResponse, warnings);
         };
         Map<String, Object> partRecommendation = partRecommendation(safePartRecommendations, engineResponse.parsedContext());
-        List<Map<String, Object>> actions = draftActions(engineResponse, request, safePartRecommendations);
+        List<Map<String, Object>> actions = new ArrayList<>();
+        actions.addAll(publicEngineActions(engineResponse.actions()));
+        actions.addAll(draftActions(engineResponse, request, safePartRecommendations));
         warnings.addAll(buildWarnings(builds));
         warnings.addAll(stringList(engineResponse.parsedContext().get("warnings")));
         return MockData.map(
@@ -161,6 +168,58 @@ public class BuildChatService {
                 "evidenceIds", engineResponse.evidenceIds(),
                 "agentSessionId", engineResponse.agentSessionId()
         );
+    }
+
+    private Map<String, Object> routeResponse(RouteIntent routeIntent) {
+        return MockData.map(
+                "answerType", "GENERAL",
+                "message", routeIntent.message(),
+                "builds", List.of(),
+                "partRecommendation", null,
+                "actions", List.of(actionMap(
+                        "OPEN_ROUTE",
+                        routeIntent.label(),
+                        routeIntent.message(),
+                        MockData.map(
+                                "route", routeIntent.route(),
+                                "source", "AI_BUILD_CHAT",
+                                "reason", "FAST_ROUTE"
+                        ),
+                        false
+                )),
+                "warnings", List.of(),
+                "evidenceIds", List.of(),
+                "agentSessionId", null
+        );
+    }
+
+    private List<Map<String, Object>> publicEngineActions(List<AiChatAction> actions) {
+        if (actions == null || actions.isEmpty()) {
+            return List.of();
+        }
+        List<Map<String, Object>> result = new ArrayList<>();
+        for (AiChatAction action : actions) {
+            if (action == null || action.type() == null) {
+                continue;
+            }
+            if ("OPEN_ROUTE".equals(action.type().name())) {
+                String route = text(action.payload() == null ? null : action.payload().get("route"));
+                if (route != null && isAllowedRoute(route)) {
+                    result.add(actionMap(
+                            "OPEN_ROUTE",
+                            firstText(action.label(), "화면 이동"),
+                            routeMessage(route),
+                            MockData.map(
+                                    "route", route,
+                                    "source", "AI_BUILD_CHAT",
+                                    "reason", "ENGINE_ROUTE"
+                            ),
+                            false
+                    ));
+                }
+            }
+        }
+        return result;
     }
 
     private List<Map<String, Object>> engineBuilds(AiChatEngineResponse engineResponse, List<String> warnings) {
@@ -190,16 +249,17 @@ public class BuildChatService {
         List<PartCandidate> parts = recommendation.items().stream()
                 .map(this::partCandidate)
                 .toList();
-        int totalPrice = totalPrice(parts);
-        Integer userBudget = numberValue(engineResponse.parsedContext().get("budget"));
+        Map<String, Object> parsedContext = engineResponse.parsedContext() == null ? Map.of() : engineResponse.parsedContext();
+        int totalPrice = totalPrice(parts, parsedContext);
+        Integer userBudget = numberValue(parsedContext.get("budget"));
         int toolBudget = userBudget == null || userBudget <= 0 ? totalPrice : userBudget;
         List<Map<String, Object>> toolResults = toolResults(parts, toolBudget, warnings);
         List<String> buildWarnings = new ArrayList<>(toolWarnings(toolResults));
-        if (userBudget != null && totalPrice > userBudget && hasHardConstraint(engineResponse.parsedContext())) {
+        if (userBudget != null && totalPrice > userBudget && hasHardConstraint(parsedContext)) {
             buildWarnings.add("명시한 부품 조건을 지키기 위해 예산을 초과했습니다.");
         }
         List<Map<String, Object>> items = parts.stream()
-                .map(part -> partItem(part, "AI 엔진 내부 자산 추천"))
+                .map(part -> partItem(part, "AI 엔진 내부 자산 추천", quantityForRecommendation(part, parsedContext)))
                 .toList();
         return MockData.map(
                 "id", "ai-engine-" + (index + 1) + "-" + slug(recommendation.name()),
@@ -209,7 +269,7 @@ public class BuildChatService {
                 "summary", recommendation.summary(),
                 "recommendedFor", recommendation.recommendedFor(),
                 "totalPrice", totalPrice,
-                "badges", badges(tier.title(), engineResponse.parsedContext()),
+                "badges", badges(tier.title(), parsedContext),
                 "budgetWon", toolBudget,
                 "budgetLabel", userBudget == null ? "예산 미지정" : formatBudgetLabel(userBudget),
                 "tierLabel", tier.title(),
@@ -481,6 +541,10 @@ public class BuildChatService {
     }
 
     private Map<String, Object> actionMap(String type, String label, String description, Map<String, Object> payload) {
+        return actionMap(type, label, description, payload, false);
+    }
+
+    private Map<String, Object> actionMap(String type, String label, String description, Map<String, Object> payload, boolean requiresConfirmation) {
         String suffix = firstText(text(payload.get("partId")), firstText(text(payload.get("category")), label));
         return MockData.map(
                 "id", "draft-action-" + type.toLowerCase(Locale.ROOT).replace('_', '-') + "-" + slug(suffix),
@@ -488,7 +552,7 @@ public class BuildChatService {
                 "label", label,
                 "description", description,
                 "payload", payload,
-                "requiresConfirmation", true
+                "requiresConfirmation", requiresConfirmation
         );
     }
 
@@ -526,6 +590,53 @@ public class BuildChatService {
         return containsAny(message, "예산", "낮춰", "줄여", "안으로", "이하", "초과", "비싸");
     }
 
+    private RouteIntent routeIntent(String message) {
+        String normalized = normalizeCommand(message);
+        String category = detectPartCategory(message);
+        if (category != null && hasRouteVerb(normalized) && !isProductDetailIntent(normalized)) {
+            String route = "/self-quote?category=" + category;
+            return new RouteIntent(route, categoryLabel(category) + " 부품 보기", categoryLabel(category) + " 부품 화면으로 이동했습니다.");
+        }
+        if (containsAnyNormalized(normalized, "셀프견적", "수동견적", "견적장바구니", "장바구니")
+                && !isDraftMutationCommand(normalized)) {
+            return new RouteIntent("/self-quote", "셀프 견적 열기", "셀프 견적 화면으로 이동했습니다.");
+        }
+        if (containsAnyNormalized(normalized, "내견적함", "견적함", "저장된견적", "견적목록")) {
+            return new RouteIntent("/my/quotes", "내 견적함 열기", "내 견적함 화면으로 이동했습니다.");
+        }
+        if (containsAnyNormalized(normalized, "ai견적", "자연어견적", "요구사항", "견적입력")) {
+            return new RouteIntent("/requirements/new", "AI 견적 열기", "AI 견적 입력 화면으로 이동했습니다.");
+        }
+        if (containsAnyNormalized(normalized, "as접수", "수리접수", "지원접수", "고장접수")) {
+            return new RouteIntent("/support/new", "AS 접수 열기", "AS 접수 화면으로 이동했습니다.");
+        }
+        if (containsAnyNormalized(normalized, "as챗봇", "asai", "수리챗봇", "지원챗봇")) {
+            return new RouteIntent("/support/ai-chat", "AS AI 챗봇 열기", "AS AI 챗봇 화면으로 이동했습니다.");
+        }
+        if (containsAnyNormalized(normalized, "구매하기", "결제", "checkout")) {
+            return new RouteIntent("/checkout", "구매하기 열기", "구매하기 화면으로 이동했습니다.");
+        }
+        return null;
+    }
+
+    private static boolean hasRouteVerb(String normalized) {
+        boolean routeLike = containsAnyNormalized(normalized, "보여", "열어", "이동", "가자", "목록", "페이지", "카테고리", "부품", "화면");
+        boolean recommendationOnly = normalized.contains("추천")
+                && !containsAnyNormalized(normalized, "보여", "열어", "목록", "페이지", "부품");
+        return routeLike && !recommendationOnly;
+    }
+
+    private static boolean isDraftMutationCommand(String normalized) {
+        return containsAnyNormalized(normalized, "담아", "넣어", "적용", "추가", "빼", "삭제", "제거", "바꿔", "교체", "수량", "변경");
+    }
+
+    private static boolean isProductDetailIntent(String normalized) {
+        boolean detailWord = containsAnyNormalized(normalized, "상세", "상품페이지", "제품페이지", "제품상세", "상품상세");
+        boolean concreteProductHint = Pattern.compile("\\d{3,5}").matcher(normalized).find()
+                || containsAnyNormalized(normalized, "asus", "msi", "gigabyte", "lianli", "리안리", "samsung", "삼성", "corsair", "커세어", "noctua", "녹투아", "arctic");
+        return detailWord && concreteProductHint;
+    }
+
     private static boolean containsAny(String message, String... keywords) {
         String normalized = message == null ? "" : message.toLowerCase(Locale.ROOT);
         for (String keyword : keywords) {
@@ -534,6 +645,50 @@ public class BuildChatService {
             }
         }
         return false;
+    }
+
+    private static boolean containsAnyNormalized(String normalized, String... keywords) {
+        for (String keyword : keywords) {
+            if (normalized.contains(normalizeCommand(keyword))) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private static String normalizeCommand(String message) {
+        return message == null ? "" : message.toLowerCase(Locale.ROOT).replaceAll("\\s+", "");
+    }
+
+    private static boolean isAllowedRoute(String route) {
+        if (List.of(
+                "/self-quote",
+                "/my/quotes",
+                "/requirements/new",
+                "/support/new",
+                "/support/ai-chat",
+                "/checkout"
+        ).contains(route)) {
+            return true;
+        }
+        return route.matches("^/self-quote\\?category=(CPU|MOTHERBOARD|RAM|GPU|STORAGE|PSU|CASE|COOLER)$")
+                || route.matches("^/parts/[0-9a-fA-F-]{8,}$");
+    }
+
+    private static String routeMessage(String route) {
+        if (route.startsWith("/self-quote?category=")) {
+            String category = route.substring(route.indexOf('=') + 1);
+            return categoryLabel(category) + " 부품 화면으로 이동했습니다.";
+        }
+        return switch (route) {
+            case "/self-quote" -> "셀프 견적 화면으로 이동했습니다.";
+            case "/my/quotes" -> "내 견적함 화면으로 이동했습니다.";
+            case "/requirements/new" -> "AI 견적 입력 화면으로 이동했습니다.";
+            case "/support/new" -> "AS 접수 화면으로 이동했습니다.";
+            case "/support/ai-chat" -> "AS AI 챗봇 화면으로 이동했습니다.";
+            case "/checkout" -> "구매하기 화면으로 이동했습니다.";
+            default -> "요청한 화면으로 이동했습니다.";
+        };
     }
 
     private static int parseQuantity(String message) {
@@ -794,6 +949,12 @@ public class BuildChatService {
                 .sum();
     }
 
+    private static int totalPrice(List<PartCandidate> parts, Map<String, Object> parsedContext) {
+        return parts.stream()
+                .mapToInt(part -> (part.price() == null ? 0 : part.price()) * quantityForRecommendation(part, parsedContext))
+                .sum();
+    }
+
     private static String categoryLabel(String category) {
         return CATEGORY_LABELS.getOrDefault(category, category);
     }
@@ -904,6 +1065,9 @@ public class BuildChatService {
     }
 
     private record CategoryKeywords(String category, List<String> keywords) {
+    }
+
+    private record RouteIntent(String route, String label, String message) {
     }
 
     private record AiBuildCandidate(Tier tier, int budgetWon, String budgetLabel, List<PartCandidate> parts, List<String> appliedPartCategories) {

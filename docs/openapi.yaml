@@ -2476,7 +2476,7 @@ components:
       enum: [REQUIRES, AFFECTS, BLOCKS, SUGGESTS]
     AiDraftActionType:
       type: string
-      enum: [ADD_PART_TO_DRAFT, REPLACE_DRAFT_PART, REMOVE_DRAFT_PART, UPDATE_DRAFT_QUANTITY, ASK_FOLLOW_UP]
+      enum: [OPEN_ROUTE, ADD_BUILD_TO_DRAFT, ADD_PART_TO_DRAFT, REPLACE_DRAFT_PART, REMOVE_DRAFT_PART, UPDATE_DRAFT_QUANTITY, ASK_FOLLOW_UP]
     AiBuildChatRequest:
       type: object
       required: [message]
@@ -2514,7 +2514,7 @@ components:
             - $ref: "#/components/schemas/AiPartRecommendationDto"
         actions:
           type: array
-          description: /self-quote에서 사용자가 확인 후 적용할 견적초안 변경안. 실제 저장은 quote-drafts API가 수행한다.
+          description: 사용자 화면 이동 또는 견적초안 변경 action. OPEN_ROUTE는 fast route 또는 LLM routeIntent가 고확신일 때만 내려오며, 프론트는 route allowlist를 재검증해야 한다. 견적초안 저장은 quote-drafts API가 수행한다.
           items:
             $ref: "#/components/schemas/AiDraftActionDto"
         warnings:
@@ -2770,10 +2770,10 @@ components:
         payload:
           type: object
           additionalProperties: true
-          description: partId, category, quantity 등 quote draft API 실행에 필요한 값
+          description: route 또는 partId, category, quantity 등 사용자 화면 이동/quote draft API 실행에 필요한 값. OPEN_ROUTE route는 /self-quote, /self-quote?category=..., /my/quotes, /requirements/new, /support/new, /support/ai-chat, /checkout, 단일 고확신 ACTIVE 부품의 /parts/{partId}만 허용한다.
         requiresConfirmation:
           type: boolean
-          default: true
+          default: false
     AiBuildApplyRequest:
       type: object
       required: [items, conflictPolicy]

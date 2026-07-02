@@ -21,7 +21,8 @@ import {
   type AiDraftAction,
   type AiDraftActionStatus,
   type AiRecommendedBuild,
-  type BuildGraphFocus
+  type BuildGraphFocus,
+  type PartCategory
 } from '../aiSelection';
 import { buildChat } from '../quoteApi';
 
@@ -102,6 +103,57 @@ export function AiBuildAssistant({ surface = 'home' }: AiBuildAssistantProps) {
     saveAssistantSession(optimisticSession, ownerKey);
     setPrompt('');
     setSubmitError(null);
+
+    if (isApplyLatestBuildIntent(nextPrompt)) {
+      const latestBuild = baseSession.latestBuilds[0];
+      const responseTime = new Date().toISOString();
+      const assistantMessage: AiChatMessage = {
+        id: createAiMessageId('route'),
+        role: 'assistant',
+        text: latestBuild
+          ? '최근 AI 추천 조합을 셀프 견적에 바로 적용합니다.'
+          : '먼저 AI 추천 견적을 만든 뒤 다시 요청해 주세요.',
+        createdAt: responseTime,
+        kind: 'general'
+      };
+      const nextSession = {
+        ...optimisticSession,
+        messages: [...optimisticSession.messages, assistantMessage],
+        updatedAt: responseTime
+      };
+      setSession(nextSession);
+      saveAssistantSession(nextSession, ownerKey);
+      if (latestBuild) {
+        void selectBuild(latestBuild);
+      }
+      return;
+    }
+
+    const routeIntent = fastRouteIntent(nextPrompt);
+    if (routeIntent) {
+      const responseTime = new Date().toISOString();
+      const latestGraphFocus: BuildGraphFocus | undefined = routeIntent.category
+        ? { mode: 'PART_IMPACT', category: routeIntent.category }
+        : baseSession.latestGraphFocus;
+      const assistantMessage: AiChatMessage = {
+        id: createAiMessageId('route'),
+        role: 'assistant',
+        text: routeIntent.message,
+        createdAt: responseTime,
+        kind: 'general'
+      };
+      const nextSession = {
+        ...optimisticSession,
+        messages: [...optimisticSession.messages, assistantMessage],
+        latestGraphFocus,
+        updatedAt: responseTime
+      };
+      setSession(nextSession);
+      saveAssistantSession(nextSession, ownerKey);
+      navigate(routeIntent.route);
+      return;
+    }
+
     setIsSending(true);
 
     try {
@@ -144,6 +196,9 @@ export function AiBuildAssistant({ surface = 'home' }: AiBuildAssistantProps) {
       };
       setSession(nextSession);
       saveAssistantSession(nextSession, ownerKey);
+      if (assistantMessage.actions?.length) {
+        void autoExecuteActions(assistantMessage.actions, assistantMessage.id);
+      }
     } catch (error) {
       if (error instanceof ApiError && error.status === 401) {
         saveAssistantSession(baseSession, ownerKey);
@@ -189,14 +244,63 @@ export function AiBuildAssistant({ surface = 'home' }: AiBuildAssistantProps) {
 
   async function applyDraftAction(action: AiDraftAction, messageId: string) {
     if (applyingActionId || action.status === 'APPLIED') return;
+    await executeDraftAction(action, messageId);
+  }
+
+  async function autoExecuteActions(actions: AiDraftAction[], messageId: string) {
+    for (const action of actions) {
+      if (!shouldAutoExecuteAction(action)) continue;
+      await executeDraftAction(action, messageId, true);
+    }
+  }
+
+  async function executeDraftAction(action: AiDraftAction, messageId: string, automatic = false) {
+    if (!automatic && applyingActionId) return;
+    if (action.status === 'APPLIED') return;
     setApplyError(null);
     setApplyingActionId(action.id);
     markDraftActionStatus(messageId, action.id, 'APPLYING');
     try {
+      if (action.type === 'OPEN_ROUTE') {
+        const route = typeof action.payload.route === 'string' ? action.payload.route : null;
+        if (!route || !isAllowedUserRoute(route)) {
+          throw new Error('route is not allowed');
+        }
+        navigate(route);
+        markDraftActionStatus(messageId, action.id, 'APPLIED');
+        return;
+      }
       const partId = typeof action.payload.partId === 'string' ? action.payload.partId : null;
       const quantity = typeof action.payload.quantity === 'number' ? action.payload.quantity : 1;
       if (action.type === 'ASK_FOLLOW_UP') {
         markDraftActionStatus(messageId, action.id, 'APPLIED');
+        return;
+      }
+      if (action.type === 'ADD_BUILD_TO_DRAFT') {
+        const buildId = typeof action.payload.buildId === 'string' ? action.payload.buildId : null;
+        const items = Array.isArray(action.payload.items) ? action.payload.items : [];
+        if (!buildId) {
+          throw new Error('buildId is required for build draft action');
+        }
+        await applyAiBuildToQuoteDraft({
+          buildId,
+          conflictPolicy: 'REPLACE',
+          items: items
+            .filter((item): item is { partId: string; category: PartCategory; quantity?: number } => (
+              typeof item === 'object'
+              && item !== null
+              && typeof (item as { partId?: unknown }).partId === 'string'
+              && isPartCategory((item as { category?: unknown }).category)
+            ))
+            .map((item) => ({
+              partId: item.partId,
+              category: item.category,
+              quantity: typeof item.quantity === 'number' ? item.quantity : 1
+            }))
+        });
+        await queryClient.invalidateQueries({ queryKey: ['quote-draft', 'current'] });
+        markDraftActionStatus(messageId, action.id, 'APPLIED');
+        navigate('/self-quote');
         return;
       }
       if (!partId) {
@@ -429,6 +533,114 @@ function toolFromPrompt(prompt: string): BuildGraphFocus['tool'] {
   return undefined;
 }
 
+type FastRouteIntent = {
+  route: string;
+  message: string;
+  category?: PartCategory;
+};
+
+const PART_CATEGORIES: PartCategory[] = ['CPU', 'MOTHERBOARD', 'RAM', 'GPU', 'STORAGE', 'PSU', 'CASE', 'COOLER'];
+
+function fastRouteIntent(prompt: string): FastRouteIntent | null {
+  const normalized = normalizePrompt(prompt);
+  const category = routeCategoryFromPrompt(normalized);
+  if (category && hasRouteVerb(normalized) && !isProductDetailIntent(normalized)) {
+    return {
+      route: `/self-quote?category=${category}`,
+      message: `${PART_CATEGORY_LABELS[category]} 부품 화면으로 이동했습니다.`,
+      category
+    };
+  }
+  if (containsAnyNormalized(normalized, ['셀프견적', '수동견적', '견적장바구니', '장바구니'])
+    && !isDraftMutationCommand(normalized)) {
+    return { route: '/self-quote', message: '셀프 견적 화면으로 이동했습니다.' };
+  }
+  if (containsAnyNormalized(normalized, ['내견적함', '견적함', '저장된견적', '견적목록'])) {
+    return { route: '/my/quotes', message: '내 견적함 화면으로 이동했습니다.' };
+  }
+  if (containsAnyNormalized(normalized, ['ai견적', '자연어견적', '요구사항', '견적입력'])) {
+    return { route: '/requirements/new', message: 'AI 견적 입력 화면으로 이동했습니다.' };
+  }
+  if (containsAnyNormalized(normalized, ['as접수', '수리접수', '지원접수', '고장접수'])) {
+    return { route: '/support/new', message: 'AS 접수 화면으로 이동했습니다.' };
+  }
+  if (containsAnyNormalized(normalized, ['as챗봇', 'asai', '수리챗봇', '지원챗봇'])) {
+    return { route: '/support/ai-chat', message: 'AS AI 챗봇 화면으로 이동했습니다.' };
+  }
+  if (containsAnyNormalized(normalized, ['구매하기', '결제', 'checkout'])) {
+    return { route: '/checkout', message: '구매하기 화면으로 이동했습니다.' };
+  }
+  return null;
+}
+
+function isApplyLatestBuildIntent(prompt: string) {
+  const normalized = normalizePrompt(prompt);
+  return containsAnyNormalized(normalized, ['담아줘', '적용해줘', '넣어줘', '장바구니에담'])
+    && containsAnyNormalized(normalized, ['추천견적', '추천조합', '이견적', '이조합', '견적']);
+}
+
+function shouldAutoExecuteAction(action: AiDraftAction) {
+  return action.type !== 'ASK_FOLLOW_UP';
+}
+
+function isAllowedUserRoute(route: string) {
+  if (route === '/self-quote'
+    || route === '/my/quotes'
+    || route === '/requirements/new'
+    || route === '/support/new'
+    || route === '/support/ai-chat'
+    || route === '/checkout') {
+    return true;
+  }
+  if (/^\/self-quote\?category=(CPU|MOTHERBOARD|RAM|GPU|STORAGE|PSU|CASE|COOLER)$/.test(route)) {
+    return true;
+  }
+  return /^\/parts\/[0-9a-fA-F-]{8,}$/.test(route);
+}
+
+function isPartCategory(value: unknown): value is PartCategory {
+  return typeof value === 'string' && PART_CATEGORIES.includes(value as PartCategory);
+}
+
+function routeCategoryFromPrompt(normalized: string): PartCategory | null {
+  const checks: Array<[PartCategory, string[]]> = [
+    ['MOTHERBOARD', ['메인보드', '마더보드', '보드', 'motherboard']],
+    ['COOLER', ['쿨러', 'cooler', '수랭', '공랭']],
+    ['STORAGE', ['ssd', '스토리지', '저장장치', '저장공간', 'nvme']],
+    ['PSU', ['파워', 'psu', '전원']],
+    ['CASE', ['케이스', 'case']],
+    ['GPU', ['gpu', '그래픽카드', '그래픽', '글카', 'vga']],
+    ['CPU', ['cpu', '씨피유', '프로세서']],
+    ['RAM', ['ram', '램', '메모리']]
+  ];
+  return checks.find(([, keywords]) => keywords.some((keyword) => normalized.includes(normalizePrompt(keyword))))?.[0] ?? null;
+}
+
+function hasRouteVerb(normalized: string) {
+  const routeLike = containsAnyNormalized(normalized, ['보여', '열어', '이동', '가자', '목록', '페이지', '카테고리', '부품', '화면']);
+  const recommendationOnly = normalized.includes('추천') && !containsAnyNormalized(normalized, ['보여', '열어', '목록', '페이지', '부품']);
+  return routeLike && !recommendationOnly;
+}
+
+function isDraftMutationCommand(normalized: string) {
+  return containsAnyNormalized(normalized, ['담아', '넣어', '적용', '추가', '빼', '삭제', '제거', '바꿔', '교체', '수량', '변경']);
+}
+
+function isProductDetailIntent(normalized: string) {
+  const detailWord = containsAnyNormalized(normalized, ['상세', '상품페이지', '제품페이지', '제품상세', '상품상세']);
+  const concreteProductHint = /\d{3,5}/.test(normalized)
+    || containsAnyNormalized(normalized, ['asus', 'msi', 'gigabyte', 'lianli', '리안리', 'samsung', '삼성', 'corsair', '커세어', 'noctua', '녹투아', 'arctic']);
+  return detailWord && concreteProductHint;
+}
+
+function containsAnyNormalized(value: string, needles: string[]) {
+  return needles.some((needle) => value.includes(normalizePrompt(needle)));
+}
+
+function normalizePrompt(value: string) {
+  return value.toLowerCase().replace(/\s+/g, '');
+}
+
 function ChatMessage({
   message,
   onSelectBuild,
@@ -568,14 +780,17 @@ function DraftActionCards({
   applyingActionId: string | null;
   onApplyDraftAction: (action: AiDraftAction, messageId: string) => void;
 }) {
+  const visibleActions = actions.filter((action) => action.type !== 'OPEN_ROUTE');
+  if (!visibleActions.length) return null;
+
   return (
     <div className="mt-2 rounded-lg border border-emerald-100 bg-emerald-50 p-3">
       <div className="mb-2 flex items-center gap-2 text-xs font-black text-emerald-700">
         <ShoppingCart size={14} />
-        견적 장바구니 변경안
+        견적 장바구니 자동 실행
       </div>
       <div className="grid gap-2">
-        {actions.map((action) => {
+        {visibleActions.map((action) => {
           const applied = action.status === 'APPLIED';
           const failed = action.status === 'FAILED';
           const applying = action.status === 'APPLYING' || applyingActionId === action.id;
@@ -589,20 +804,23 @@ function DraftActionCards({
                     <p className="mt-1 break-keep text-xs leading-5 text-slate-500">{action.description}</p>
                   ) : null}
                   {failed ? (
-                    <p className="mt-1 text-xs font-black text-red-600">적용 실패. 다시 시도해 주세요.</p>
+                    <p className="mt-1 text-xs font-black text-red-600">자동 실행 실패. 다시 시도해 주세요.</p>
                   ) : null}
                   {applied ? (
                     <p className="mt-1 text-xs font-black text-emerald-700">견적 장바구니에 적용됨</p>
                   ) : null}
+                  {!applied && !failed && !informational ? (
+                    <p className="mt-1 text-xs font-black text-slate-500">{applying ? '자동 실행 중' : '자동 실행 대기'}</p>
+                  ) : null}
                 </div>
-                {!informational ? (
+                {failed && !informational ? (
                   <button
                     type="button"
-                    disabled={applying || applied || Boolean(applyingActionId)}
+                    disabled={applying || Boolean(applyingActionId)}
                     onClick={() => onApplyDraftAction(action, messageId)}
                     className="min-h-9 shrink-0 rounded-md bg-commerce-ink px-3 text-xs font-black text-white transition hover:bg-slate-700 disabled:bg-slate-300"
                   >
-                    {applied ? '완료' : applying ? '적용 중' : '적용'}
+                    재시도
                   </button>
                 ) : null}
               </div>
