@@ -385,7 +385,7 @@ public class BuildChatService {
             return List.of();
         }
         List<Map<String, Object>> actions = new ArrayList<>();
-        int limit = multiple ? Math.min(3, recommendations.size()) : 1;
+        int limit = 1;
         for (int index = 0; index < limit; index += 1) {
             AiChatEngineResponse.PartRecommendation candidate = recommendations.get(index);
             Map<String, Object> existing = findDraftItem(draftItems, candidate.category(), candidate.name());

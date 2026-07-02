@@ -62,6 +62,35 @@ class PartReplacementRankerTest {
                 .containsExactly("gpu-5080", "gpu-5090");
     }
 
+    @Test
+    void betterCpuDoesNotDowngradeX3dToNonX3dSameTierFallback() {
+        var result = ranker.select(
+                "CPU",
+                Map.of(
+                        "partId", "cpu-9950x3d",
+                        "price", 847_000,
+                        "attributes", Map.of(
+                                "cpuClass", "RYZEN_9_9950X3D",
+                                "hardwareClass", "RYZEN_9_9950X3D",
+                                "coreCount", 16,
+                                "threadCount", 32,
+                                "tdpW", 120
+                        )
+                ),
+                "MORE_EXPENSIVE",
+                null,
+                List.of(
+                        cpu("cpu-9950x3d", "AMD Ryzen 9 9950X3D", 847_000, "RYZEN_9_9950X3D", 16, 32, 120),
+                        cpu("cpu-9950x", "AMD Ryzen 9 9950X", 847_000, "RYZEN_9_9950X", 16, 32, 170),
+                        cpu("cpu-9900x3d", "AMD Ryzen 9 9900X3D", 846_950, "RYZEN_9_9900X3D", 12, 24, 120)
+                ),
+                3
+        );
+
+        assertThat(result.parts()).isEmpty();
+        assertThat(result.warnings()).contains(PartReplacementRanker.WARNING_NO_HIGHER_RANK_CANDIDATE);
+    }
+
     private static List<AiChatEngineResponse.PartRecommendation> tieredParts(String category) {
         return List.of(
                 part(category, "high", 1_080_000),
@@ -118,6 +147,32 @@ class PartReplacementRankerTest {
                 "BuildGraph",
                 price,
                 Map.of("gpuClass", gpuClass, "vramGb", 16, "benchmarkScore", benchmarkScore)
+        );
+    }
+
+    private static AiChatEngineResponse.PartRecommendation cpu(
+            String id,
+            String name,
+            int price,
+            String cpuClass,
+            int coreCount,
+            int threadCount,
+            int tdpW
+    ) {
+        return new AiChatEngineResponse.PartRecommendation(
+                id,
+                "CPU",
+                name,
+                "AMD",
+                price,
+                Map.of(
+                        "cpuClass", cpuClass,
+                        "hardwareClass", cpuClass,
+                        "coreCount", coreCount,
+                        "threadCount", threadCount,
+                        "tdpW", tdpW,
+                        "shortSpec", name
+                )
         );
     }
 }

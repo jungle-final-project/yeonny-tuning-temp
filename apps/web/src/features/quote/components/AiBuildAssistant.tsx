@@ -248,10 +248,27 @@ export function AiBuildAssistant({ surface = 'home' }: AiBuildAssistantProps) {
   }
 
   async function autoExecuteActions(actions: AiDraftAction[], messageId: string) {
-    for (const action of actions) {
+    for (const action of primaryAutoExecutableActions(actions)) {
       if (!shouldAutoExecuteAction(action)) continue;
       await executeDraftAction(action, messageId, true);
     }
+  }
+
+  function primaryAutoExecutableActions(actions: AiDraftAction[]) {
+    const result: AiDraftAction[] = [];
+    const seenDraftCategories = new Set<string>();
+    for (const action of actions) {
+      if (!shouldAutoExecuteAction(action)) continue;
+      if (action.type === 'OPEN_ROUTE' || action.type === 'ADD_BUILD_TO_DRAFT') {
+        result.push(action);
+        continue;
+      }
+      const category = typeof action.payload.category === 'string' ? action.payload.category : action.id;
+      if (seenDraftCategories.has(category)) continue;
+      seenDraftCategories.add(category);
+      result.push(action);
+    }
+    return result;
   }
 
   async function executeDraftAction(action: AiDraftAction, messageId: string, automatic = false) {

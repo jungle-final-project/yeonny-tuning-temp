@@ -84,6 +84,9 @@ public class PartReplacementRanker {
             warnings.add(WARNING_NO_HIGHER_RANK_CANDIDATE);
             warnings.add(WARNING_RANK_FALLBACK_USED);
             selected = sameRankFallback(scored, currentRank);
+            if (selected.isEmpty()) {
+                return new SelectionResult(List.of(), warnings.stream().distinct().toList());
+            }
         }
         if (selected.isEmpty() && "CHEAPER".equals(direction)) {
             warnings.add(WARNING_RANK_FALLBACK_USED);
@@ -189,7 +192,7 @@ public class PartReplacementRanker {
                     .toList();
         }
         return scored.stream()
-                .filter(part -> Math.floor(part.rank() / 1000.0) >= Math.floor(currentRank / 1000.0))
+                .filter(part -> part.rank() >= currentRank)
                 .sorted(Comparator.comparing(ScoredPart::rank).reversed().thenComparing(part -> part.part().price()))
                 .toList();
     }
@@ -287,11 +290,18 @@ public class PartReplacementRanker {
         double benchmark = benchmarkScore(attributes);
         double cores = number(attributes.get("coreCount"));
         double threads = number(attributes.get("threadCount"));
-        double tdp = number(attributes.get("tdpW"));
         if (classRank <= 0 && benchmark <= 0 && cores <= 0) {
             return null;
         }
-        return (classRank * 1000.0) + (benchmark * 10.0) + (cores * 20.0) + (threads * 6.0) + (tdp * 0.2);
+        return (classRank * 1000.0)
+                + cpuModelRank(
+                        text(attributes.get("cpuClass")),
+                        text(attributes.get("hardwareClass")),
+                        text(attributes.get("shortSpec"))
+                )
+                + (benchmark * 10.0)
+                + (cores * 20.0)
+                + (threads * 6.0);
     }
 
     private Double cpuTier(Map<String, Object> attributes) {
@@ -453,6 +463,28 @@ public class PartReplacementRanker {
             case "STANDARD" -> 5;
             default -> 0;
         };
+    }
+
+    private static double cpuModelRank(String... values) {
+        double best = 0.0;
+        for (String value : values) {
+            String text = text(value);
+            if (text == null) {
+                continue;
+            }
+            String normalized = text.toUpperCase(Locale.ROOT);
+            java.util.regex.Matcher matcher = java.util.regex.Pattern.compile("(9[0-9]{3}|8[0-9]{3}|7[0-9]{3}|2[0-9]{2})").matcher(normalized);
+            while (matcher.find()) {
+                best = Math.max(best, Double.parseDouble(matcher.group(1)) / 10.0);
+            }
+            if (normalized.contains("X3D")) {
+                best += 80.0;
+            }
+            if (normalized.contains("ULTRA")) {
+                best += 20.0;
+            }
+        }
+        return best;
     }
 
     private static double chipsetRank(String value) {

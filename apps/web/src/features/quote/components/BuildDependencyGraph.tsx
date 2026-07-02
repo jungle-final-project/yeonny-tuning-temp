@@ -4,7 +4,6 @@ import {
   Background,
   Controls,
   MarkerType,
-  MiniMap,
   Position,
   ReactFlow,
   type Edge,
@@ -139,7 +138,8 @@ export function BuildDependencyGraph({
   }, [canShowFloatingGraph, isDesktopViewport]);
 
   const handleNodeClick = (node: Node) => {
-    setActiveNodeId(String(node.id));
+    const originalNodeId = typeof node.data.originalId === 'string' ? node.data.originalId : String(node.id);
+    setActiveNodeId(originalNodeId);
     setActiveEdge(null);
     const category = node.data.category;
     if (typeof category === 'string' && isPartCategory(category)) {
@@ -227,9 +227,6 @@ export function BuildDependencyGraph({
                 onEdgeClick={(_, edge: Edge) => handleEdgeClick(edge)}
               >
                 <Background color="#dbe4f0" gap={18} />
-                {isDesktopViewport ? (
-                  <MiniMap pannable zoomable nodeColor={(node) => statusColor(String(node.data.status ?? 'PASS'))} />
-                ) : null}
                 {isDesktopViewport ? <Controls showInteractive={false} /> : null}
               </ReactFlow>
             </div>
@@ -544,7 +541,16 @@ function PriceTotalNode({ data }: NodeProps<Node<{ label: ReactNode }>>) {
 function toFlowElements(graph?: BuildGraphResolveResponse | null): { nodes: Node[]; edges: Edge[] } {
   if (!graph) return { nodes: [], edges: [] };
   const focusNodeIds = new Set(graph.focusNodeIds);
+  const nodeIdCounts = new Map<string, number>();
+  const firstFlowNodeIdByGraphNodeId = new Map<string, string>();
   const nodes = graph.nodes.map((node, index) => {
+    const graphNodeId = String(node.id);
+    const currentCount = nodeIdCounts.get(graphNodeId) ?? 0;
+    nodeIdCounts.set(graphNodeId, currentCount + 1);
+    const flowNodeId = currentCount === 0 ? graphNodeId : `${graphNodeId}__${currentCount + 1}`;
+    if (!firstFlowNodeIdByGraphNodeId.has(graphNodeId)) {
+      firstFlowNodeIdByGraphNodeId.set(graphNodeId, flowNodeId);
+    }
     const category = String(node.category ?? node.id).toUpperCase();
     const isPriceNode = isPriceGraphNode(node);
     const basePosition = categoryPositions[category] ?? {
@@ -552,7 +558,7 @@ function toFlowElements(graph?: BuildGraphResolveResponse | null): { nodes: Node
       y: 80 + Math.floor(index / 3) * 210
     };
     return {
-      id: node.id,
+      id: flowNodeId,
       type: isPriceNode ? 'priceTotal' : undefined,
       position: basePosition,
       ...(isPriceNode ? {} : {
@@ -560,6 +566,7 @@ function toFlowElements(graph?: BuildGraphResolveResponse | null): { nodes: Node
         targetPosition: Position.Left
       }),
       data: {
+        originalId: graphNodeId,
         label: nodeLabel(node),
         category: node.category,
         status: node.status
@@ -570,8 +577,8 @@ function toFlowElements(graph?: BuildGraphResolveResponse | null): { nodes: Node
   });
   const edges = graph.edges.map((edge) => ({
     id: edge.id,
-    source: edge.source,
-    target: edge.target,
+    source: firstFlowNodeIdByGraphNodeId.get(String(edge.source)) ?? edge.source,
+    target: firstFlowNodeIdByGraphNodeId.get(String(edge.target)) ?? edge.target,
     label: edge.label,
     type: 'bezier',
     animated: false,
