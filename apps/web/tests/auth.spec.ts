@@ -164,6 +164,231 @@ test('refreshes expired access token and retries current user request', async ({
   expect(await page.evaluate(() => localStorage.getItem('buildgraph.refreshToken'))).toBe('rotated-refresh-token');
 });
 
+test('clears stored auth when protected API returns 401 without refresh token', async ({ page }) => {
+  let protectedCalls = 0;
+  await page.addInitScript(() => {
+    localStorage.setItem('buildgraph.token', 'expired-access-token');
+    localStorage.setItem('buildgraph.authUser', JSON.stringify({
+      id: 'user-no-refresh',
+      email: 'no-refresh@example.com',
+      name: 'No Refresh User',
+      role: 'USER'
+    }));
+  });
+  await page.route('**/api/protected/no-refresh', async (route) => {
+    protectedCalls += 1;
+    await route.fulfill({
+      status: 401,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        code: 'UNAUTHORIZED',
+        message: '로그인이 필요합니다.'
+      })
+    });
+  });
+
+  await page.goto('/login');
+  const result = await page.evaluate(async () => {
+    const apiModulePath = '/src/lib/api.ts';
+    const { api, ApiError } = await import(/* @vite-ignore */ apiModulePath);
+    try {
+      await api('/api/protected/no-refresh');
+      return { ok: true };
+    } catch (error) {
+      const isApiError = error instanceof ApiError;
+      const apiError = error as { status?: number; code?: string };
+      return {
+        ok: false,
+        isApiError,
+        status: isApiError ? apiError.status : null,
+        code: isApiError ? apiError.code : null,
+        message: error instanceof Error ? error.message : ''
+      };
+    }
+  });
+
+  expect(result).toEqual({
+    ok: false,
+    isApiError: true,
+    status: 401,
+    code: 'UNAUTHORIZED',
+    message: '로그인이 필요합니다.'
+  });
+  expect(protectedCalls).toBe(1);
+  expect(await page.evaluate(() => localStorage.getItem('buildgraph.token'))).toBeNull();
+  expect(await page.evaluate(() => localStorage.getItem('buildgraph.refreshToken'))).toBeNull();
+  expect(await page.evaluate(() => localStorage.getItem('buildgraph.authUser'))).toBeNull();
+});
+
+test('clears stored auth when refresh request fails and does not retry original API', async ({ page }) => {
+  let protectedCalls = 0;
+  let refreshCalls = 0;
+  await page.addInitScript(() => {
+    localStorage.setItem('buildgraph.token', 'expired-access-token');
+    localStorage.setItem('buildgraph.refreshToken', 'stale-refresh-token');
+    localStorage.setItem('buildgraph.authUser', JSON.stringify({
+      id: 'user-stale-refresh',
+      email: 'stale-refresh@example.com',
+      name: 'Stale Refresh User',
+      role: 'USER'
+    }));
+  });
+  await page.route('**/api/protected/refresh-fails', async (route) => {
+    protectedCalls += 1;
+    await route.fulfill({
+      status: 401,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        code: 'UNAUTHORIZED',
+        message: 'Access token is expired.'
+      })
+    });
+  });
+  await page.route('**/api/auth/refresh', async (route) => {
+    refreshCalls += 1;
+    await route.fulfill({
+      status: 500,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        code: 'INTERNAL_ERROR',
+        message: 'refresh failed'
+      })
+    });
+  });
+
+  await page.goto('/login');
+  const result = await page.evaluate(async () => {
+    const apiModulePath = '/src/lib/api.ts';
+    const { api, ApiError } = await import(/* @vite-ignore */ apiModulePath);
+    try {
+      await api('/api/protected/refresh-fails');
+      return { ok: true };
+    } catch (error) {
+      const isApiError = error instanceof ApiError;
+      const apiError = error as { status?: number; code?: string };
+      return {
+        ok: false,
+        isApiError,
+        status: isApiError ? apiError.status : null,
+        code: isApiError ? apiError.code : null
+      };
+    }
+  });
+
+  expect(result).toEqual({
+    ok: false,
+    isApiError: true,
+    status: 401,
+    code: 'UNAUTHORIZED'
+  });
+  expect(protectedCalls).toBe(1);
+  expect(refreshCalls).toBe(1);
+  expect(await page.evaluate(() => localStorage.getItem('buildgraph.token'))).toBeNull();
+  expect(await page.evaluate(() => localStorage.getItem('buildgraph.refreshToken'))).toBeNull();
+  expect(await page.evaluate(() => localStorage.getItem('buildgraph.authUser'))).toBeNull();
+});
+
+test('clears stored auth when refresh response body is invalid', async ({ page }) => {
+  let protectedCalls = 0;
+  let refreshCalls = 0;
+  await page.addInitScript(() => {
+    localStorage.setItem('buildgraph.token', 'expired-access-token');
+    localStorage.setItem('buildgraph.refreshToken', 'invalid-body-refresh-token');
+    localStorage.setItem('buildgraph.authUser', JSON.stringify({
+      id: 'user-invalid-refresh',
+      email: 'invalid-refresh@example.com',
+      name: 'Invalid Refresh User',
+      role: 'USER'
+    }));
+  });
+  await page.route('**/api/protected/invalid-refresh-body', async (route) => {
+    protectedCalls += 1;
+    await route.fulfill({
+      status: 401,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        code: 'UNAUTHORIZED',
+        message: 'Access token is expired.'
+      })
+    });
+  });
+  await page.route('**/api/auth/refresh', async (route) => {
+    refreshCalls += 1;
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        accessToken: 'new-access-token'
+      })
+    });
+  });
+
+  await page.goto('/login');
+  await page.evaluate(async () => {
+    const apiModulePath = '/src/lib/api.ts';
+    const { api } = await import(/* @vite-ignore */ apiModulePath);
+    await api('/api/protected/invalid-refresh-body').catch(() => undefined);
+  });
+
+  expect(protectedCalls).toBe(1);
+  expect(refreshCalls).toBe(1);
+  expect(await page.evaluate(() => localStorage.getItem('buildgraph.token'))).toBeNull();
+  expect(await page.evaluate(() => localStorage.getItem('buildgraph.refreshToken'))).toBeNull();
+  expect(await page.evaluate(() => localStorage.getItem('buildgraph.authUser'))).toBeNull();
+});
+
+test('preserves ErrorResponse details on ApiError', async ({ page }) => {
+  await page.route('**/api/protected/details-error', async (route) => {
+    await route.fulfill({
+      status: 400,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        code: 'VALIDATION_ERROR',
+        message: '요청 값이 올바르지 않습니다.',
+        details: {
+          field: 'email',
+          reason: 'INVALID_FORMAT'
+        }
+      })
+    });
+  });
+
+  await page.goto('/login');
+  const result = await page.evaluate(async () => {
+    const apiModulePath = '/src/lib/api.ts';
+    const { api, ApiError } = await import(/* @vite-ignore */ apiModulePath);
+    try {
+      await api('/api/protected/details-error');
+      return { ok: true };
+    } catch (error) {
+      const isApiError = error instanceof ApiError;
+      const apiError = error as { status?: number; path?: string; code?: string; details?: unknown };
+      return {
+        ok: false,
+        isApiError,
+        status: isApiError ? apiError.status : null,
+        path: isApiError ? apiError.path : null,
+        code: isApiError ? apiError.code : null,
+        message: error instanceof Error ? error.message : '',
+        details: isApiError ? apiError.details : null
+      };
+    }
+  });
+
+  expect(result).toEqual({
+    ok: false,
+    isApiError: true,
+    status: 400,
+    path: '/api/protected/details-error',
+    code: 'VALIDATION_ERROR',
+    message: '요청 값이 올바르지 않습니다.',
+    details: {
+      field: 'email',
+      reason: 'INVALID_FORMAT'
+    }
+  });
+});
+
 test('calls logout API and clears stored auth tokens', async ({ page }) => {
   let logoutCalled = false;
   await page.addInitScript(() => {
@@ -199,6 +424,59 @@ test('calls logout API and clears stored auth tokens', async ({ page }) => {
 
   await page.goto('/login');
   await expect(page.getByText('Logout User')).toBeVisible();
+  await page.locator('header button').last().click();
+
+  expect(logoutCalled).toBe(true);
+  await page.waitForFunction(() =>
+    localStorage.getItem('buildgraph.token') === null &&
+    localStorage.getItem('buildgraph.refreshToken') === null &&
+    localStorage.getItem('buildgraph.authUser') === null
+  );
+  expect(await page.evaluate(() => localStorage.getItem('buildgraph.token'))).toBeNull();
+  expect(await page.evaluate(() => localStorage.getItem('buildgraph.refreshToken'))).toBeNull();
+  expect(await page.evaluate(() => localStorage.getItem('buildgraph.authUser'))).toBeNull();
+  await expect(page).toHaveURL('/login');
+});
+
+test('clears stored auth tokens even when logout API fails', async ({ page }) => {
+  let logoutCalled = false;
+  await page.addInitScript(() => {
+    localStorage.setItem('buildgraph.token', 'logout-fail-access-token');
+    localStorage.setItem('buildgraph.refreshToken', 'logout-fail-refresh-token');
+    localStorage.setItem('buildgraph.authUser', JSON.stringify({
+      id: '00000000-0000-4000-8000-000000001067',
+      email: 'logout-fail@example.com',
+      name: 'Logout Fail User',
+      role: 'USER'
+    }));
+  });
+  await page.route('**/api/auth/me', async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        id: '00000000-0000-4000-8000-000000001067',
+        email: 'logout-fail@example.com',
+        name: 'Logout Fail User',
+        role: 'USER'
+      })
+    });
+  });
+  await page.route('**/api/auth/logout', async (route) => {
+    logoutCalled = true;
+    expect(route.request().headers().authorization).toBe('Bearer logout-fail-access-token');
+    await route.fulfill({
+      status: 500,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        code: 'INTERNAL_ERROR',
+        message: 'logout failed'
+      })
+    });
+  });
+
+  await page.goto('/login');
+  await expect(page.getByText('Logout Fail User')).toBeVisible();
   await page.locator('header button').last().click();
 
   expect(logoutCalled).toBe(true);

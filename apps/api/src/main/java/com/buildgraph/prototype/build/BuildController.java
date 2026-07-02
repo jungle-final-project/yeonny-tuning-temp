@@ -28,8 +28,8 @@ public class BuildController {
             @RequestBody Map<String, Object> request,
             @RequestHeader(value = "Authorization", required = false) String authorization
     ) {
-        currentUserService.requireUser(authorization);
-        return buildQueryService.parse(request);
+        CurrentUserService.CurrentUser user = currentUserService.requireUser(authorization);
+        return buildQueryService.parse(request, user);
     }
 
     @PostMapping("/builds/recommend")
@@ -37,8 +37,8 @@ public class BuildController {
             @RequestBody(required = false) Map<String, Object> request,
             @RequestHeader(value = "Authorization", required = false) String authorization
     ) {
-        currentUserService.requireUser(authorization);
-        return buildQueryService.recommendations(request == null ? Map.of() : request);
+        CurrentUserService.CurrentUser user = currentUserService.requireUser(authorization);
+        return buildQueryService.recommendations(request == null ? Map.of() : request, user);
     }
 
     @GetMapping("/builds/{id}")
@@ -46,14 +46,14 @@ public class BuildController {
             @PathVariable String id,
             @RequestHeader(value = "Authorization", required = false) String authorization
     ) {
-        currentUserService.requireUser(authorization);
-        return buildQueryService.buildDetail(id);
+        CurrentUserService.CurrentUser user = currentUserService.requireUser(authorization);
+        return buildQueryService.buildDetail(id, user);
     }
 
     @GetMapping("/builds/history")
     Map<String, Object> history(@RequestHeader(value = "Authorization", required = false) String authorization) {
-        currentUserService.requireUser(authorization);
-        return Map.of("items", buildQueryService.builds());
+        CurrentUserService.CurrentUser user = currentUserService.requireUser(authorization);
+        return Map.of("items", buildQueryService.builds(user));
     }
 
     @PostMapping("/builds/{id}/change-part")
@@ -62,16 +62,21 @@ public class BuildController {
             @RequestBody(required = false) Map<String, Object> request,
             @RequestHeader(value = "Authorization", required = false) String authorization
     ) {
-        currentUserService.requireUser(authorization);
-        return buildQueryService.changePart(id, request == null ? Map.of() : request);
+        CurrentUserService.CurrentUser user = currentUserService.requireUser(authorization);
+        return buildQueryService.changePart(id, request == null ? Map.of() : request, user);
     }
 
     @PostMapping("/ai/build-chat")
     Map<String, Object> buildChat(
             @RequestBody(required = false) Map<String, Object> request,
-            @RequestHeader(value = "Authorization", required = false) String authorization
+            @RequestHeader(value = "Authorization", required = false) String authorization,
+            @RequestHeader(value = "X-BuildGraph-AI-Profile", required = false) String aiProfile
     ) {
-        currentUserService.requireUser(authorization);
-        return buildChatService.chat(request == null ? Map.of() : request);
+        CurrentUserService.CurrentUser user = currentUserService.requireUser(authorization);
+        Map<String, Object> body = request == null ? Map.of() : request;
+        if (aiProfile == null || aiProfile.isBlank()) {
+            return buildChatService.chat(body, user);
+        }
+        return buildChatService.chat(body, aiProfile, user);
     }
 }

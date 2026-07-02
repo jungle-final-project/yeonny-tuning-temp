@@ -1,12 +1,113 @@
 # 3번 AI 성능 및 고도화 검증 보고서
 
-작성 기준: 2026-06-30 로컬 `hyunjin` 저장소 기준
+작성 기준: 2026-07-02 `prototype/main` 07dbe62 기반 3번 AI 영역
 
 ## 결론
 
-AS AI Chat 고도화 변경은 로컬 빌드, 프론트 테스트, Docker 재빌드, 실제 OpenAI 호출까지 통과했다.
+AS AI Chat과 Build Chat의 성능 판단은 날짜별 benchmark 보고서를 기준으로 한다.
 
-이번 변경의 핵심은 AS Chat 답변을 단순 문자열 생성에서 Structured Outputs 기반 JSON 생성으로 바꾼 것이다. 이로 인해 프론트와 관리자 화면이 기대하는 `causeCandidates`, `nextActions`, `escalation`, `ticketDraft` 구조를 더 안정적으로 받을 수 있다.
+이번 문서는 구조와 검증 기준을 요약한다. 실제 profile별 수치의 source of truth는 `docs/reports/as-chat-profile-benchmark-YYYYMMDD.md`와 `docs/reports/build-chat-profile-benchmark-YYYYMMDD.md`다.
+
+2026-07-01 전체 실험 기준으로 `gpt-5.4-mini` 계열이 AS Chat과 Build Chat 모두에서 기본값 gate를 통과했다. 이 결과를 반영해 사용자 기본 profile은 `AS_CHAT_54_MINI_FAST`, `BUILD_CHAT_54_MINI_FAST`로 전환한다.
+
+2026-07-02 이후 RAG vector 정책 판단은 모델 비교가 아니라 경로별 검색 품질 평가로 분리한다. 런타임 기본값은 `RAG_VECTOR_ENABLED=true`를 유지하고, `RAG_VECTOR_REQUIREMENT_PARSE_ENABLED`, `RAG_VECTOR_BUILD_RECOMMEND_ENABLED`, `RAG_VECTOR_AS_ANALYZE_ENABLED`, `RAG_VECTOR_PUBLIC_SEARCH_ENABLED`로 경로별 실험만 수행한다.
+
+2026-07-02 RAG vector 정책 결정 요약은 `docs/reports/rag-vector-policy-decision-20260702.md`를 기준으로 본다. 결론은 전역 vector 유지, 경로별 override 기본값 유지, `REQUIREMENT_PARSE`와 `BUILD_RECOMMEND`는 seed/rerank 품질 개선 대상으로 분리다.
+
+## 2026-07-02 RAG Vector 경로별 평가 체계
+
+평가 산출물:
+
+- Retrieval benchmark: `tools/rag_retrieval_cases.json`, `tools/benchmark_rag_retrieval.py`, `docs/reports/rag-retrieval-benchmark-YYYYMMDD.md`
+- AS Chat live benchmark: `tools/ai_quality_cases.json`, `tools/benchmark_as_chat_profiles.py`
+- Build Chat live benchmark: `tools/build_chat_live_cases.json`, `tools/benchmark_build_chat_profiles.py`
+
+현재 평가셋 규모:
+
+- RAG retrieval: 190개 case. 견적/부품/추천 근거, AS 증상, public search를 포함한다.
+- AS Chat live: 43개 case. thermal, driver, memory, storage, power, mixed 증상을 포함한다.
+- Build Chat live: 42개 case. 추천 3개 생성, 5090 하드 제약, 부품 추천, 견적 draft action을 포함한다.
+
+기본 실행은 비용 통제를 위해 현재 기본 profile만 측정한다.
+
+```powershell
+python tools/benchmark_rag_retrieval.py --variant-label vector-on
+python tools/benchmark_as_chat_profiles.py --variant-label vector-on
+python tools/benchmark_build_chat_profiles.py --variant-label vector-on
+```
+
+경로별 off 실험은 API 재기동 후 같은 명령을 다른 variant label로 실행한다.
+
+```powershell
+$env:RAG_VECTOR_AS_ANALYZE_ENABLED="false"
+docker compose up --build -d api
+python tools/benchmark_rag_retrieval.py --variant-label as-vector-off
+python tools/benchmark_as_chat_profiles.py --variant-label as-vector-off
+```
+
+판정 기준:
+
+- `vector-on` 채택 후보: retrieval top3 hit rate가 vector-off보다 5%p 이상 높거나 hard constraint/의미 검색 실패를 유의미하게 줄일 때.
+- `vector-off` 후보: hit rate 차이가 2%p 미만이고 AS/Build Chat latency가 15% 이상 개선될 때.
+- public `/api/rag/search`는 관리자 검색 품질을 우선하므로 속도만으로 끄지 않는다.
+- 이번 단계에서는 보고서에 권장 경로별 정책만 남기고 기본 env는 직접 바꾸지 않는다.
+
+## 2026-07-01 엄격 전체 실험 결과
+
+실험 범위:
+
+- AS Chat: 5개 profile x 6개 케이스 x vector-on/off = 60회
+- Build Chat: 3개 profile x 5개 케이스 x vector-on/off = 30회
+- 총 LLM 호출: 90회
+
+보고서:
+
+- AS Chat vector-on: `docs/reports/as-chat-profile-benchmark-20260701-vector-on.md`
+- AS Chat vector-off: `docs/reports/as-chat-profile-benchmark-20260701-vector-off.md`
+- Build Chat vector-on: `docs/reports/build-chat-profile-benchmark-20260701-vector-on.md`
+- Build Chat vector-off: `docs/reports/build-chat-profile-benchmark-20260701-vector-off.md`
+
+AS Chat 요약:
+
+| variant | profile | successRate | avgFinalLatencyMs | p95FinalLatencyMs | schemaValidRate | groundedEvidenceRate | unsupportedClaims |
+| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| vector-on | `AS_CHAT_FAST` | 66.7% | 10296 | 12900 | 100.0% | 100.0% | 0.2 |
+| vector-on | `AS_CHAT_54_FAST` | 100.0% | 6900 | 7690 | 100.0% | 100.0% | 0.0 |
+| vector-on | `AS_CHAT_54_MINI_FAST` | 100.0% | 5451 | 7199 | 100.0% | 100.0% | 0.0 |
+| vector-on | `AS_CHAT_NANO_FAST` | 33.3% | 6714 | 10733 | 33.3% | 33.3% | 0.0 |
+| vector-on | `AS_CHAT_BALANCED` | 100.0% | 12511 | 13851 | 100.0% | 100.0% | 0.0 |
+| vector-off | `AS_CHAT_FAST` | 83.3% | 9295 | 10453 | 100.0% | 100.0% | 0.2 |
+| vector-off | `AS_CHAT_54_FAST` | 83.3% | 6661 | 7136 | 100.0% | 83.3% | 0.2 |
+| vector-off | `AS_CHAT_54_MINI_FAST` | 100.0% | 4580 | 5136 | 100.0% | 100.0% | 0.0 |
+| vector-off | `AS_CHAT_NANO_FAST` | 50.0% | 6085 | 6893 | 50.0% | 50.0% | 0.0 |
+| vector-off | `AS_CHAT_BALANCED` | 100.0% | 10766 | 11644 | 100.0% | 100.0% | 0.0 |
+
+Build Chat 요약:
+
+| variant | profile | successRate | avgLatencyMs | p95LatencyMs | schemaValidRate |
+| --- | --- | ---: | ---: | ---: | ---: |
+| vector-on | `BUILD_CHAT_FAST` | 100.0% | 4318 | 5204 | 100.0% |
+| vector-on | `BUILD_CHAT_54_FAST` | 100.0% | 3833 | 4256 | 100.0% |
+| vector-on | `BUILD_CHAT_54_MINI_FAST` | 100.0% | 3056 | 3484 | 100.0% |
+| vector-off | `BUILD_CHAT_FAST` | 100.0% | 4160 | 5467 | 100.0% |
+| vector-off | `BUILD_CHAT_54_FAST` | 100.0% | 3813 | 4585 | 100.0% |
+| vector-off | `BUILD_CHAT_54_MINI_FAST` | 100.0% | 2669 | 3027 | 100.0% |
+
+Build Chat 반복 요청 속도 개선은 Redis cache로 보조한다. cache는 성공 응답만 TTL 600초로 저장하고, key는 사용자 내부 id, profile, 정규화 message, selectedCategory, currentQuoteDraft fingerprint, parts/benchmark/FPS/RAG/alias version을 포함한다. cache hit/miss는 사용자 응답 body에 노출하지 않으며 Redis 장애 시 기존 LLM 흐름으로 우회한다. cache hit 응답은 이전 실행의 `agentSessionId`, `evidenceIds`, `toolInvocationIds`를 재사용하지 않는다.
+
+판정:
+
+- `AS_CHAT_54_MINI_FAST`는 vector-on/off 모두 gate를 통과했고, 기존 `AS_CHAT_FAST`보다 성공률과 속도 모두 낫다.
+- `AS_CHAT_NANO_FAST`는 JSON schema 실패가 반복되어 기본값 후보에서 제외한다.
+- `AS_CHAT_BALANCED`는 품질은 안정적이지만 평균 지연 시간이 길어 기본 사용자 profile보다 고위험/관리자 검증 후보에 가깝다.
+- Build Chat은 `BUILD_CHAT_54_MINI_FAST`가 모든 케이스를 통과하면서 가장 빠르다.
+- 현재 고정 평가셋에서는 vector-on이 품질 이득을 만들지 못했고, 평균 latency는 더 길었다. 다만 `5090` RAG smoke에서 vector 검색 자체는 정상 작동하므로, 운영 기본값 변경은 더 큰 자연어 검색 평가셋으로 한 번 더 확인하는 것이 안전하다.
+
+권장 후속 조치:
+
+1. 사용자 기본 profile을 `AS_CHAT_54_MINI_FAST`, `BUILD_CHAT_54_MINI_FAST`로 전환한다.
+2. `RAG_VECTOR_ENABLED=false`를 기본값으로 바꿀지는 아직 보류한다. 현재 평가셋에서는 빠르지만, 의미 검색 품질을 볼 더 큰 견적/RAG 케이스가 필요하다.
+3. nano profile은 기본 후보가 아니라 실패 사례 추적용 실험 profile로만 남긴다.
 
 ## 검증 결과
 
@@ -51,11 +152,13 @@ AS AI Chat 고도화 변경은 로컬 빌드, 프론트 테스트, Docker 재빌
 현재 기본 설정은 다음과 같다.
 
 ```env
-OPENAI_MODEL=gpt-5.5
-OPENAI_REASONING_EFFORT=medium
+AS_CHAT_DEFAULT_PROFILE=AS_CHAT_54_MINI_FAST
+AS_CHAT_54_MINI_FAST_MODEL=gpt-5.4-mini
+BUILD_CHAT_DEFAULT_PROFILE=BUILD_CHAT_54_MINI_FAST
+BUILD_CHAT_54_MINI_FAST_MODEL=gpt-5.4-mini
 ```
 
-품질 우선 설정이므로 AS 분석 답변 품질에는 유리하다. 대신 응답 시간과 비용은 nano profile보다 높다. 데모 속도가 더 중요해지면 `AS_CHAT_NANO_FAST`(`gpt-5.4-nano`)를 같은 benchmark 구조에서 비교한 뒤 기본 profile 전환 여부를 판단한다.
+rollback이 필요하면 `.env`에서 `AS_CHAT_DEFAULT_PROFILE=AS_CHAT_FAST`, `BUILD_CHAT_DEFAULT_PROFILE=BUILD_CHAT_FAST`로 되돌린다. `AS_CHAT_NANO_FAST`(`gpt-5.4-nano`)는 schema valid 실패가 반복되어 기본 후보가 아니라 실험/실패 추적 profile로 유지한다.
 
 ### RAG 검색 개선
 
@@ -87,46 +190,50 @@ OPENAI_REASONING_EFFORT=medium
 
 - `gpt-5.5`는 품질은 높지만 응답 시간이 길 수 있음
 - Structured Outputs는 schema 검증 안정성을 얻는 대신 요청 payload가 약간 커짐
-- 현재 RAG는 keyword-hybrid 방식이라 문서가 크게 늘면 검색 품질 한계가 생길 수 있음
+- pgvector는 의미 검색 품질을 높일 수 있지만, embedding 호출과 vector ranking 비용이 있어 경로별 평가가 필요함
 
 ## 한계와 다음 개선 방향
 
 현재 구조는 데모와 Sprint 개발 기준으로는 충분하지만, 운영 수준까지 가려면 다음 개선이 필요하다.
 
-1. AS 평가셋 추가
-   - 온도, 프레임 드랍, 드라이버 오류, RAM 부족, 저장장치 병목, 전원 문제 케이스를 고정 평가셋으로 둔다.
+1. 경로별 vector 정책 판정
+   - `RAG_VECTOR_REQUIREMENT_PARSE_ENABLED`, `RAG_VECTOR_BUILD_RECOMMEND_ENABLED`, `RAG_VECTOR_AS_ANALYZE_ENABLED`, `RAG_VECTOR_PUBLIC_SEARCH_ENABLED`를 각각 켜고 끈 결과를 비교한다.
 
-2. RAG 검색 품질 계량화
-   - 기대 근거가 top 3 안에 들어오는지 자동 테스트한다.
+2. RAG 검색 품질 계량화 유지
+   - `tools/benchmark_rag_retrieval.py`로 기대 근거가 top 3 안에 들어오는지 자동 측정한다.
 
-3. pgvector rerank 도입 검토
-   - RAG 문서와 로그 근거가 수천 chunk 이상으로 늘면 keyword 검색만으로는 부족하다.
+3. 평가셋 보강
+   - 현재 190개 retrieval case와 40개 이상 live case를 기준으로 시작하되, 실제 데모 실패 문장을 계속 추가한다.
 
 4. 모델 라우팅
    - 단순 질문은 경량 모델, 복합 AS 분석은 고성능 모델을 쓰는 구조로 비용과 지연을 조절한다.
 
 5. 응답 지연 측정
-   - AS Chat POST 응답 시간을 DB 또는 로그에 남겨 모델별 실제 비용 대비 품질을 비교한다.
+   - AS Chat stage timing, Build Chat wall latency, retrieval latency를 보고서에 남겨 모델별/경로별 실제 비용 대비 품질을 비교한다.
 
-## Profile Benchmark 결과
+## Profile Benchmark 기준
 
-2026-06-30에 `tools/benchmark_as_chat_profiles.py`로 AS Chat profile을 실제 OpenAI 호출 기준으로 비교했다. 이 결과는 `POST /api/ai/as-chat/stream`, compact prompt, profile별 출력 제한 적용 후 측정한 값이다. 최신 세부 결과는 `docs/reports/as-chat-profile-benchmark-20260630.md`를 기준으로 본다.
+최신 profile 비교는 아래 파일을 기준으로 본다.
 
-| profile | successRate | avgFirstEventMs | avgFinalLatencyMs | p95FinalLatencyMs | avgTokens | schemaValidRate | avgUnsupportedClaims |
-|---|---:|---:|---:|---:|---:|---:|---:|
-| `AS_CHAT_FAST` | 100.0% | 17 | 9287 | 12838 | 1833 | 100.0% | 0.0 |
-| `AS_CHAT_NANO_FAST` | 33.3% | 9 | 5643 | 6237 | 1914 | 33.3% | 0.0 |
-| `AS_CHAT_BALANCED` | 100.0% | 16 | 11835 | 13784 | 2199 | 100.0% | 0.0 |
-| `AS_CHAT_HIGH_QUALITY` | 83.3% | 17 | 16870 | 21170 | 3001 | 100.0% | 0.2 |
+- AS Chat: `docs/reports/as-chat-profile-benchmark-YYYYMMDD.md`
+- Build Chat: `docs/reports/build-chat-profile-benchmark-YYYYMMDD.md`
 
-판단:
+AS Chat benchmark는 `AS_CHAT_FAST`, `AS_CHAT_54_FAST`, `AS_CHAT_54_MINI_FAST`, `AS_CHAT_NANO_FAST`, `AS_CHAT_BALANCED`를 같은 케이스로 비교한다. 보고서에는 `variant`, `firstEventMs`, `ragReadyMs`, `toolsReadyMs`, `llmOnlyMs`, `finalLatencyMs`, token, schema valid, grounded evidence, unsupported claim을 남긴다.
 
-- `AS_CHAT_FAST`와 `AS_CHAT_BALANCED`는 구조화 응답과 자동 품질 기준을 통과했다.
-- `AS_CHAT_NANO_FAST`는 평균 5.6초대로 가장 빠르지만 schema valid 33.3%라 기본값 전환 조건을 만족하지 못했다. nano는 실험 후보로 유지한다.
-- `AS_CHAT_FAST`가 평균 10초 이하와 p95 20초 이하 조건을 만족하므로 현재 사용자 기본 profile로 둔다.
-- 첫 진행 이벤트는 모든 profile이 평균 1초 이내라, 사용자는 요청 직후 처리 진행 상태를 볼 수 있다.
-- `AS_CHAT_BALANCED`와 `AS_CHAT_HIGH_QUALITY`는 관리자 검증 또는 고위험 분석 후보로 유지한다.
-- 현재 PR 범위의 AS Chat profile 비교는 OpenAI profile만 대상으로 한다. 다른 provider 비교는 별도 합의 후 추가한다.
+Build Chat benchmark는 `BUILD_CHAT_FAST`, `BUILD_CHAT_54_FAST`, `BUILD_CHAT_54_MINI_FAST`를 같은 케이스로 비교한다. “5090 포함”, “300만원 이하 5090”, “GPU 더 싼 걸로”, “RAM 64GB” 같은 최근 피드백 케이스를 포함한다.
+
+기본값 전환 기준:
+
+- schema valid 100%
+- success rate 95% 이상
+- grounded evidence 90% 이상
+- unsupported claim 0
+- p95 20초 이하
+- 기존 기본 profile보다 평균 latency가 유의미하게 개선
+
+위 기준을 `AS_CHAT_54_MINI_FAST`, `BUILD_CHAT_54_MINI_FAST`가 통과했으므로 사용자 기본값으로 전환한다. `AS_CHAT_FAST`, `BUILD_CHAT_FAST`는 rollback 후보이고, `gpt-5.4`, `gpt-5.4-nano` 계열은 계속 benchmark 비교 후보로 둔다.
+
+RAG vector on/off 비교는 같은 profile과 같은 case를 두 번 실행하고 `tools/benchmark_as_chat_profiles.py --variant-label vector-on|vector-off`로 라벨을 분리한다.
 
 ## 책임 경계
 

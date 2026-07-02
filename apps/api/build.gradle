@@ -7,6 +7,13 @@ plugins {
 group = 'com.buildgraph'
 version = '0.1.0'
 
+def isWindows = System.getProperty('os.name').toLowerCase(Locale.ROOT).contains('windows')
+def hasNonAsciiProjectPath = !java.nio.charset.StandardCharsets.US_ASCII.newEncoder().canEncode(projectDir.absolutePath)
+if (isWindows && hasNonAsciiProjectPath) {
+    def projectPathHash = Integer.toHexString(projectDir.absolutePath.hashCode())
+    layout.buildDirectory = file("${System.getProperty('user.home')}/.gradle/buildgraph-api-build/${projectPathHash}")
+}
+
 java {
     toolchain {
         languageVersion = JavaLanguageVersion.of(21)
@@ -16,9 +23,11 @@ java {
 dependencies {
     implementation 'org.springframework.boot:spring-boot-starter-actuator'
     implementation 'org.springframework.boot:spring-boot-starter-amqp'
+    implementation 'org.springframework.boot:spring-boot-starter-data-jpa'
     implementation 'org.springframework.boot:spring-boot-starter-data-redis'
     implementation 'org.springframework.boot:spring-boot-starter-jdbc'
     implementation 'org.springframework.boot:spring-boot-starter-mail'
+    implementation 'org.springframework.boot:spring-boot-starter-security'
     implementation 'org.springframework.boot:spring-boot-starter-validation'
     implementation 'org.springframework.boot:spring-boot-starter-web'
     implementation 'org.springframework.security:spring-security-crypto'
@@ -33,6 +42,44 @@ dependencies {
     testImplementation 'org.springframework.boot:spring-boot-starter-test'
 }
 
+def asciiTestClasspathRoot = providers.provider {
+    def safeProjectKey = projectDir.absolutePath.replaceAll('[^A-Za-z0-9._-]', '_')
+    new File(System.getProperty('java.io.tmpdir'), "buildgraph-api-test-classpath/${safeProjectKey}")
+}
+
+tasks.register('syncAsciiTestClasspath', Sync) {
+    dependsOn tasks.named('testClasses')
+    into(asciiTestClasspathRoot)
+    into('test-classes') {
+        from sourceSets.test.output.classesDirs
+    }
+    into('test-resources') {
+        from sourceSets.test.output.resourcesDir
+    }
+    into('main-classes') {
+        from sourceSets.main.output.classesDirs
+    }
+    into('main-resources') {
+        from sourceSets.main.output.resourcesDir
+    }
+}
+
 tasks.named('test') {
+    dependsOn tasks.named('syncAsciiTestClasspath')
     useJUnitPlatform()
+    doFirst {
+        def root = asciiTestClasspathRoot.get()
+        def projectOutput = files(
+                sourceSets.test.output.classesDirs,
+                sourceSets.test.output.resourcesDir,
+                sourceSets.main.output.classesDirs,
+                sourceSets.main.output.resourcesDir
+        )
+        classpath = files(
+                new File(root, 'test-classes'),
+                new File(root, 'test-resources'),
+                new File(root, 'main-classes'),
+                new File(root, 'main-resources')
+        ) + (classpath - projectOutput)
+    }
 }

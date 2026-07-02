@@ -2,6 +2,7 @@ package com.buildgraph.prototype.part;
 
 import com.buildgraph.prototype.common.DbValueMapper;
 import com.buildgraph.prototype.common.MockData;
+import com.buildgraph.prototype.user.CurrentUserService;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
@@ -17,9 +18,40 @@ public class PartQueryService {
     private static final Set<String> CATEGORIES = Set.of("CPU", "GPU", "RAM", "MOTHERBOARD", "STORAGE", "PSU", "CASE", "COOLER");
     private static final Set<String> STATUSES = Set.of("ACTIVE", "INACTIVE", "DISCONTINUED");
     private final JdbcTemplate jdbcTemplate;
+    private final PartCompatibleCandidateService compatibilityService;
 
-    public PartQueryService(JdbcTemplate jdbcTemplate) {
+    public PartQueryService(JdbcTemplate jdbcTemplate, PartCompatibleCandidateService compatibilityService) {
         this.jdbcTemplate = jdbcTemplate;
+        this.compatibilityService = compatibilityService;
+    }
+
+    public Map<String, Object> parts(
+            CurrentUserService.CurrentUser user,
+            String category,
+            String query,
+            String manufacturer,
+            String status,
+            Integer minPrice,
+            Integer maxPrice,
+            Integer page,
+            Integer size,
+            String sort,
+            String compatibilitySource
+    ) {
+        PartSearch search = new PartSearch(category, query, manufacturer, status, minPrice, maxPrice, page, size, sort);
+        String normalizedCompatibilitySource = normalizeCompatibilitySource(compatibilitySource);
+        if ("compatibility".equals(search.sort()) && (search.category() == null || normalizedCompatibilitySource == null)) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "호환성순 정렬에는 category와 compatibilitySource가 필요합니다.");
+        }
+        if (normalizedCompatibilitySource != null && search.category() != null) {
+            return partsWithCompatibility(user, search, normalizedCompatibilitySource);
+        }
+        return MockData.map(
+                "items", partRows(search),
+                "page", search.page(),
+                "size", search.size(),
+                "total", countParts(search)
+        );
     }
 
     public Map<String, Object> parts(
@@ -33,13 +65,7 @@ public class PartQueryService {
             Integer size,
             String sort
     ) {
-        PartSearch search = new PartSearch(category, query, manufacturer, status, minPrice, maxPrice, page, size, sort);
-        return MockData.map(
-                "items", partRows(search),
-                "page", search.page(),
-                "size", search.size(),
-                "total", countParts(search)
-        );
+        return parts(null, category, query, manufacturer, status, minPrice, maxPrice, page, size, sort, null);
     }
 
     public Map<String, Object> part(String id) {
@@ -85,10 +111,21 @@ public class PartQueryService {
                           ORDER BY snapshot.collected_at DESC, snapshot.id DESC
                           LIMIT 1
                         ) ps ON true
-                        LEFT JOIN part_external_offers peo
-                          ON peo.part_id = p.id
-                         AND peo.source = 'NAVER_SHOPPING_SEARCH'
-                         AND peo.deleted_at IS NULL
+                        LEFT JOIN LATERAL (
+                          SELECT offer.*
+                          FROM part_external_offers offer
+                          WHERE offer.part_id = p.id
+                            AND offer.deleted_at IS NULL
+                          ORDER BY
+                            CASE offer.source
+                              WHEN 'NAVER_SHOPPING_SEARCH' THEN 1
+                              WHEN 'ADMIN_MANUAL' THEN 2
+                              ELSE 9
+                            END,
+                            offer.refreshed_at DESC,
+                            offer.id DESC
+                          LIMIT 1
+                        ) peo ON true
                         WHERE p.public_id = ?::uuid
                           AND p.deleted_at IS NULL
                         """, id)
@@ -166,7 +203,111 @@ public class PartQueryService {
         params.add(search.size());
         params.add(search.offset());
         return jdbcTemplate.queryForList("""
-                        SELECT p.public_id::text AS id,
+                        SELECT p.id AS internal_id,
+                               p.public_id::text AS id,
+                               p.category,
+                               p.name,
+                               p.manufacturer,
+                               p.price,
+                               p.status,
+                               p.attributes,
+                               bs.summary AS benchmark_summary,
+                               bs.score AS benchmark_score,
+                               CASE
+                                 WHEN peo.low_price IS NOT NULL AND peo.low_price = p.price THEN peo.source
+                                 ELSE ps.source
+                               END AS latest_price_source,
+                               CASE
+                                 WHEN peo.low_price IS NOT NULL AND peo.low_price = p.price THEN peo.refreshed_at
+                                 ELSE ps.collected_at
+                               END AS latest_price_collected_at,
+                               peo.title AS external_offer_title,
+                               peo.image_url AS external_offer_image_url,
+                               peo.supplier_name AS external_offer_supplier_name,
+                               peo.offer_url AS external_offer_url,
+                               peo.low_price AS external_offer_low_price,
+                               peo.source AS external_offer_source,
+                               peo.refreshed_at AS external_offer_refreshed_at
+                        FROM parts p
+                        LEFT JOIN LATERAL (
+                          SELECT b.summary, b.score
+                          FROM benchmark_summaries b
+                          WHERE b.part_id = p.id
+                            AND b.deleted_at IS NULL
+                          ORDER BY b.created_at DESC, b.id DESC
+                          LIMIT 1
+                        ) bs ON true
+                        LEFT JOIN LATERAL (
+                          SELECT snapshot.source, snapshot.collected_at
+                          FROM price_snapshots snapshot
+                          WHERE snapshot.part_id = p.id
+                            AND snapshot.collected_at <= now()
+                          ORDER BY snapshot.collected_at DESC, snapshot.id DESC
+                          LIMIT 1
+                        ) ps ON true
+                        LEFT JOIN LATERAL (
+                          SELECT offer.*
+                          FROM part_external_offers offer
+                          WHERE offer.part_id = p.id
+                            AND offer.deleted_at IS NULL
+                          ORDER BY
+                            CASE offer.source
+                              WHEN 'NAVER_SHOPPING_SEARCH' THEN 1
+                              WHEN 'ADMIN_MANUAL' THEN 2
+                              ELSE 9
+                            END,
+                            offer.refreshed_at DESC,
+                            offer.id DESC
+                          LIMIT 1
+                        ) peo ON true
+                        """ + where.sql() + " ORDER BY " + orderBy(search.sort()) + " LIMIT ? OFFSET ?",
+                        params.toArray())
+                .stream()
+                .map(this::partMap)
+                .toList();
+    }
+
+    private Map<String, Object> partsWithCompatibility(CurrentUserService.CurrentUser user, PartSearch search, String compatibilitySource) {
+        if (user == null) {
+            throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "로그인이 필요합니다.");
+        }
+        if ("compatibility".equals(search.sort())) {
+            List<Map<String, Object>> rows = compatibilityService.partRowsWithCompatibility(
+                    user,
+                    compatibilitySource,
+                    search.category(),
+                    allPartRowsForCompatibility(search)
+            ).stream()
+                    .sorted(Comparator
+                            .comparingInt(PartQueryService::compatibilityRank)
+                            .thenComparingInt(row -> DbValueMapper.integer(row, "price") == null ? 0 : DbValueMapper.integer(row, "price")))
+                    .toList();
+            return MockData.map(
+                    "items", paginate(rows, search).stream().map(this::stripInternalFields).toList(),
+                    "page", search.page(),
+                    "size", search.size(),
+                    "total", rows.size()
+            );
+        }
+        List<Map<String, Object>> rows = compatibilityService.partRowsWithCompatibility(
+                user,
+                compatibilitySource,
+                search.category(),
+                partRows(search)
+        );
+        return MockData.map(
+                "items", rows.stream().map(this::stripInternalFields).toList(),
+                "page", search.page(),
+                "size", search.size(),
+                "total", countParts(search)
+        );
+    }
+
+    private List<Map<String, Object>> allPartRowsForCompatibility(PartSearch search) {
+        SqlWhere where = whereClause(search);
+        return jdbcTemplate.queryForList("""
+                        SELECT p.id AS internal_id,
+                               p.public_id::text AS id,
                                p.category,
                                p.name,
                                p.manufacturer,
@@ -211,11 +352,20 @@ public class PartQueryService {
                           ON peo.part_id = p.id
                          AND peo.source = 'NAVER_SHOPPING_SEARCH'
                          AND peo.deleted_at IS NULL
-                        """ + where.sql() + " ORDER BY " + orderBy(search.sort()) + " LIMIT ? OFFSET ?",
-                        params.toArray())
-                .stream()
-                .map(this::partMap)
-                .toList();
+                        """ + where.sql() + " ORDER BY p.price ASC, p.id ASC",
+                        where.params().toArray());
+    }
+
+    private List<Map<String, Object>> paginate(List<Map<String, Object>> rows, PartSearch search) {
+        int fromIndex = Math.min(search.offset(), rows.size());
+        int toIndex = Math.min(fromIndex + search.size(), rows.size());
+        return rows.subList(fromIndex, toIndex);
+    }
+
+    private Map<String, Object> stripInternalFields(Map<String, Object> row) {
+        Map<String, Object> copy = new java.util.LinkedHashMap<>(row);
+        copy.remove("internal_id");
+        return copy;
     }
 
     private Integer countParts(PartSearch search) {
@@ -499,7 +649,41 @@ public class PartQueryService {
         if (Set.of("category", "price_asc", "price_desc", "name").contains(normalized)) {
             return normalized;
         }
+        if ("compatibility".equals(normalized)) {
+            return normalized;
+        }
         throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "지원하지 않는 sort입니다.");
+    }
+
+    private static String normalizeCompatibilitySource(String value) {
+        String normalized = blankToNull(value);
+        if (normalized == null) {
+            return null;
+        }
+        String upper = normalized.toUpperCase();
+        if ("QUOTE_DRAFT_CURRENT".equals(upper)) {
+            return upper;
+        }
+        throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "지원하지 않는 compatibilitySource입니다.");
+    }
+
+    @SuppressWarnings("unchecked")
+    private static int compatibilityRank(Map<String, Object> row) {
+        Object value = row.get("compatibility");
+        if (!(value instanceof Map<?, ?> map)) {
+            return 3;
+        }
+        Object status = map.get("status");
+        if ("PASS".equals(status)) {
+            return 0;
+        }
+        if ("WARN".equals(status)) {
+            return 1;
+        }
+        if ("FAIL".equals(status)) {
+            return 2;
+        }
+        return 3;
     }
 
     private static Integer positiveOrNull(Integer value, String message) {

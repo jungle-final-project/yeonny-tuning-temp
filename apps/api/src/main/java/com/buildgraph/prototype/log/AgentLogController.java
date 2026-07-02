@@ -32,8 +32,8 @@ public class AgentLogController {
             @RequestParam(required = false) Boolean consentAccepted,
             @RequestHeader(value = "Authorization", required = false) String authorization
     ) {
-        currentUserService.requireUser(authorization);
-        return agentLogQueryService.upload(file, rangeMinutes, consentAccepted);
+        CurrentUserService.CurrentUser user = currentUserService.requireUser(authorization);
+        return agentLogQueryService.upload(file, rangeMinutes, consentAccepted, user);
     }
 
     @GetMapping("/agent-logs/{id}")
@@ -41,7 +41,7 @@ public class AgentLogController {
             @PathVariable String id,
             @RequestHeader(value = "Authorization", required = false) String authorization
     ) {
-        currentUserService.requireUser(authorization);
-        return agentLogQueryService.detail(id);
+        CurrentUserService.CurrentUser user = currentUserService.requireUser(authorization);
+        return agentLogQueryService.detail(id, user);
     }
 }

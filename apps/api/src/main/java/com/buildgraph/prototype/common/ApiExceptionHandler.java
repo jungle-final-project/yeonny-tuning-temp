@@ -1,10 +1,13 @@
 package com.buildgraph.prototype.common;
 
 import jakarta.validation.ConstraintViolationException;
+import java.util.List;
+import java.util.Map;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.HttpStatusCode;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
+import org.springframework.validation.FieldError;
 import org.springframework.validation.BindException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.MissingServletRequestParameterException;
@@ -21,7 +24,7 @@ public class ApiExceptionHandler {
     @ExceptionHandler(ApiException.class)
     ResponseEntity<ApiErrorResponse> handleApiException(ApiException exception) {
         return ResponseEntity.status(exception.status())
-                .body(new ApiErrorResponse(exception.code(), exception.getMessage()));
+                .body(new ApiErrorResponse(exception.code(), exception.getMessage(), exception.details()));
     }
 
     @ExceptionHandler(ResponseStatusException.class)
@@ -42,7 +45,62 @@ public class ApiExceptionHandler {
     })
     ResponseEntity<ApiErrorResponse> handleValidationException(Exception exception) {
         return ResponseEntity.badRequest()
-                .body(new ApiErrorResponse("VALIDATION_ERROR", VALIDATION_ERROR_MESSAGE));
+                .body(new ApiErrorResponse("VALIDATION_ERROR", VALIDATION_ERROR_MESSAGE, detailsFor(exception)));
+    }
+
+    private Map<String, Object> detailsFor(Exception exception) {
+        if (exception instanceof MethodArgumentNotValidException methodArgumentNotValidException) {
+            return fieldErrorDetails(methodArgumentNotValidException.getBindingResult().getFieldErrors());
+        }
+        if (exception instanceof BindException bindException) {
+            return fieldErrorDetails(bindException.getBindingResult().getFieldErrors());
+        }
+        if (exception instanceof ConstraintViolationException constraintViolationException) {
+            List<Map<String, Object>> errors = constraintViolationException.getConstraintViolations()
+                    .stream()
+                    .map(violation -> Map.<String, Object>of(
+                            "field", violation.getPropertyPath().toString(),
+                            "message", violation.getMessage()
+                    ))
+                    .toList();
+            return errors.isEmpty() ? Map.of("reason", "CONSTRAINT_VIOLATION") : Map.of("errors", errors);
+        }
+        if (exception instanceof MissingServletRequestParameterException missingParameterException) {
+            return Map.of(
+                    "parameter", missingParameterException.getParameterName(),
+                    "parameterType", missingParameterException.getParameterType(),
+                    "errors", List.of(Map.of(
+                            "field", missingParameterException.getParameterName(),
+                            "message", "required"
+                    ))
+            );
+        }
+        if (exception instanceof MethodArgumentTypeMismatchException typeMismatchException) {
+            return Map.of(
+                    "parameter", typeMismatchException.getName(),
+                    "requiredType", typeMismatchException.getRequiredType() == null
+                            ? "unknown"
+                            : typeMismatchException.getRequiredType().getSimpleName(),
+                    "errors", List.of(Map.of(
+                            "field", typeMismatchException.getName(),
+                            "message", "type mismatch"
+                    ))
+            );
+        }
+        if (exception instanceof HttpMessageNotReadableException) {
+            return Map.of("reason", "MALFORMED_JSON");
+        }
+        return Map.of("reason", exception.getClass().getSimpleName());
+    }
+
+    private Map<String, Object> fieldErrorDetails(List<FieldError> fieldErrors) {
+        List<Map<String, Object>> errors = fieldErrors.stream()
+                .map(error -> Map.<String, Object>of(
+                        "field", error.getField(),
+                        "message", error.getDefaultMessage() == null ? "invalid" : error.getDefaultMessage()
+                ))
+                .toList();
+        return errors.isEmpty() ? Map.of("reason", "VALIDATION_ERROR") : Map.of("errors", errors);
     }
 
     private String codeFor(HttpStatusCode statusCode) {

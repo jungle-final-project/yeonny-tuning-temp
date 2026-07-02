@@ -1,0 +1,85 @@
+name: AI Live Quality Benchmark
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ai-live-quality-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  ai-live-quality:
+    name: ai-live-quality
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+      OPENAI_MODEL: gpt-5.5
+      OPENAI_REASONING_EFFORT: medium
+      AS_CHAT_DEFAULT_PROFILE: AS_CHAT_FAST
+      AS_CHAT_FAST_MODEL: gpt-5.5
+      AS_CHAT_FAST_REASONING_EFFORT: low
+      AS_CHAT_NANO_FAST_MODEL: gpt-5.4-nano
+      AS_CHAT_NANO_FAST_REASONING_EFFORT: low
+      AS_CHAT_BALANCED_MODEL: gpt-5.5
+      AS_CHAT_BALANCED_REASONING_EFFORT: medium
+      AS_CHAT_HIGH_QUALITY_MODEL: gpt-5.5
+      AS_CHAT_HIGH_QUALITY_REASONING_EFFORT: high
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Run AS Chat profile benchmark
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ -z "${OPENAI_API_KEY}" ]; then
+            echo "OPENAI_API_KEY secret is not configured; skipping live AI benchmark."
+            exit 0
+          fi
+
+          mkdir -p "$RUNNER_TEMP/ai-live-quality"
+
+          cleanup() {
+            status=$?
+            docker compose -f compose.yaml ps > "$RUNNER_TEMP/ai-live-quality/compose-ps.txt" 2>&1 || true
+            docker compose -f compose.yaml logs --no-color > "$RUNNER_TEMP/ai-live-quality/compose.log" 2>&1 || true
+            docker compose -f compose.yaml down -v > "$RUNNER_TEMP/ai-live-quality/compose-down.log" 2>&1 || true
+            exit "$status"
+          }
+          trap cleanup EXIT
+
+          docker compose -f compose.yaml up -d --build postgres redis rabbitmq mailpit api
+
+          for attempt in {1..90}; do
+            if curl -fsS http://localhost:8080/api/health; then
+              break
+            fi
+            if [ "$attempt" -eq 90 ]; then
+              docker compose -f compose.yaml logs --no-color api
+              exit 1
+            fi
+            sleep 2
+          done
+
+          python tools/benchmark_as_chat_profiles.py
+
+      - name: Upload AS Chat benchmark report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: as-chat-profile-benchmark
+          path: |
+            docs/reports/as-chat-profile-benchmark-*.md
+            ${{ runner.temp }}/ai-live-quality
+          if-no-files-found: ignore
+          retention-days: 7

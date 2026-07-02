@@ -29,8 +29,8 @@ public class TicketController {
             @RequestBody(required = false) Map<String, Object> request,
             @RequestHeader(value = "Authorization", required = false) String authorization
     ) {
-        currentUserService.requireUser(authorization);
-        return ticketQueryService.create(request);
+        CurrentUserService.CurrentUser user = currentUserService.requireUser(authorization);
+        return ticketQueryService.create(request, user);
     }
 
     @GetMapping("/as-tickets/{id}")
@@ -38,7 +38,7 @@ public class TicketController {
             @PathVariable String id,
             @RequestHeader(value = "Authorization", required = false) String authorization
     ) {
-        currentUserService.requireUser(authorization);
-        return ticketQueryService.ticket(id);
+        CurrentUserService.CurrentUser user = currentUserService.requireUser(authorization);
+        return ticketQueryService.ticket(id, user);
     }
 }

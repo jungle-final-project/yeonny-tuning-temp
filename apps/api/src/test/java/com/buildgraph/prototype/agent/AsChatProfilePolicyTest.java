@@ -48,40 +48,6 @@ class AsChatProfilePolicyTest {
     }
 
     private static AiProfileConfig config(String defaultProfile) {
-        return new AiProfileConfig(
-                defaultProfile,
-                "gpt-5.5",
-                "low",
-                2,
-                900,
-                3,
-                false,
-                false,
-                true,
-                "gpt-5.4-nano",
-                "low",
-                2,
-                700,
-                2,
-                false,
-                false,
-                true,
-                "gpt-5.5",
-                "low",
-                3,
-                1100,
-                4,
-                false,
-                false,
-                true,
-                "gpt-5.5",
-                "medium",
-                5,
-                2600,
-                5,
-                true,
-                false,
-                true
-        );
+        return AiProfileConfigTest.config(defaultProfile, "BUILD_CHAT_FAST");
     }
 }

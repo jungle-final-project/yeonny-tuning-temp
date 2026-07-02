@@ -83,6 +83,12 @@ public class AdminController {
         return agentQueryService.toolInvocation(id);
     }
 
+    @GetMapping("/rag-evidence")
+    Map<String, Object> ragEvidenceList(@RequestHeader(value = "Authorization", required = false) String authorization) {
+        currentUserService.requireAdmin(authorization);
+        return ragQueryService.adminEvidenceList();
+    }
+
     @GetMapping("/rag-evidence/{id}")
     Map<String, Object> ragEvidence(@PathVariable String id, @RequestHeader(value = "Authorization", required = false) String authorization) {
         currentUserService.requireAdmin(authorization);
@@ -108,7 +114,7 @@ public class AdminController {
     @GetMapping("/as-tickets/{id}")
     Map<String, Object> ticket(@PathVariable String id, @RequestHeader(value = "Authorization", required = false) String authorization) {
         currentUserService.requireAdmin(authorization);
-        return ticketQueryService.ticket(id);
+        return ticketQueryService.adminTicket(id);
     }
 
     @PatchMapping("/as-tickets/{id}")
@@ -117,8 +123,8 @@ public class AdminController {
             @RequestBody(required = false) Map<String, Object> request,
             @RequestHeader(value = "Authorization", required = false) String authorization
     ) {
-        currentUserService.requireAdmin(authorization);
-        return ticketQueryService.update(id, request);
+        CurrentUserService.CurrentUser admin = currentUserService.requireAdmin(authorization);
+        return ticketQueryService.update(id, request, admin);
     }
 
     @GetMapping("/price-jobs")
@@ -130,8 +136,8 @@ public class AdminController {
     @PostMapping("/price-jobs/run")
     @ResponseStatus(HttpStatus.CREATED)
     Map<String, Object> runPriceJob(@RequestHeader(value = "Authorization", required = false) String authorization) {
-        currentUserService.requireAdmin(authorization);
-        return priceQueryService.runPriceJob();
+        CurrentUserService.CurrentUser admin = currentUserService.requireAdmin(authorization);
+        return priceQueryService.runPriceJob(admin);
     }
 
 }

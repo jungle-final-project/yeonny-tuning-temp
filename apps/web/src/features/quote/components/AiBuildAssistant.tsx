@@ -2,12 +2,14 @@ import { type FormEvent, useEffect, useRef, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
 import { Bot, CheckCircle2, Cpu, PackageCheck, Send, ShoppingCart, Sparkles, X, Zap } from 'lucide-react';
-import { getToken } from '../../../lib/api';
+import { AUTH_CHANGED_EVENT, ApiError, clearToken, getToken } from '../../../lib/api';
 import { applyAiBuildToQuoteDraft, deleteQuoteDraftItem, getCurrentQuoteDraft, patchQuoteDraftItem, putQuoteDraftItem } from '../../parts/partsApi';
 import {
   AI_ASSISTANT_SESSION_CHANGED_EVENT,
   PART_CATEGORY_LABELS,
+  clearLegacyAiStorage,
   createAiMessageId,
+  getAiStorageOwnerKey,
   normalizeAiBuilds,
   normalizeAiRecommendedBuild,
   readAssistantSession,
@@ -18,13 +20,17 @@ import {
   type AiChatMessage,
   type AiDraftAction,
   type AiDraftActionStatus,
-  type AiRecommendedBuild
+  type AiRecommendedBuild,
+  type BuildGraphFocus
 } from '../aiSelection';
 import { buildChat } from '../quoteApi';
 
 type AiBuildAssistantProps = {
   surface?: 'home' | 'self-quote';
 };
+
+const LOGIN_REQUIRED_MESSAGE = '로그인이 필요합니다. 다시 로그인해 주세요.';
+const GENERIC_SUBMIT_ERROR_MESSAGE = 'AI 추천 API 호출에 실패했습니다. 잠시 후 다시 시도해 주세요.';
 
 export function AiBuildAssistant({ surface = 'home' }: AiBuildAssistantProps) {
   const navigate = useNavigate();
@@ -47,11 +53,17 @@ export function AiBuildAssistant({ surface = 'home' }: AiBuildAssistantProps) {
   });
 
   useEffect(() => {
-    const syncSession = () => setSession(readAssistantSession());
+    const syncSession = () => {
+      clearLegacyAiStorage();
+      setSession(readAssistantSession());
+    };
+    syncSession();
     window.addEventListener(AI_ASSISTANT_SESSION_CHANGED_EVENT, syncSession);
+    window.addEventListener(AUTH_CHANGED_EVENT, syncSession);
     window.addEventListener('storage', syncSession);
     return () => {
       window.removeEventListener(AI_ASSISTANT_SESSION_CHANGED_EVENT, syncSession);
+      window.removeEventListener(AUTH_CHANGED_EVENT, syncSession);
       window.removeEventListener('storage', syncSession);
     };
   }, []);
@@ -66,7 +78,14 @@ export function AiBuildAssistant({ surface = 'home' }: AiBuildAssistantProps) {
     const nextPrompt = prompt.trim();
     if (!nextPrompt || isSending) return;
 
+    const ownerKey = getAiStorageOwnerKey();
+    if (!getToken() || !ownerKey) {
+      setSubmitError(LOGIN_REQUIRED_MESSAGE);
+      return;
+    }
+
     const now = new Date().toISOString();
+    const baseSession = readAssistantSession(ownerKey);
     const userMessage: AiChatMessage = {
       id: createAiMessageId('user'),
       role: 'user',
@@ -75,12 +94,12 @@ export function AiBuildAssistant({ surface = 'home' }: AiBuildAssistantProps) {
       kind: 'general'
     };
     const optimisticSession = {
-      ...session,
-      messages: [...session.messages, userMessage],
+      ...baseSession,
+      messages: [...baseSession.messages, userMessage],
       updatedAt: now
     };
     setSession(optimisticSession);
-    saveAssistantSession(optimisticSession);
+    saveAssistantSession(optimisticSession, ownerKey);
     setPrompt('');
     setSubmitError(null);
     setIsSending(true);
@@ -88,21 +107,22 @@ export function AiBuildAssistant({ surface = 'home' }: AiBuildAssistantProps) {
     try {
       const response = await buildChat({
         message: nextPrompt,
-        currentBuilds: session.latestBuilds,
-        appliedPartPreferences: session.appliedPartPreferences,
+        currentBuilds: baseSession.latestBuilds,
+        appliedPartPreferences: baseSession.appliedPartPreferences,
         currentQuoteDraft: surface === 'self-quote' ? quoteDraftQuery.data : undefined
       });
       const responseTime = new Date().toISOString();
       const responseBuilds = response.builds?.length ? normalizeAiBuilds(response.builds) : undefined;
-      const latestBuilds = responseBuilds ?? session.latestBuilds;
+      const latestBuilds = responseBuilds ?? baseSession.latestBuilds;
+      const latestGraphFocus = graphFocusFromResponse(response, nextPrompt);
       const appliedPartPreferences = response.partRecommendation
-        ? replaceAppliedPartPreference(session.appliedPartPreferences, {
+        ? replaceAppliedPartPreference(baseSession.appliedPartPreferences, {
             category: response.partRecommendation.category,
             label: response.partRecommendation.label,
             appliedAt: responseTime,
             options: response.partRecommendation.options
           })
-        : session.appliedPartPreferences;
+        : baseSession.appliedPartPreferences;
       const assistantMessage: AiChatMessage = {
         id: createAiMessageId(response.answerType.toLowerCase()),
         role: 'assistant',
@@ -118,12 +138,21 @@ export function AiBuildAssistant({ surface = 'home' }: AiBuildAssistantProps) {
         messages: [...optimisticSession.messages, assistantMessage],
         latestBuilds,
         appliedPartPreferences,
+        latestGraphFocus,
+        latestActiveBuildId: latestBuilds[1]?.id ?? latestBuilds[0]?.id,
         updatedAt: responseTime
       };
       setSession(nextSession);
-      saveAssistantSession(nextSession);
-    } catch {
-      setSubmitError('AI 추천 API 호출에 실패했습니다. 잠시 후 다시 시도해 주세요.');
+      saveAssistantSession(nextSession, ownerKey);
+    } catch (error) {
+      if (error instanceof ApiError && error.status === 401) {
+        saveAssistantSession(baseSession, ownerKey);
+        clearToken();
+        setSession(readAssistantSession(null));
+        setSubmitError(LOGIN_REQUIRED_MESSAGE);
+        return;
+      }
+      setSubmitError(GENERIC_SUBMIT_ERROR_MESSAGE);
     } finally {
       setIsSending(false);
     }
@@ -137,7 +166,7 @@ export function AiBuildAssistant({ surface = 'home' }: AiBuildAssistantProps) {
     setFailedBuild(null);
     setApplyingBuildId(normalizedBuild.id);
     try {
-      await applyAiBuildToQuoteDraft({
+      const appliedDraft = await applyAiBuildToQuoteDraft({
         buildId: normalizedBuild.id,
         conflictPolicy: 'REPLACE',
         items: normalizedBuild.items.map((item) => ({
@@ -146,6 +175,8 @@ export function AiBuildAssistant({ surface = 'home' }: AiBuildAssistantProps) {
           quantity: item.quantity
         }))
       });
+      queryClient.setQueryData(['quote-draft', 'current'], appliedDraft);
+      void queryClient.invalidateQueries({ queryKey: ['quote-draft', 'current'] });
       setOpen(false);
       navigate('/self-quote');
     } catch {
@@ -344,6 +375,58 @@ function replaceAppliedPartPreference(preferences: AiAppliedPartPreference[], ne
     ...preferences.filter((preference) => preference.category !== nextPreference.category),
     nextPreference
   ];
+}
+
+function graphFocusFromResponse(
+  response: {
+    answerType: 'BUDGET' | 'PART' | 'GENERAL';
+    partRecommendation?: { category?: BuildGraphFocus['category'] } | null;
+    actions?: AiDraftAction[];
+    warnings?: string[];
+  },
+  prompt: string
+): BuildGraphFocus {
+  if (response.actions?.length) {
+    const actionCategory = response.actions.find((action) => typeof action.payload.category === 'string')?.payload.category;
+    return {
+      mode: 'DRAFT_ACTION',
+      category: actionCategory,
+      tool: toolFromPrompt(prompt)
+    };
+  }
+  if (response.answerType === 'PART' && response.partRecommendation?.category) {
+    return {
+      mode: 'PART_IMPACT',
+      category: response.partRecommendation.category,
+      tool: toolFromCategory(response.partRecommendation.category)
+    };
+  }
+  if (response.answerType === 'BUDGET') {
+    return {
+      mode: 'BUILD_OVERVIEW',
+      tool: toolFromPrompt(prompt)
+    };
+  }
+  return {
+    mode: response.warnings?.length || /왜|안돼|안 돼|호환|전력|파워|크기|장착/.test(prompt) ? 'ISSUE_PATH' : 'BUILD_OVERVIEW',
+    tool: toolFromPrompt(prompt)
+  };
+}
+
+function toolFromCategory(category?: BuildGraphFocus['category']): BuildGraphFocus['tool'] {
+  if (category === 'GPU' || category === 'PSU') return 'power';
+  if (category === 'CASE' || category === 'COOLER') return 'size';
+  if (category === 'CPU' || category === 'MOTHERBOARD' || category === 'RAM') return 'compatibility';
+  return undefined;
+}
+
+function toolFromPrompt(prompt: string): BuildGraphFocus['tool'] {
+  if (/파워|전력|w\b|W\b|psu/i.test(prompt)) return 'power';
+  if (/케이스|크기|장착|길이|쿨러|높이/.test(prompt)) return 'size';
+  if (/호환|소켓|메인보드|보드|ram|DDR/i.test(prompt)) return 'compatibility';
+  if (/성능|게임|QHD|FPS|개발|AI|CUDA/i.test(prompt)) return 'performance';
+  if (/가격|예산|만원|원/.test(prompt)) return 'price';
+  return undefined;
 }
 
 function ChatMessage({

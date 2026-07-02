@@ -78,7 +78,7 @@ export function AppHeader() {
       <div className="border-b border-neutral-900 bg-neutral-950 text-xs text-white">
         <div className="mx-auto flex min-h-[32px] w-full max-w-[1320px] flex-col gap-1 px-4 py-2 sm:flex-row sm:items-center sm:justify-between sm:px-6 lg:px-8 xl:px-0">
           <span className="font-semibold">오늘의 PC 견적 특가 · 내부 자산 기준 가격/호환성 검증</span>
-          <span className="text-white/75">{user ? `로그인됨 · ${user.email} · ${user.role}` : checkingUser ? '로그인 상태 확인 중' : '로그인 필요 · 회원가입 · 관리자 · PC Agent'}</span>
+          <span className="text-white/75">{user ? `로그인됨 · ${user.email} · ${user.role}` : checkingUser ? '로그인 상태 확인 중' : '로그인 필요 · 회원가입 · PC Agent'}</span>
         </div>
       </div>
       <header className="border-b border-commerce-line bg-white">

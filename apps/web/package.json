@@ -7,10 +7,12 @@
     "dev": "vite --host 0.0.0.0",
     "build": "tsc -b && vite build",
     "preview": "vite preview --host 0.0.0.0",
-    "test": "playwright test"
+    "test": "playwright test",
+    "test:e2e:mvp": "playwright test -c playwright.mvp.config.ts"
   },
   "dependencies": {
     "@tanstack/react-query": "^5.66.0",
+    "@xyflow/react": "^12.11.1",
     "lucide-react": "^0.468.0",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",

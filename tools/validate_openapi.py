@@ -31,15 +31,17 @@ REQUIRED_PATHS = [
     "/api/builds/{id}",
     "/api/builds/history",
     "/api/builds/{id}/change-part",
+    "/api/ai/build-chat",
     "/api/parts",
     "/api/parts/{id}",
+    "/api/quote-drafts/current/apply-ai-build",
     *TOOL_PATHS,
     "/api/price-alerts",
     "/api/admin/price-jobs",
     "/api/admin/price-jobs/run",
-    "/api/agent/sessions",
-    "/api/agent/sessions/{id}/run",
-    "/api/agent/sessions/{id}",
+    "/api/ai/agent-sessions",
+    "/api/ai/agent-sessions/{id}/run",
+    "/api/ai/agent-sessions/{id}",
     "/api/rag/search",
     "/api/rag/evidence/{id}",
     "/api/agent-logs/upload",
@@ -52,6 +54,7 @@ REQUIRED_PATHS = [
     "/api/admin/agent-sessions/{id}",
     "/api/admin/tool-invocations",
     "/api/admin/tool-invocations/{id}",
+    "/api/admin/rag-evidence",
     "/api/admin/rag-evidence/{id}",
     "/api/admin/as-tickets",
     "/api/admin/as-tickets/{id}",
@@ -66,22 +69,31 @@ POST_JSON_REQUEST_SCHEMAS = {
     "/api/requirements/parse": "RequirementParseRequest",
     "/api/builds/recommend": "BuildRecommendRequest",
     "/api/builds/{id}/change-part": "ChangePartRequest",
+    "/api/ai/build-chat": "AiBuildChatRequest",
     "/api/price-alerts": "PriceAlertCreateRequest",
-    "/api/admin/price-jobs/run": "PriceJobRunRequest",
-    "/api/agent/sessions": "AgentSessionCreateRequest",
+    "/api/ai/agent-sessions": "AgentSessionCreateRequest",
     "/api/as-tickets": "AsTicketCreateRequest",
+}
+
+PUT_JSON_REQUEST_SCHEMAS = {
+    "/api/quote-drafts/current/apply-ai-build": "AiBuildApplyRequest",
 }
 
 REQUIRED_SCHEMAS = [
     "ErrorResponse",
     "AuthResponse",
     "ChangePartRequest",
+    "AiBuildChatRequest",
+    "AiBuildChatResponse",
+    "AiBuildApplyRequest",
+    "QuoteDraftDto",
     "ToolCheckRequest",
     "ToolCheckResponse",
     "AgentLogUploadRequest",
     "AgentSessionDto",
     "ToolInvocationDto",
     "RagEvidenceDto",
+    "AdminRagEvidenceDto",
 ]
 
 REQUIRED_ERROR_CODES = {
@@ -113,6 +125,18 @@ def request_schema_ref(operation: dict, content_type: str = "application/json") 
     return ref_name(schema)
 
 
+def validate_json_request_schemas(
+    paths: dict, method: str, request_schemas: dict[str, str]
+) -> None:
+    for path, schema_name in request_schemas.items():
+        operation = paths.get(path, {}).get(method)
+        if not operation:
+            raise SystemExit(f"Missing {method.upper()} operation for {path}")
+
+        if request_schema_ref(operation) != schema_name:
+            raise SystemExit(f"{path} must reference {schema_name}")
+
+
 def main() -> None:
     with OPENAPI_PATH.open(encoding="utf-8") as file:
         spec = yaml.safe_load(file)
@@ -136,13 +160,8 @@ def main() -> None:
     if missing_schemas:
         raise SystemExit(f"Missing OpenAPI schemas: {', '.join(missing_schemas)}")
 
-    for path, schema_name in POST_JSON_REQUEST_SCHEMAS.items():
-        post = paths.get(path, {}).get("post")
-        if not post:
-            raise SystemExit(f"Missing POST operation for {path}")
-
-        if request_schema_ref(post) != schema_name:
-            raise SystemExit(f"{path} must reference {schema_name}")
+    validate_json_request_schemas(paths, "post", POST_JSON_REQUEST_SCHEMAS)
+    validate_json_request_schemas(paths, "put", PUT_JSON_REQUEST_SCHEMAS)
 
     for path in TOOL_PATHS:
         post = paths.get(path, {}).get("post")

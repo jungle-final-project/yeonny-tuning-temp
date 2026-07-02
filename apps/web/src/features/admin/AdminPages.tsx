@@ -6,5 +6,8 @@ export { AdminPriceJobsPage } from './pages/AdminPriceJobsPage';
 export { AdminTicketDetailPage } from './pages/AdminTicketDetailPage';
 export { AdminTicketsPage } from './pages/AdminTicketsPage';
 export { AgentSessionAdminPage } from './pages/AgentSessionAdminPage';
+export { AgentSessionsListAdminPage } from './pages/AgentSessionsListAdminPage';
 export { RagEvidenceAdminPage } from './pages/RagEvidenceAdminPage';
+export { RagEvidenceListAdminPage } from './pages/RagEvidenceListAdminPage';
 export { ToolInvocationAdminPage } from './pages/ToolInvocationAdminPage';
+export { ToolInvocationsListAdminPage } from './pages/ToolInvocationsListAdminPage';

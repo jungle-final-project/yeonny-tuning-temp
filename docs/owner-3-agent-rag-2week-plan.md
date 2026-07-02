@@ -19,7 +19,7 @@
 | 관리자 화면 | `/admin/agent-sessions/:id`, `/admin/tool-invocations/:id`, `/admin/rag-evidence/:id` |
 | 백엔드 패키지 | `apps/api/src/main/java/com/buildgraph/prototype/agent`, `apps/api/src/main/java/com/buildgraph/prototype/rag` |
 | DB 테이블 | `agent_sessions`, `tool_invocations`, `rag_evidence` |
-| API | `POST /api/agent/sessions`, `POST /api/agent/sessions/{id}/run`, `GET /api/agent/sessions/{id}`, `GET /api/rag/search`, `GET /api/rag/evidence/{id}`, admin Agent/RAG/Tool 상세 API |
+| API | `POST /api/ai/agent-sessions`, `POST /api/ai/agent-sessions/{id}/run`, `GET /api/ai/agent-sessions/{id}`, `GET /api/rag/search`, `GET /api/rag/evidence/{id}`, admin Agent/RAG/Tool 상세 API |
 | 협업 지점 | 1번 추천 API, 2번 Tool 계산 결과, 4번 AS 분석 트리거, 5번 AdminShell/Auth |
 
 3번의 핵심 책임은 추천이나 AS 결과 자체를 대신 만드는 것이 아니라, Agent 실행 과정에서 어떤 RAG 근거와 Tool 결과를 사용했는지 추적 가능하게 저장하고 관리자 화면에서 확인할 수 있게 만드는 것이다.
@@ -58,7 +58,7 @@
 |---:|---|---|---|---|
 | 1 | 공통 계약 문서 확인 | 완료 | `API_CONTRACT`, `DB_SCHEMA`, `ROUTE_OWNERSHIP` 기준 확인 | 계약 변경 시 문서 먼저 갱신 |
 | 2 | 담당 와이어프레임 범위 확정 | 완료 | 관리자 Agent/RAG/Tool 상세 화면 3개와 협업 화면 분리 | Notion 공유 후 팀 피드백 반영 |
-| 3 | Agent session 기본 흐름 | 완료 | `POST /api/agent/sessions`, root 구분, 목적 타입, `QUEUED -> RUNNING` | 인증/소유권 검증은 5번 공통 정책과 맞춘 뒤 보강 |
+| 3 | Agent session 기본 흐름 | 완료 | `POST /api/ai/agent-sessions`, root 구분, 목적 타입, `QUEUED -> RUNNING` | 인증/소유권 검증은 5번 공통 정책과 맞춘 뒤 보강 |
 | 4 | RAG 근거 기록 기반 | 완료 | `AgentTraceService.recordRagEvidence`, `AgentRagEvidenceDraft` | 실제 runner에서 호출해 세션별 evidence 생성 |
 | 5 | Tool 호출 기록 기반 | 완료 | `AgentTraceService.recordToolInvocation`, `AgentToolInvocationDraft` | 2번 Tool 결과 DTO와 payload shape 최종 합의 |
 | 6 | Agent 상태 전이 공통화 | 완료 | `AgentTraceService.advanceStatus`, 허용 전이/금지 전이 검증 | runner와 화면에서 상태 전이 결과 사용 |

@@ -14,7 +14,7 @@ public final class AgentSeed {
                 "id", "demo-session",
                 "status", "QUEUED",
                 "mode", "LIMITED_ORCHESTRATOR",
-                "nextAction", "POST /api/agent/sessions/demo-session/run"
+                "nextAction", "POST /api/ai/agent-sessions/demo-session/run"
         );
     }
 

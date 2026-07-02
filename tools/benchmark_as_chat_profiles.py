@@ -16,7 +16,9 @@ import urllib.request
 from pathlib import Path
 
 
-DEFAULT_OPENAI_PROFILES = ["AS_CHAT_FAST", "AS_CHAT_NANO_FAST", "AS_CHAT_BALANCED", "AS_CHAT_HIGH_QUALITY"]
+DEFAULT_OPENAI_PROFILES = [
+    "AS_CHAT_54_MINI_FAST",
+]
 
 
 def main() -> int:
@@ -29,6 +31,7 @@ def main() -> int:
     parser.add_argument("--admin-email", default="admin@example.com")
     parser.add_argument("--admin-password", default="passw0rd!")
     parser.add_argument("--profiles", nargs="+", default=None)
+    parser.add_argument("--variant-label", default="default", help="RAG/vector 실험 라벨. 예: vector-on, vector-off")
     parser.add_argument("--strict", action="store_true", help="모든 케이스가 통과하지 않으면 non-zero로 종료")
     args = parser.parse_args()
 
@@ -40,14 +43,14 @@ def main() -> int:
     results = []
     for profile in profiles:
         for case in cases:
-            results.append(run_case(args.base_url, user_token, admin_token, profile, case))
+            results.append(run_case(args.base_url, user_token, admin_token, profile, case, args.variant_label))
 
     output = write_report(Path(args.output_dir), results)
     print(output)
     return 0 if not args.strict or all(result["success"] for result in results) else 1
 
 
-def run_case(base_url: str, user_token: str, admin_token: str, profile: str, case: dict) -> dict:
+def run_case(base_url: str, user_token: str, admin_token: str, profile: str, case: dict, variant_label: str) -> dict:
     ticket = request_json(
         base_url,
         "POST",
@@ -59,9 +62,9 @@ def run_case(base_url: str, user_token: str, admin_token: str, profile: str, cas
     started = time.perf_counter()
     error = None
     response = None
-    time_to_first_event_ms = None
+    event_timings = {}
     try:
-        response, time_to_first_event_ms = request_sse_json(
+        response, event_timings = request_sse_json(
             base_url,
             user_token,
             {"asTicketId": ticket_id, "message": case["message"]},
@@ -87,6 +90,10 @@ def run_case(base_url: str, user_token: str, admin_token: str, profile: str, cas
             admin_detail = {}
 
     llm_generation = first((admin_detail.get("llmGenerations") or []), {})
+    request_metadata = llm_generation.get("requestMetadata") or {}
+    recorded_stage_timings = request_metadata.get("stageTimings") if isinstance(request_metadata, dict) else {}
+    if not isinstance(recorded_stage_timings, dict):
+        recorded_stage_timings = {}
     assistant_message = response.get("assistantMessage", "") if response else ""
     expected_keywords = case.get("expectedKeywords", [])
     keyword_hits = sum(1 for keyword in expected_keywords if keyword.lower() in assistant_message.lower())
@@ -114,14 +121,25 @@ def run_case(base_url: str, user_token: str, admin_token: str, profile: str, cas
         and grounded_rate >= 0.5
     )
     return {
+        "variant": variant_label,
         "profile": profile,
         "caseId": case["id"],
         "risk": case.get("risk", "-"),
         "success": success,
         "schemaValid": schema_valid,
-        "timeToFirstEventMs": time_to_first_event_ms,
+        "timeToFirstEventMs": event_timings.get("firstEventMs"),
+        "timeToStartedMs": event_timings.get("STARTED"),
+        "timeToRagReadyMs": event_timings.get("RAG_READY"),
+        "timeToToolsReadyMs": event_timings.get("TOOLS_READY"),
+        "timeToLlmRunningMs": event_timings.get("LLM_RUNNING"),
         "wallLatencyMs": wall_latency_ms,
         "recordedLatencyMs": llm_generation.get("latencyMs"),
+        "recordedFirstEventMs": recorded_stage_timings.get("firstEventMs"),
+        "recordedRagReadyMs": recorded_stage_timings.get("ragReadyMs"),
+        "recordedToolsReadyMs": recorded_stage_timings.get("toolsReadyMs"),
+        "recordedLlmRunningMs": recorded_stage_timings.get("llmRunningMs"),
+        "recordedLlmOnlyLatencyMs": recorded_stage_timings.get("llmOnlyLatencyMs"),
+        "recordedDoneMs": recorded_stage_timings.get("doneMs"),
         "inputTokens": llm_generation.get("inputTokens"),
         "outputTokens": llm_generation.get("outputTokens"),
         "totalTokens": llm_generation.get("totalTokens"),
@@ -146,7 +164,7 @@ def write_report(output_dir: Path, results: list[dict]) -> Path:
     output_path = output_dir / f"as-chat-profile-benchmark-{date}.md"
     grouped = {}
     for result in results:
-        grouped.setdefault(result["profile"], []).append(result)
+        grouped.setdefault((result["variant"], result["profile"]), []).append(result)
 
     lines = [
         "# AS Chat AI Profile Benchmark",
@@ -156,13 +174,16 @@ def write_report(output_dir: Path, results: list[dict]) -> Path:
         "",
         "## Summary",
         "",
-        "| profile | provider | successRate | avgFirstEventMs | avgFinalLatencyMs | p95FinalLatencyMs | avgInputTokens | avgOutputTokens | avgTokens | schemaValidRate | avgGroundedEvidenceRate | avgUnsupportedClaims |",
-        "|---|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|",
+        "| variant | profile | provider | successRate | avgFirstEventMs | avgRagReadyMs | avgToolsReadyMs | avgLlmOnlyMs | avgFinalLatencyMs | p95FinalLatencyMs | avgInputTokens | avgOutputTokens | avgTokens | schemaValidRate | avgGroundedEvidenceRate | avgUnsupportedClaims |",
+        "|---|---|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|",
     ]
-    for profile, rows in grouped.items():
+    for (variant, profile), rows in grouped.items():
         success_rate = ratio(row["success"] for row in rows)
         schema_rate = ratio(row["schemaValid"] for row in rows)
         first_events = [row["timeToFirstEventMs"] for row in rows if row["timeToFirstEventMs"] is not None]
+        rag_ready = [row["recordedRagReadyMs"] for row in rows if row["recordedRagReadyMs"] is not None]
+        tools_ready = [row["recordedToolsReadyMs"] for row in rows if row["recordedToolsReadyMs"] is not None]
+        llm_only = [row["recordedLlmOnlyLatencyMs"] for row in rows if row["recordedLlmOnlyLatencyMs"] is not None]
         latencies = [row["wallLatencyMs"] for row in rows]
         input_tokens = [row["inputTokens"] for row in rows if row["inputTokens"] is not None]
         output_tokens = [row["outputTokens"] for row in rows if row["outputTokens"] is not None]
@@ -170,7 +191,7 @@ def write_report(output_dir: Path, results: list[dict]) -> Path:
         grounded_rates = [row["groundedEvidenceRate"] for row in rows]
         unsupported_counts = [row["unsupportedClaimCount"] for row in rows]
         lines.append(
-            f"| {profile} | {rows[0].get('provider') or provider_from_profile(profile)} | {success_rate:.1%} | {mean(first_events):.0f} | {mean(latencies):.0f} | {percentile(latencies, 95):.0f} | "
+            f"| {variant} | {profile} | {rows[0].get('provider') or provider_from_profile(profile)} | {success_rate:.1%} | {mean(first_events):.0f} | {mean(rag_ready):.0f} | {mean(tools_ready):.0f} | {mean(llm_only):.0f} | {mean(latencies):.0f} | {percentile(latencies, 95):.0f} | "
             f"{mean(input_tokens):.0f} | {mean(output_tokens):.0f} | {mean(tokens):.0f} | {schema_rate:.1%} | {mean(grounded_rates):.1%} | {mean(unsupported_counts):.1f} |"
         )
 
@@ -183,14 +204,14 @@ def write_report(output_dir: Path, results: list[dict]) -> Path:
         "",
         "## Cases",
         "",
-        "| profile | provider | case | risk | ok | firstEventMs | finalLatencyMs | model | inTok | outTok | tokens | evidence | tools | actions | keywords | grounded | unsupported | failureType | error |",
-        "|---|---|---|---|---:|---:|---:|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---|---|",
+        "| variant | profile | provider | case | risk | ok | firstEventMs | ragReadyMs | toolsReadyMs | llmOnlyMs | finalLatencyMs | model | inTok | outTok | tokens | evidence | tools | actions | keywords | grounded | unsupported | failureType | error |",
+        "|---|---|---|---|---|---:|---:|---:|---:|---:|---:|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---|---|",
     ])
     for row in results:
         error = (row["error"] or "").replace("|", "/")
         lines.append(
-            f"| {row['profile']} | {row['provider']} | {row['caseId']} | {row['risk']} | {yes(row['success'])} | "
-            f"{value(row['timeToFirstEventMs'])} | {row['wallLatencyMs']} | {row['model']} | "
+            f"| {row['variant']} | {row['profile']} | {row['provider']} | {row['caseId']} | {row['risk']} | {yes(row['success'])} | "
+            f"{value(row['timeToFirstEventMs'])} | {value(row['recordedRagReadyMs'])} | {value(row['recordedToolsReadyMs'])} | {value(row['recordedLlmOnlyLatencyMs'])} | {row['wallLatencyMs']} | {row['model']} | "
             f"{value(row['inputTokens'])} | {value(row['outputTokens'])} | {value(row['totalTokens'])} | "
             f"{row['evidenceCount']} | {row['toolCount']} | {row['nextActionCount']} | "
             f"{row['keywordHits']}/{row['keywordTotal']} | {row['groundedEvidenceRate']:.0%} | "
@@ -208,6 +229,7 @@ def write_report(output_dir: Path, results: list[dict]) -> Path:
         "- 평균 응답 시간이 10초 이하인 profile을 우선한다.",
         "- p95 응답 시간이 20초를 넘으면 사용자 체감상 감점한다.",
         "- 품질 차이가 작으면 더 빠른 profile을 선택한다.",
+        "- RAG vector on/off 비교는 같은 profile과 case를 두 번 실행하고 `--variant-label vector-on|vector-off`로 구분한다.",
         "- benchmark 명령은 기본적으로 보고서 생성을 성공으로 본다. 전체 통과를 CI gate로 강제하려면 `--strict`를 사용한다.",
     ])
     output_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
@@ -347,7 +369,7 @@ def request_sse_json(
     body: dict,
     extra_headers: dict | None = None,
     timeout: int = 180,
-) -> tuple[dict, int | None]:
+) -> tuple[dict, dict]:
     started = time.perf_counter()
     data = json.dumps(body).encode("utf-8")
     headers = {
@@ -363,7 +385,7 @@ def request_sse_json(
         headers=headers,
         method="POST",
     )
-    first_event_ms = None
+    event_timings = {}
     event_name = "message"
     data_lines = []
     try:
@@ -377,11 +399,13 @@ def request_sse_json(
                     if not data_lines:
                         event_name = "message"
                         continue
-                    if first_event_ms is None:
-                        first_event_ms = round((time.perf_counter() - started) * 1000)
+                    event_elapsed_ms = round((time.perf_counter() - started) * 1000)
+                    if "firstEventMs" not in event_timings:
+                        event_timings["firstEventMs"] = event_elapsed_ms
+                    event_timings[event_name] = event_elapsed_ms
                     payload = json.loads("\n".join(data_lines))
                     if event_name == "DONE":
-                        return payload, first_event_ms
+                        return payload, event_timings
                     if event_name == "ERROR":
                         raise RuntimeError(f"POST /api/ai/as-chat/stream failed: {payload}")
                     event_name = "message"

@@ -1,6 +1,15 @@
 import { api } from '../../lib/api';
 import type { AiBuildItem } from '../quote/aiSelection';
-import type { PartPage, PartPriceHistory, PartPriceHistoryParams, PartSearchParams, PartRow, QuoteDraft, ToolRow } from './types';
+import type {
+  CompatiblePartCandidateRequest,
+  CompatiblePartCandidateResponse,
+  PartPage,
+  PartPriceHistory,
+  PartPriceHistoryParams,
+  PartSearchParams,
+  PartRow,
+  QuoteDraft
+} from './types';
 
 export function listParts(params: PartSearchParams = {}) {
   const search = new URLSearchParams();
@@ -15,6 +24,13 @@ export function listParts(params: PartSearchParams = {}) {
 
 export function getPart(partId: string) {
   return api<PartRow>(`/api/parts/${partId}`);
+}
+
+export function listCompatiblePartCandidates(payload: CompatiblePartCandidateRequest) {
+  return api<CompatiblePartCandidateResponse>('/api/parts/compatible-candidates', {
+    method: 'POST',
+    body: JSON.stringify(payload)
+  });
 }
 
 export function getPartPriceHistory(partId: string, params: PartPriceHistoryParams = {}) {
@@ -64,7 +80,7 @@ export function applyAiBuildToQuoteDraft(payload: {
 }
 
 export function runToolCheck(tool: 'compatibility' | 'power' | 'size' | 'performance' | 'price', payload: unknown) {
-  return api<ToolRow>(`/api/tools/${tool}/check`, {
+  return api(`/api/tools/${tool}/check`, {
     method: 'POST',
     body: JSON.stringify(payload)
   });

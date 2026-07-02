@@ -47,7 +47,11 @@ public class OpenAiResponsesClient {
     }
 
     public String createSummary(String systemPrompt, String userPrompt) {
-        return createResponse(systemPrompt, userPrompt, Map.of()).text();
+        return createSummaryResult(systemPrompt, userPrompt).text();
+    }
+
+    public LlmResponseResult createSummaryResult(String systemPrompt, String userPrompt) {
+        return createResponse(systemPrompt, userPrompt, Map.of());
     }
 
     public String createStructuredJson(

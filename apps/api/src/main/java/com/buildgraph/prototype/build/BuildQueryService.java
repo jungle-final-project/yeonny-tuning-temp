@@ -2,11 +2,10 @@ package com.buildgraph.prototype.build;
 
 import com.buildgraph.prototype.agent.AgentRunProfile;
 import com.buildgraph.prototype.agent.AgentRunProfiles;
-import com.buildgraph.prototype.agent.AgentRunner;
 import com.buildgraph.prototype.agent.AgentSessionRoot;
 import com.buildgraph.prototype.agent.AgentSessionRootType;
-import com.buildgraph.prototype.agent.AgentStatus;
 import com.buildgraph.prototype.agent.AgentTraceService;
+import com.buildgraph.prototype.agent.AgentJobPublisher;
 import com.buildgraph.prototype.agent.AiChatEngine;
 import com.buildgraph.prototype.agent.QuoteRequirementAnalysisRequest;
 import com.buildgraph.prototype.agent.QuoteRequirementAnalysisResult;
@@ -14,6 +13,7 @@ import com.buildgraph.prototype.common.DbValueMapper;
 import com.buildgraph.prototype.common.MockData;
 import com.buildgraph.prototype.part.ToolBuildPart;
 import com.buildgraph.prototype.part.ToolCheckService;
+import com.buildgraph.prototype.user.CurrentUserService;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -60,25 +60,25 @@ public class BuildQueryService {
 
     private final JdbcTemplate jdbcTemplate;
     private final AgentTraceService agentTraceService;
-    private final AgentRunner agentRunner;
+    private final AgentJobPublisher agentJobPublisher;
     private final AiChatEngine aiChatEngine;
     private final ToolCheckService toolCheckService;
 
     public BuildQueryService(
             JdbcTemplate jdbcTemplate,
             AgentTraceService agentTraceService,
-            AgentRunner agentRunner,
+            AgentJobPublisher agentJobPublisher,
             AiChatEngine aiChatEngine,
             ToolCheckService toolCheckService
     ) {
         this.jdbcTemplate = jdbcTemplate;
         this.agentTraceService = agentTraceService;
-        this.agentRunner = agentRunner;
+        this.agentJobPublisher = agentJobPublisher;
         this.aiChatEngine = aiChatEngine;
         this.toolCheckService = toolCheckService;
     }
 
-    public Map<String, Object> parse(Map<String, Object> request) {
+    public Map<String, Object> parse(Map<String, Object> request, CurrentUserService.CurrentUser user) {
         Map<String, Object> body = request == null ? Map.of() : request;
         String message = text(body.get("message"));
         if (message == null) {
@@ -94,17 +94,19 @@ public class BuildQueryService {
         String id = jdbcTemplate.queryForObject("""
                 INSERT INTO requirements (user_id, raw_message, budget, usage_tags, parsed_context)
                 VALUES (
-                  (SELECT id FROM users WHERE email = 'user@example.com'),
+                  ?,
                   ?,
                   ?,
                   string_to_array(?, ','),
                   ?::jsonb
                 )
                 RETURNING public_id::text
-                """, String.class, message, fallbackBudget, String.join(",", fallbackUsageTags), json(pendingContext));
+                """, String.class, user.internalId(), message, fallbackBudget, String.join(",", fallbackUsageTags), json(pendingContext));
 
+        Map<String, Object> analysisInputs = new LinkedHashMap<>(body);
+        analysisInputs.put("_userInternalId", user.internalId());
         QuoteRequirementAnalysisResult parseResult = aiChatEngine.analyzeQuoteRequirement(
-                new QuoteRequirementAnalysisRequest(id, message, body, fallbackContext)
+                new QuoteRequirementAnalysisRequest(id, message, analysisInputs, fallbackContext)
         );
         Map<String, Object> parsedContext = parseResult.parsedContext();
         Integer budget = numberValue(parsedContext.get("budget"));
@@ -130,12 +132,12 @@ public class BuildQueryService {
         );
     }
 
-    public Map<String, Object> recommendations(Map<String, Object> request) {
+    public Map<String, Object> recommendations(Map<String, Object> request, CurrentUserService.CurrentUser user) {
         String requirementId = text(request == null ? null : request.get("requirementId"));
         if (requirementId == null) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "requirementId가 필요합니다.");
         }
-        RequirementRow requirement = requirement(requirementId);
+        RequirementRow requirement = requirement(requirementId, user.internalId());
         Map<String, Object> answers = objectMap(request == null ? null : request.get("answers"));
         int budget = effectiveBudget(requirement, answers);
         Integer userBudget = userBudget(requirement);
@@ -149,9 +151,9 @@ public class BuildQueryService {
             createdBuildIds.add(insertBuild(requirement.internalId(), plan, parts, warnings));
         }
 
-        String agentSessionId = runAgent(new AgentSessionRoot(AgentSessionRootType.REQUIREMENT, requirement.publicId()));
+        String agentSessionId = runAgent(new AgentSessionRoot(AgentSessionRootType.REQUIREMENT, requirement.publicId()), user.internalId());
         List<Map<String, Object>> recommendations = createdBuildIds.stream()
-                .map(this::buildDetail)
+                .map(id -> buildDetail(id, user))
                 .map(build -> with(build, "agentSessionId", agentSessionId))
                 .toList();
         return MockData.map(
@@ -163,20 +165,22 @@ public class BuildQueryService {
         );
     }
 
-    public List<Map<String, Object>> builds() {
+    public List<Map<String, Object>> builds(CurrentUserService.CurrentUser user) {
         return jdbcTemplate.queryForList("""
-                        SELECT public_id::text AS id, name, total_price, confidence, warnings, created_at
-                        FROM builds
-                        ORDER BY created_at DESC, id DESC
+                        SELECT b.public_id::text AS id, b.name, b.total_price, b.confidence, b.warnings, b.created_at
+                        FROM builds b
+                        JOIN requirements r ON r.id = b.requirement_id
+                        WHERE r.user_id = ?
+                        ORDER BY b.created_at DESC, b.id DESC
                         LIMIT 30
-                        """)
+                        """, user.internalId())
                 .stream()
                 .map(this::buildSummary)
                 .toList();
     }
 
-    public Map<String, Object> buildDetail(String id) {
-        Map<String, Object> row = buildRow(id);
+    public Map<String, Object> buildDetail(String id, CurrentUserService.CurrentUser user) {
+        Map<String, Object> row = buildRow(id, user.internalId());
         Map<String, Object> summary = buildSummary(row);
         return MockData.map(
                 "id", summary.get("id"),
@@ -196,7 +200,7 @@ public class BuildQueryService {
         );
     }
 
-    public Map<String, Object> changePart(String id, Map<String, Object> request) {
+    public Map<String, Object> changePart(String id, Map<String, Object> request, CurrentUserService.CurrentUser user) {
         String category = normalizeCategory(text(request == null ? null : request.get("category")));
         String selectedPartId = text(request == null ? null : request.get("partId"));
         if (selectedPartId == null) {
@@ -206,14 +210,14 @@ public class BuildQueryService {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "변경할 부품을 찾을 수 없습니다.");
         }
 
-        Map<String, Object> beforeBuild = buildDetail(id);
+        Map<String, Object> beforeBuild = buildDetail(id, user);
         List<PartCandidate> beforeParts = buildPartCandidates(id);
         PartCandidate selectedPart = partByPublicId(selectedPartId);
         List<PartCandidate> afterParts = replaceCategory(beforeParts, category, selectedPart);
         int beforeTotal = total(beforeParts);
         int afterTotal = total(afterParts);
         List<Map<String, Object>> toolResults = evaluateTools(afterParts, afterTotal);
-        String agentSessionId = runAgent(new AgentSessionRoot(AgentSessionRootType.BUILD, id));
+        String agentSessionId = runAgent(new AgentSessionRoot(AgentSessionRootType.BUILD, id), user.internalId());
         Map<String, Object> agentSession = agentSessionId == null ? Map.of() : agentSession(agentSessionId);
 
         return MockData.map(
@@ -238,7 +242,7 @@ public class BuildQueryService {
         );
     }
 
-    private RequirementRow requirement(String publicId) {
+    private RequirementRow requirement(String publicId, Long userId) {
         return jdbcTemplate.queryForList("""
                         SELECT id AS internal_id,
                                public_id::text AS id,
@@ -248,7 +252,8 @@ public class BuildQueryService {
                                parsed_context
                         FROM requirements
                         WHERE public_id = ?::uuid
-                        """, publicId)
+                          AND user_id = ?
+                        """, publicId, userId)
                 .stream()
                 .findFirst()
                 .map(row -> new RequirementRow(
@@ -453,28 +458,34 @@ public class BuildQueryService {
         );
     }
 
-    private Map<String, Object> buildRow(String id) {
+    private Map<String, Object> buildRow(String id, Long userId) {
         return jdbcTemplate.queryForList("""
-                        SELECT public_id::text AS id, name, total_price, confidence, warnings, created_at
-                        FROM builds
-                        WHERE public_id = ?::uuid
-                        """, id)
+                        SELECT b.public_id::text AS id, b.name, b.total_price, b.confidence, b.warnings, b.created_at
+                        FROM builds b
+                        JOIN requirements r ON r.id = b.requirement_id
+                        WHERE b.public_id = ?::uuid
+                          AND r.user_id = ?
+                        """, id, userId)
                 .stream()
                 .findFirst()
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Build를 찾을 수 없습니다."));
     }
 
-    private String runAgent(AgentSessionRoot root) {
-        return runAgent(root, AgentRunProfiles.forRoot(root));
+    private String runAgent(AgentSessionRoot root, Long userId) {
+        return runAgent(root, AgentRunProfiles.forRoot(root), userId);
     }
 
-    private String runAgent(AgentSessionRoot root, AgentRunProfile profile) {
+    private String runAgent(AgentSessionRoot root, AgentRunProfile profile, Long userId) {
+        String sessionId = null;
         try {
-            String sessionId = agentTraceService.createQueuedSession(root, "SYSTEM", profile.purpose());
-            agentTraceService.advanceStatus(sessionId, AgentStatus.RUNNING, "SYSTEM", "agent run requested for " + profile.purpose());
-            agentRunner.run(sessionId, root, profile);
+            sessionId = agentTraceService.createQueuedSession(root, "SYSTEM", profile.purpose(), userId);
+            agentJobPublisher.publishRun(sessionId, root, profile);
             return sessionId;
         } catch (RuntimeException error) {
+            if (sessionId != null) {
+                agentTraceService.markFailed(sessionId, "SYSTEM", "agent job publish failed");
+                return sessionId;
+            }
             return null;
         }
     }

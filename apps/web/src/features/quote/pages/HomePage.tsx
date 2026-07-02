@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { useQueries } from '@tanstack/react-query';
+import { useQueries, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link, useNavigate } from 'react-router-dom';
 import {
   Activity,
@@ -18,19 +18,24 @@ import {
   type LucideIcon
 } from 'lucide-react';
 import { Screen } from '../../../components/ui';
+import { AUTH_CHANGED_EVENT } from '../../../lib/api';
 import { partImageUrl } from '../../parts/partDisplay';
 import { applyAiBuildToQuoteDraft, getPart, listParts } from '../../parts/partsApi';
 import type { PartRow } from '../../parts/types';
 import { AiBuildAssistant } from '../components/AiBuildAssistant';
+import { BuildDependencyGraph } from '../components/BuildDependencyGraph';
 import {
   AI_ASSISTANT_SESSION_CHANGED_EVENT,
+  clearLegacyAiStorage,
   normalizeAiRecommendedBuild,
   readAssistantSession,
   saveSelectedAiBuild,
   type AiAssistantSession,
   type AiRecommendedBuild,
+  type BuildGraphFocus,
   type PartCategory
 } from '../aiSelection';
+import { resolveBuildGraph } from '../quoteApi';
 
 type QuickCategory = {
   label: string;
@@ -163,6 +168,7 @@ const popularPartDeals: PopularPart[] = [
 
 export function HomePage() {
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
   const [assistantSession, setAssistantSession] = useState<AiAssistantSession>(() => readAssistantSession());
   const [recommendationTab, setRecommendationTab] = useState<RecommendationTab>(() => readAssistantSession().latestBuilds.length > 0 ? 'ai' : 'popular');
   const [applyingBuildId, setApplyingBuildId] = useState<string | null>(null);
@@ -201,19 +207,50 @@ export function HomePage() {
       };
     })
   });
+  const activeAiBuild = activeGraphBuild(assistantSession);
+  const activeGraphFocus = assistantSession.latestGraphFocus ?? defaultGraphFocus(activeAiBuild);
+  const graphQuery = useQuery({
+    queryKey: [
+      'build-graph',
+      'home-ai-build',
+      activeAiBuild?.id,
+      activeGraphFocus.mode,
+      activeGraphFocus.category,
+      activeGraphFocus.tool,
+      activeAiBuild?.items.map((item) => item.partId).join(',')
+    ],
+    queryFn: () => resolveBuildGraph({
+      source: 'AI_BUILD',
+      view: 'FOCUSED',
+      items: activeAiBuild?.items.map((item) => ({
+        partId: item.partId,
+        category: item.category,
+        quantity: item.quantity
+      })),
+      budgetWon: activeAiBuild?.budgetWon,
+      focus: activeGraphFocus
+    }),
+    enabled: Boolean(activeAiBuild)
+  });
 
   useEffect(() => {
     const syncAssistantSession = () => {
+      clearLegacyAiStorage();
       const nextSession = readAssistantSession();
       setAssistantSession(nextSession);
       if (nextSession.latestBuilds.length > 0) {
         setRecommendationTab('ai');
+      } else {
+        setRecommendationTab('popular');
       }
     };
+    syncAssistantSession();
     window.addEventListener(AI_ASSISTANT_SESSION_CHANGED_EVENT, syncAssistantSession);
+    window.addEventListener(AUTH_CHANGED_EVENT, syncAssistantSession);
     window.addEventListener('storage', syncAssistantSession);
     return () => {
       window.removeEventListener(AI_ASSISTANT_SESSION_CHANGED_EVENT, syncAssistantSession);
+      window.removeEventListener(AUTH_CHANGED_EVENT, syncAssistantSession);
       window.removeEventListener('storage', syncAssistantSession);
     };
   }, []);
@@ -225,7 +262,7 @@ export function HomePage() {
     setApplyError(null);
     setApplyingBuildId(normalizedBuild.id);
     try {
-      await applyAiBuildToQuoteDraft({
+      const appliedDraft = await applyAiBuildToQuoteDraft({
         buildId: normalizedBuild.id,
         conflictPolicy: 'REPLACE',
         items: normalizedBuild.items.map((item) => ({
@@ -234,6 +271,8 @@ export function HomePage() {
           quantity: item.quantity
         }))
       });
+      queryClient.setQueryData(['quote-draft', 'current'], appliedDraft);
+      void queryClient.invalidateQueries({ queryKey: ['quote-draft', 'current'] });
       navigate('/self-quote');
     } catch {
       setApplyError('AI 추천 조합을 셀프 견적 장바구니에 적용하지 못했습니다.');
@@ -252,7 +291,7 @@ export function HomePage() {
 
     setApplyingFeaturedBuildId(build.id);
     try {
-      await applyAiBuildToQuoteDraft({
+      const appliedDraft = await applyAiBuildToQuoteDraft({
         buildId: build.id,
         conflictPolicy: 'REPLACE',
         items: buildParts.map(({ search, part }) => ({
@@ -261,6 +300,8 @@ export function HomePage() {
           quantity: 1
         }))
       });
+      queryClient.setQueryData(['quote-draft', 'current'], appliedDraft);
+      void queryClient.invalidateQueries({ queryKey: ['quote-draft', 'current'] });
       navigate('/self-quote');
     } catch {
       setApplyError('추천상품 견적을 셀프견적 장바구니에 담지 못했습니다. 백엔드 실행 상태를 확인해 주세요.');
@@ -347,6 +388,25 @@ export function HomePage() {
                       />
                     ))}
                   </div>
+                  <div className="mt-4">
+                    <BuildDependencyGraph
+                      graph={graphQuery.data}
+                      isLoading={graphQuery.isLoading}
+                      isError={graphQuery.isError}
+                      totalPrice={activeAiBuild?.totalPrice}
+                      title="견적 관계도"
+                      subtitle="최신 AI 추천 조합에서 영향을 받는 부품과 제약을 먼저 보여줍니다."
+                      candidateContext={activeAiBuild ? {
+                        source: 'AI_BUILD',
+                        items: activeAiBuild.items.map((item) => ({
+                          partId: item.partId,
+                          category: item.category,
+                          quantity: item.quantity
+                        })),
+                        readOnly: true
+                      } : undefined}
+                    />
+                  </div>
                 </>
               ) : (
                 <div className="rounded-lg border border-dashed border-blue-200 bg-blue-50/60 p-6 text-center">
@@ -371,6 +431,21 @@ export function HomePage() {
       <AiBuildAssistant surface="home" />
     </Screen>
   );
+}
+
+function activeGraphBuild(session: AiAssistantSession) {
+  if (session.latestBuilds.length === 0) {
+    return null;
+  }
+  const storedActiveBuild = session.latestBuilds.find((build) => build.id === session.latestActiveBuildId);
+  return storedActiveBuild ?? session.latestBuilds.find((build) => build.tier === 'balanced') ?? session.latestBuilds[0];
+}
+
+function defaultGraphFocus(build: AiRecommendedBuild | null): BuildGraphFocus {
+  return {
+    mode: build ? 'BUILD_OVERVIEW' : 'ISSUE_PATH',
+    tool: 'price'
+  };
 }
 
 function AiRecommendationCard({

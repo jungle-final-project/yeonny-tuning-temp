@@ -248,7 +248,7 @@ Figma 기준으로 5번이 직접 맡아야 할 화면은 `153:1880 STATE-15 ADM
 3번은 Agent/RAG/AS Chat owner라서 AS Chat과 RAG 근거 흐름은 많이 들어왔지만, 일반 Agent session 계약과 queue 정책이 남아 있습니다.
 
 - AS Chat은 사용자 티켓 소유권 확인, SSE 진행 이벤트, RAG/Tool/LLM 구조화 응답까지 잘 들어와 있습니다.
-- 일반 `POST /api/agent/sessions`, `POST /api/agent/sessions/{id}/run`, `GET /api/agent/sessions/{id}`는 현재 로그인 사용자 소유권을 확인해야 합니다.
+- 일반 `POST /api/ai/agent-sessions`, `POST /api/ai/agent-sessions/{id}/run`, `GET /api/ai/agent-sessions/{id}`는 현재 로그인 사용자 소유권을 확인해야 합니다.
 - 본인 소유가 아닌 Agent session은 계약대로 `404_NOT_FOUND`를 반환해야 합니다.
 - AdminShell의 `Agent 세션`, `Tool 이력`, `RAG 근거` 메뉴가 현재 seed 상세 id로 바로 이동합니다. list route를 만들지, seed/sample link로 둘지 결정해 주세요.
 - Agent job을 실제 비동기 queue로 처리할 계획이면 상태 전이 `QUEUED -> RUNNING -> RAG_SEARCHED -> TOOLS_CALLED -> SUMMARY_READY -> SUCCEEDED`와 실패/취소 정책을 문서와 테스트에 맞춰 주세요.
@@ -735,7 +735,7 @@ AdminShell nav 분석 결과:
 - [x] 계약 문서 동기화 여부를 확인했다. `docs/API_CONTRACT.md`, `docs/ROUTE_OWNERSHIP.md`, `docs/openapi.yaml`에는 새 API와 route owner 변경이 반영되어 있다.
 - [x] 공동계약서 위반 가능성이 있는 항목을 구분했다.
   - [ ] 5번 단독 PR이라면 owner 범위 위반 가능성이 있다. 이 브랜치는 1번 owner 영역인 `build`, `features/quote`, 홈 화면과 2번 owner 영역인 `quote`, `features/parts`, 셀프 견적 화면을 직접 수정한다. 1번/2번 작업 또는 명시적 리뷰가 있으면 허용 가능하고, 5번 단독 작업이면 계약 위반이다.
-  - [ ] 새 API 2개가 `docs/openapi.yaml`에는 들어갔지만 `tools/validate_openapi.py`의 `REQUIRED_PATHS`와 request schema 검사 목록에는 포함되지 않았다. CI의 OpenAPI 검증이 새 API 누락을 잡지 못하므로 검증 계약 보강이 필요하다.
+  - [x] 새 API 2개가 `docs/openapi.yaml`에는 들어갔지만 `tools/validate_openapi.py`의 `REQUIRED_PATHS`와 request schema 검사 목록에는 포함되지 않았다. 2026-07-01 `POST /api/ai/build-chat`, `PUT /api/quote-drafts/current/apply-ai-build`를 CI 필수 path/request schema 검사에 추가했다.
   - [ ] `HomePage.tsx` 안에 `featuredBuilds`, `popularPartDeals` 같은 domain mock/static 데이터가 직접 들어 있다. 유지하려면 "홈 마케팅용 정적 데이터"로 합의해야 하고, mock 데이터라면 `features/quote/mocks`로 옮기는 것이 계약에 맞다.
 - [x] 위반으로 보지 않는 항목을 확인했다.
   - [x] 페이지 컴포넌트가 공통 `api()`를 직접 호출하지 않고 `quoteApi.ts`, `partsApi.ts` wrapper를 사용한다.
@@ -755,6 +755,239 @@ AdminShell nav 분석 결과:
 - [x] 현재 unstaged 변경은 `docs/hosoek/owner5-work-analysis-checklist.md` 1개뿐이며, 코드/API/OpenAPI 추가 변경은 없다.
 - [x] 이번 커밋 메시지는 구매 상담 기능 구현이 아니라 공동계약서 감사와 커밋 메시지 요청 전 점검 기록을 남기는 문서 커밋으로 분리한다.
 
+#### 2026-07-01 OpenAPI CI 필수 API 보강 기록
+
+- [x] `POST /api/ai/build-chat`를 `tools/validate_openapi.py`의 `REQUIRED_PATHS`와 `POST_JSON_REQUEST_SCHEMAS`에 추가했다.
+- [x] `PUT /api/quote-drafts/current/apply-ai-build`를 `tools/validate_openapi.py`의 `REQUIRED_PATHS`와 `PUT_JSON_REQUEST_SCHEMAS`에 추가했다.
+- [x] `AiBuildChatRequest`, `AiBuildChatResponse`, `AiBuildApplyRequest`, `QuoteDraftDto`를 필수 schema 목록에 추가했다.
+- [x] `POST` 전용 검사에 머물러 있던 request schema 검증을 `PUT`도 검사할 수 있게 보강했다.
+- [x] GitHub Actions의 OpenAPI 검증 단계에서 `python -m unittest tools.test_validate_openapi`도 실행하도록 추가했다.
+- [x] `/private/tmp/buildgraph-openapi-check/bin/python -m unittest tools.test_validate_openapi` 통과.
+- [x] `/private/tmp/buildgraph-openapi-check/bin/python tools/validate_openapi.py` 통과. 52 paths.
+
+#### 2026-07-01 AS 접수 업로드 샘플 생성 기록
+
+- [x] AS 접수 화면에서 업로드 테스트에 사용할 JSONL 샘플 [as-upload-sample.jsonl](/Users/juhoseok/Desktop/prototype/docs/hosoek/as-upload-sample.jsonl)을 추가했다.
+- [x] 샘플 내용은 게임 중 GPU 온도 상승, 드라이버 경고, 프레임 드랍 증상을 재현하는 12개 timestamp 관측치로 구성했다.
+- [x] `python3` JSONL 파싱 검증 통과. 12 rows.
+
+#### 2026-07-01 1번/4번 완료도 재감사 기록
+
+결론: **1번과 4번은 모두 부분완료다.** 현재 테스트와 OpenAPI 검증은 통과하지만, 계약서 기준의 소유권, OAuth, 파일 검증, 관리자 화면/API 상태 전이까지 완전히 닫히지는 않았다.
+
+- [x] 검증 실행 결과
+  - [x] `cd apps/web && npm run test` 통과. Playwright 70개 통과.
+  - [x] `cd apps/api && ./gradlew test --no-daemon` 통과. `BUILD SUCCESSFUL`.
+  - [x] `/private/tmp/buildgraph-openapi-check/bin/python tools/validate_openapi.py` 통과. 52 paths.
+- [x] 1번 완료된 부분 확인
+  - [x] `POST /api/users`, `POST /api/auth/login`, `POST /api/auth/refresh`, `POST /api/auth/logout`, `GET /api/auth/me` 구현과 테스트가 있다.
+  - [x] 로그인/회원가입 화면은 API payload, 오류 표시, token 저장, logout 흐름 테스트가 있다.
+  - [x] 요구사항 분석, 추천, build 상세, 부품 변경 API 골격은 있다.
+- [ ] 1번 미완료/확인 필요
+  - [ ] `GET /api/auth/google/start`, `GET /api/auth/google/callback`, `POST /api/auth/exchange`는 OpenAPI/계약에는 있으나 현재 `UserController`에 구현되어 있지 않다.
+  - [ ] `BuildQueryService.parse()`가 현재 로그인 사용자 id가 아니라 `user@example.com` 고정 user_id로 requirement를 저장한다.
+  - [ ] `GET /api/builds/history`, `GET /api/builds/{id}`, `POST /api/builds/{id}/change-part`는 현재 사용자 소유권 404를 보장하지 않는다.
+  - [ ] `/my/quotes`는 `quoteMock` 기반 정적 화면이고 `getBuildHistory()`를 호출하지 않는다.
+- [x] 4번 완료된 부분 확인
+  - [x] PC Agent CLI sample/export가 있다.
+  - [x] `/support/new`는 파일 선택, 동의, `POST /api/agent-logs/upload`, `POST /api/as-tickets`, 상세 이동 흐름을 갖고 있다.
+  - [x] `POST /api/agent-logs/upload`, `GET /api/agent-logs/{id}`, `POST /api/as-tickets`, `GET /api/as-tickets/{id}` API 골격이 있다.
+  - [x] `GET/PATCH /api/admin/as-tickets` 백엔드 route는 `AdminController`에 있다.
+- [ ] 4번 미완료/확인 필요
+  - [ ] `AgentLogQueryService.upload()`가 현재 사용자 id가 아니라 `user@example.com` 고정 user_id로 저장한다.
+  - [ ] 로그 업로드 서버 검증이 계약 수준에 부족하다. 파일 필수, JSONL line 검증, MIME/확장자, 10 MiB, 20000 line, PII masking, `FILE_VALIDATION_ERROR`가 필요하다.
+  - [ ] `AgentLogQueryService.detail()`과 `TicketQueryService.ticket()`는 본인 소유 404를 보장하지 않는다.
+  - [ ] `TicketQueryService.create()`가 현재 사용자 id가 아니라 `user@example.com` 고정 user_id로 티켓을 만든다.
+  - [ ] `PATCH /api/admin/as-tickets/{id}`는 허용 상태 전이표, `409 CONFLICT_STATE`, `assignedAdminId`, `resolvedAt`, `admin_audit_logs` 기록을 구현하지 않는다.
+  - [ ] `/admin/as-tickets`, `/admin/as-tickets/:ticketId` 프론트는 mock/static/no-op 화면으로 실제 admin AS API를 호출하지 않는다.
+  - [ ] `AgentLogControllerTest`, `TicketControllerTest`, `TicketQueryServiceTest`가 없어 4번 계약을 막아주는 백엔드 테스트가 부족하다.
+
+#### 2026-07-01 프로젝트 종료까지 남은 작업
+
+프로젝트를 끝내려면 “화면이 렌더링된다”가 아니라 **계약서의 실제 사용자 흐름이 서버+DB+테스트로 닫히는 상태**가 되어야 한다.
+
+- [ ] 1번 Quote/Auth 마무리
+  - [ ] Google OAuth start/callback/exchange 구현 여부를 결정하고, 구현한다면 Redis/runtime one-time code와 token 저장 흐름을 완성한다.
+  - [ ] `requirements`, `builds`, `build_items` 저장/조회/변경을 현재 로그인 사용자 소유권 기준으로 바꾼다.
+  - [ ] 타인 build/history/detail/change-part 접근 시 404를 반환하도록 contract test를 추가한다.
+  - [ ] `/my/quotes`를 mock에서 `GET /api/builds/history` 실제 API 연결로 전환한다.
+- [ ] 2번 Parts/Price/Tool 마무리
+  - [ ] 가격 알림을 현재 사용자 기준으로 저장/조회하고 active 중복 등록은 409로 정리한다.
+  - [ ] `POST /api/admin/price-jobs/run`의 중복 실행 409, 실패 처리, 상태 전이 정책을 계약과 맞춘다.
+  - [ ] `/admin/price-jobs`를 disabled/static 화면이 아니라 실제 API 실행/상태/실패 이력 화면으로 연결한다.
+  - [ ] 가격 수집이 네이버 API/다나와 보완 결과를 내부 후보/게시 데이터로 저장하는 흐름을 최종 검증한다.
+- [ ] 3번 Agent/RAG/AS Chat 마무리
+  - [ ] 일반 Agent session create/run/get API의 본인 소유권 404를 보장한다.
+  - [ ] Agent 실행 상태 전이와 queue/worker 사용 여부를 결정하고, RabbitMQ를 실제로 쓰는 경우 ack/retry 정책을 문서화/테스트한다.
+  - [ ] 관리자 Agent/Tool/RAG 메뉴가 seed 상세 링크인지 list route인지 최종 결정한다.
+  - [ ] AS Chat LLM/RAG/Tool 응답이 저장되고 실패/OPENAI_API_KEY 없음/stream fallback이 테스트로 막히는지 확인한다.
+- [ ] 4번 PC Agent/AS 마무리
+  - [ ] 로그 업로드를 현재 로그인 사용자 기준으로 저장하고 본인 소유 404를 적용한다.
+  - [ ] JSONL 파일 필수, MIME/확장자, 10 MiB, 20000 line, line JSON validation, PII masking, `FILE_VALIDATION_ERROR`를 구현한다.
+  - [ ] AS 티켓 생성/조회/update에 현재 사용자 소유권, soft delete 제외, 상태 전이 409, `assignedAdminId`, `resolvedAt`, audit log를 적용한다.
+  - [ ] `/admin/as-tickets`, `/admin/as-tickets/:ticketId`를 mock/static에서 실제 admin AS API 화면으로 전환한다.
+  - [ ] `AgentLogControllerTest`, `TicketControllerTest`, `TicketQueryServiceTest`를 추가한다.
+- [ ] 5번 Common/Admin/Infra 마무리
+  - [ ] `api.ts`의 `ErrorResponse` 보존, refresh retry 1회, refresh 실패 시 `clearToken()`, logout API 호출 흐름을 고정한다.
+  - [ ] `RequireUser`, `RequireAdmin`, admin shell route guard가 실제 JWT/role 정책과 충돌 없는지 최종 확인한다.
+  - [ ] AdminShell nav label/order와 각 owner route 정책을 2/3/4번과 공유해 확정한다.
+  - [ ] k6 300명/1000명 부하 테스트 시나리오와 리포트 템플릿을 실제 endpoint 기준으로 확장한다.
+  - [ ] Redis/RabbitMQ/Mailpit은 실제 기능이 붙은 뒤 connection smoke에서 기능 smoke로 올린다.
+- [ ] 공통 종료 검증
+  - [ ] `npm run build`, `npm run test`.
+  - [ ] `./gradlew test --no-daemon`, `./gradlew bootJar --no-daemon`.
+  - [ ] `python tools/validate_openapi.py`.
+  - [ ] `docker compose config`, 필요 시 `docker compose up --build` runtime smoke.
+  - [ ] 실제 E2E: 로그인 -> 자연어 구매 상담 -> 추천 적용 -> 내 견적함 -> 가격 알림 -> PC Agent 로그 업로드 -> AS 티켓 생성 -> 관리자 화면 확인.
+
+#### 2026-07-01 MVP와 MVP 이후 작업 구분
+
+| 구분 | 기능/영역 | 끝내기 위한 작업 | 담당/협업 |
+| --- | --- | --- | --- |
+| MVP | Auth/User | 이메일 회원가입, 로그인, refresh/logout, `/auth/me`, token 저장/삭제, 401/403 분기, 공통 `ErrorResponse`를 테스트까지 닫는다. OAuth는 구현 여부를 별도 확정한다. | 1번, 5번 |
+| MVP | 구매 상담/추천 | 자연어 입력 -> 요구사항 저장 -> RAG/Tool 근거 기반 추천 2~3개 -> 추천 적용까지 실제 DB와 현재 사용자 기준으로 연결한다. | 1번, 2번, 3번 |
+| MVP | 내 견적함 | `/my/quotes` mock을 제거하고 `GET /api/builds/history` 실제 사용자 build 목록으로 바꾼다. | 1번, 2번 협업 |
+| MVP | 부품/가격/Tool | 내부 자산 `parts`, 가격 스냅샷, Tool check, 견적초안 적용/수정/삭제를 계약 DTO와 맞추고 테스트한다. | 2번 |
+| MVP | 가격 알림 | 목표가 알림 등록/조회, 현재 사용자 기준 저장, active 중복 409, 1회 이메일 발송 정책을 구현한다. | 2번, 5번 Mailpit |
+| MVP | Agent/RAG/근거 | Agent session, Tool invocation, RAG evidence 저장/조회, 관리자 상세 확인, 본인 소유권/관리자 권한을 테스트한다. | 3번, 5번 |
+| MVP | PC Agent/AS | JSONL sample/export, 로그 업로드, 파일 검증, AS 티켓 생성/조회, 본인 소유권 404를 구현한다. | 4번 |
+| MVP | 관리자 AS | `/admin/as-tickets`, `/admin/as-tickets/:ticketId`를 mock에서 실제 API로 바꾸고 상태 전이 409, 담당자 배정, audit log를 구현한다. | 4번, 5번 |
+| MVP | AdminShell/공통 관리자 | 8개 메뉴, guard, dashboard, audit logs, owner route 연결, 권한 분기를 최종 고정한다. | 5번, 2/3/4번 협업 |
+| MVP | 인프라/검증 | Docker compose, Redis/RabbitMQ/Mailpit smoke, CI, OpenAPI 검증, Gradle/npm test/build, 실제 E2E를 닫는다. | 5번 |
+| MVP 이후 | Google OAuth 확장 | Google start/callback/exchange, Redis one-time code TTL, 계정 연결 정책, OAuth 오류/보안 테스트를 구현한다. MVP에 포함할지는 팀 결정 필요. | 1번, 5번 |
+| MVP 이후 | 실제 queue worker | Agent job, price job, mail job을 RabbitMQ publish/consume/ack/retry/dead-letter 정책으로 확장한다. | 2번, 3번, 5번 |
+| MVP 이후 | 가격 수집 고도화 | 가격 동향 그래프, 배송비/쿠폰/품절 반영, 수집 대상 확대, 다나와 크롤링 안정화, 가격 이력 분석을 추가한다. | 2번 |
+| MVP 이후 | 부하 테스트 확장 | k6 300명/1000명 시나리오, 병목 분석, p95/에러율 리포트, mock worker 부하 검증을 실행한다. | 5번, 전체 |
+| MVP 이후 | PC Agent 고도화 | 실제 센서 수집, Windows Event Log, NVML, 문제 상황 profile, 자동 로그 보관 삭제 스케줄러를 붙인다. | 4번 |
+| MVP 이후 | AS 고도화 | 상담원 답변 등록, 티켓 종료 요청, 업그레이드 후보 반영, AS Chat 결과를 티켓 후보로 승인 반영하는 workflow를 만든다. | 4번, 3번 |
+| MVP 이후 | 관리자 운영 고도화 | 전역 검색, export/action button, 운영 작업 패널 실시간화, dashboard degraded 원인 드릴다운을 구현한다. | 5번, 2/3/4번 |
+| MVP 이후 | 메일/알림 확장 | 회원가입 인증 메일, 가격 알림 템플릿, 재발송/수신거부, Mailpit 이후 실제 SMTP 연동을 구현한다. | 1번, 2번, 5번 |
+| MVP 이후 | 제외 범위 유지 | 결제/배송/거래, 커뮤니티, 원격제어, 정확한 FPS 보장, 최저가 보장, 자동 모델 학습은 MVP 이후에도 별도 기획 없이는 구현하지 않는다. | 팀 결정 필요 |
+
+#### 2026-07-01 `last.md` 최종 남은 작업 문서 생성 기록
+
+- [x] 저장소 루트에 `last.md`를 새로 만들었다.
+- [x] MVP를 끝내기 위한 작업과 MVP 이후 기능 구현을 끝내기 위한 작업을 분리했다.
+- [x] 각 작업에 현재 상태, 남은 작업, 완료 기준, 담당/협업자를 정리했다.
+- [x] MVP 이후에도 별도 기획 없이는 구현하지 않을 제외 범위를 따로 정리했다.
+
+#### 2026-07-01 구매 상담 AI 챗봇 사용자 격리 및 로그인 오류 UX 수정
+
+- [x] Playwright 회귀 테스트를 먼저 추가했다.
+  - [x] A 사용자 구매 상담 세션이 있어도 B 사용자 로그인 상태에서는 A 메시지가 보이지 않는다.
+  - [x] legacy global key `buildgraph.ai.assistantSession`에 남은 이전 대화가 현재 사용자에게 표시되지 않는다.
+  - [x] 챗봇 화면이 열린 뒤 token이 사라진 상태에서 질문하면 API 호출 없이 로그인 필요 문구를 보여준다.
+  - [x] `/api/ai/build-chat`가 401을 반환하면 일반 실패 문구 대신 로그인 필요 문구를 보여준다.
+- [x] `buildgraph.ai.assistantSession:{userIdOrEmail}` 방식으로 구매 상담 챗봇 대화 저장소를 사용자별로 분리했다.
+- [x] `buildgraph.ai.selectedBuild:{userIdOrEmail}` 방식으로 AI 선택 Build 저장소도 사용자별로 분리했다.
+- [x] 기존 unscoped `buildgraph.ai.assistantSession`, `buildgraph.ai.selectedBuild`는 현재 로그인 사용자에게 fallback하지 않고 정리 대상으로 처리했다.
+- [x] token 없음 또는 401 응답에서는 optimistic user message를 남기지 않고 `로그인이 필요합니다. 다시 로그인해 주세요.`를 표시하도록 수정했다.
+- [x] 검증: `cd apps/web && npm run test -- home.spec.ts` 통과.
+- [x] 추가 검증: `cd apps/web && npm run test`, `cd apps/web && npm run build`, `git diff --check` 통과.
+
+#### 2026-07-01 공통 API Client 인증/오류 처리 마감
+
+- [x] Playwright 회귀 테스트를 먼저 추가했다.
+  - [x] refresh token 없이 보호 API가 401을 반환하면 access token, refresh token, cached user를 정리한다.
+  - [x] `/api/auth/refresh`가 실패 응답을 반환하면 원래 보호 API를 재시도하지 않고 token/user를 정리한다.
+  - [x] refresh 응답 body에 `accessToken` 또는 `refreshToken`이 없으면 refresh 실패로 보고 token/user를 정리한다.
+  - [x] `ErrorResponse.details`가 있는 오류 응답을 `ApiError.details`에 보존한다.
+  - [x] logout API가 실패해도 프론트 token/user를 정리하고 `/login`으로 이동한다.
+- [x] `ApiError`가 `status`, `path`, `code`, `message`, `details`를 보존하도록 확장했다.
+- [x] access token 만료 401에서 refresh retry는 1회만 수행하고, refresh 성공 시 원래 요청을 1회 재시도하도록 정책을 고정했다.
+- [x] refresh token 없음, refresh 실패, refresh 응답 이상, refresh network 실패 시 `clearToken()`으로 로그인 상태를 정리하도록 수정했다.
+- [x] `/api/auth/login`, `/api/auth/refresh`, `/api/auth/logout`, `/api/auth/exchange`, `/api/users`, `/api/auth/google/*`는 refresh retry 제외 대상으로 유지했다.
+- [x] 검증: `cd apps/web && npm run test -- auth.spec.ts` 통과.
+- [x] 추가 검증: `cd apps/web && npm run test`, `cd apps/web && npm run build`, `git diff --check` 통과.
+
+#### 2026-07-01 커밋 메시지 요청 전 점검 기록
+
+- [x] 현재 브랜치가 `main`이고, 마지막 커밋이 `Merge pull request #26 from jungle-final-project/feat/popular-part-detail-links`임을 확인했다.
+- [x] 현재 변경은 구매 상담 AI 세션 사용자별 저장소 분리, 로그인 만료 오류 UX, 관련 Playwright 테스트, 남은 작업 최종 정리 문서, 오래된 hoseok/hosoek 문서 자산 삭제로 구분된다.
+- [x] 코드/테스트 변경과 문서 정리 변경은 성격이 달라 별도 커밋으로 나누는 것이 적절하다.
+
+#### 2026-07-01 Build 관계 그래프 커밋 메시지 요청 전 점검
+
+- [x] 현재 브랜치가 `main`이고, `origin/main`보다 5커밋 앞선 상태임을 확인했다.
+- [x] 마지막 커밋은 `676b7c9 docs: MVP 완료 상태와 인프라 연동 판단을 정리`다.
+- [x] 미커밋 변경은 `POST /api/build-graphs/resolve` 백엔드 API, OpenAPI/API 계약, React Flow 기반 견적 관계도 UI, Home/SelfQuote 연동, Playwright/JUnit 테스트로 구분된다.
+- [x] `@xyflow/react` 의존성은 견적 관계도 시각화를 위해 추가된 프론트 런타임 의존성이다.
+- [x] 백엔드 API/계약과 프론트 관계도 UI는 서로 연결되지만 리뷰 범위가 커서 별도 커밋으로 나누는 것이 적절하다.
+- [x] 5번 체크리스트 갱신은 커밋 메시지 요청 전 점검 기록으로 별도 문서 커밋에 포함한다.
+
+#### 2026-07-01 AI 추천 장바구니 즉시 반영 점검
+
+- [x] 현재 브랜치가 `main`이고, `origin/main`보다 7커밋 앞선 상태임을 확인했다.
+- [x] 마지막 커밋은 `a095198 feat: 견적 관계도를 홈과 셀프 견적에 표시`다.
+- [x] 미커밋 변경은 홈 추천 카드와 챗봇 추천 적용 후 `PUT /api/quote-drafts/current/apply-ai-build` 응답을 React Query `['quote-draft', 'current']` 캐시에 즉시 반영하는 프론트 수정이다.
+- [x] stale GET이 늦게 돌아오는 상황에서도 사용자가 별도 제거 동작을 하지 않아도 `/self-quote`에서 적용된 장바구니가 보이도록 Playwright 회귀 테스트를 추가했다.
+- [x] 이 변경은 build graph API가 아니라 AI 추천 적용 후 quote draft cache 동기화 문제를 고치는 fix 커밋으로 분리한다.
+
+#### 2026-07-01 Build 관계 그래프 판정 근거 구체화
+
+- [x] 현재 브랜치가 `main`이고, `origin/main`보다 8커밋 앞선 상태임을 확인했다.
+- [x] 마지막 커밋은 `ada4f7e fix: AI 추천 적용 후 견적 장바구니를 즉시 표시`다.
+- [x] `BuildGraphService`가 ToolCheckService details를 사용해 소켓, RAM 규격, 쿨러 소켓, 전력 여유, GPU 길이, 쿨러 높이를 관계별 `PASS/WARN/FAIL`로 다시 구분하도록 보강했다.
+- [x] 그래프 node detail에 CPU 소켓, 메인보드 소켓/메모리/Wi-Fi, RAM 용량/모듈 수, GPU 전력/길이, PSU 정격 출력, 케이스 GPU 허용 길이, 쿨러 높이를 표시하도록 정리했다.
+- [x] React Flow 그래프의 `PASS/WARN/FAIL` 문구를 사용자 친화적인 `여유 있음/간섭 주의/장착 불가` 라벨로 표시했다.
+- [x] JUnit 테스트에 정상 여유, warning 여유, socket/power/size 실패 케이스를 추가해 edge label과 summary를 검증했다.
+
+#### 2026-07-01 Build 관계 그래프 제약 노드 라벨 보정
+
+- [x] 현재 브랜치가 `main`이고, `origin/main`보다 9커밋 앞선 상태임을 확인했다.
+- [x] 마지막 커밋은 `fae7c2b feat: 빌드 관계 그래프 판정 근거를 구체화`다.
+- [x] 제약 노드가 `전력 여유`, `장착 규격`, `기본 호환성` 같은 generic label 대신 `정격 850W`, 실제 케이스명, 실제 메인보드명을 표시하도록 보정했다.
+- [x] `BuildGraphServiceTest`에서 `constraint-power`, `constraint-size`, `constraint-compatibility` label을 검증하도록 추가했다.
+- [x] 홈 Playwright fixture와 assertion도 실제 제약 노드 라벨 기준으로 맞추고 generic 문구가 노출되지 않는지 확인한다.
+
+#### 2026-07-01 그래프 노드 호환 후보 API와 패널 점검
+
+- [x] 현재 브랜치가 `main`이고, `origin/main`보다 10커밋 앞선 상태임을 확인했다.
+- [x] 마지막 커밋은 `647bfbd fix: 빌드 그래프 제약 노드 라벨을 실제 부품 기준으로 표시`다.
+- [x] `POST /api/parts/compatible-candidates` API를 추가해 AI 추천 조합 또는 현재 견적초안 기준으로 같은 카테고리 호환 후보를 계산한다.
+- [x] 후보 계산은 서버가 부품을 DB에서 다시 조회하고, 해당 카테고리 교체 후 `ToolCheckService.checkBuild` 결과의 관련 tool만 사용해 `PASS/WARN/FAIL`을 판단한다.
+- [x] 그래프 노드 클릭 시 선택 부품 상세와 호환 후보 패널을 표시하고, 홈 AI 추천에서는 읽기 전용, 셀프 견적에서는 `담기/교체` 동작으로 연결한다.
+- [x] OpenAPI/API 계약/route ownership과 controller/service/JUnit, Home/SelfQuote Playwright fixture를 함께 갱신했다.
+
+#### 2026-07-01 그래프 노드 호환 후보 프론트 분리 점검
+
+- [x] 현재 브랜치가 `main`이고, `origin/main`보다 11커밋 앞선 상태임을 확인했다.
+- [x] 마지막 커밋은 `dc91fcc feat: 현재 조합 기준 호환 부품 후보 API를 추가`다.
+- [x] 미커밋 변경은 API 계약이 아니라 `BuildDependencyGraph`에서 노드 선택 시 호환 후보 패널을 보여주는 프론트 연결 작업이다.
+- [x] 홈 AI 추천 그래프는 `AI_BUILD` source와 build items를 넘겨 읽기 전용 후보 목록을 표시한다.
+- [x] 셀프 견적 그래프는 `QUOTE_DRAFT_CURRENT` source와 현재 장바구니 선택 상태를 넘겨 후보의 `담기/교체` 버튼을 견적초안 담기 흐름에 연결한다.
+- [x] Home/SelfQuote Playwright fixture는 후보 API 요청, 선택 부품 상세 표시, 읽기 전용 표시, 후보 담기 동작을 검증한다.
+
+#### 2026-07-01 그래프 호환 후보 체크리스트 문서 커밋 점검
+
+- [x] 현재 브랜치가 `main`이고, `origin/main`보다 12커밋 앞선 상태임을 확인했다.
+- [x] 마지막 커밋은 `946625a feat: 그래프 노드에서 호환 부품 후보를 표시`다.
+- [x] 미커밋 변경은 `docs/hosoek/owner5-work-analysis-checklist.md`의 작업 점검 기록 1개 파일뿐이다.
+- [x] 기능 코드, API 계약, 테스트 변경은 이미 직전 커밋에 포함되어 있어 이번 커밋은 문서 기록 정리로 분리한다.
+
+#### 2026-07-01 그래프 호환 후보 패널 배치 보정 점검
+
+- [x] 현재 브랜치가 `main`이고, `origin/main`보다 12커밋 앞선 상태임을 확인했다.
+- [x] 마지막 커밋은 `946625a feat: 그래프 노드에서 호환 부품 후보를 표시`다.
+- [x] 미커밋 코드 변경은 `BuildDependencyGraph`의 선택 노드 상세와 호환 후보 목록을 그래프 캔버스 내부 패널로 분리하는 UI 보정이다.
+- [x] 기존 우측 aside는 관계 edge 선택 설명과 판정 근거 확인 영역으로 유지하고, node 선택 시 `graph-node-candidate-panel`에서 부품 상세와 후보 목록을 함께 보여준다.
+- [x] Home/SelfQuote Playwright 테스트는 새 패널 test id를 기준으로 선택 부품 상세, 읽기 전용 후보, 담기/교체 동작을 검증하도록 맞춘다.
+- [x] 모바일 홈 테스트는 챗봇 추천 후 관계도와 후보 패널을 열어도 가로 overflow가 생기지 않는지 확인한다.
+
+#### 2026-07-02 미구현 운영 기능 마감 점검
+
+- [x] 공통 `ApiErrorResponse`에 optional `details`를 추가하고 `ApiExceptionHandler`가 validation 세부 정보를 보존하도록 구현했다.
+- [x] Agent 로그 업로드에서 `.jsonl`/`.ndjson`, MIME, 10MiB, 20000 line, JSON object line 파싱, PII 마스킹을 DB insert 전에 검증하도록 구현했다.
+- [x] 로그 검증 실패는 `400 FILE_VALIDATION_ERROR`로 반환하고 `agent_log_uploads` row를 만들지 않도록 테스트로 고정했다.
+- [x] `PriceJobWorker`가 `startPriceJob()` 후 네이버 external-offers refresh와 다나와 current snapshot refresh를 실행하고 성공/실패 상태를 저장하도록 연결했다.
+- [x] `/api/admin/rag-evidence` 목록 API를 추가하고 ADMIN/USER/unauthorized 분기 테스트를 추가했다.
+- [x] 관리자 sidebar의 Agent/Tool/RAG 메뉴를 seed 상세 ID가 아니라 목록 route(`/admin/agent-sessions`, `/admin/tool-invocations`, `/admin/rag-evidence`)로 변경했다.
+- [x] 관리자 Agent/Tool/RAG 목록 화면을 추가하고 목록에서 기존 상세 화면으로 이동하도록 구현했다.
+- [x] 관리자 topbar `내보내기`를 CSV export로 구현하고, `작업 실행`은 `/admin/price-jobs`에서 가격 Job 실행 action으로만 표시되도록 변경했다.
+- [x] `/admin/load-tests`는 k6 직접 실행이 아니라 smoke 대상, 검증 명령, 리포트 위치를 보여주는 운영 화면으로 정리했다.
+- [x] `docs/API_CONTRACT.md`, `docs/openapi.yaml`, `tools/validate_openapi.py`에 새 RAG 목록 API 계약을 반영했다.
+- [x] 검증: `apps/api ./gradlew test --no-daemon`, `apps/web npm run test`, `apps/web npm run build`, `OpenAPI validation`, `git diff --check` 통과.
+
 ## 우선순위
 
 ### P0
@@ -767,7 +1000,7 @@ AdminShell nav 분석 결과:
 - [x] 401/403 권한 분기 확인
 - [x] PR 전 기본 검증 명령 실행
 - [x] 1번 Auth/User 구현 후 `api.ts`, `RequireAdmin`, admin guard 기본 연동 검토
-- [ ] `api.ts` refresh retry, logout API 호출, `ErrorResponse` 보존 구현
+- [x] `api.ts` refresh retry, logout API 호출, `ErrorResponse` 보존 구현
 
 ### P1
 
@@ -784,8 +1017,8 @@ AdminShell nav 분석 결과:
 
 - [ ] Redis/RabbitMQ/Mailpit 실제 기능 연동. 조건: OAuth one-time code, AI 견적 추천 실행 작업, 부품 가격 수집 작업, 가격 알림 메일 중 해당 owner 구현 PR 발생
 - [ ] 부하 테스트 300명/1000명 시나리오 확장
-- [ ] AdminShell sample id 메뉴를 3번과 합의해 list route 또는 seed link 정책으로 정리
-- [ ] `/admin/price-jobs` 중복 실행 409 계약 위반 여부를 2번과 정리
+- [x] AdminShell sample id 메뉴를 list route 정책으로 정리
+- [x] `/admin/price-jobs` 중복 실행 409 계약을 유지하고 worker 실제 현재가 갱신을 연결
 - [ ] `/admin/as-tickets` mock/static 상태를 4번과 정리
 
 ## 다음 작업 순서
@@ -819,7 +1052,7 @@ AdminShell nav 분석 결과:
 - [x] DB 연결 실패 시 `/api/health`를 500 `INTERNAL_ERROR`, 503 `DOWN`, 또는 200 `status: "DOWN"` 중 어떤 정책으로 반환할지 결정해야 한다. 결정: `503 Service Unavailable` + `{ "status": "DOWN" }`
 - [x] AdminShell nav의 `가격 Job`을 2번의 `/admin/parts` 안에 둘지 별도 route로 둘지 결정해야 한다. 결정: `/admin/price-jobs` 별도 route
 - [x] `부하 테스트` 관리자 화면을 MVP route로 만들지, 문서/리포트 링크로 둘지 결정해야 한다. 결정: `/admin/load-tests` route
-- [x] topbar `작업 실행`이 어떤 작업을 실행하는 버튼인지 결정해야 한다. 결정: Sprint 1에서는 실행 job 미확정으로 disabled placeholder 처리한다.
+- [x] topbar `작업 실행`이 어떤 작업을 실행하는 버튼인지 결정해야 한다. 결정: 전역 placeholder를 제거하고 route별 action으로 둔다. 현재는 `/admin/price-jobs`에서 가격 Job 실행만 표시한다.
 - [x] admin search가 전역 검색인지, 단순 placeholder인지 결정해야 한다. 결정: Sprint 1에서는 전역 검색과 placeholder input을 모두 제외한다.
 
 | 구분 | 남은 일 | 상태 |
@@ -832,3 +1065,14 @@ AdminShell nav 분석 결과:
 | Redis 임시 저장소 | 구글 로그인 임시 코드, AI 결과 캐시, 사용량 제한 정책 검토 | 1번/3번 이후 |
 | RabbitMQ 작업 대기열 | AI 추천/분석 작업, 부품 가격 수집 작업을 대기열에 넣고 처리하는 정책 검토 | 2번/3번 이후 |
 | Mailpit 개발용 메일함 | 가격 알림 메일이나 회원가입 인증 메일이 잘 오는지 확인 | 1번/2번 이후 |
+
+## 2026-07-03 부품 목록 externalOffer 이미지 누락 수정
+
+- [x] `/self-quote?category=PSU`에서 `가격 낮은순`, `가격 높은순`, `이름순` 정렬 시 제품 이미지가 기본 PSU 아이콘으로 떨어지는 원인을 확인했다.
+- [x] 원인: `/api/parts`가 `compatibilitySource=QUOTE_DRAFT_CURRENT`와 일반 정렬을 함께 처리할 때 이미 DTO로 변환된 `externalOffer`를 raw DB row처럼 재매핑해 `externalOffer`를 `null`로 만드는 문제였다.
+- [x] `PartCompatibleCandidateServiceTest`에 API DTO 형태 row의 `externalOffer.imageUrl`, `supplierName`, `offerUrl`, `source`가 호환성 평가 이후에도 유지되는 회귀 테스트를 추가했다.
+- [x] `PartCompatibleCandidateService.partRowsWithCompatibility()`가 API DTO row는 보존하고 raw DB row만 기존 `partMap()` 변환을 타도록 수정했다.
+- [x] 검증: `apps/api ./gradlew test --tests com.buildgraph.prototype.part.PartCompatibleCandidateServiceTest --no-daemon` 통과.
+- [x] 검증: `apps/api ./gradlew test --tests com.buildgraph.prototype.part.PartQueryServiceTest --no-daemon` 통과.
+- [x] 검증: `apps/api ./gradlew test --no-daemon` 통과.
+- [x] 검증: `git diff --check` 통과.

@@ -5,7 +5,10 @@
     "message": "200만원 QHD 게임용 PC 추천해줘",
     "surface": "HOME",
     "expectedIntent": "FULL_BUILD_RECOMMEND",
-    "expectedActions": ["OPEN_SELF_QUOTE", "ADD_BUILD_TO_DRAFT"]
+    "expectedActions": [
+      "OPEN_SELF_QUOTE",
+      "ADD_BUILD_TO_DRAFT"
+    ]
   },
   {
     "id": "full-build-002",
@@ -13,7 +16,10 @@
     "message": "개발이랑 게임 같이 할 컴퓨터 맞춰줘",
     "surface": "HOME",
     "expectedIntent": "FULL_BUILD_RECOMMEND",
-    "expectedActions": ["OPEN_SELF_QUOTE", "ADD_BUILD_TO_DRAFT"]
+    "expectedActions": [
+      "OPEN_SELF_QUOTE",
+      "ADD_BUILD_TO_DRAFT"
+    ]
   },
   {
     "id": "full-build-003",
@@ -21,7 +27,10 @@
     "message": "영상편집용 본체 견적 내줘",
     "surface": "HOME",
     "expectedIntent": "FULL_BUILD_RECOMMEND",
-    "expectedActions": ["OPEN_SELF_QUOTE", "ADD_BUILD_TO_DRAFT"]
+    "expectedActions": [
+      "OPEN_SELF_QUOTE",
+      "ADD_BUILD_TO_DRAFT"
+    ]
   },
   {
     "id": "full-build-004",
@@ -29,7 +38,10 @@
     "message": "AI CUDA 실험용 PC 추천",
     "surface": "HOME",
     "expectedIntent": "FULL_BUILD_RECOMMEND",
-    "expectedActions": ["OPEN_SELF_QUOTE", "ADD_BUILD_TO_DRAFT"]
+    "expectedActions": [
+      "OPEN_SELF_QUOTE",
+      "ADD_BUILD_TO_DRAFT"
+    ]
   },
   {
     "id": "full-build-005",
@@ -37,7 +49,10 @@
     "message": "4K 게임용 컴퓨터 추천해줘",
     "surface": "HOME",
     "expectedIntent": "FULL_BUILD_RECOMMEND",
-    "expectedActions": ["OPEN_SELF_QUOTE", "ADD_BUILD_TO_DRAFT"]
+    "expectedActions": [
+      "OPEN_SELF_QUOTE",
+      "ADD_BUILD_TO_DRAFT"
+    ]
   },
   {
     "id": "full-build-006",
@@ -45,7 +60,10 @@
     "message": "180만원으로 사무랑 학습용 PC 견적",
     "surface": "HOME",
     "expectedIntent": "FULL_BUILD_RECOMMEND",
-    "expectedActions": ["OPEN_SELF_QUOTE", "ADD_BUILD_TO_DRAFT"]
+    "expectedActions": [
+      "OPEN_SELF_QUOTE",
+      "ADD_BUILD_TO_DRAFT"
+    ]
   },
   {
     "id": "full-build-007",
@@ -53,7 +71,10 @@
     "message": "QHD 배그용 추천",
     "surface": "HOME",
     "expectedIntent": "FULL_BUILD_RECOMMEND",
-    "expectedActions": ["OPEN_SELF_QUOTE", "ADD_BUILD_TO_DRAFT"]
+    "expectedActions": [
+      "OPEN_SELF_QUOTE",
+      "ADD_BUILD_TO_DRAFT"
+    ]
   },
   {
     "id": "full-build-008",
@@ -61,7 +82,10 @@
     "message": "조용한 게임 컴퓨터 맞춰줘",
     "surface": "HOME",
     "expectedIntent": "FULL_BUILD_RECOMMEND",
-    "expectedActions": ["OPEN_SELF_QUOTE", "ADD_BUILD_TO_DRAFT"]
+    "expectedActions": [
+      "OPEN_SELF_QUOTE",
+      "ADD_BUILD_TO_DRAFT"
+    ]
   },
   {
     "id": "full-build-009",
@@ -69,7 +93,10 @@
     "message": "오래 쓸 업그레이드 여유 있는 본체 추천",
     "surface": "HOME",
     "expectedIntent": "FULL_BUILD_RECOMMEND",
-    "expectedActions": ["OPEN_SELF_QUOTE", "ADD_BUILD_TO_DRAFT"]
+    "expectedActions": [
+      "OPEN_SELF_QUOTE",
+      "ADD_BUILD_TO_DRAFT"
+    ]
   },
   {
     "id": "full-build-010",
@@ -77,7 +104,10 @@
     "message": "프리미어랑 게임 둘 다 하는 PC 맞춰줘",
     "surface": "HOME",
     "expectedIntent": "FULL_BUILD_RECOMMEND",
-    "expectedActions": ["OPEN_SELF_QUOTE", "ADD_BUILD_TO_DRAFT"]
+    "expectedActions": [
+      "OPEN_SELF_QUOTE",
+      "ADD_BUILD_TO_DRAFT"
+    ]
   },
   {
     "id": "full-build-011",
@@ -85,7 +115,10 @@
     "message": "인텔 선호 개발용 컴퓨터 견적",
     "surface": "HOME",
     "expectedIntent": "FULL_BUILD_RECOMMEND",
-    "expectedActions": ["OPEN_SELF_QUOTE", "ADD_BUILD_TO_DRAFT"]
+    "expectedActions": [
+      "OPEN_SELF_QUOTE",
+      "ADD_BUILD_TO_DRAFT"
+    ]
   },
   {
     "id": "full-build-012",
@@ -93,7 +126,10 @@
     "message": "라데온 그래픽카드로 게임용 PC 맞춰줘",
     "surface": "HOME",
     "expectedIntent": "FULL_BUILD_RECOMMEND",
-    "expectedActions": ["OPEN_SELF_QUOTE", "ADD_BUILD_TO_DRAFT"]
+    "expectedActions": [
+      "OPEN_SELF_QUOTE",
+      "ADD_BUILD_TO_DRAFT"
+    ]
   },
   {
     "id": "full-build-013",
@@ -101,7 +137,10 @@
     "message": "300만원 안에서 고성능 컴퓨터 추천",
     "surface": "HOME",
     "expectedIntent": "FULL_BUILD_RECOMMEND",
-    "expectedActions": ["OPEN_SELF_QUOTE", "ADD_BUILD_TO_DRAFT"]
+    "expectedActions": [
+      "OPEN_SELF_QUOTE",
+      "ADD_BUILD_TO_DRAFT"
+    ]
   },
   {
     "id": "full-build-013a",
@@ -109,7 +148,10 @@
     "message": "300만원 이상으로 게임용 PC 맞춰줘",
     "surface": "HOME",
     "expectedIntent": "FULL_BUILD_RECOMMEND",
-    "expectedActions": ["OPEN_SELF_QUOTE", "ADD_BUILD_TO_DRAFT"]
+    "expectedActions": [
+      "OPEN_SELF_QUOTE",
+      "ADD_BUILD_TO_DRAFT"
+    ]
   },
   {
     "id": "full-build-013b",
@@ -117,7 +159,10 @@
     "message": "최소 300만원 넘게 개발용 컴퓨터 추천",
     "surface": "HOME",
     "expectedIntent": "FULL_BUILD_RECOMMEND",
-    "expectedActions": ["OPEN_SELF_QUOTE", "ADD_BUILD_TO_DRAFT"]
+    "expectedActions": [
+      "OPEN_SELF_QUOTE",
+      "ADD_BUILD_TO_DRAFT"
+    ]
   },
   {
     "id": "full-build-014",
@@ -125,7 +170,10 @@
     "message": "FHD 240hz FPS 게임용 추천",
     "surface": "HOME",
     "expectedIntent": "FULL_BUILD_RECOMMEND",
-    "expectedActions": ["OPEN_SELF_QUOTE", "ADD_BUILD_TO_DRAFT"]
+    "expectedActions": [
+      "OPEN_SELF_QUOTE",
+      "ADD_BUILD_TO_DRAFT"
+    ]
   },
   {
     "id": "full-build-015",
@@ -133,7 +181,10 @@
     "message": "블렌더 3D 작업용 PC 견적",
     "surface": "HOME",
     "expectedIntent": "FULL_BUILD_RECOMMEND",
-    "expectedActions": ["OPEN_SELF_QUOTE", "ADD_BUILD_TO_DRAFT"]
+    "expectedActions": [
+      "OPEN_SELF_QUOTE",
+      "ADD_BUILD_TO_DRAFT"
+    ]
   },
   {
     "id": "part-001",
@@ -141,7 +192,9 @@
     "message": "RTX 5070 중에 뭐가 좋아?",
     "surface": "SELF_QUOTE",
     "expectedIntent": "PART_RECOMMEND",
-    "expectedActions": ["ADD_PART_TO_DRAFT"],
+    "expectedActions": [
+      "ADD_PART_TO_DRAFT"
+    ],
     "expectedCategory": "GPU"
   },
   {
@@ -150,7 +203,9 @@
     "message": "그래픽카드 추천해줘",
     "surface": "SELF_QUOTE",
     "expectedIntent": "PART_RECOMMEND",
-    "expectedActions": ["ADD_PART_TO_DRAFT"],
+    "expectedActions": [
+      "ADD_PART_TO_DRAFT"
+    ],
     "expectedCategory": "GPU"
   },
   {
@@ -159,7 +214,9 @@
     "message": "라이젠 CPU 뭐가 괜찮아?",
     "surface": "SELF_QUOTE",
     "expectedIntent": "PART_RECOMMEND",
-    "expectedActions": ["ADD_PART_TO_DRAFT"],
+    "expectedActions": [
+      "ADD_PART_TO_DRAFT"
+    ],
     "expectedCategory": "CPU"
   },
   {
@@ -168,7 +225,9 @@
     "message": "메인보드 추천",
     "surface": "SELF_QUOTE",
     "expectedIntent": "PART_RECOMMEND",
-    "expectedActions": ["ADD_PART_TO_DRAFT"],
+    "expectedActions": [
+      "ADD_PART_TO_DRAFT"
+    ],
     "expectedCategory": "MOTHERBOARD"
   },
   {
@@ -177,7 +236,9 @@
     "message": "DDR5 램 추천해줘",
     "surface": "SELF_QUOTE",
     "expectedIntent": "PART_RECOMMEND",
-    "expectedActions": ["ADD_PART_TO_DRAFT"],
+    "expectedActions": [
+      "ADD_PART_TO_DRAFT"
+    ],
     "expectedCategory": "RAM"
   },
   {
@@ -186,7 +247,9 @@
     "message": "SSD 뭐 담으면 좋을까",
     "surface": "SELF_QUOTE",
     "expectedIntent": "PART_RECOMMEND",
-    "expectedActions": ["ADD_PART_TO_DRAFT"],
+    "expectedActions": [
+      "ADD_PART_TO_DRAFT"
+    ],
     "expectedCategory": "STORAGE"
   },
   {
@@ -195,7 +258,9 @@
     "message": "파워 추천",
     "surface": "SELF_QUOTE",
     "expectedIntent": "PART_RECOMMEND",
-    "expectedActions": ["ADD_PART_TO_DRAFT"],
+    "expectedActions": [
+      "ADD_PART_TO_DRAFT"
+    ],
     "expectedCategory": "PSU"
   },
   {
@@ -204,7 +269,9 @@
     "message": "케이스 뭐가 좋아?",
     "surface": "SELF_QUOTE",
     "expectedIntent": "PART_RECOMMEND",
-    "expectedActions": ["ADD_PART_TO_DRAFT"],
+    "expectedActions": [
+      "ADD_PART_TO_DRAFT"
+    ],
     "expectedCategory": "CASE"
   },
   {
@@ -213,7 +280,9 @@
     "message": "수랭 쿨러 후보 보여줘",
     "surface": "SELF_QUOTE",
     "expectedIntent": "PART_RECOMMEND",
-    "expectedActions": ["ADD_PART_TO_DRAFT"],
+    "expectedActions": [
+      "ADD_PART_TO_DRAFT"
+    ],
     "expectedCategory": "COOLER"
   },
   {
@@ -222,7 +291,9 @@
     "message": "엔비디아 GPU 후보 골라줘",
     "surface": "SELF_QUOTE",
     "expectedIntent": "PART_RECOMMEND",
-    "expectedActions": ["ADD_PART_TO_DRAFT"],
+    "expectedActions": [
+      "ADD_PART_TO_DRAFT"
+    ],
     "expectedCategory": "GPU"
   },
   {
@@ -231,7 +302,9 @@
     "message": "인텔 프로세서 추천",
     "surface": "SELF_QUOTE",
     "expectedIntent": "PART_RECOMMEND",
-    "expectedActions": ["ADD_PART_TO_DRAFT"],
+    "expectedActions": [
+      "ADD_PART_TO_DRAFT"
+    ],
     "expectedCategory": "CPU"
   },
   {
@@ -240,7 +313,9 @@
     "message": "저장장치 추천해줘",
     "surface": "SELF_QUOTE",
     "expectedIntent": "PART_RECOMMEND",
-    "expectedActions": ["ADD_PART_TO_DRAFT"],
+    "expectedActions": [
+      "ADD_PART_TO_DRAFT"
+    ],
     "expectedCategory": "STORAGE"
   },
   {
@@ -249,7 +324,9 @@
     "message": "이 견적에서 램 64기가로 바꿔줘",
     "surface": "SELF_QUOTE",
     "expectedIntent": "BUILD_MODIFY",
-    "expectedActions": ["REPLACE_DRAFT_PART"],
+    "expectedActions": [
+      "REPLACE_DRAFT_PART"
+    ],
     "expectedCategory": "RAM"
   },
   {
@@ -258,7 +335,9 @@
     "message": "GPU를 더 좋은 걸로 교체해줘",
     "surface": "SELF_QUOTE",
     "expectedIntent": "BUILD_MODIFY",
-    "expectedActions": ["REPLACE_DRAFT_PART"],
+    "expectedActions": [
+      "REPLACE_DRAFT_PART"
+    ],
     "expectedCategory": "GPU"
   },
   {
@@ -267,7 +346,9 @@
     "message": "CPU 업그레이드 해줘",
     "surface": "SELF_QUOTE",
     "expectedIntent": "BUILD_MODIFY",
-    "expectedActions": ["REPLACE_DRAFT_PART"],
+    "expectedActions": [
+      "REPLACE_DRAFT_PART"
+    ],
     "expectedCategory": "CPU"
   },
   {
@@ -276,7 +357,9 @@
     "message": "파워를 850W로 변경",
     "surface": "SELF_QUOTE",
     "expectedIntent": "BUILD_MODIFY",
-    "expectedActions": ["REPLACE_DRAFT_PART"],
+    "expectedActions": [
+      "REPLACE_DRAFT_PART"
+    ],
     "expectedCategory": "PSU"
   },
   {
@@ -285,7 +368,9 @@
     "message": "SSD 하나 추가해줘",
     "surface": "SELF_QUOTE",
     "expectedIntent": "BUILD_MODIFY",
-    "expectedActions": ["REPLACE_DRAFT_PART"],
+    "expectedActions": [
+      "REPLACE_DRAFT_PART"
+    ],
     "expectedCategory": "STORAGE"
   },
   {
@@ -294,7 +379,9 @@
     "message": "메인보드 더 좋은 걸로 바꿔",
     "surface": "SELF_QUOTE",
     "expectedIntent": "BUILD_MODIFY",
-    "expectedActions": ["REPLACE_DRAFT_PART"],
+    "expectedActions": [
+      "REPLACE_DRAFT_PART"
+    ],
     "expectedCategory": "MOTHERBOARD"
   },
   {
@@ -303,7 +390,9 @@
     "message": "케이스를 작은 걸로 교체",
     "surface": "SELF_QUOTE",
     "expectedIntent": "BUILD_MODIFY",
-    "expectedActions": ["REPLACE_DRAFT_PART"],
+    "expectedActions": [
+      "REPLACE_DRAFT_PART"
+    ],
     "expectedCategory": "CASE"
   },
   {
@@ -312,7 +401,9 @@
     "message": "쿨러를 수랭으로 바꿔줘",
     "surface": "SELF_QUOTE",
     "expectedIntent": "BUILD_MODIFY",
-    "expectedActions": ["REPLACE_DRAFT_PART"],
+    "expectedActions": [
+      "REPLACE_DRAFT_PART"
+    ],
     "expectedCategory": "COOLER"
   },
   {
@@ -321,7 +412,9 @@
     "message": "예산 낮춰서 구성 변경해줘",
     "surface": "SELF_QUOTE",
     "expectedIntent": "BUILD_MODIFY",
-    "expectedActions": ["REPLACE_DRAFT_PART"]
+    "expectedActions": [
+      "REPLACE_DRAFT_PART"
+    ]
   },
   {
     "id": "modify-010",
@@ -329,7 +422,9 @@
     "message": "성능 올려서 견적 바꿔줘",
     "surface": "SELF_QUOTE",
     "expectedIntent": "BUILD_MODIFY",
-    "expectedActions": ["REPLACE_DRAFT_PART"]
+    "expectedActions": [
+      "REPLACE_DRAFT_PART"
+    ]
   },
   {
     "id": "price-001",
@@ -338,7 +433,9 @@
     "surface": "PART_DETAIL",
     "selectedCategory": "GPU",
     "expectedIntent": "PRICE_ALERT_HELP",
-    "expectedActions": ["CREATE_PRICE_ALERT"]
+    "expectedActions": [
+      "CREATE_PRICE_ALERT"
+    ]
   },
   {
     "id": "price-002",
@@ -347,7 +444,9 @@
     "surface": "PART_DETAIL",
     "selectedCategory": "CPU",
     "expectedIntent": "PRICE_ALERT_HELP",
-    "expectedActions": ["CREATE_PRICE_ALERT"]
+    "expectedActions": [
+      "CREATE_PRICE_ALERT"
+    ]
   },
   {
     "id": "price-003",
@@ -356,7 +455,9 @@
     "surface": "PART_DETAIL",
     "selectedCategory": "RAM",
     "expectedIntent": "PRICE_ALERT_HELP",
-    "expectedActions": ["CREATE_PRICE_ALERT"]
+    "expectedActions": [
+      "CREATE_PRICE_ALERT"
+    ]
   },
   {
     "id": "price-004",
@@ -365,7 +466,9 @@
     "surface": "PART_DETAIL",
     "selectedCategory": "STORAGE",
     "expectedIntent": "PRICE_ALERT_HELP",
-    "expectedActions": ["CREATE_PRICE_ALERT"]
+    "expectedActions": [
+      "CREATE_PRICE_ALERT"
+    ]
   },
   {
     "id": "price-005",
@@ -374,7 +477,9 @@
     "surface": "PART_DETAIL",
     "selectedCategory": "CASE",
     "expectedIntent": "PRICE_ALERT_HELP",
-    "expectedActions": ["CREATE_PRICE_ALERT"]
+    "expectedActions": [
+      "CREATE_PRICE_ALERT"
+    ]
   },
   {
     "id": "price-006",
@@ -383,7 +488,9 @@
     "surface": "PART_DETAIL",
     "selectedCategory": "PSU",
     "expectedIntent": "PRICE_ALERT_HELP",
-    "expectedActions": ["CREATE_PRICE_ALERT"]
+    "expectedActions": [
+      "CREATE_PRICE_ALERT"
+    ]
   },
   {
     "id": "price-007",
@@ -392,7 +499,9 @@
     "surface": "PART_DETAIL",
     "selectedCategory": "COOLER",
     "expectedIntent": "PRICE_ALERT_HELP",
-    "expectedActions": ["CREATE_PRICE_ALERT"]
+    "expectedActions": [
+      "CREATE_PRICE_ALERT"
+    ]
   },
   {
     "id": "price-008",
@@ -401,7 +510,9 @@
     "surface": "PART_DETAIL",
     "selectedCategory": "MOTHERBOARD",
     "expectedIntent": "PRICE_ALERT_HELP",
-    "expectedActions": ["CREATE_PRICE_ALERT"]
+    "expectedActions": [
+      "CREATE_PRICE_ALERT"
+    ]
   },
   {
     "id": "explain-001",
@@ -409,7 +520,9 @@
     "message": "왜 이 조합을 추천했어?",
     "surface": "BUILD_DETAIL",
     "expectedIntent": "EXPLAIN",
-    "expectedActions": ["OPEN_SELF_QUOTE"]
+    "expectedActions": [
+      "OPEN_SELF_QUOTE"
+    ]
   },
   {
     "id": "explain-002",
@@ -417,7 +530,9 @@
     "message": "이 GPU 선택 이유 설명해줘",
     "surface": "PART_DETAIL",
     "expectedIntent": "EXPLAIN",
-    "expectedActions": ["OPEN_SELF_QUOTE"]
+    "expectedActions": [
+      "OPEN_SELF_QUOTE"
+    ]
   },
   {
     "id": "explain-003",
@@ -425,7 +540,9 @@
     "message": "근거가 뭐야?",
     "surface": "BUILD_DETAIL",
     "expectedIntent": "EXPLAIN",
-    "expectedActions": ["OPEN_SELF_QUOTE"]
+    "expectedActions": [
+      "OPEN_SELF_QUOTE"
+    ]
   },
   {
     "id": "explain-004",
@@ -433,7 +550,9 @@
     "message": "이 견적 이유 알려줘",
     "surface": "BUILD_DETAIL",
     "expectedIntent": "EXPLAIN",
-    "expectedActions": ["OPEN_SELF_QUOTE"]
+    "expectedActions": [
+      "OPEN_SELF_QUOTE"
+    ]
   },
   {
     "id": "explain-005",
@@ -441,7 +560,9 @@
     "message": "왜 램을 32기가로 골랐어?",
     "surface": "BUILD_DETAIL",
     "expectedIntent": "EXPLAIN",
-    "expectedActions": ["OPEN_SELF_QUOTE"]
+    "expectedActions": [
+      "OPEN_SELF_QUOTE"
+    ]
   },
   {
     "id": "explain-006",
@@ -449,7 +570,9 @@
     "message": "파워 용량 판단 근거 설명",
     "surface": "BUILD_DETAIL",
     "expectedIntent": "EXPLAIN",
-    "expectedActions": ["OPEN_SELF_QUOTE"]
+    "expectedActions": [
+      "OPEN_SELF_QUOTE"
+    ]
   },
   {
     "id": "explain-007",
@@ -457,7 +580,9 @@
     "message": "가격 차이가 나는 이유 설명해줘",
     "surface": "BUILD_DETAIL",
     "expectedIntent": "EXPLAIN",
-    "expectedActions": ["OPEN_SELF_QUOTE"]
+    "expectedActions": [
+      "OPEN_SELF_QUOTE"
+    ]
   },
   {
     "id": "follow-up-001",
@@ -465,7 +590,9 @@
     "message": "추천해줘",
     "surface": "HOME",
     "expectedIntent": "ASK_FOLLOW_UP",
-    "expectedActions": ["ASK_FOLLOW_UP"]
+    "expectedActions": [
+      "ASK_FOLLOW_UP"
+    ]
   },
   {
     "id": "follow-up-002",
@@ -473,7 +600,9 @@
     "message": "뭐가 좋아?",
     "surface": "HOME",
     "expectedIntent": "ASK_FOLLOW_UP",
-    "expectedActions": ["ASK_FOLLOW_UP"]
+    "expectedActions": [
+      "ASK_FOLLOW_UP"
+    ]
   },
   {
     "id": "follow-up-003",
@@ -481,7 +610,9 @@
     "message": "알아서 해줘",
     "surface": "HOME",
     "expectedIntent": "ASK_FOLLOW_UP",
-    "expectedActions": ["ASK_FOLLOW_UP"]
+    "expectedActions": [
+      "ASK_FOLLOW_UP"
+    ]
   },
   {
     "id": "follow-up-004",
@@ -489,7 +620,9 @@
     "message": "좋은 거",
     "surface": "HOME",
     "expectedIntent": "ASK_FOLLOW_UP",
-    "expectedActions": ["ASK_FOLLOW_UP"]
+    "expectedActions": [
+      "ASK_FOLLOW_UP"
+    ]
   },
   {
     "id": "follow-up-005",
@@ -497,7 +630,9 @@
     "message": "적당한 걸로",
     "surface": "HOME",
     "expectedIntent": "ASK_FOLLOW_UP",
-    "expectedActions": ["ASK_FOLLOW_UP"]
+    "expectedActions": [
+      "ASK_FOLLOW_UP"
+    ]
   },
   {
     "id": "follow-up-006",
@@ -505,7 +640,9 @@
     "message": "잘 모르겠어",
     "surface": "HOME",
     "expectedIntent": "ASK_FOLLOW_UP",
-    "expectedActions": ["ASK_FOLLOW_UP"]
+    "expectedActions": [
+      "ASK_FOLLOW_UP"
+    ]
   },
   {
     "id": "follow-up-007",
@@ -513,7 +650,9 @@
     "message": "그냥 무난하게",
     "surface": "HOME",
     "expectedIntent": "ASK_FOLLOW_UP",
-    "expectedActions": ["ASK_FOLLOW_UP"]
+    "expectedActions": [
+      "ASK_FOLLOW_UP"
+    ]
   },
   {
     "id": "follow-up-008",
@@ -521,6 +660,1527 @@
     "message": "처음이라 모르겠음",
     "surface": "HOME",
     "expectedIntent": "ASK_FOLLOW_UP",
-    "expectedActions": ["ASK_FOLLOW_UP"]
+    "expectedActions": [
+      "ASK_FOLLOW_UP"
+    ]
+  },
+  {
+    "id": "direction-gpu-more-001",
+    "group": "BUILD_MODIFY_DIRECTION",
+    "message": "그래픽카드 더 좋은 걸로 바꿔줘",
+    "surface": "SELF_QUOTE",
+    "expectedIntent": "BUILD_MODIFY",
+    "expectedActions": [
+      "REPLACE_DRAFT_PART"
+    ],
+    "requiredActionType": "REPLACE_DRAFT_PART",
+    "expectedCategory": "GPU",
+    "expectedDirection": "MORE_EXPENSIVE",
+    "forbiddenPartIds": [
+      "GPU-mid",
+      "GPU-low"
+    ],
+    "currentQuoteDraft": {
+      "id": "direction-draft",
+      "status": "ACTIVE",
+      "name": "방향성 검증 견적",
+      "items": [
+        {
+          "id": "draft-gpu",
+          "partId": "GPU-mid",
+          "category": "GPU",
+          "name": "GPU Mid",
+          "manufacturer": "BuildGraph",
+          "quantity": 1,
+          "currentPrice": 760000,
+          "lineTotal": 760000,
+          "attributes": {
+            "gpuClass": "RTX_5070"
+          }
+        }
+      ]
+    }
+  },
+  {
+    "id": "direction-gpu-more-002",
+    "group": "BUILD_MODIFY_DIRECTION",
+    "message": "그래픽카드 상위 제품으로 업그레이드해줘",
+    "surface": "SELF_QUOTE",
+    "expectedIntent": "BUILD_MODIFY",
+    "expectedActions": [
+      "REPLACE_DRAFT_PART"
+    ],
+    "requiredActionType": "REPLACE_DRAFT_PART",
+    "expectedCategory": "GPU",
+    "expectedDirection": "MORE_EXPENSIVE",
+    "forbiddenPartIds": [
+      "GPU-mid",
+      "GPU-low"
+    ],
+    "currentQuoteDraft": {
+      "id": "direction-draft",
+      "status": "ACTIVE",
+      "name": "방향성 검증 견적",
+      "items": [
+        {
+          "id": "draft-gpu",
+          "partId": "GPU-mid",
+          "category": "GPU",
+          "name": "GPU Mid",
+          "manufacturer": "BuildGraph",
+          "quantity": 1,
+          "currentPrice": 760000,
+          "lineTotal": 760000,
+          "attributes": {
+            "gpuClass": "RTX_5070"
+          }
+        }
+      ]
+    }
+  },
+  {
+    "id": "direction-gpu-cheap-001",
+    "group": "BUILD_MODIFY_DIRECTION",
+    "message": "그래픽카드 너무 비싸니 더 싼 걸로 추천해줘",
+    "surface": "SELF_QUOTE",
+    "expectedIntent": "BUILD_MODIFY",
+    "expectedActions": [
+      "REPLACE_DRAFT_PART"
+    ],
+    "requiredActionType": "REPLACE_DRAFT_PART",
+    "expectedCategory": "GPU",
+    "expectedDirection": "CHEAPER",
+    "forbiddenPartIds": [],
+    "currentQuoteDraft": {
+      "id": "direction-draft",
+      "status": "ACTIVE",
+      "name": "방향성 검증 견적",
+      "items": [
+        {
+          "id": "draft-gpu",
+          "partId": "GPU-mid",
+          "category": "GPU",
+          "name": "GPU Mid",
+          "manufacturer": "BuildGraph",
+          "quantity": 1,
+          "currentPrice": 760000,
+          "lineTotal": 760000,
+          "attributes": {
+            "gpuClass": "RTX_5070"
+          }
+        }
+      ]
+    }
+  },
+  {
+    "id": "direction-gpu-cheap-002",
+    "group": "BUILD_MODIFY_DIRECTION",
+    "message": "그래픽카드 예산 낮춰야 해서 저렴한 후보로 바꿔줘",
+    "surface": "SELF_QUOTE",
+    "expectedIntent": "BUILD_MODIFY",
+    "expectedActions": [
+      "REPLACE_DRAFT_PART"
+    ],
+    "requiredActionType": "REPLACE_DRAFT_PART",
+    "expectedCategory": "GPU",
+    "expectedDirection": "CHEAPER",
+    "forbiddenPartIds": [],
+    "currentQuoteDraft": {
+      "id": "direction-draft",
+      "status": "ACTIVE",
+      "name": "방향성 검증 견적",
+      "items": [
+        {
+          "id": "draft-gpu",
+          "partId": "GPU-mid",
+          "category": "GPU",
+          "name": "GPU Mid",
+          "manufacturer": "BuildGraph",
+          "quantity": 1,
+          "currentPrice": 760000,
+          "lineTotal": 760000,
+          "attributes": {
+            "gpuClass": "RTX_5070"
+          }
+        }
+      ]
+    }
+  },
+  {
+    "id": "direction-gpu-similar-001",
+    "group": "BUILD_MODIFY_DIRECTION",
+    "message": "그래픽카드 비슷한 가격으로 더 괜찮은 걸로 바꿔줘",
+    "surface": "SELF_QUOTE",
+    "expectedIntent": "BUILD_MODIFY",
+    "expectedActions": [
+      "REPLACE_DRAFT_PART"
+    ],
+    "requiredActionType": "REPLACE_DRAFT_PART",
+    "expectedCategory": "GPU",
+    "expectedDirection": "SIMILAR_PRICE",
+    "forbiddenPartIds": [
+      "GPU-low"
+    ],
+    "currentQuoteDraft": {
+      "id": "direction-draft",
+      "status": "ACTIVE",
+      "name": "방향성 검증 견적",
+      "items": [
+        {
+          "id": "draft-gpu",
+          "partId": "GPU-mid",
+          "category": "GPU",
+          "name": "GPU Mid",
+          "manufacturer": "BuildGraph",
+          "quantity": 1,
+          "currentPrice": 760000,
+          "lineTotal": 760000,
+          "attributes": {
+            "gpuClass": "RTX_5070"
+          }
+        }
+      ]
+    }
+  },
+  {
+    "id": "direction-cpu-more-001",
+    "group": "BUILD_MODIFY_DIRECTION",
+    "message": "CPU 더 좋은 걸로 바꿔줘",
+    "surface": "SELF_QUOTE",
+    "expectedIntent": "BUILD_MODIFY",
+    "expectedActions": [
+      "REPLACE_DRAFT_PART"
+    ],
+    "requiredActionType": "REPLACE_DRAFT_PART",
+    "expectedCategory": "CPU",
+    "expectedDirection": "MORE_EXPENSIVE",
+    "forbiddenPartIds": [
+      "CPU-mid",
+      "CPU-low"
+    ],
+    "currentQuoteDraft": {
+      "id": "direction-draft",
+      "status": "ACTIVE",
+      "name": "방향성 검증 견적",
+      "items": [
+        {
+          "id": "draft-cpu",
+          "partId": "CPU-mid",
+          "category": "CPU",
+          "name": "CPU Mid",
+          "manufacturer": "BuildGraph",
+          "quantity": 1,
+          "currentPrice": 300000,
+          "lineTotal": 300000,
+          "attributes": {
+            "cpuClass": "RYZEN_7",
+            "coreCount": 8,
+            "threadCount": 16
+          }
+        }
+      ]
+    }
+  },
+  {
+    "id": "direction-cpu-more-002",
+    "group": "BUILD_MODIFY_DIRECTION",
+    "message": "CPU 상위 제품으로 업그레이드해줘",
+    "surface": "SELF_QUOTE",
+    "expectedIntent": "BUILD_MODIFY",
+    "expectedActions": [
+      "REPLACE_DRAFT_PART"
+    ],
+    "requiredActionType": "REPLACE_DRAFT_PART",
+    "expectedCategory": "CPU",
+    "expectedDirection": "MORE_EXPENSIVE",
+    "forbiddenPartIds": [
+      "CPU-mid",
+      "CPU-low"
+    ],
+    "currentQuoteDraft": {
+      "id": "direction-draft",
+      "status": "ACTIVE",
+      "name": "방향성 검증 견적",
+      "items": [
+        {
+          "id": "draft-cpu",
+          "partId": "CPU-mid",
+          "category": "CPU",
+          "name": "CPU Mid",
+          "manufacturer": "BuildGraph",
+          "quantity": 1,
+          "currentPrice": 300000,
+          "lineTotal": 300000,
+          "attributes": {
+            "cpuClass": "RYZEN_7",
+            "coreCount": 8,
+            "threadCount": 16
+          }
+        }
+      ]
+    }
+  },
+  {
+    "id": "direction-cpu-cheap-001",
+    "group": "BUILD_MODIFY_DIRECTION",
+    "message": "CPU 너무 비싸니 더 싼 걸로 추천해줘",
+    "surface": "SELF_QUOTE",
+    "expectedIntent": "BUILD_MODIFY",
+    "expectedActions": [
+      "REPLACE_DRAFT_PART"
+    ],
+    "requiredActionType": "REPLACE_DRAFT_PART",
+    "expectedCategory": "CPU",
+    "expectedDirection": "CHEAPER",
+    "forbiddenPartIds": [],
+    "currentQuoteDraft": {
+      "id": "direction-draft",
+      "status": "ACTIVE",
+      "name": "방향성 검증 견적",
+      "items": [
+        {
+          "id": "draft-cpu",
+          "partId": "CPU-mid",
+          "category": "CPU",
+          "name": "CPU Mid",
+          "manufacturer": "BuildGraph",
+          "quantity": 1,
+          "currentPrice": 300000,
+          "lineTotal": 300000,
+          "attributes": {
+            "cpuClass": "RYZEN_7",
+            "coreCount": 8,
+            "threadCount": 16
+          }
+        }
+      ]
+    }
+  },
+  {
+    "id": "direction-cpu-cheap-002",
+    "group": "BUILD_MODIFY_DIRECTION",
+    "message": "CPU 예산 낮춰야 해서 저렴한 후보로 바꿔줘",
+    "surface": "SELF_QUOTE",
+    "expectedIntent": "BUILD_MODIFY",
+    "expectedActions": [
+      "REPLACE_DRAFT_PART"
+    ],
+    "requiredActionType": "REPLACE_DRAFT_PART",
+    "expectedCategory": "CPU",
+    "expectedDirection": "CHEAPER",
+    "forbiddenPartIds": [],
+    "currentQuoteDraft": {
+      "id": "direction-draft",
+      "status": "ACTIVE",
+      "name": "방향성 검증 견적",
+      "items": [
+        {
+          "id": "draft-cpu",
+          "partId": "CPU-mid",
+          "category": "CPU",
+          "name": "CPU Mid",
+          "manufacturer": "BuildGraph",
+          "quantity": 1,
+          "currentPrice": 300000,
+          "lineTotal": 300000,
+          "attributes": {
+            "cpuClass": "RYZEN_7",
+            "coreCount": 8,
+            "threadCount": 16
+          }
+        }
+      ]
+    }
+  },
+  {
+    "id": "direction-cpu-similar-001",
+    "group": "BUILD_MODIFY_DIRECTION",
+    "message": "CPU 비슷한 가격으로 더 괜찮은 걸로 바꿔줘",
+    "surface": "SELF_QUOTE",
+    "expectedIntent": "BUILD_MODIFY",
+    "expectedActions": [
+      "REPLACE_DRAFT_PART"
+    ],
+    "requiredActionType": "REPLACE_DRAFT_PART",
+    "expectedCategory": "CPU",
+    "expectedDirection": "SIMILAR_PRICE",
+    "forbiddenPartIds": [
+      "CPU-low"
+    ],
+    "currentQuoteDraft": {
+      "id": "direction-draft",
+      "status": "ACTIVE",
+      "name": "방향성 검증 견적",
+      "items": [
+        {
+          "id": "draft-cpu",
+          "partId": "CPU-mid",
+          "category": "CPU",
+          "name": "CPU Mid",
+          "manufacturer": "BuildGraph",
+          "quantity": 1,
+          "currentPrice": 300000,
+          "lineTotal": 300000,
+          "attributes": {
+            "cpuClass": "RYZEN_7",
+            "coreCount": 8,
+            "threadCount": 16
+          }
+        }
+      ]
+    }
+  },
+  {
+    "id": "direction-motherboard-more-001",
+    "group": "BUILD_MODIFY_DIRECTION",
+    "message": "메인보드 더 좋은 걸로 바꿔줘",
+    "surface": "SELF_QUOTE",
+    "expectedIntent": "BUILD_MODIFY",
+    "expectedActions": [
+      "REPLACE_DRAFT_PART"
+    ],
+    "requiredActionType": "REPLACE_DRAFT_PART",
+    "expectedCategory": "MOTHERBOARD",
+    "expectedDirection": "MORE_EXPENSIVE",
+    "forbiddenPartIds": [
+      "MOTHERBOARD-mid",
+      "MOTHERBOARD-low"
+    ],
+    "currentQuoteDraft": {
+      "id": "direction-draft",
+      "status": "ACTIVE",
+      "name": "방향성 검증 견적",
+      "items": [
+        {
+          "id": "draft-motherboard",
+          "partId": "MOTHERBOARD-mid",
+          "category": "MOTHERBOARD",
+          "name": "MOTHERBOARD Mid",
+          "manufacturer": "BuildGraph",
+          "quantity": 1,
+          "currentPrice": 120000,
+          "lineTotal": 120000,
+          "attributes": {
+            "chipset": "H810",
+            "memoryType": "DDR5",
+            "pcieGeneration": "3.0"
+          }
+        }
+      ]
+    }
+  },
+  {
+    "id": "direction-motherboard-more-002",
+    "group": "BUILD_MODIFY_DIRECTION",
+    "message": "메인보드 상위 제품으로 업그레이드해줘",
+    "surface": "SELF_QUOTE",
+    "expectedIntent": "BUILD_MODIFY",
+    "expectedActions": [
+      "REPLACE_DRAFT_PART"
+    ],
+    "requiredActionType": "REPLACE_DRAFT_PART",
+    "expectedCategory": "MOTHERBOARD",
+    "expectedDirection": "MORE_EXPENSIVE",
+    "forbiddenPartIds": [
+      "MOTHERBOARD-mid",
+      "MOTHERBOARD-low"
+    ],
+    "currentQuoteDraft": {
+      "id": "direction-draft",
+      "status": "ACTIVE",
+      "name": "방향성 검증 견적",
+      "items": [
+        {
+          "id": "draft-motherboard",
+          "partId": "MOTHERBOARD-mid",
+          "category": "MOTHERBOARD",
+          "name": "MOTHERBOARD Mid",
+          "manufacturer": "BuildGraph",
+          "quantity": 1,
+          "currentPrice": 120000,
+          "lineTotal": 120000,
+          "attributes": {
+            "chipset": "H810",
+            "memoryType": "DDR5",
+            "pcieGeneration": "3.0"
+          }
+        }
+      ]
+    }
+  },
+  {
+    "id": "direction-motherboard-cheap-001",
+    "group": "BUILD_MODIFY_DIRECTION",
+    "message": "메인보드 너무 비싸니 더 싼 걸로 추천해줘",
+    "surface": "SELF_QUOTE",
+    "expectedIntent": "BUILD_MODIFY",
+    "expectedActions": [
+      "REPLACE_DRAFT_PART"
+    ],
+    "requiredActionType": "REPLACE_DRAFT_PART",
+    "expectedCategory": "MOTHERBOARD",
+    "expectedDirection": "CHEAPER",
+    "forbiddenPartIds": [],
+    "currentQuoteDraft": {
+      "id": "direction-draft",
+      "status": "ACTIVE",
+      "name": "방향성 검증 견적",
+      "items": [
+        {
+          "id": "draft-motherboard",
+          "partId": "MOTHERBOARD-mid",
+          "category": "MOTHERBOARD",
+          "name": "MOTHERBOARD Mid",
+          "manufacturer": "BuildGraph",
+          "quantity": 1,
+          "currentPrice": 240000,
+          "lineTotal": 240000,
+          "attributes": {
+            "chipset": "B850",
+            "memoryType": "DDR5",
+            "pcieGeneration": "4.0"
+          }
+        }
+      ]
+    }
+  },
+  {
+    "id": "direction-motherboard-cheap-002",
+    "group": "BUILD_MODIFY_DIRECTION",
+    "message": "메인보드 예산 낮춰야 해서 저렴한 후보로 바꿔줘",
+    "surface": "SELF_QUOTE",
+    "expectedIntent": "BUILD_MODIFY",
+    "expectedActions": [
+      "REPLACE_DRAFT_PART"
+    ],
+    "requiredActionType": "REPLACE_DRAFT_PART",
+    "expectedCategory": "MOTHERBOARD",
+    "expectedDirection": "CHEAPER",
+    "forbiddenPartIds": [],
+    "currentQuoteDraft": {
+      "id": "direction-draft",
+      "status": "ACTIVE",
+      "name": "방향성 검증 견적",
+      "items": [
+        {
+          "id": "draft-motherboard",
+          "partId": "MOTHERBOARD-mid",
+          "category": "MOTHERBOARD",
+          "name": "MOTHERBOARD Mid",
+          "manufacturer": "BuildGraph",
+          "quantity": 1,
+          "currentPrice": 240000,
+          "lineTotal": 240000,
+          "attributes": {
+            "chipset": "B850",
+            "memoryType": "DDR5",
+            "pcieGeneration": "4.0"
+          }
+        }
+      ]
+    }
+  },
+  {
+    "id": "direction-motherboard-similar-001",
+    "group": "BUILD_MODIFY_DIRECTION",
+    "message": "메인보드 비슷한 가격으로 더 괜찮은 걸로 바꿔줘",
+    "surface": "SELF_QUOTE",
+    "expectedIntent": "BUILD_MODIFY",
+    "expectedActions": [
+      "REPLACE_DRAFT_PART"
+    ],
+    "requiredActionType": "REPLACE_DRAFT_PART",
+    "expectedCategory": "MOTHERBOARD",
+    "expectedDirection": "SIMILAR_PRICE",
+    "forbiddenPartIds": [
+      "MOTHERBOARD-low"
+    ],
+    "currentQuoteDraft": {
+      "id": "direction-draft",
+      "status": "ACTIVE",
+      "name": "방향성 검증 견적",
+      "items": [
+        {
+          "id": "draft-motherboard",
+          "partId": "MOTHERBOARD-mid",
+          "category": "MOTHERBOARD",
+          "name": "MOTHERBOARD Mid",
+          "manufacturer": "BuildGraph",
+          "quantity": 1,
+          "currentPrice": 240000,
+          "lineTotal": 240000,
+          "attributes": {
+            "chipset": "B850",
+            "memoryType": "DDR5",
+            "pcieGeneration": "4.0"
+          }
+        }
+      ]
+    }
+  },
+  {
+    "id": "direction-ram-more-001",
+    "group": "BUILD_MODIFY_DIRECTION",
+    "message": "램 더 좋은 걸로 바꿔줘",
+    "surface": "SELF_QUOTE",
+    "expectedIntent": "BUILD_MODIFY",
+    "expectedActions": [
+      "REPLACE_DRAFT_PART"
+    ],
+    "requiredActionType": "REPLACE_DRAFT_PART",
+    "expectedCategory": "RAM",
+    "expectedDirection": "MORE_EXPENSIVE",
+    "forbiddenPartIds": [
+      "RAM-mid",
+      "RAM-low"
+    ],
+    "currentQuoteDraft": {
+      "id": "direction-draft",
+      "status": "ACTIVE",
+      "name": "방향성 검증 견적",
+      "items": [
+        {
+          "id": "draft-ram",
+          "partId": "RAM-mid",
+          "category": "RAM",
+          "name": "RAM Mid",
+          "manufacturer": "BuildGraph",
+          "quantity": 1,
+          "currentPrice": 150000,
+          "lineTotal": 150000,
+          "attributes": {
+            "memoryType": "DDR5",
+            "capacityGb": 32,
+            "speedMhz": 6400,
+            "moduleCount": 2
+          }
+        }
+      ]
+    }
+  },
+  {
+    "id": "direction-ram-more-002",
+    "group": "BUILD_MODIFY_DIRECTION",
+    "message": "램 상위 제품으로 업그레이드해줘",
+    "surface": "SELF_QUOTE",
+    "expectedIntent": "BUILD_MODIFY",
+    "expectedActions": [
+      "REPLACE_DRAFT_PART"
+    ],
+    "requiredActionType": "REPLACE_DRAFT_PART",
+    "expectedCategory": "RAM",
+    "expectedDirection": "MORE_EXPENSIVE",
+    "forbiddenPartIds": [
+      "RAM-mid",
+      "RAM-low"
+    ],
+    "currentQuoteDraft": {
+      "id": "direction-draft",
+      "status": "ACTIVE",
+      "name": "방향성 검증 견적",
+      "items": [
+        {
+          "id": "draft-ram",
+          "partId": "RAM-mid",
+          "category": "RAM",
+          "name": "RAM Mid",
+          "manufacturer": "BuildGraph",
+          "quantity": 1,
+          "currentPrice": 150000,
+          "lineTotal": 150000,
+          "attributes": {
+            "memoryType": "DDR5",
+            "capacityGb": 32,
+            "speedMhz": 6400,
+            "moduleCount": 2
+          }
+        }
+      ]
+    }
+  },
+  {
+    "id": "direction-ram-cheap-001",
+    "group": "BUILD_MODIFY_DIRECTION",
+    "message": "램 너무 비싸니 더 싼 걸로 추천해줘",
+    "surface": "SELF_QUOTE",
+    "expectedIntent": "BUILD_MODIFY",
+    "expectedActions": [
+      "REPLACE_DRAFT_PART"
+    ],
+    "requiredActionType": "REPLACE_DRAFT_PART",
+    "expectedCategory": "RAM",
+    "expectedDirection": "CHEAPER",
+    "forbiddenPartIds": [],
+    "currentQuoteDraft": {
+      "id": "direction-draft",
+      "status": "ACTIVE",
+      "name": "방향성 검증 견적",
+      "items": [
+        {
+          "id": "draft-ram",
+          "partId": "RAM-mid",
+          "category": "RAM",
+          "name": "RAM Mid",
+          "manufacturer": "BuildGraph",
+          "quantity": 1,
+          "currentPrice": 3000000,
+          "lineTotal": 3000000,
+          "attributes": {
+            "memoryType": "DDR5",
+            "capacityGb": 32,
+            "speedMhz": 6400,
+            "moduleCount": 2
+          }
+        }
+      ]
+    }
+  },
+  {
+    "id": "direction-ram-cheap-002",
+    "group": "BUILD_MODIFY_DIRECTION",
+    "message": "램 예산 낮춰야 해서 저렴한 후보로 바꿔줘",
+    "surface": "SELF_QUOTE",
+    "expectedIntent": "BUILD_MODIFY",
+    "expectedActions": [
+      "REPLACE_DRAFT_PART"
+    ],
+    "requiredActionType": "REPLACE_DRAFT_PART",
+    "expectedCategory": "RAM",
+    "expectedDirection": "CHEAPER",
+    "forbiddenPartIds": [],
+    "currentQuoteDraft": {
+      "id": "direction-draft",
+      "status": "ACTIVE",
+      "name": "방향성 검증 견적",
+      "items": [
+        {
+          "id": "draft-ram",
+          "partId": "RAM-mid",
+          "category": "RAM",
+          "name": "RAM Mid",
+          "manufacturer": "BuildGraph",
+          "quantity": 1,
+          "currentPrice": 3000000,
+          "lineTotal": 3000000,
+          "attributes": {
+            "memoryType": "DDR5",
+            "capacityGb": 32,
+            "speedMhz": 6400,
+            "moduleCount": 2
+          }
+        }
+      ]
+    }
+  },
+  {
+    "id": "direction-ram-similar-001",
+    "group": "BUILD_MODIFY_DIRECTION",
+    "message": "램 비슷한 가격으로 더 괜찮은 걸로 바꿔줘",
+    "surface": "SELF_QUOTE",
+    "expectedIntent": "BUILD_MODIFY",
+    "expectedActions": [
+      "REPLACE_DRAFT_PART"
+    ],
+    "requiredActionType": "REPLACE_DRAFT_PART",
+    "expectedCategory": "RAM",
+    "expectedDirection": "SIMILAR_PRICE",
+    "forbiddenPartIds": [
+      "RAM-low"
+    ],
+    "currentQuoteDraft": {
+      "id": "direction-draft",
+      "status": "ACTIVE",
+      "name": "방향성 검증 견적",
+      "items": [
+        {
+          "id": "draft-ram",
+          "partId": "RAM-mid",
+          "category": "RAM",
+          "name": "RAM Mid",
+          "manufacturer": "BuildGraph",
+          "quantity": 1,
+          "currentPrice": 150000,
+          "lineTotal": 150000,
+          "attributes": {
+            "memoryType": "DDR5",
+            "capacityGb": 32,
+            "speedMhz": 6400,
+            "moduleCount": 2
+          }
+        }
+      ]
+    }
+  },
+  {
+    "id": "direction-storage-more-001",
+    "group": "BUILD_MODIFY_DIRECTION",
+    "message": "SSD 더 좋은 걸로 바꿔줘",
+    "surface": "SELF_QUOTE",
+    "expectedIntent": "BUILD_MODIFY",
+    "expectedActions": [
+      "REPLACE_DRAFT_PART"
+    ],
+    "requiredActionType": "REPLACE_DRAFT_PART",
+    "expectedCategory": "STORAGE",
+    "expectedDirection": "MORE_EXPENSIVE",
+    "forbiddenPartIds": [
+      "STORAGE-mid",
+      "STORAGE-low"
+    ],
+    "currentQuoteDraft": {
+      "id": "direction-draft",
+      "status": "ACTIVE",
+      "name": "방향성 검증 견적",
+      "items": [
+        {
+          "id": "draft-storage",
+          "partId": "STORAGE-mid",
+          "category": "STORAGE",
+          "name": "STORAGE Mid",
+          "manufacturer": "BuildGraph",
+          "quantity": 1,
+          "currentPrice": 150000,
+          "lineTotal": 150000,
+          "attributes": {
+            "capacityGb": 2000,
+            "readMbps": 7400,
+            "writeMbps": 6500,
+            "generation": "PCIe 4.0"
+          }
+        }
+      ]
+    }
+  },
+  {
+    "id": "direction-storage-more-002",
+    "group": "BUILD_MODIFY_DIRECTION",
+    "message": "SSD 상위 제품으로 업그레이드해줘",
+    "surface": "SELF_QUOTE",
+    "expectedIntent": "BUILD_MODIFY",
+    "expectedActions": [
+      "REPLACE_DRAFT_PART"
+    ],
+    "requiredActionType": "REPLACE_DRAFT_PART",
+    "expectedCategory": "STORAGE",
+    "expectedDirection": "MORE_EXPENSIVE",
+    "forbiddenPartIds": [
+      "STORAGE-mid",
+      "STORAGE-low"
+    ],
+    "currentQuoteDraft": {
+      "id": "direction-draft",
+      "status": "ACTIVE",
+      "name": "방향성 검증 견적",
+      "items": [
+        {
+          "id": "draft-storage",
+          "partId": "STORAGE-mid",
+          "category": "STORAGE",
+          "name": "STORAGE Mid",
+          "manufacturer": "BuildGraph",
+          "quantity": 1,
+          "currentPrice": 150000,
+          "lineTotal": 150000,
+          "attributes": {
+            "capacityGb": 2000,
+            "readMbps": 7400,
+            "writeMbps": 6500,
+            "generation": "PCIe 4.0"
+          }
+        }
+      ]
+    }
+  },
+  {
+    "id": "direction-storage-cheap-001",
+    "group": "BUILD_MODIFY_DIRECTION",
+    "message": "SSD 너무 비싸니 더 싼 걸로 추천해줘",
+    "surface": "SELF_QUOTE",
+    "expectedIntent": "BUILD_MODIFY",
+    "expectedActions": [
+      "REPLACE_DRAFT_PART"
+    ],
+    "requiredActionType": "REPLACE_DRAFT_PART",
+    "expectedCategory": "STORAGE",
+    "expectedDirection": "CHEAPER",
+    "forbiddenPartIds": [],
+    "currentQuoteDraft": {
+      "id": "direction-draft",
+      "status": "ACTIVE",
+      "name": "방향성 검증 견적",
+      "items": [
+        {
+          "id": "draft-storage",
+          "partId": "STORAGE-mid",
+          "category": "STORAGE",
+          "name": "STORAGE Mid",
+          "manufacturer": "BuildGraph",
+          "quantity": 1,
+          "currentPrice": 5000000,
+          "lineTotal": 5000000,
+          "attributes": {
+            "capacityGb": 2000,
+            "readMbps": 7400,
+            "writeMbps": 6500,
+            "generation": "PCIe 4.0"
+          }
+        }
+      ]
+    }
+  },
+  {
+    "id": "direction-storage-cheap-002",
+    "group": "BUILD_MODIFY_DIRECTION",
+    "message": "SSD 예산 낮춰야 해서 저렴한 후보로 바꿔줘",
+    "surface": "SELF_QUOTE",
+    "expectedIntent": "BUILD_MODIFY",
+    "expectedActions": [
+      "REPLACE_DRAFT_PART"
+    ],
+    "requiredActionType": "REPLACE_DRAFT_PART",
+    "expectedCategory": "STORAGE",
+    "expectedDirection": "CHEAPER",
+    "forbiddenPartIds": [],
+    "currentQuoteDraft": {
+      "id": "direction-draft",
+      "status": "ACTIVE",
+      "name": "방향성 검증 견적",
+      "items": [
+        {
+          "id": "draft-storage",
+          "partId": "STORAGE-mid",
+          "category": "STORAGE",
+          "name": "STORAGE Mid",
+          "manufacturer": "BuildGraph",
+          "quantity": 1,
+          "currentPrice": 5000000,
+          "lineTotal": 5000000,
+          "attributes": {
+            "capacityGb": 2000,
+            "readMbps": 7400,
+            "writeMbps": 6500,
+            "generation": "PCIe 4.0"
+          }
+        }
+      ]
+    }
+  },
+  {
+    "id": "direction-storage-similar-001",
+    "group": "BUILD_MODIFY_DIRECTION",
+    "message": "SSD 비슷한 가격으로 더 괜찮은 걸로 바꿔줘",
+    "surface": "SELF_QUOTE",
+    "expectedIntent": "BUILD_MODIFY",
+    "expectedActions": [
+      "REPLACE_DRAFT_PART"
+    ],
+    "requiredActionType": "REPLACE_DRAFT_PART",
+    "expectedCategory": "STORAGE",
+    "expectedDirection": "SIMILAR_PRICE",
+    "forbiddenPartIds": [
+      "STORAGE-low"
+    ],
+    "currentQuoteDraft": {
+      "id": "direction-draft",
+      "status": "ACTIVE",
+      "name": "방향성 검증 견적",
+      "items": [
+        {
+          "id": "draft-storage",
+          "partId": "STORAGE-mid",
+          "category": "STORAGE",
+          "name": "STORAGE Mid",
+          "manufacturer": "BuildGraph",
+          "quantity": 1,
+          "currentPrice": 150000,
+          "lineTotal": 150000,
+          "attributes": {
+            "capacityGb": 2000,
+            "readMbps": 7400,
+            "writeMbps": 6500,
+            "generation": "PCIe 4.0"
+          }
+        }
+      ]
+    }
+  },
+  {
+    "id": "direction-psu-more-001",
+    "group": "BUILD_MODIFY_DIRECTION",
+    "message": "파워 더 좋은 걸로 바꿔줘",
+    "surface": "SELF_QUOTE",
+    "expectedIntent": "BUILD_MODIFY",
+    "expectedActions": [
+      "REPLACE_DRAFT_PART"
+    ],
+    "requiredActionType": "REPLACE_DRAFT_PART",
+    "expectedCategory": "PSU",
+    "expectedDirection": "MORE_EXPENSIVE",
+    "forbiddenPartIds": [
+      "PSU-mid",
+      "PSU-low"
+    ],
+    "currentQuoteDraft": {
+      "id": "direction-draft",
+      "status": "ACTIVE",
+      "name": "방향성 검증 견적",
+      "items": [
+        {
+          "id": "draft-psu",
+          "partId": "PSU-mid",
+          "category": "PSU",
+          "name": "PSU Mid",
+          "manufacturer": "BuildGraph",
+          "quantity": 1,
+          "currentPrice": 150000,
+          "lineTotal": 150000,
+          "attributes": {
+            "capacityW": 850,
+            "efficiency": "GOLD",
+            "atxSpec": "3.1",
+            "modular": true
+          }
+        }
+      ]
+    }
+  },
+  {
+    "id": "direction-psu-more-002",
+    "group": "BUILD_MODIFY_DIRECTION",
+    "message": "파워 상위 제품으로 업그레이드해줘",
+    "surface": "SELF_QUOTE",
+    "expectedIntent": "BUILD_MODIFY",
+    "expectedActions": [
+      "REPLACE_DRAFT_PART"
+    ],
+    "requiredActionType": "REPLACE_DRAFT_PART",
+    "expectedCategory": "PSU",
+    "expectedDirection": "MORE_EXPENSIVE",
+    "forbiddenPartIds": [
+      "PSU-mid",
+      "PSU-low"
+    ],
+    "currentQuoteDraft": {
+      "id": "direction-draft",
+      "status": "ACTIVE",
+      "name": "방향성 검증 견적",
+      "items": [
+        {
+          "id": "draft-psu",
+          "partId": "PSU-mid",
+          "category": "PSU",
+          "name": "PSU Mid",
+          "manufacturer": "BuildGraph",
+          "quantity": 1,
+          "currentPrice": 150000,
+          "lineTotal": 150000,
+          "attributes": {
+            "capacityW": 850,
+            "efficiency": "GOLD",
+            "atxSpec": "3.1",
+            "modular": true
+          }
+        }
+      ]
+    }
+  },
+  {
+    "id": "direction-psu-cheap-001",
+    "group": "BUILD_MODIFY_DIRECTION",
+    "message": "파워 너무 비싸니 더 싼 걸로 추천해줘",
+    "surface": "SELF_QUOTE",
+    "expectedIntent": "BUILD_MODIFY",
+    "expectedActions": [
+      "REPLACE_DRAFT_PART"
+    ],
+    "requiredActionType": "REPLACE_DRAFT_PART",
+    "expectedCategory": "PSU",
+    "expectedDirection": "CHEAPER",
+    "forbiddenPartIds": [],
+    "currentQuoteDraft": {
+      "id": "direction-draft",
+      "status": "ACTIVE",
+      "name": "방향성 검증 견적",
+      "items": [
+        {
+          "id": "draft-psu",
+          "partId": "PSU-mid",
+          "category": "PSU",
+          "name": "PSU Mid",
+          "manufacturer": "BuildGraph",
+          "quantity": 1,
+          "currentPrice": 150000,
+          "lineTotal": 150000,
+          "attributes": {
+            "capacityW": 850,
+            "efficiency": "GOLD",
+            "atxSpec": "3.1",
+            "modular": true
+          }
+        }
+      ]
+    }
+  },
+  {
+    "id": "direction-psu-cheap-002",
+    "group": "BUILD_MODIFY_DIRECTION",
+    "message": "파워 예산 낮춰야 해서 저렴한 후보로 바꿔줘",
+    "surface": "SELF_QUOTE",
+    "expectedIntent": "BUILD_MODIFY",
+    "expectedActions": [
+      "REPLACE_DRAFT_PART"
+    ],
+    "requiredActionType": "REPLACE_DRAFT_PART",
+    "expectedCategory": "PSU",
+    "expectedDirection": "CHEAPER",
+    "forbiddenPartIds": [],
+    "currentQuoteDraft": {
+      "id": "direction-draft",
+      "status": "ACTIVE",
+      "name": "방향성 검증 견적",
+      "items": [
+        {
+          "id": "draft-psu",
+          "partId": "PSU-mid",
+          "category": "PSU",
+          "name": "PSU Mid",
+          "manufacturer": "BuildGraph",
+          "quantity": 1,
+          "currentPrice": 150000,
+          "lineTotal": 150000,
+          "attributes": {
+            "capacityW": 850,
+            "efficiency": "GOLD",
+            "atxSpec": "3.1",
+            "modular": true
+          }
+        }
+      ]
+    }
+  },
+  {
+    "id": "direction-psu-similar-001",
+    "group": "BUILD_MODIFY_DIRECTION",
+    "message": "파워 비슷한 가격으로 더 괜찮은 걸로 바꿔줘",
+    "surface": "SELF_QUOTE",
+    "expectedIntent": "BUILD_MODIFY",
+    "expectedActions": [
+      "REPLACE_DRAFT_PART"
+    ],
+    "requiredActionType": "REPLACE_DRAFT_PART",
+    "expectedCategory": "PSU",
+    "expectedDirection": "SIMILAR_PRICE",
+    "forbiddenPartIds": [
+      "PSU-low"
+    ],
+    "currentQuoteDraft": {
+      "id": "direction-draft",
+      "status": "ACTIVE",
+      "name": "방향성 검증 견적",
+      "items": [
+        {
+          "id": "draft-psu",
+          "partId": "PSU-mid",
+          "category": "PSU",
+          "name": "PSU Mid",
+          "manufacturer": "BuildGraph",
+          "quantity": 1,
+          "currentPrice": 150000,
+          "lineTotal": 150000,
+          "attributes": {
+            "capacityW": 850,
+            "efficiency": "GOLD",
+            "atxSpec": "3.1",
+            "modular": true
+          }
+        }
+      ]
+    }
+  },
+  {
+    "id": "direction-case-more-001",
+    "group": "BUILD_MODIFY_DIRECTION",
+    "message": "케이스 더 좋은 걸로 바꿔줘",
+    "surface": "SELF_QUOTE",
+    "expectedIntent": "BUILD_MODIFY",
+    "expectedActions": [
+      "REPLACE_DRAFT_PART"
+    ],
+    "requiredActionType": "REPLACE_DRAFT_PART",
+    "expectedCategory": "CASE",
+    "expectedDirection": "MORE_EXPENSIVE",
+    "forbiddenPartIds": [
+      "CASE-mid",
+      "CASE-low"
+    ],
+    "currentQuoteDraft": {
+      "id": "direction-draft",
+      "status": "ACTIVE",
+      "name": "방향성 검증 견적",
+      "items": [
+        {
+          "id": "draft-case",
+          "partId": "CASE-mid",
+          "category": "CASE",
+          "name": "CASE Mid",
+          "manufacturer": "BuildGraph",
+          "quantity": 1,
+          "currentPrice": 120000,
+          "lineTotal": 120000,
+          "attributes": {
+            "maxGpuLengthMm": 380,
+            "maxCpuCoolerHeightMm": 170,
+            "maxPsuLengthMm": 220,
+            "frontMesh": true
+          }
+        }
+      ]
+    }
+  },
+  {
+    "id": "direction-case-more-002",
+    "group": "BUILD_MODIFY_DIRECTION",
+    "message": "케이스 상위 제품으로 업그레이드해줘",
+    "surface": "SELF_QUOTE",
+    "expectedIntent": "BUILD_MODIFY",
+    "expectedActions": [
+      "REPLACE_DRAFT_PART"
+    ],
+    "requiredActionType": "REPLACE_DRAFT_PART",
+    "expectedCategory": "CASE",
+    "expectedDirection": "MORE_EXPENSIVE",
+    "forbiddenPartIds": [
+      "CASE-mid",
+      "CASE-low"
+    ],
+    "currentQuoteDraft": {
+      "id": "direction-draft",
+      "status": "ACTIVE",
+      "name": "방향성 검증 견적",
+      "items": [
+        {
+          "id": "draft-case",
+          "partId": "CASE-mid",
+          "category": "CASE",
+          "name": "CASE Mid",
+          "manufacturer": "BuildGraph",
+          "quantity": 1,
+          "currentPrice": 120000,
+          "lineTotal": 120000,
+          "attributes": {
+            "maxGpuLengthMm": 380,
+            "maxCpuCoolerHeightMm": 170,
+            "maxPsuLengthMm": 220,
+            "frontMesh": true
+          }
+        }
+      ]
+    }
+  },
+  {
+    "id": "direction-case-cheap-001",
+    "group": "BUILD_MODIFY_DIRECTION",
+    "message": "케이스 너무 비싸니 더 싼 걸로 추천해줘",
+    "surface": "SELF_QUOTE",
+    "expectedIntent": "BUILD_MODIFY",
+    "expectedActions": [
+      "REPLACE_DRAFT_PART"
+    ],
+    "requiredActionType": "REPLACE_DRAFT_PART",
+    "expectedCategory": "CASE",
+    "expectedDirection": "CHEAPER",
+    "forbiddenPartIds": [],
+    "currentQuoteDraft": {
+      "id": "direction-draft",
+      "status": "ACTIVE",
+      "name": "방향성 검증 견적",
+      "items": [
+        {
+          "id": "draft-case",
+          "partId": "CASE-mid",
+          "category": "CASE",
+          "name": "CASE Mid",
+          "manufacturer": "BuildGraph",
+          "quantity": 1,
+          "currentPrice": 120000,
+          "lineTotal": 120000,
+          "attributes": {
+            "maxGpuLengthMm": 380,
+            "maxCpuCoolerHeightMm": 170,
+            "maxPsuLengthMm": 220,
+            "frontMesh": true
+          }
+        }
+      ]
+    }
+  },
+  {
+    "id": "direction-case-cheap-002",
+    "group": "BUILD_MODIFY_DIRECTION",
+    "message": "케이스 예산 낮춰야 해서 저렴한 후보로 바꿔줘",
+    "surface": "SELF_QUOTE",
+    "expectedIntent": "BUILD_MODIFY",
+    "expectedActions": [
+      "REPLACE_DRAFT_PART"
+    ],
+    "requiredActionType": "REPLACE_DRAFT_PART",
+    "expectedCategory": "CASE",
+    "expectedDirection": "CHEAPER",
+    "forbiddenPartIds": [],
+    "currentQuoteDraft": {
+      "id": "direction-draft",
+      "status": "ACTIVE",
+      "name": "방향성 검증 견적",
+      "items": [
+        {
+          "id": "draft-case",
+          "partId": "CASE-mid",
+          "category": "CASE",
+          "name": "CASE Mid",
+          "manufacturer": "BuildGraph",
+          "quantity": 1,
+          "currentPrice": 120000,
+          "lineTotal": 120000,
+          "attributes": {
+            "maxGpuLengthMm": 380,
+            "maxCpuCoolerHeightMm": 170,
+            "maxPsuLengthMm": 220,
+            "frontMesh": true
+          }
+        }
+      ]
+    }
+  },
+  {
+    "id": "direction-case-similar-001",
+    "group": "BUILD_MODIFY_DIRECTION",
+    "message": "케이스 비슷한 가격으로 더 괜찮은 걸로 바꿔줘",
+    "surface": "SELF_QUOTE",
+    "expectedIntent": "BUILD_MODIFY",
+    "expectedActions": [
+      "REPLACE_DRAFT_PART"
+    ],
+    "requiredActionType": "REPLACE_DRAFT_PART",
+    "expectedCategory": "CASE",
+    "expectedDirection": "SIMILAR_PRICE",
+    "forbiddenPartIds": [
+      "CASE-low"
+    ],
+    "currentQuoteDraft": {
+      "id": "direction-draft",
+      "status": "ACTIVE",
+      "name": "방향성 검증 견적",
+      "items": [
+        {
+          "id": "draft-case",
+          "partId": "CASE-mid",
+          "category": "CASE",
+          "name": "CASE Mid",
+          "manufacturer": "BuildGraph",
+          "quantity": 1,
+          "currentPrice": 120000,
+          "lineTotal": 120000,
+          "attributes": {
+            "maxGpuLengthMm": 380,
+            "maxCpuCoolerHeightMm": 170,
+            "maxPsuLengthMm": 220,
+            "frontMesh": true
+          }
+        }
+      ]
+    }
+  },
+  {
+    "id": "direction-cooler-more-001",
+    "group": "BUILD_MODIFY_DIRECTION",
+    "message": "쿨러 더 좋은 걸로 바꿔줘",
+    "surface": "SELF_QUOTE",
+    "expectedIntent": "BUILD_MODIFY",
+    "expectedActions": [
+      "REPLACE_DRAFT_PART"
+    ],
+    "requiredActionType": "REPLACE_DRAFT_PART",
+    "expectedCategory": "COOLER",
+    "expectedDirection": "MORE_EXPENSIVE",
+    "forbiddenPartIds": [
+      "COOLER-mid",
+      "COOLER-low"
+    ],
+    "currentQuoteDraft": {
+      "id": "direction-draft",
+      "status": "ACTIVE",
+      "name": "방향성 검증 견적",
+      "items": [
+        {
+          "id": "draft-cooler",
+          "partId": "COOLER-mid",
+          "category": "COOLER",
+          "name": "COOLER Mid",
+          "manufacturer": "BuildGraph",
+          "quantity": 1,
+          "currentPrice": 110000,
+          "lineTotal": 110000,
+          "attributes": {
+            "tdpW": 220,
+            "radiatorLengthMm": 280,
+            "heightMm": 165,
+            "coolerType": "AIR"
+          }
+        }
+      ]
+    }
+  },
+  {
+    "id": "direction-cooler-more-002",
+    "group": "BUILD_MODIFY_DIRECTION",
+    "message": "쿨러 상위 제품으로 업그레이드해줘",
+    "surface": "SELF_QUOTE",
+    "expectedIntent": "BUILD_MODIFY",
+    "expectedActions": [
+      "REPLACE_DRAFT_PART"
+    ],
+    "requiredActionType": "REPLACE_DRAFT_PART",
+    "expectedCategory": "COOLER",
+    "expectedDirection": "MORE_EXPENSIVE",
+    "forbiddenPartIds": [
+      "COOLER-mid",
+      "COOLER-low"
+    ],
+    "currentQuoteDraft": {
+      "id": "direction-draft",
+      "status": "ACTIVE",
+      "name": "방향성 검증 견적",
+      "items": [
+        {
+          "id": "draft-cooler",
+          "partId": "COOLER-mid",
+          "category": "COOLER",
+          "name": "COOLER Mid",
+          "manufacturer": "BuildGraph",
+          "quantity": 1,
+          "currentPrice": 110000,
+          "lineTotal": 110000,
+          "attributes": {
+            "tdpW": 220,
+            "radiatorLengthMm": 280,
+            "heightMm": 165,
+            "coolerType": "AIR"
+          }
+        }
+      ]
+    }
+  },
+  {
+    "id": "direction-cooler-cheap-001",
+    "group": "BUILD_MODIFY_DIRECTION",
+    "message": "쿨러 너무 비싸니 더 싼 걸로 추천해줘",
+    "surface": "SELF_QUOTE",
+    "expectedIntent": "BUILD_MODIFY",
+    "expectedActions": [
+      "REPLACE_DRAFT_PART"
+    ],
+    "requiredActionType": "REPLACE_DRAFT_PART",
+    "expectedCategory": "COOLER",
+    "expectedDirection": "CHEAPER",
+    "forbiddenPartIds": [],
+    "currentQuoteDraft": {
+      "id": "direction-draft",
+      "status": "ACTIVE",
+      "name": "방향성 검증 견적",
+      "items": [
+        {
+          "id": "draft-cooler",
+          "partId": "COOLER-mid",
+          "category": "COOLER",
+          "name": "COOLER Mid",
+          "manufacturer": "BuildGraph",
+          "quantity": 1,
+          "currentPrice": 110000,
+          "lineTotal": 110000,
+          "attributes": {
+            "tdpW": 220,
+            "radiatorLengthMm": 280,
+            "heightMm": 165,
+            "coolerType": "AIR"
+          }
+        }
+      ]
+    }
+  },
+  {
+    "id": "direction-cooler-cheap-002",
+    "group": "BUILD_MODIFY_DIRECTION",
+    "message": "쿨러 예산 낮춰야 해서 저렴한 후보로 바꿔줘",
+    "surface": "SELF_QUOTE",
+    "expectedIntent": "BUILD_MODIFY",
+    "expectedActions": [
+      "REPLACE_DRAFT_PART"
+    ],
+    "requiredActionType": "REPLACE_DRAFT_PART",
+    "expectedCategory": "COOLER",
+    "expectedDirection": "CHEAPER",
+    "forbiddenPartIds": [],
+    "currentQuoteDraft": {
+      "id": "direction-draft",
+      "status": "ACTIVE",
+      "name": "방향성 검증 견적",
+      "items": [
+        {
+          "id": "draft-cooler",
+          "partId": "COOLER-mid",
+          "category": "COOLER",
+          "name": "COOLER Mid",
+          "manufacturer": "BuildGraph",
+          "quantity": 1,
+          "currentPrice": 110000,
+          "lineTotal": 110000,
+          "attributes": {
+            "tdpW": 220,
+            "radiatorLengthMm": 280,
+            "heightMm": 165,
+            "coolerType": "AIR"
+          }
+        }
+      ]
+    }
+  },
+  {
+    "id": "direction-cooler-similar-001",
+    "group": "BUILD_MODIFY_DIRECTION",
+    "message": "쿨러 비슷한 가격으로 더 괜찮은 걸로 바꿔줘",
+    "surface": "SELF_QUOTE",
+    "expectedIntent": "BUILD_MODIFY",
+    "expectedActions": [
+      "REPLACE_DRAFT_PART"
+    ],
+    "requiredActionType": "REPLACE_DRAFT_PART",
+    "expectedCategory": "COOLER",
+    "expectedDirection": "SIMILAR_PRICE",
+    "forbiddenPartIds": [
+      "COOLER-low"
+    ],
+    "currentQuoteDraft": {
+      "id": "direction-draft",
+      "status": "ACTIVE",
+      "name": "방향성 검증 견적",
+      "items": [
+        {
+          "id": "draft-cooler",
+          "partId": "COOLER-mid",
+          "category": "COOLER",
+          "name": "COOLER Mid",
+          "manufacturer": "BuildGraph",
+          "quantity": 1,
+          "currentPrice": 110000,
+          "lineTotal": 110000,
+          "attributes": {
+            "tdpW": 220,
+            "radiatorLengthMm": 280,
+            "heightMm": 165,
+            "coolerType": "AIR"
+          }
+        }
+      ]
+    }
   }
 ]

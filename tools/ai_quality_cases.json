@@ -1,44 +1,45 @@
 [
-  {
-    "id": "gpu-thermal-frame-drop",
-    "symptom": "게임을 20분 정도 하면 프레임이 급락하고 GPU 온도가 95도까지 올라갑니다.",
-    "message": "게임 중 프레임이 끊기고 GPU 온도가 높습니다. 무엇부터 확인해야 하나요?",
-    "expectedKeywords": ["GPU", "온도", "프레임"],
-    "risk": "medium"
-  },
-  {
-    "id": "driver-crash-event-log",
-    "symptom": "게임 실행 중 화면이 멈추고 nvlddmkm 드라이버 오류가 이벤트 로그에 반복됩니다.",
-    "message": "화면 멈춤과 드라이버 오류가 반복됩니다. 드라이버를 다시 깔아야 하나요?",
-    "expectedKeywords": ["드라이버", "이벤트", "로그"],
-    "risk": "medium"
-  },
-  {
-    "id": "memory-pressure",
-    "symptom": "개발 IDE와 크롬 탭을 많이 열면 RAM 사용률이 90% 이상으로 올라가고 PC가 멈칫합니다.",
-    "message": "작업 중 RAM 사용률이 높고 IDE가 멈춥니다. 업그레이드가 필요한 상황인가요?",
-    "expectedKeywords": ["RAM", "메모리", "사용률"],
-    "risk": "low"
-  },
-  {
-    "id": "storage-bottleneck",
-    "symptom": "게임 로딩이 길고 작업 중 디스크 사용률이 100%까지 올라갑니다.",
-    "message": "디스크 사용률 100%와 로딩 지연이 같이 보입니다. SSD 문제일 수 있나요?",
-    "expectedKeywords": ["디스크", "SSD", "로딩"],
-    "risk": "low"
-  },
-  {
-    "id": "power-instability",
-    "symptom": "고사양 게임에서만 전원이 꺼지거나 재부팅되고 파워 부족이 의심됩니다.",
-    "message": "부하가 걸릴 때만 재부팅됩니다. 파워나 전원 문제를 어떻게 확인해야 하나요?",
-    "expectedKeywords": ["파워", "전원", "부하"],
-    "risk": "high"
-  },
-  {
-    "id": "mixed-thermal-driver",
-    "symptom": "게임 30분 후 프레임이 떨어지고 가끔 화면이 멈추며 드라이버 오류도 기록됩니다.",
-    "message": "온도 문제인지 드라이버 문제인지 모르겠습니다. 어떤 순서로 확인하면 좋나요?",
-    "expectedKeywords": ["온도", "드라이버", "순서"],
-    "risk": "high"
-  }
+  {"id":"gpu-thermal-frame-drop","symptom":"게임을 20분 정도 하면 프레임이 급락하고 GPU 온도가 95도까지 올라갑니다.","message":"게임 중 프레임이 끊기고 GPU 온도가 높습니다. 무엇부터 확인해야 하나요?","expectedKeywords":["GPU","온도","프레임"],"risk":"medium"},
+  {"id":"gpu-thermal-fan-noise","symptom":"GPU 온도 92도, 팬 소음 증가, 케이스가 뜨겁습니다.","message":"팬 소리가 커지고 그래픽카드 온도가 높습니다. GPU 교체가 필요한가요?","expectedKeywords":["온도","팬","쿨링"],"risk":"medium"},
+  {"id":"gpu-frame-time-spike","symptom":"평균 FPS는 괜찮지만 frame time spike가 반복되고 화면이 끊깁니다.","message":"프레임 타임이 튀고 렉이 납니다. 어떤 로그를 봐야 하나요?","expectedKeywords":["프레임","로그","온도"],"risk":"medium"},
+  {"id":"gpu-dust-airflow","symptom":"먼지가 많고 게임 30분 후 온도와 프레임 드랍이 함께 나타납니다.","message":"먼지 청소와 케이스 공기 흐름부터 확인해야 하나요?","expectedKeywords":["먼지","공기","온도"],"risk":"low"},
+  {"id":"gpu-airflow-before-upgrade","symptom":"RTX 5070 사용 중 QHD 게임은 충분하지만 온도가 높아 업그레이드를 고민합니다.","message":"성능은 충분한데 발열 때문에 GPU를 바꾸는 게 맞나요?","expectedKeywords":["발열","쿨링","업그레이드"],"risk":"low"},
+  {"id":"gpu-case-fan-direction","symptom":"케이스 팬 방향을 바꾼 뒤 GPU 온도가 올라가고 프레임이 떨어졌습니다.","message":"팬 방향 때문에 GPU 온도와 프레임이 나빠질 수 있나요?","expectedKeywords":["팬","공기","온도"],"risk":"medium"},
+  {"id":"gpu-thermal-driver-mixed","symptom":"게임 30분 후 프레임이 떨어지고 가끔 화면이 멈추며 드라이버 오류도 기록됩니다.","message":"온도 문제인지 드라이버 문제인지 모르겠습니다. 어떤 순서로 확인하면 좋나요?","expectedKeywords":["온도","드라이버","순서"],"risk":"high"},
+  {"id":"gpu-hotspot","symptom":"GPU hotspot 온도만 높고 평균 온도는 정상에 가깝습니다.","message":"핫스팟 온도가 높으면 어떤 조치를 먼저 해야 하나요?","expectedKeywords":["온도","쿨링","점검"],"risk":"medium"},
+  {"id":"gpu-thermal-after-case-change","symptom":"케이스 교체 후 GPU 온도가 더 높아졌습니다.","message":"케이스 바꾼 뒤 온도가 오른 건 무엇을 확인해야 하나요?","expectedKeywords":["케이스","공기","팬"],"risk":"medium"},
+  {"id":"gpu-throttling-after-minutes","symptom":"처음에는 빠른데 15분 후 성능이 급격히 떨어집니다.","message":"게임 시작 후 시간이 지나면 성능이 떨어지는 이유가 뭔가요?","expectedKeywords":["스로틀","온도","프레임"],"risk":"medium"},
+  {"id":"driver-crash-event-log","symptom":"게임 실행 중 화면이 멈추고 nvlddmkm 드라이버 오류가 이벤트 로그에 반복됩니다.","message":"화면 멈춤과 드라이버 오류가 반복됩니다. 드라이버를 다시 깔아야 하나요?","expectedKeywords":["드라이버","이벤트","로그"],"risk":"medium"},
+  {"id":"driver-display-stopped","symptom":"이벤트 로그에 display driver stopped가 반복됩니다.","message":"display driver stopped 로그가 있으면 어떤 순서로 봐야 하나요?","expectedKeywords":["드라이버","이벤트","로그"],"risk":"medium"},
+  {"id":"driver-bsod","symptom":"게임 중 블루스크린이 뜨고 재부팅됩니다.","message":"블루스크린과 GPU 드라이버 문제를 어떻게 구분하나요?","expectedKeywords":["블루스크린","드라이버","로그"],"risk":"high"},
+  {"id":"driver-after-update","symptom":"그래픽 드라이버 업데이트 후 게임이 튕깁니다.","message":"드라이버 업데이트 후 튕김이 생겼습니다. 롤백해야 하나요?","expectedKeywords":["드라이버","롤백","업데이트"],"risk":"medium"},
+  {"id":"driver-crash-power-mixed","symptom":"화면이 멈추고 전원도 가끔 꺼집니다.","message":"드라이버 문제인지 파워 문제인지 어떻게 봐야 하나요?","expectedKeywords":["드라이버","전원","로그"],"risk":"high"},
+  {"id":"driver-black-screen","symptom":"고사양 게임 중 검은 화면이 되고 소리는 계속 납니다.","message":"검은 화면이 나올 때 드라이버와 GPU 안정성 중 무엇부터 확인하나요?","expectedKeywords":["드라이버","GPU","로그"],"risk":"medium"},
+  {"id":"driver-crash-new-gpu","symptom":"새 그래픽카드 장착 후 특정 게임만 튕깁니다.","message":"새 GPU 장착 후 게임 튕김은 드라이버 재설치부터 봐야 하나요?","expectedKeywords":["드라이버","GPU","게임"],"risk":"medium"},
+  {"id":"driver-windows-event","symptom":"Windows Event Log에 그래픽 관련 오류가 남습니다.","message":"이벤트 로그를 AS 티켓에 어떻게 남기면 좋을까요?","expectedKeywords":["이벤트","로그","드라이버"],"risk":"low"},
+  {"id":"memory-pressure","symptom":"개발 IDE와 크롬 탭을 많이 열면 RAM 사용률이 90% 이상으로 올라가고 PC가 멈칫합니다.","message":"작업 중 RAM 사용률이 높고 IDE가 멈춥니다. 업그레이드가 필요한 상황인가요?","expectedKeywords":["RAM","메모리","사용률"],"risk":"low"},
+  {"id":"memory-rendering","symptom":"영상 렌더링 중 RAM이 꽉 차고 저장장치 사용률도 올라갑니다.","message":"렌더링이 느린데 RAM과 SSD 중 무엇부터 봐야 하나요?","expectedKeywords":["RAM","SSD","렌더링"],"risk":"low"},
+  {"id":"memory-chrome-tabs","symptom":"크롬 탭을 많이 열면 전체 시스템이 느려집니다.","message":"크롬 탭이 많을 때 RAM 업그레이드가 효과적인가요?","expectedKeywords":["RAM","메모리","탭"],"risk":"low"},
+  {"id":"memory-game-stutter","symptom":"게임 중 RAM 사용률이 높고 간헐적으로 끊깁니다.","message":"램 부족도 게임 끊김 원인이 될 수 있나요?","expectedKeywords":["RAM","게임","끊김"],"risk":"low"},
+  {"id":"memory-64gb-upgrade","symptom":"32GB RAM에서 개발 IDE, Docker, 브라우저를 동시에 쓰면 부족합니다.","message":"64GB로 올리면 어떤 증상에 도움이 될까요?","expectedKeywords":["64GB","RAM","Docker"],"risk":"low"},
+  {"id":"memory-pagefile","symptom":"RAM이 꽉 찬 뒤 SSD 사용률이 올라가고 느려집니다.","message":"페이지파일 때문에 SSD가 바빠질 수 있나요?","expectedKeywords":["RAM","SSD","사용률"],"risk":"low"},
+  {"id":"storage-bottleneck","symptom":"게임 로딩이 길고 작업 중 디스크 사용률이 100%까지 올라갑니다.","message":"디스크 사용률 100%와 로딩 지연이 같이 보입니다. SSD 문제일 수 있나요?","expectedKeywords":["디스크","SSD","로딩"],"risk":"low"},
+  {"id":"storage-game-loading","symptom":"프레임은 괜찮지만 게임 로딩만 매우 깁니다.","message":"게임 로딩만 느리면 SSD부터 봐야 하나요?","expectedKeywords":["SSD","로딩","디스크"],"risk":"low"},
+  {"id":"storage-disk-queue","symptom":"디스크 큐가 길고 앱 실행이 느립니다.","message":"디스크 큐 길이는 어떤 문제를 의미하나요?","expectedKeywords":["디스크","큐","SSD"],"risk":"low"},
+  {"id":"storage-health","symptom":"SSD 사용 시간이 길고 파일 복사가 느립니다.","message":"SSD 상태와 저장장치 병목을 어떻게 확인하나요?","expectedKeywords":["SSD","상태","저장장치"],"risk":"low"},
+  {"id":"storage-background-process","symptom":"백그라운드 작업 중 디스크 100%가 자주 뜹니다.","message":"백그라운드 프로세스 때문에 디스크 병목이 생길 수 있나요?","expectedKeywords":["디스크","백그라운드","프로세스"],"risk":"low"},
+  {"id":"power-instability","symptom":"고사양 게임에서만 전원이 꺼지거나 재부팅되고 파워 부족이 의심됩니다.","message":"부하가 걸릴 때만 재부팅됩니다. 파워나 전원 문제를 어떻게 확인해야 하나요?","expectedKeywords":["파워","전원","부하"],"risk":"high"},
+  {"id":"power-new-gpu","symptom":"새 GPU 장착 후 부하가 걸리면 PC가 꺼집니다.","message":"GPU 교체 후 꺼짐은 파워 용량이나 케이블 문제일 수 있나요?","expectedKeywords":["파워","GPU","케이블"],"risk":"high"},
+  {"id":"power-connector","symptom":"12V-2x6 케이블 연결 후 간헐적으로 전원이 꺼집니다.","message":"GPU 전원 커넥터를 어떻게 확인해야 하나요?","expectedKeywords":["커넥터","전원","파워"],"risk":"high"},
+  {"id":"power-transient-load","symptom":"평소에는 괜찮지만 순간 부하에서만 재부팅됩니다.","message":"순간 부하나 파워 여유분을 어떻게 봐야 하나요?","expectedKeywords":["부하","파워","여유"],"risk":"high"},
+  {"id":"power-event-log","symptom":"Kernel-Power 이벤트가 있고 게임 중 꺼집니다.","message":"Kernel-Power 로그가 있으면 파워 문제로 봐야 하나요?","expectedKeywords":["전원","로그","파워"],"risk":"high"},
+  {"id":"power-ups","symptom":"전원 멀티탭을 바꾼 뒤 간헐적으로 재부팅됩니다.","message":"외부 전원과 파워 문제를 어떻게 구분하나요?","expectedKeywords":["전원","파워","확인"],"risk":"medium"},
+  {"id":"mixed-thermal-power","symptom":"게임 중 온도가 높고 가끔 전원이 꺼집니다.","message":"발열과 전원 문제를 어떤 순서로 확인하면 좋나요?","expectedKeywords":["온도","전원","순서"],"risk":"high"},
+  {"id":"mixed-driver-memory","symptom":"IDE 사용 중 멈추고 가끔 드라이버 오류도 뜹니다.","message":"메모리 부족과 드라이버 오류가 같이 있을 때 어떻게 분리하나요?","expectedKeywords":["메모리","드라이버","로그"],"risk":"medium"},
+  {"id":"mixed-storage-memory","symptom":"RAM과 디스크 사용률이 모두 높고 로딩이 느립니다.","message":"RAM과 SSD 중 업그레이드 우선순위를 어떻게 잡나요?","expectedKeywords":["RAM","SSD","우선"],"risk":"low"},
+  {"id":"mixed-gpu-upgrade","symptom":"GPU 온도는 높고 성능도 부족한 것 같습니다.","message":"쿨링 점검과 GPU 업그레이드 중 무엇부터 해야 하나요?","expectedKeywords":["쿨링","GPU","업그레이드"],"risk":"medium"},
+  {"id":"mixed-no-log","symptom":"가끔 느려지는데 로그가 없습니다.","message":"로그가 없을 때 AS 티켓에 어떤 데이터를 추가로 요청해야 하나요?","expectedKeywords":["로그","요청","확인"],"risk":"low"},
+  {"id":"mixed-after-driver-clean","symptom":"드라이버를 재설치해도 게임 중 프레임이 떨어집니다.","message":"드라이버 재설치 후에도 프레임 드랍이면 다음은 무엇인가요?","expectedKeywords":["드라이버","프레임","온도"],"risk":"medium"},
+  {"id":"mixed-after-cleaning","symptom":"먼지 청소 후에도 발열과 소음이 남습니다.","message":"청소 후에도 발열이 있으면 쿨러나 케이스를 봐야 하나요?","expectedKeywords":["발열","쿨러","케이스"],"risk":"medium"},
+  {"id":"mixed-remote-support","symptom":"사용자가 직접 조치하기 어렵고 여러 증상이 섞여 있습니다.","message":"원격지원이 필요한지 판단하려면 무엇을 확인해야 하나요?","expectedKeywords":["로그","확인","지원"],"risk":"high"}
 ]

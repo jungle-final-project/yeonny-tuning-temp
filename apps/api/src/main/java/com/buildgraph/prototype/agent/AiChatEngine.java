@@ -7,5 +7,9 @@ public interface AiChatEngine {
         return respond(request);
     }
 
+    default AiChatEngineResponse respondLlmRequired(AiChatEngineRequest request, String requestedAiProfile) {
+        return respondLlmRequired(request);
+    }
+
     QuoteRequirementAnalysisResult analyzeQuoteRequirement(QuoteRequirementAnalysisRequest request);
 }

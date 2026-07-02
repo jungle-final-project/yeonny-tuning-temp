@@ -1,8 +1,8 @@
 export const agentStateRows = [
   { step: '1', state: 'INPUT_RECEIVED', owner: 'Frontend', api: 'POST /api/requirements/parse', output: 'Requirement' },
   { step: '2', state: 'RAG_SEARCHED', owner: 'RAG Service', api: 'GET /api/rag/search', output: 'RagEvidence[]' },
-  { step: '3', state: 'TOOLS_CALLED', owner: 'Agent Orchestrator', api: 'POST /api/agent/sessions/:id/run', output: 'ToolInvocation[]' },
-  { step: '4', state: 'SUMMARY_READY', owner: 'Agent + LLM', api: 'GET /api/agent/sessions/:id', output: 'Build explanation' },
+  { step: '3', state: 'TOOLS_CALLED', owner: 'Agent Orchestrator', api: 'POST /api/ai/agent-sessions/:id/run', output: 'ToolInvocation[]' },
+  { step: '4', state: 'SUMMARY_READY', owner: 'Agent + LLM', api: 'GET /api/ai/agent-sessions/:id', output: 'Build explanation' },
   { step: '5', state: 'FALLBACK_READY', owner: 'Backend', api: 'same session', output: 'Seed result when LLM fails' }
 ];
 

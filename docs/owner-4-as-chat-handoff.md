@@ -163,10 +163,10 @@ AS Chat은 다음 테이블을 사용한다.
 사용자 요청은 기본적으로 profile 1개만 실행한다.
 
 ```text
-AS_CHAT_DEFAULT_PROFILE=AS_CHAT_FAST
+AS_CHAT_DEFAULT_PROFILE=AS_CHAT_54_MINI_FAST
 ```
 
-`AS_CHAT_NANO_FAST`는 실험 후보로 남겨두었다. 평균 응답은 빠르지만 현재 benchmark에서 schema valid가 낮아 기본값으로 전환하지 않았다.
+`AS_CHAT_54_MINI_FAST`는 2026-07-01 benchmark에서 성공률, schema valid, 근거율, 지연 시간 기준을 통과해 기본값으로 전환했다. `AS_CHAT_NANO_FAST`는 평균 응답은 빠르지만 schema valid가 낮아 실험/실패 추적용 profile로만 남긴다. rollback이 필요하면 `.env`에서 `AS_CHAT_DEFAULT_PROFILE=AS_CHAT_FAST`로 되돌린다.
 
 ## 4번이 바로 하면 되는 작업
 

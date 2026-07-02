@@ -95,8 +95,165 @@ function partDetail(partId: string) {
   };
 }
 
+function buildGraphResponse(mode = 'BUILD_OVERVIEW') {
+  return {
+    mode,
+    summary: 'RTX 5070 선택으로 PSU와 케이스 조건을 함께 확인해야 합니다.',
+    nodes: [
+      { id: 'part-GPU', type: 'PART', category: 'GPU', label: 'RTX 5070', status: 'PASS', detail: '250W · 길이 304mm' },
+      { id: 'part-PSU', type: 'PART', category: 'PSU', label: '850W 파워', status: 'WARN', detail: '정격 850W' },
+      { id: 'part-CASE', type: 'PART', category: 'CASE', label: '미들타워 케이스', status: 'PASS', detail: 'GPU 최대 320mm' },
+      { id: 'constraint-power', type: 'CONSTRAINT', category: 'PSU', label: '정격 850W', status: 'WARN', detail: '권장 출력 750W / 현재 파워 850W' },
+      { id: 'constraint-size', type: 'CONSTRAINT', category: 'CASE', label: '미들타워 케이스', status: 'PASS', detail: 'GPU 길이와 쿨러 높이가 케이스 제약 안에 있습니다.' },
+      { id: 'constraint-compatibility', type: 'CONSTRAINT', category: 'MOTHERBOARD', label: 'B650 Board', status: 'PASS', detail: '소켓과 메모리 규격을 확인합니다.' }
+    ],
+    edges: [
+      {
+        id: 'edge-gpu-psu-power',
+        source: 'part-GPU',
+        target: 'part-PSU',
+        type: 'AFFECTS',
+        status: 'WARN',
+        label: '전력 여유 100W',
+        summary: '권장 출력 750W / 현재 파워 850W입니다. 여유 100W로 장착은 가능하지만 권장 여유가 낮습니다.'
+      },
+      {
+        id: 'edge-gpu-case-length',
+        source: 'part-GPU',
+        target: 'part-CASE',
+        type: 'REQUIRES',
+        status: 'PASS',
+        label: '길이 간섭 주의',
+        summary: 'GPU 길이 304mm / 케이스 허용 320mm입니다. 여유 16mm로 장착은 가능하지만 간섭을 주의해야 합니다.'
+      }
+    ],
+    focusNodeIds: ['part-GPU', 'part-PSU'],
+    insights: [
+      {
+        id: 'insight-power',
+        status: 'WARN',
+        title: '파워 여유 확인',
+        description: '여유 100W로 장착은 가능하지만 권장 여유가 낮습니다.',
+        relatedNodeIds: ['part-GPU', 'part-PSU']
+      }
+    ],
+    toolResults: [
+      { tool: 'power', status: 'WARN', confidence: 'MEDIUM', summary: 'PSU 정격 출력 여유를 확인해야 합니다.' }
+    ]
+  };
+}
+
+async function mockBuildGraphApi(page: Page) {
+  const requests: unknown[] = [];
+  await page.route('**/api/build-graphs/resolve', async (route) => {
+    const body = JSON.parse(route.request().postData() ?? '{}');
+    requests.push(body);
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify(buildGraphResponse(body.focus?.mode ?? 'BUILD_OVERVIEW'))
+    });
+  });
+  return requests;
+}
+
+async function mockCompatibleCandidatesApi(page: Page) {
+  const requests: Array<{ source?: string; category?: string; items?: unknown[] }> = [];
+  await page.route('**/api/parts/compatible-candidates', async (route) => {
+    const body = JSON.parse(route.request().postData() ?? '{}') as { source?: string; category?: string; items?: unknown[] };
+    requests.push(body);
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        category: body.category ?? 'GPU',
+        items: [
+          {
+            part: {
+              id: 'candidate-gpu-pass',
+              category: 'GPU',
+              name: 'RTX 5070 Ti 호환 후보',
+              manufacturer: 'NVIDIA',
+              price: 990000,
+              status: 'ACTIVE',
+              attributes: { wattage: 285, lengthMm: 310 },
+              externalOffer: {
+                imageUrl: 'https://example.test/candidate-rtx5070ti.png',
+                supplierName: '후보테스트몰',
+                offerUrl: null,
+                lowPrice: 990000,
+                source: 'NAVER_SHOPPING_SEARCH'
+              }
+            },
+            status: 'PASS',
+            statusLabel: '여유 있음',
+            summary: '현재 PSU/케이스 기준 장착 가능합니다.',
+            checkedTools: ['power', 'size', 'performance']
+          },
+          {
+            part: {
+              id: 'candidate-gpu-warn',
+              category: 'GPU',
+              name: 'RTX 5080 Compact 호환 후보',
+              manufacturer: 'NVIDIA',
+              price: 1490000,
+              status: 'ACTIVE',
+              attributes: { wattage: 360, lengthMm: 330 }
+            },
+            status: 'WARN',
+            statusLabel: '간섭 주의',
+            summary: '파워 여유가 낮아 850W 이상을 권장합니다.',
+            checkedTools: ['power', 'size', 'performance']
+          }
+        ],
+        rejectedCount: 1,
+        warnings: []
+      })
+    });
+  });
+  return requests;
+}
+
+async function dragFloatingGraphResizeHandle(page: Page, deltaX: number, deltaY: number) {
+  const handle = page.getByTestId('floating-graph-resize-handle');
+  const box = await handle.boundingBox();
+  if (!box) {
+    throw new Error('floating graph resize handle is not visible');
+  }
+  const startX = box.x + box.width / 2;
+  const startY = box.y + box.height / 2;
+  await page.mouse.move(startX, startY);
+  await page.mouse.down();
+  await page.mouse.move(startX + deltaX, startY + deltaY, { steps: 8 });
+  await page.mouse.up();
+}
+
 function budgetBuilds(budgetWon: number, appliedPartCategories: PartCategory[] = []) {
   return (['budget', 'balanced', 'performance'] as AiTier[]).map((tier) => build(tier, budgetWon, appliedPartCategories));
+}
+
+function storedAssistantSession(messageText: string) {
+  return {
+    messages: [
+      {
+        id: 'ai-intro',
+        role: 'assistant',
+        text: '예산은 “200만원 PC 추천”처럼, 부품은 “GPU 추천해줘”처럼 물어보세요. 추천은 서버의 실제 부품 DB와 룰 기반 검증 결과로 계산됩니다.',
+        createdAt: '2026-06-30T00:00:00.000Z',
+        kind: 'intro'
+      },
+      {
+        id: 'user-existing',
+        role: 'user',
+        text: messageText,
+        createdAt: '2026-07-01T00:00:00.000Z',
+        kind: 'general'
+      }
+    ],
+    latestBuilds: [],
+    appliedPartPreferences: [],
+    updatedAt: '2026-07-01T00:00:00.000Z'
+  };
 }
 
 async function mockAiBuildChatApi(page: Page) {
@@ -225,6 +382,12 @@ async function mockHomePartsApi(page: Page) {
 async function openHomeAsUser(page: Page) {
   await page.addInitScript(() => {
     localStorage.setItem('buildgraph.token', 'jwt-user-token');
+    localStorage.setItem('buildgraph.authUser', JSON.stringify({
+      id: 'user-1004',
+      email: 'user@example.com',
+      name: '테스트 사용자',
+      role: 'USER'
+    }));
     sessionStorage.clear();
   });
   await page.route('**/api/auth/me', async (route) => {
@@ -243,7 +406,10 @@ async function openHomeAsUser(page: Page) {
   await page.goto('/');
 }
 
-async function mockSelfQuoteApis(page: Page) {
+async function mockSelfQuoteApis(
+  page: Page,
+  options: { staleGetAfterApply?: boolean; getDelayAfterApplyMs?: number } = {}
+) {
   const applyRequests: unknown[] = [];
   const draftPartNames: Record<string, string> = {
     'home-cpu-ryzen7': 'Home Ryzen 7 CPU',
@@ -306,7 +472,7 @@ async function mockSelfQuoteApis(page: Page) {
         lineTotal: (knownAiItems.find((item) => item.partId === next.partId)?.price ?? 100000 + index) * next.quantity,
         attributes: {}
       }));
-      draft = {
+      const appliedDraft = {
         id: 'draft-home-ai-test',
         status: 'ACTIVE',
         name: '셀프 견적',
@@ -314,6 +480,19 @@ async function mockSelfQuoteApis(page: Page) {
         totalPrice: items.reduce((sum, next) => sum + next.lineTotal, 0),
         itemCount: items.reduce((sum, next) => sum + next.quantity, 0)
       };
+      if (!options.staleGetAfterApply) {
+        draft = appliedDraft;
+      }
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify(appliedDraft)
+      });
+      return;
+    }
+
+    if (options.getDelayAfterApplyMs && applyRequests.length > 0 && route.request().method() === 'GET') {
+      await new Promise((resolve) => setTimeout(resolve, options.getDelayAfterApplyMs));
     }
 
     await route.fulfill({
@@ -420,6 +599,8 @@ test('selects a featured recommendation and applies every build part to self quo
 });
 
 test('chatbot uses build-chat API and updates latest home AI recommendations', async ({ page }) => {
+  const buildGraphRequests = await mockBuildGraphApi(page);
+  const compatibleCandidateRequests = await mockCompatibleCandidatesApi(page);
   const buildChatRequests = await mockAiBuildChatApi(page);
   await openHomeAsUser(page);
   const main = page.getByRole('main');
@@ -438,6 +619,90 @@ test('chatbot uses build-chat API and updates latest home AI recommendations', a
   await expect(main.getByTestId('home-ai-recommendations').getByRole('img', { name: /케이스 이미지/ })).toHaveCount(0);
   await expect(main.getByTestId('home-ai-recommendations')).toContainText('AI 추천');
   await expect(main.getByTestId('home-ai-recommendations')).toContainText('호환성 통과');
+  await expect(main.getByTestId('build-dependency-graph')).toContainText('견적 관계도');
+  await expect(main.getByTestId('build-dependency-graph')).toContainText('파워 여유 확인');
+  await expect(main.getByTestId('build-dependency-graph')).toContainText('여유 100W로 장착은 가능하지만 권장 여유가 낮습니다.');
+  await expect(main.getByTestId('build-dependency-graph')).toContainText('호환됨');
+  await expect(main.getByTestId('build-dependency-graph')).not.toContainText('여유 있음');
+  await expect(main.getByTestId('build-dependency-graph')).toContainText('간섭 주의');
+  await expect(main.getByTestId('build-dependency-graph')).not.toContainText('250W · 길이 304mm');
+  await expect(main.getByTestId('build-dependency-graph')).not.toContainText('권장 출력 750W / 현재 파워 850W');
+  await expect(main.getByTestId('build-dependency-graph')).toContainText('정격 850W');
+  await expect(main.getByTestId('build-dependency-graph')).toContainText('B650 Board');
+  await expect(main.getByTestId('build-dependency-graph')).toContainText('미들타워 케이스');
+  await expect(main.getByTestId('build-dependency-graph')).not.toContainText('기본 호환성');
+  await expect(main.getByTestId('build-dependency-graph')).not.toContainText('장착 규격');
+  await expect(main.getByTestId('build-dependency-graph')).not.toContainText('PASS');
+  await expect(main.getByTestId('build-dependency-graph')).not.toContainText('WARN');
+  await expect.poll(() => buildGraphRequests.length).toBeGreaterThan(0);
+  expect((buildGraphRequests[0] as { source?: string; items?: unknown[] }).source).toBe('AI_BUILD');
+  expect((buildGraphRequests[0] as { items?: unknown[] }).items?.length).toBe(8);
+  const graphCanvas = main.getByTestId('graph-flow-canvas');
+  await graphCanvas.scrollIntoViewIfNeeded();
+  await expect(page.getByTestId('floating-dependency-graph')).toHaveCount(0);
+  await graphCanvas.getByText('RTX 5070', { exact: true }).click();
+  const graphPaneBox = await graphCanvas.locator('.react-flow').boundingBox();
+  expect(graphPaneBox?.height).toBeGreaterThanOrEqual(520);
+  const gpuGraphNode = graphCanvas.locator('.react-flow__node').filter({ hasText: 'RTX 5070' }).first();
+  await expect(gpuGraphNode).toHaveClass(/buildgraph-flow-node/);
+  await expect(gpuGraphNode).toHaveCSS('border-radius', '50%');
+  await expect(gpuGraphNode.locator('.buildgraph-node-category-label')).toHaveText('GPU');
+  await expect(gpuGraphNode.locator('.buildgraph-node-main-label')).toContainText('RTX 5070');
+  await expect(gpuGraphNode.locator('.buildgraph-node-status-label')).toHaveText('호환됨');
+  const gpuGraphNodeBox = await gpuGraphNode.boundingBox();
+  expect(gpuGraphNodeBox).not.toBeNull();
+  expect(Math.abs((gpuGraphNodeBox?.width ?? 0) - (gpuGraphNodeBox?.height ?? 0))).toBeLessThanOrEqual(2);
+  await expect(gpuGraphNode.locator('.buildgraph-node-status-orb')).toHaveCount(0);
+  const graphEdgePath = graphCanvas.locator('.react-flow__edge.buildgraph-flow-edge .react-flow__edge-path').first();
+  await expect(graphEdgePath).toHaveCSS('stroke-linecap', 'round');
+  await expect(graphEdgePath).toHaveCSS('stroke-width', '2px');
+  const candidatePanel = graphCanvas.getByTestId('graph-node-candidate-panel');
+  await expect(candidatePanel).toContainText('선택한 부품 상세');
+  await expect(candidatePanel).toContainText('250W · 길이 304mm');
+  await expect(candidatePanel).toContainText('호환 후보');
+  await expect(candidatePanel).toContainText('RTX 5070 Ti 호환 후보');
+  await expect(candidatePanel).toContainText('읽기 전용');
+  await expect(candidatePanel).not.toContainText('담기/교체');
+  await expect(candidatePanel.getByRole('img', { name: 'RTX 5070 Ti 호환 후보 제품 사진' })).toBeVisible();
+  await expect(candidatePanel.getByRole('img', { name: 'RTX 5080 Compact 호환 후보 사진 없음' })).toBeVisible();
+  await candidatePanel.getByRole('button', { name: 'RTX 5070 Ti 호환 후보 사진 확대' }).click();
+  const imageDialog = page.getByRole('dialog', { name: 'RTX 5070 Ti 호환 후보 사진 확대' });
+  await expect(imageDialog).toBeVisible();
+  await expect(imageDialog.getByRole('img', { name: 'RTX 5070 Ti 호환 후보 확대 이미지' })).toBeVisible();
+  await expect(imageDialog).toContainText('NVIDIA · 990,000원');
+  await page.keyboard.press('Escape');
+  await expect(imageDialog).toHaveCount(0);
+  await expect.poll(() => compatibleCandidateRequests.length).toBe(1);
+  expect(compatibleCandidateRequests[0].source).toBe('AI_BUILD');
+  expect(compatibleCandidateRequests[0].category).toBe('GPU');
+  expect(compatibleCandidateRequests[0].items?.length).toBe(8);
+  await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight));
+  const floatingGraph = page.getByTestId('floating-dependency-graph');
+  await expect(floatingGraph).toBeVisible();
+  await expect(page.getByTestId('floating-graph-resize-handle')).toBeVisible();
+  const defaultFloatingBox = await floatingGraph.boundingBox();
+  expect(defaultFloatingBox).not.toBeNull();
+  await dragFloatingGraphResizeHandle(page, 160, -100);
+  const expandedFloatingBox = await floatingGraph.boundingBox();
+  expect(expandedFloatingBox).not.toBeNull();
+  expect(expandedFloatingBox?.width).toBeGreaterThan((defaultFloatingBox?.width ?? 0) + 90);
+  expect(expandedFloatingBox?.height).toBeGreaterThan((defaultFloatingBox?.height ?? 0) + 60);
+  await expect(floatingGraph.locator('.react-flow')).toBeVisible();
+
+  await expect(page.getByTestId('floating-graph-candidate-panel')).toHaveCount(0);
+  await floatingGraph.getByText('RTX 5070', { exact: true }).click();
+  await expect(page.getByTestId('floating-graph-candidate-panel')).toHaveCount(0);
+  await expect(floatingGraph.locator('.react-flow__node').filter({ hasText: 'RTX 5070' }).first()).toHaveClass(/buildgraph-flow-node--mini-active/);
+  await expect(candidatePanel).toContainText('RTX 5070 Ti 호환 후보');
+  await expect.poll(() => compatibleCandidateRequests.length).toBe(1);
+
+  const floatingViewportTransform = await floatingGraph.locator('.react-flow__viewport').getAttribute('style');
+  await floatingGraph.getByRole('button', { name: /zoom in/i }).click();
+  await expect.poll(async () => floatingGraph.locator('.react-flow__viewport').getAttribute('style')).not.toBe(floatingViewportTransform);
+
+  const mainViewportTransform = await graphCanvas.locator('.react-flow__viewport').getAttribute('style');
+  await graphCanvas.getByRole('button', { name: /zoom in/i }).click();
+  await expect.poll(async () => graphCanvas.locator('.react-flow__viewport').getAttribute('style')).not.toBe(mainViewportTransform);
   await expect(page.getByTestId('ai-chat-messages')).toContainText('200만원 예산 기준');
 
   await page.getByRole('textbox', { name: 'AI 챗봇에게 PC 사양 질문' }).fill('300만원 PC 추천');
@@ -452,6 +717,7 @@ test('chatbot uses build-chat API and updates latest home AI recommendations', a
 });
 
 test('chatbot part questions show backend parts and apply them to home AI builds', async ({ page }) => {
+  const buildGraphRequests = await mockBuildGraphApi(page);
   const buildChatRequests = await mockAiBuildChatApi(page);
   await openHomeAsUser(page);
   const main = page.getByRole('main');
@@ -470,13 +736,117 @@ test('chatbot part questions show backend parts and apply them to home AI builds
   await expect(main.getByTestId('home-ai-recommendations').getByRole('img', { name: /케이스 이미지/ })).toHaveCount(0);
   await expect(main.getByTestId('home-ai-recommendations')).toContainText('AI 추천');
   await expect(main.getByTestId('home-ai-recommendations')).toContainText('호환성 통과');
+  await expect(main.getByTestId('build-dependency-graph')).toContainText('견적 관계도');
+  await expect(main.getByTestId('build-dependency-graph')).toContainText('전력 여유 100W');
+  await expect.poll(() => buildGraphRequests.length).toBeGreaterThan(1);
+  const latestGraphRequest = buildGraphRequests[buildGraphRequests.length - 1] as { focus?: { mode?: string; category?: string } };
+  expect(latestGraphRequest.focus?.mode).toBe('PART_IMPACT');
+  expect(latestGraphRequest.focus?.category).toBe('GPU');
+});
+
+test('chatbot only shows the current user scoped assistant session', async ({ page }) => {
+  await page.addInitScript(({ otherUserSession, legacySession }) => {
+    localStorage.setItem('buildgraph.token', 'jwt-user-token');
+    localStorage.setItem('buildgraph.authUser', JSON.stringify({
+      id: 'user-b',
+      email: 'test@test.test',
+      name: '테스트 사용자 B',
+      role: 'USER'
+    }));
+    sessionStorage.setItem('buildgraph.ai.assistantSession:user-a', otherUserSession);
+    sessionStorage.setItem('buildgraph.ai.assistantSession', legacySession);
+  }, {
+    otherUserSession: JSON.stringify(storedAssistantSession('kmb5037@naver.com 계정의 이전 구매 상담')),
+    legacySession: JSON.stringify(storedAssistantSession('legacy global key에 남아 있던 이전 상담'))
+  });
+  await page.route('**/api/auth/me', async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        id: 'user-b',
+        email: 'test@test.test',
+        name: '테스트 사용자 B',
+        role: 'USER'
+      })
+    });
+  });
+  await mockHomePartsApi(page);
+  await page.goto('/');
+
+  await page.getByRole('button', { name: 'AI 견적 챗봇 열기' }).click();
+
+  await expect(page.getByTestId('ai-chat-messages')).toContainText('예산은');
+  await expect(page.getByTestId('ai-chat-messages')).not.toContainText('kmb5037@naver.com 계정의 이전 구매 상담');
+  await expect(page.getByTestId('ai-chat-messages')).not.toContainText('legacy global key에 남아 있던 이전 상담');
+});
+
+test('chatbot asks for login when token disappears before submit', async ({ page }) => {
+  let buildChatCalls = 0;
+  await openHomeAsUser(page);
+  await page.route('**/api/ai/build-chat', async (route) => {
+    buildChatCalls += 1;
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        answerType: 'GENERAL',
+        message: '호출되면 안 되는 응답입니다.',
+        builds: [],
+        partRecommendation: null,
+        warnings: []
+      })
+    });
+  });
+
+  await page.getByRole('button', { name: 'AI 견적 챗봇 열기' }).click();
+  await page.evaluate(() => {
+    localStorage.removeItem('buildgraph.token');
+  });
+  await page.getByRole('textbox', { name: 'AI 챗봇에게 PC 사양 질문' }).fill('토큰 삭제 확인 질문');
+  await page.getByRole('button', { name: '질문 보내기' }).click();
+
+  await expect(page.getByRole('alert')).toContainText('로그인이 필요합니다. 다시 로그인해 주세요.');
+  await expect(page.getByRole('alert')).not.toContainText('AI 추천 API 호출에 실패했습니다.');
+  await expect(page.getByTestId('ai-chat-messages')).not.toContainText('토큰 삭제 확인 질문');
+  expect(buildChatCalls).toBe(0);
+});
+
+test('chatbot maps build-chat 401 to login required instead of generic failure', async ({ page }) => {
+  let buildChatCalls = 0;
+  await openHomeAsUser(page);
+  await page.route('**/api/ai/build-chat', async (route) => {
+    buildChatCalls += 1;
+    await route.fulfill({
+      status: 401,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        code: 'UNAUTHORIZED',
+        message: '로그인이 필요합니다.'
+      })
+    });
+  });
+
+  await page.getByRole('button', { name: 'AI 견적 챗봇 열기' }).click();
+  await page.getByRole('textbox', { name: 'AI 챗봇에게 PC 사양 질문' }).fill('로그인 만료 확인 질문');
+  await page.getByRole('button', { name: '질문 보내기' }).click();
+
+  await expect.poll(() => buildChatCalls).toBe(1);
+  await expect(page.getByRole('alert')).toContainText('로그인이 필요합니다. 다시 로그인해 주세요.');
+  await expect(page.getByRole('alert')).not.toContainText('AI 추천 API 호출에 실패했습니다.');
+  await expect(page.getByTestId('ai-chat-messages')).not.toContainText('로그인 만료 확인 질문');
 });
 
 test('selects a home AI recommendation through batch API and shows applied cart in self quote', async ({ page }) => {
+  await mockBuildGraphApi(page);
   await mockAiBuildChatApi(page);
-  const { applyRequests } = await mockSelfQuoteApis(page);
+  const { applyRequests } = await mockSelfQuoteApis(page, { staleGetAfterApply: true, getDelayAfterApplyMs: 10_000 });
   await openHomeAsUser(page);
   const main = page.getByRole('main');
+
+  await page.goto('/self-quote');
+  await expect(page.getByText('왼쪽 목록에서 부품을 담으면 이곳에 내 견적이 쌓입니다.')).toBeVisible();
+  await page.goto('/');
 
   await page.getByRole('button', { name: 'AI 견적 챗봇 열기' }).click();
   await page.getByRole('textbox', { name: 'AI 챗봇에게 PC 사양 질문' }).fill('200만원 안에서 QHD 게임용 PC 추천해줘');
@@ -500,6 +870,32 @@ test('selects a home AI recommendation through batch API and shows applied cart 
   await expect(page.getByRole('heading', { name: '견적 장바구니', exact: true })).toBeVisible();
 });
 
+test('selects a chatbot recommendation and shows the applied cart without a later remove action', async ({ page }) => {
+  await mockBuildGraphApi(page);
+  await mockAiBuildChatApi(page);
+  const { applyRequests } = await mockSelfQuoteApis(page, { staleGetAfterApply: true, getDelayAfterApplyMs: 10_000 });
+  await openHomeAsUser(page);
+
+  await page.goto('/self-quote');
+  await expect(page.getByText('왼쪽 목록에서 부품을 담으면 이곳에 내 견적이 쌓입니다.')).toBeVisible();
+  await page.goto('/');
+
+  await page.getByRole('button', { name: 'AI 견적 챗봇 열기' }).click();
+  await page.getByRole('textbox', { name: 'AI 챗봇에게 PC 사양 질문' }).fill('200만원 PC 추천');
+  await page.getByRole('button', { name: '질문 보내기' }).click();
+  await page.getByTestId('ai-chat-messages').getByRole('button', { name: '이 조합으로 셀프 견적 보기' }).nth(1).click();
+
+  await expect.poll(() => applyRequests.length).toBe(1);
+  const expectedTotal = budgetBuilds(2_000_000)[1].totalPrice.toLocaleString();
+  expect((applyRequests[0] as { conflictPolicy?: string; items?: unknown[] }).conflictPolicy).toBe('REPLACE');
+  expect((applyRequests[0] as { items?: unknown[] }).items).toHaveLength(8);
+  await expect(page).toHaveURL('/self-quote');
+  await expect(page.getByRole('heading', { name: '견적 장바구니', exact: true })).toBeVisible();
+  await expect(page.getByText(`${expectedTotal}원`)).toHaveCount(2);
+  await expect(page.getByText('서버 반영 RTX 5070 서버 GPU').first()).toBeVisible();
+  await expect(page.getByRole('button', { name: /서버 반영 RTX 5070 서버 GPU 견적에서 제거/ })).toBeVisible();
+});
+
 test('keeps shared header and navigation destinations unchanged', async ({ page }) => {
   await openHomeAsUser(page);
   const header = page.locator('header');
@@ -515,6 +911,8 @@ test('keeps shared header and navigation destinations unchanged', async ({ page 
 
 test('keeps the unified home usable on mobile width', async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
+  await mockBuildGraphApi(page);
+  await mockCompatibleCandidatesApi(page);
   await mockAiBuildChatApi(page);
   await openHomeAsUser(page);
   const main = page.getByRole('main');
@@ -524,6 +922,13 @@ test('keeps the unified home usable on mobile width', async ({ page }) => {
   await expect(main.getByRole('tab', { name: '인기상품' })).toBeVisible();
   await page.getByRole('button', { name: 'AI 견적 챗봇 열기' }).click();
   await expect(page.getByTestId('ai-chatbot-panel')).toBeVisible();
+  await page.getByRole('textbox', { name: 'AI 챗봇에게 PC 사양 질문' }).fill('200만원 PC 추천');
+  await page.getByRole('button', { name: '질문 보내기' }).click();
+  await expect(main.getByTestId('build-dependency-graph')).toContainText('견적 관계도');
+  await main.getByTestId('build-dependency-graph').getByText('RTX 5070', { exact: true }).click();
+  await expect(main.getByTestId('graph-flow-canvas').getByTestId('graph-node-candidate-panel')).toContainText('호환 후보');
+  await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight));
+  await expect(page.getByTestId('floating-dependency-graph')).toHaveCount(0);
 
   const hasBodyOverflow = await page.evaluate(() => document.documentElement.scrollWidth > window.innerWidth + 1);
   expect(hasBodyOverflow).toBe(false);

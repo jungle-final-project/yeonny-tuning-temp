@@ -1,0 +1,1 @@
+프론트 UI 변경은 frontend-design 사용, QA 검수 후 적용한다

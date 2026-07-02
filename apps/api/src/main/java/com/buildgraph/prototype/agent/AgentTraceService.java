@@ -48,7 +48,12 @@ public class AgentTraceService {
                   state_timeline
                 )
                 VALUES (
-                  COALESCE(?, (SELECT id FROM users WHERE email = 'user@example.com')),
+                  COALESCE(
+                    ?,
+                    (SELECT user_id FROM requirements WHERE public_id = ?::uuid),
+                    (SELECT r.user_id FROM builds b JOIN requirements r ON r.id = b.requirement_id WHERE b.public_id = ?::uuid),
+                    (SELECT user_id FROM as_tickets WHERE public_id = ?::uuid)
+                  ),
                   (SELECT id FROM requirements WHERE public_id = ?::uuid),
                   (SELECT id FROM builds WHERE public_id = ?::uuid),
                   (SELECT id FROM as_tickets WHERE public_id = ?::uuid),
@@ -58,6 +63,9 @@ public class AgentTraceService {
                 RETURNING public_id::text AS id
                 """,
                 userId,
+                root.requirementId(),
+                root.buildId(),
+                root.asTicketId(),
                 root.requirementId(),
                 root.buildId(),
                 root.asTicketId(),
@@ -184,6 +192,20 @@ public class AgentTraceService {
         if (updated != 1) {
             throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Agent session을 찾을 수 없습니다.");
         }
+    }
+
+    public void markFailed(String sessionId, String actor, String reason) {
+        validateSessionId(sessionId);
+        requireText(actor, "Agent status 변경 actor가 필요합니다.");
+        Map<String, Object> row = sessionTraceRow(sessionId);
+        AgentStatus from = parseStatus(DbValueMapper.string(row, "status"));
+        if (from == AgentStatus.FAILED || from == AgentStatus.SUCCEEDED || from == AgentStatus.CANCELLED) {
+            return;
+        }
+        if (from != AgentStatus.FALLBACK_READY) {
+            updateSummary(sessionId, "Agent worker failed: " + (reason == null || reason.isBlank() ? "unknown error" : reason));
+        }
+        advanceStatus(sessionId, AgentStatus.FAILED, actor.trim(), reason);
     }
 
     static Map<String, Object> timelineItem(String from, String to, String actor, String reason) {

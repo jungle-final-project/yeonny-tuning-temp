@@ -1,49 +1,59 @@
 import { useQuery } from '@tanstack/react-query';
 import { Link, useParams } from 'react-router-dom';
-import { AdminShell, DataTable, Panel, StateMessage, StatusBadge } from '../../../components/ui';
+import { AdminShell, DataTable, Panel, StateMessage } from '../../../components/ui';
 import { getToolInvocation } from '../adminApi';
+import { KoreanStatusBadge, koreanStatusLabel, koreanToolLabel } from '../adminDisplay';
 import type { ToolInvocation } from '../adminApi';
 
 export function ToolInvocationAdminPage() {
-  const { id = '00000000-0000-4000-8000-000000005002' } = useParams();
+  const { id } = useParams();
   const {
     data: invocation,
     isError,
     isLoading
   } = useQuery({
     queryKey: ['admin-tool-invocation', id],
-    queryFn: () => getToolInvocation(id)
+    queryFn: () => getToolInvocation(id ?? ''),
+    enabled: Boolean(id)
   });
+
+  if (!id) {
+    return (
+      <AdminShell title="도구 호출 상세">
+        <StateMessage type="info" title="도구 호출을 선택하세요" body="에이전트 세션 상세에서 도구 호출 항목을 선택해야 합니다." />
+      </AdminShell>
+    );
+  }
 
   if (isLoading) {
     return (
-      <AdminShell title="Tool Invocation 상세">
-        <StateMessage type="info" title="Tool 호출 로딩 중" body="Tool request와 result payload를 불러오고 있습니다." />
+      <AdminShell title="도구 호출 상세">
+        <StateMessage type="info" title="도구 호출 로딩 중" body="도구 요청과 결과 데이터를 불러오고 있습니다." />
       </AdminShell>
     );
   }
 
   if (isError || !invocation) {
     return (
-      <AdminShell title="Tool Invocation 상세">
-        <StateMessage type="warn" title="Tool 호출 조회 실패" body="관리자 Tool invocation 상세 API 응답을 불러오지 못했습니다." />
+      <AdminShell title="도구 호출 상세">
+        <StateMessage type="warn" title="도구 호출 조회 실패" body="관리자 도구 호출 상세 응답을 불러오지 못했습니다." />
       </AdminShell>
     );
   }
 
   return (
-    <AdminShell title="Tool Invocation 상세">
+    <AdminShell title="도구 호출 상세">
       <div className="grid grid-cols-[1fr_420px] gap-5">
-        <Panel title="호출 상세" subtitle={`${invocation.toolName} / ${invocation.id}`}>
+        <Panel title="호출 상세" subtitle={`${koreanToolLabel(invocation.toolName)} / ${invocation.id}`}>
           <DataTable columns={['필드', '값']} rows={detailRows(invocation)} />
         </Panel>
         <Panel title="결과 요약">
-          <StateMessage type={invocation.status === 'PASS' ? 'success' : 'warn'} title={`${invocation.status} / ${invocation.confidence}`} body={invocation.summary} />
+          <StateMessage type={invocation.status === 'PASS' ? 'success' : 'warn'} title={`${koreanStatusLabel(invocation.status)} / ${koreanStatusLabel(invocation.confidence)}`} body={invocation.summary} />
         </Panel>
-        <Panel title="Request Payload" className="col-span-1">
+        <Panel title="요청 데이터" className="col-span-1">
           <JsonBlock value={invocation.requestPayload ?? {}} />
         </Panel>
-        <Panel title="Result Payload">
+        <Panel title="결과 데이터">
           <JsonBlock value={invocation.resultPayload ?? {}} />
         </Panel>
       </div>
@@ -53,16 +63,16 @@ export function ToolInvocationAdminPage() {
 
 function detailRows(invocation: ToolInvocation) {
   return [
-    { 필드: 'invocationId', 값: invocation.id },
-    { 필드: 'tool', 값: invocation.toolName },
-    { 필드: 'status', 값: <StatusBadge status={invocation.status} /> },
-    { 필드: 'confidence', 값: <StatusBadge status={invocation.confidence} /> },
-    { 필드: 'latency', 값: invocation.latencyMs == null ? '-' : `${invocation.latencyMs}ms` },
+    { 필드: '호출 식별자', 값: invocation.id },
+    { 필드: '도구', 값: koreanToolLabel(invocation.toolName) },
+    { 필드: '상태', 값: <KoreanStatusBadge status={invocation.status} /> },
+    { 필드: '근거 수준', 값: <KoreanStatusBadge status={invocation.confidence} /> },
+    { 필드: '지연 시간', 값: invocation.latencyMs == null ? '-' : `${invocation.latencyMs}ms` },
     {
-      필드: 'sessionId',
+      필드: '세션 식별자',
       값: <Link className="font-bold text-brand-blue" to={`/admin/agent-sessions/${invocation.agentSessionId}`}>{invocation.agentSessionId}</Link>
     },
-    { 필드: 'createdAt', 값: formatDateTime(invocation.createdAt) }
+    { 필드: '생성 시간', 값: formatDateTime(invocation.createdAt) }
   ];
 }
 

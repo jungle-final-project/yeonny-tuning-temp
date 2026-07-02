@@ -7,10 +7,18 @@ on:
       - main
       - dev
 
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
-  verify:
-    name: Build and smoke test
+  web:
+    name: web
     runs-on: ubuntu-latest
+    timeout-minutes: 20
 
     steps:
       - name: Checkout
@@ -27,16 +35,6 @@ jobs:
         working-directory: apps/web
         run: npm ci
 
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: "3.11"
-
-      - name: Validate OpenAPI YAML
-        run: |
-          python -m pip install -r tools/requirements.txt
-          python tools/validate_openapi.py
-
       - name: Install Playwright browser
         working-directory: apps/web
         run: npx playwright install --with-deps chromium
@@ -45,9 +43,29 @@ jobs:
         working-directory: apps/web
         run: npm run build
 
-      - name: Run web route smoke tests
+      - name: Run web tests
         working-directory: apps/web
         run: npm run test
+
+      - name: Upload web test artifacts
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: web-test-artifacts
+          path: |
+            apps/web/playwright-report
+            apps/web/test-results
+          if-no-files-found: ignore
+          retention-days: 7
+
+  api:
+    name: api
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
 
       - name: Set up Java 21
         uses: actions/setup-java@v4
@@ -66,72 +84,21 @@ jobs:
         working-directory: apps/api
         run: ./gradlew bootJar --no-daemon
 
-      - name: Validate Docker Compose
-        run: docker compose config
+      - name: Upload API test artifacts
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: api-test-artifacts
+          path: |
+            apps/api/build/reports/tests/test
+            apps/api/build/test-results/test
+          if-no-files-found: ignore
+          retention-days: 7
 
-      - name: Build API Docker image
-        run: docker build -t buildgraph-api:ci ./apps/api
-
-      - name: Build web Docker image
-        run: docker build -t buildgraph-web:ci ./apps/web
-
-      - name: Run API runtime smoke test
-        shell: bash
-        env:
-          SPRING_DATASOURCE_URL: jdbc:postgresql://localhost:5432/buildgraph
-          SPRING_DATASOURCE_USERNAME: buildgraph
-          SPRING_DATASOURCE_PASSWORD: buildgraph
-          SPRING_DATA_REDIS_HOST: localhost
-          SPRING_RABBITMQ_HOST: localhost
-          SPRING_RABBITMQ_USERNAME: buildgraph
-          SPRING_RABBITMQ_PASSWORD: buildgraph
-          SPRING_MAIL_HOST: localhost
-          SPRING_MAIL_PORT: 1025
-        run: |
-          set -euo pipefail
-          docker compose up -d postgres redis rabbitmq mailpit
-
-          POSTGRES_READY=0
-          for attempt in {1..60}; do
-            if docker compose exec -T postgres pg_isready -U buildgraph -d buildgraph; then
-              POSTGRES_READY=1
-              break
-            fi
-            sleep 2
-          done
-          if [ "$POSTGRES_READY" -ne 1 ]; then
-            docker compose logs postgres
-            exit 1
-          fi
-
-          API_JAR="$(ls apps/api/build/libs/*.jar | head -n 1)"
-          java -jar "$API_JAR" > api-smoke.log 2>&1 &
-          API_PID=$!
-
-          cleanup() {
-            kill "$API_PID" 2>/dev/null || true
-            docker compose down -v
-          }
-          trap cleanup EXIT
-
-          for attempt in {1..60}; do
-            if curl -fsS http://localhost:8080/api/health; then
-              exit 0
-            fi
-            if ! kill -0 "$API_PID" 2>/dev/null; then
-              cat api-smoke.log
-              exit 1
-            fi
-            sleep 2
-          done
-
-          cat api-smoke.log
-          exit 1
-
-  ai-live-quality:
-    name: AS Chat live AI quality benchmark
+  openapi:
+    name: openapi
     runs-on: ubuntu-latest
-    needs: verify
+    timeout-minutes: 10
 
     steps:
       - name: Checkout
@@ -141,52 +108,112 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: "3.11"
+          cache: pip
+          cache-dependency-path: tools/requirements.txt
 
-      - name: Run AS Chat profile benchmark
-        shell: bash
-        env:
-          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
-          OPENAI_MODEL: gpt-5.5
-          OPENAI_REASONING_EFFORT: medium
-          AS_CHAT_DEFAULT_PROFILE: AS_CHAT_FAST
-          AS_CHAT_FAST_MODEL: gpt-5.5
-          AS_CHAT_FAST_REASONING_EFFORT: low
-          AS_CHAT_NANO_FAST_MODEL: gpt-5.4-nano
-          AS_CHAT_NANO_FAST_REASONING_EFFORT: low
-          AS_CHAT_BALANCED_MODEL: gpt-5.5
-          AS_CHAT_BALANCED_REASONING_EFFORT: medium
-          AS_CHAT_HIGH_QUALITY_MODEL: gpt-5.5
-          AS_CHAT_HIGH_QUALITY_REASONING_EFFORT: high
+      - name: Validate OpenAPI YAML
+        run: |
+          python -m pip install -r tools/requirements.txt
+          python tools/validate_openapi.py
+          python -m unittest tools.test_validate_openapi
+
+  compose:
+    name: compose
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Validate Docker Compose
+        run: docker compose -f compose.yaml config
+
+  pc-agent:
+    name: pc-agent
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: apps/pc-agent/requirements.txt
+
+      - name: Run PC Agent sample/export smoke test
         run: |
           set -euo pipefail
-          if [ -z "${OPENAI_API_KEY}" ]; then
-            echo "OPENAI_API_KEY secret is not configured; skipping live AI benchmark."
-            exit 0
-          fi
+          python -m pip install -r apps/pc-agent/requirements.txt
+          mkdir -p "$RUNNER_TEMP/pc-agent"
+          python apps/pc-agent/buildgraph_agent.py sample --out "$RUNNER_TEMP/pc-agent/sample-agent-log.jsonl"
+          python apps/pc-agent/buildgraph_agent.py export --source "$RUNNER_TEMP/pc-agent/sample-agent-log.jsonl" --out "$RUNNER_TEMP/pc-agent/recent-30m.jsonl" --minutes 30
+          test -s "$RUNNER_TEMP/pc-agent/sample-agent-log.jsonl"
+          test -s "$RUNNER_TEMP/pc-agent/recent-30m.jsonl"
 
-          docker compose up -d --build postgres redis rabbitmq mailpit api
+      - name: Upload PC Agent artifacts
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: pc-agent-artifacts
+          path: ${{ runner.temp }}/pc-agent
+          if-no-files-found: ignore
+          retention-days: 7
+
+  docker-runtime-smoke:
+    name: docker-runtime-smoke
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    env:
+      AGENT_RUNNER_MODE: deterministic
+      PART_PRICE_REFRESH_ENABLED: "false"
+      RAG_EMBEDDING_BACKFILL_ON_STARTUP: "false"
+      OPENAI_API_KEY: ""
+      NAVER_SEARCH_CLIENT_ID: ""
+      NAVER_SEARCH_CLIENT_SECRET: ""
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Build Docker images and smoke test API container
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/docker-runtime-smoke"
+
           cleanup() {
-            docker compose down -v
+            status=$?
+            docker compose -f compose.yaml ps > "$RUNNER_TEMP/docker-runtime-smoke/compose-ps.txt" 2>&1 || true
+            docker compose -f compose.yaml logs --no-color > "$RUNNER_TEMP/docker-runtime-smoke/compose.log" 2>&1 || true
+            docker compose -f compose.yaml down -v > "$RUNNER_TEMP/docker-runtime-smoke/compose-down.log" 2>&1 || true
+            exit "$status"
           }
           trap cleanup EXIT
 
+          docker compose -f compose.yaml build api web
+          docker compose -f compose.yaml up -d postgres redis rabbitmq mailpit api
+
           for attempt in {1..90}; do
-            if curl -fsS http://localhost:8080/api/health; then
-              break
+            if curl -fsS http://localhost:8080/api/health | tee "$RUNNER_TEMP/docker-runtime-smoke/health.json"; then
+              exit 0
             fi
             if [ "$attempt" -eq 90 ]; then
-              docker compose logs api
+              docker compose -f compose.yaml logs --no-color api
               exit 1
             fi
             sleep 2
           done
 
-          python tools/benchmark_as_chat_profiles.py
-
-      - name: Upload AS Chat benchmark report
-        if: always()
+      - name: Upload Docker runtime smoke artifacts
+        if: failure()
         uses: actions/upload-artifact@v4
         with:
-          name: as-chat-profile-benchmark
-          path: docs/reports/as-chat-profile-benchmark-*.md
+          name: docker-runtime-smoke-artifacts
+          path: ${{ runner.temp }}/docker-runtime-smoke
           if-no-files-found: ignore
+          retention-days: 7

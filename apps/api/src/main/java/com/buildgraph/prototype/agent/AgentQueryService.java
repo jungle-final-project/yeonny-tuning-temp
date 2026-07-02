@@ -3,6 +3,7 @@ package com.buildgraph.prototype.agent;
 import com.buildgraph.prototype.common.DbValueMapper;
 import com.buildgraph.prototype.common.MockData;
 import com.buildgraph.prototype.rag.RagQueryService;
+import com.buildgraph.prototype.user.CurrentUserService;
 import java.util.List;
 import java.util.Map;
 import org.springframework.http.HttpStatus;
@@ -15,41 +16,44 @@ public class AgentQueryService {
     private final JdbcTemplate jdbcTemplate;
     private final RagQueryService ragQueryService;
     private final AgentTraceService agentTraceService;
-    private final AgentRunner agentRunner;
+    private final AgentJobPublisher agentJobPublisher;
     private final LlmGenerationService llmGenerationService;
 
     public AgentQueryService(
             JdbcTemplate jdbcTemplate,
             RagQueryService ragQueryService,
             AgentTraceService agentTraceService,
-            AgentRunner agentRunner,
+            AgentJobPublisher agentJobPublisher,
             LlmGenerationService llmGenerationService
     ) {
         this.jdbcTemplate = jdbcTemplate;
         this.ragQueryService = ragQueryService;
         this.agentTraceService = agentTraceService;
-        this.agentRunner = agentRunner;
+        this.agentJobPublisher = agentJobPublisher;
         this.llmGenerationService = llmGenerationService;
     }
 
-    public Map<String, Object> createSession(AgentSessionCreateRequest request) {
+    public Map<String, Object> createSession(AgentSessionCreateRequest request, CurrentUserService.CurrentUser user) {
         AgentSessionRoot root = parseRoot(request);
-        String id = agentTraceService.createQueuedSession(root, "USER");
-        return session(id);
+        requireRootOwner(root, user.internalId());
+        String id = agentTraceService.createQueuedSession(root, "USER", root.purpose(), user.internalId());
+        return session(id, user);
     }
 
-    public Map<String, Object> runSession(String id) {
-        Map<String, Object> row = agentSessionRow(id);
+    public Map<String, Object> runSession(String id, CurrentUserService.CurrentUser user) {
+        Map<String, Object> row = agentSessionRow(id, user.internalId());
+        String status = DbValueMapper.string(row, "status");
+        if (!"QUEUED".equals(status)) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "QUEUED 상태의 Agent session만 실행할 수 있습니다.");
+        }
         AgentSessionRoot root = rootFromRow(row);
         AgentRunProfile profile = AgentRunProfiles.forRoot(root);
-        agentTraceService.advanceStatus(id, AgentStatus.RUNNING, "SYSTEM", "agent run requested for " + profile.purpose());
-        Map<String, Object> startedSession = session(id);
-        agentRunner.run(id, root, profile);
-        return startedSession;
+        agentJobPublisher.publishRun(id, root, profile);
+        return session(id, user);
     }
 
-    public Map<String, Object> session(String id) {
-        Map<String, Object> row = agentSessionRow(id);
+    public Map<String, Object> session(String id, CurrentUserService.CurrentUser user) {
+        Map<String, Object> row = agentSessionRow(id, user.internalId());
         return MockData.map(
                 "id", DbValueMapper.string(row, "id"),
                 "status", DbValueMapper.string(row, "status"),
@@ -133,6 +137,29 @@ public class AgentQueryService {
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Agent session을 찾을 수 없습니다."));
     }
 
+    private Map<String, Object> agentSessionRow(String id, Long userId) {
+        return jdbcTemplate.queryForList("""
+                        SELECT s.public_id::text AS id,
+                               s.status,
+                               s.summary,
+                               s.state_timeline,
+                               s.created_at,
+                               s.updated_at,
+                               r.public_id::text AS requirement_id,
+                               b.public_id::text AS build_id,
+                               t.public_id::text AS as_ticket_id
+                        FROM agent_sessions s
+                        LEFT JOIN requirements r ON r.id = s.requirement_id
+                        LEFT JOIN builds b ON b.id = s.build_id
+                        LEFT JOIN as_tickets t ON t.id = s.as_ticket_id
+                        WHERE s.public_id = ?::uuid
+                          AND s.user_id = ?
+                        """, id, userId)
+                .stream()
+                .findFirst()
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Agent session을 찾을 수 없습니다."));
+    }
+
     private List<Map<String, Object>> toolInvocationsBySession(String sessionId) {
         return jdbcTemplate.queryForList(toolInvocationSql() + " WHERE s.public_id = ?::uuid ORDER BY ti.id", sessionId)
                 .stream()
@@ -201,6 +228,35 @@ public class AgentQueryService {
             return AgentSessionRoot.from(request);
         } catch (IllegalArgumentException e) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, e.getMessage(), e);
+        }
+    }
+
+    private void requireRootOwner(AgentSessionRoot root, Long userId) {
+        String sql = switch (root.type()) {
+            case REQUIREMENT -> """
+                    SELECT COUNT(*)
+                    FROM requirements
+                    WHERE public_id = ?::uuid
+                      AND user_id = ?
+                    """;
+            case BUILD -> """
+                    SELECT COUNT(*)
+                    FROM builds b
+                    JOIN requirements r ON r.id = b.requirement_id
+                    WHERE b.public_id = ?::uuid
+                      AND r.user_id = ?
+                    """;
+            case AS_TICKET -> """
+                    SELECT COUNT(*)
+                    FROM as_tickets
+                    WHERE public_id = ?::uuid
+                      AND user_id = ?
+                      AND deleted_at IS NULL
+                    """;
+        };
+        Integer count = jdbcTemplate.queryForObject(sql, Integer.class, root.publicId(), userId);
+        if (count == null || count == 0) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Agent root를 찾을 수 없습니다.");
         }
     }
 

@@ -1,0 +1,12 @@
+{"timestamp":"2026-07-01T20:00:00+09:00","cpuUsage":41.8,"ramUsage":64.2,"gpuUsage":68.5,"vramUsage":57.4,"gpuTemp":72.1,"cpuTemp":61.8,"diskUsage":46.7,"osErrorEvent":null,"topCpuProcess":"game.exe","topRamProcess":"game.exe"}
+{"timestamp":"2026-07-01T20:00:05+09:00","cpuUsage":55.6,"ramUsage":70.1,"gpuUsage":81.9,"vramUsage":66.8,"gpuTemp":78.4,"cpuTemp":64.2,"diskUsage":47.0,"osErrorEvent":null,"topCpuProcess":"game.exe","topRamProcess":"game.exe"}
+{"timestamp":"2026-07-01T20:00:10+09:00","cpuUsage":63.3,"ramUsage":76.5,"gpuUsage":92.7,"vramUsage":78.2,"gpuTemp":84.9,"cpuTemp":67.1,"diskUsage":47.3,"osErrorEvent":"Display driver warning","topCpuProcess":"game.exe","topRamProcess":"game.exe"}
+{"timestamp":"2026-07-01T20:00:15+09:00","cpuUsage":72.4,"ramUsage":81.9,"gpuUsage":97.2,"vramUsage":86.3,"gpuTemp":89.6,"cpuTemp":70.8,"diskUsage":47.8,"osErrorEvent":"Display driver nvlddmkm stopped responding","topCpuProcess":"game.exe","topRamProcess":"game.exe"}
+{"timestamp":"2026-07-01T20:00:20+09:00","cpuUsage":78.9,"ramUsage":84.1,"gpuUsage":98.0,"vramUsage":91.5,"gpuTemp":93.8,"cpuTemp":73.2,"diskUsage":48.2,"osErrorEvent":"Frame time spike detected","topCpuProcess":"game.exe","topRamProcess":"game.exe"}
+{"timestamp":"2026-07-01T20:00:25+09:00","cpuUsage":66.7,"ramUsage":82.4,"gpuUsage":94.6,"vramUsage":90.2,"gpuTemp":95.1,"cpuTemp":72.5,"diskUsage":48.3,"osErrorEvent":"Display driver recovered","topCpuProcess":"game.exe","topRamProcess":"browser.exe"}
+{"timestamp":"2026-07-01T20:00:30+09:00","cpuUsage":48.2,"ramUsage":80.7,"gpuUsage":71.4,"vramUsage":82.0,"gpuTemp":88.7,"cpuTemp":68.4,"diskUsage":48.4,"osErrorEvent":"Game process not responding","topCpuProcess":"game.exe","topRamProcess":"game.exe"}
+{"timestamp":"2026-07-01T20:00:35+09:00","cpuUsage":39.4,"ramUsage":76.6,"gpuUsage":42.5,"vramUsage":69.3,"gpuTemp":79.8,"cpuTemp":63.9,"diskUsage":48.4,"osErrorEvent":null,"topCpuProcess":"system","topRamProcess":"browser.exe"}
+{"timestamp":"2026-07-01T20:00:40+09:00","cpuUsage":44.1,"ramUsage":73.2,"gpuUsage":58.9,"vramUsage":71.8,"gpuTemp":81.2,"cpuTemp":64.7,"diskUsage":48.6,"osErrorEvent":null,"topCpuProcess":"game.exe","topRamProcess":"game.exe"}
+{"timestamp":"2026-07-01T20:00:45+09:00","cpuUsage":69.8,"ramUsage":82.9,"gpuUsage":96.8,"vramUsage":92.7,"gpuTemp":94.6,"cpuTemp":72.8,"diskUsage":48.8,"osErrorEvent":"Display driver warning","topCpuProcess":"game.exe","topRamProcess":"game.exe"}
+
+

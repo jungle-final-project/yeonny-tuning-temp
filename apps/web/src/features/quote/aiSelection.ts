@@ -1,4 +1,5 @@
 import type { QuoteDraft } from '../parts/types';
+import { getCachedAuthUser } from '../../lib/api';
 
 export const AI_SELECTED_BUILD_STORAGE_KEY = 'buildgraph.ai.selectedBuild';
 export const AI_SELECTED_BUILD_CHANGED_EVENT = 'buildgraph.ai.selectedBuildChanged';
@@ -8,6 +9,12 @@ export const AI_ASSISTANT_SESSION_CHANGED_EVENT = 'buildgraph.ai.assistantSessio
 export type AiBuildTier = 'budget' | 'balanced' | 'performance';
 export type PartCategory = 'CPU' | 'MOTHERBOARD' | 'RAM' | 'GPU' | 'STORAGE' | 'PSU' | 'CASE' | 'COOLER';
 export type AiChatAnswerType = 'BUDGET' | 'PART' | 'GENERAL';
+export type BuildGraphSource = 'AI_BUILD' | 'QUOTE_DRAFT_CURRENT';
+export type BuildGraphView = 'FOCUSED' | 'FULL';
+export type BuildGraphMode = 'BUILD_OVERVIEW' | 'PART_IMPACT' | 'ISSUE_PATH' | 'DRAFT_ACTION';
+export type BuildGraphNodeType = 'PART' | 'CONSTRAINT' | 'ISSUE' | 'ACTION';
+export type BuildGraphEdgeType = 'REQUIRES' | 'AFFECTS' | 'BLOCKS' | 'SUGGESTS';
+export type BuildGraphStatus = 'PASS' | 'WARN' | 'FAIL';
 export type AiDraftActionType =
   | 'ADD_PART_TO_DRAFT'
   | 'REPLACE_DRAFT_PART'
@@ -86,6 +93,60 @@ export type AiAppliedPartPreference = {
   options: AiBuildItem[];
 };
 
+export type BuildGraphFocus = {
+  mode: BuildGraphMode;
+  category?: PartCategory;
+  partId?: string;
+  tool?: 'compatibility' | 'power' | 'size' | 'performance' | 'price';
+};
+
+export type BuildGraphNode = {
+  id: string;
+  type: BuildGraphNodeType;
+  category?: PartCategory | 'PRICE' | string;
+  label: string;
+  status: BuildGraphStatus;
+  detail?: string;
+  partId?: string;
+  price?: number;
+};
+
+export type BuildGraphEdge = {
+  id: string;
+  source: string;
+  target: string;
+  type: BuildGraphEdgeType;
+  status: BuildGraphStatus;
+  label: string;
+  summary: string;
+};
+
+export type BuildGraphInsight = {
+  id: string;
+  status: BuildGraphStatus;
+  title: string;
+  description: string;
+  relatedNodeIds: string[];
+};
+
+export type BuildGraphResolveRequest = {
+  source: BuildGraphSource;
+  view?: BuildGraphView;
+  items?: Array<Pick<AiBuildItem, 'partId' | 'category' | 'quantity'>>;
+  budgetWon?: number;
+  focus?: BuildGraphFocus;
+};
+
+export type BuildGraphResolveResponse = {
+  mode: BuildGraphMode;
+  summary: string;
+  nodes: BuildGraphNode[];
+  edges: BuildGraphEdge[];
+  focusNodeIds: string[];
+  insights: BuildGraphInsight[];
+  toolResults: AiToolResult[];
+};
+
 export type AiChatMessage = {
   id: string;
   role: 'user' | 'assistant';
@@ -103,6 +164,8 @@ export type AiAssistantSession = {
   messages: AiChatMessage[];
   latestBuilds: AiRecommendedBuild[];
   appliedPartPreferences: AiAppliedPartPreference[];
+  latestGraphFocus?: BuildGraphFocus;
+  latestActiveBuildId?: string;
   updatedAt: string;
 };
 
@@ -146,6 +209,8 @@ export function emptyAssistantSession(): AiAssistantSession {
     messages: [initialAssistantMessage],
     latestBuilds: [],
     appliedPartPreferences: [],
+    latestGraphFocus: undefined,
+    latestActiveBuildId: undefined,
     updatedAt: initialAssistantMessage.createdAt
   };
 }
@@ -162,17 +227,43 @@ export function toSelectedAiBuild(build: AiRecommendedBuild): AiSelectedBuild {
   };
 }
 
-export function saveSelectedAiBuild(build: AiRecommendedBuild) {
+export function getAiStorageOwnerKey() {
+  if (typeof window === 'undefined') return null;
+  const cachedUser = getCachedAuthUser();
+  if (!cachedUser || typeof cachedUser !== 'object') return null;
+  const candidate = cachedUser as Record<string, unknown>;
+  const id = typeof candidate.id === 'string' ? candidate.id.trim() : '';
+  if (id) return id;
+  const email = typeof candidate.email === 'string' ? candidate.email.trim().toLowerCase() : '';
+  return email || null;
+}
+
+export function getScopedAiStorageKey(baseKey: string, ownerKey: string | null = getAiStorageOwnerKey()) {
+  const normalizedOwnerKey = ownerKey?.trim();
+  return normalizedOwnerKey ? `${baseKey}:${encodeURIComponent(normalizedOwnerKey)}` : null;
+}
+
+export function clearLegacyAiStorage() {
   if (typeof window === 'undefined') return;
+  window.sessionStorage.removeItem(AI_SELECTED_BUILD_STORAGE_KEY);
+  window.sessionStorage.removeItem(AI_ASSISTANT_SESSION_STORAGE_KEY);
+}
+
+export function saveSelectedAiBuild(build: AiRecommendedBuild, ownerKey: string | null = getAiStorageOwnerKey()) {
+  if (typeof window === 'undefined') return;
+  const storageKey = getScopedAiStorageKey(AI_SELECTED_BUILD_STORAGE_KEY, ownerKey);
+  if (!storageKey) return;
   const selectedBuild = toSelectedAiBuild(normalizeAiRecommendedBuild(build));
-  window.sessionStorage.setItem(AI_SELECTED_BUILD_STORAGE_KEY, JSON.stringify(selectedBuild));
+  window.sessionStorage.setItem(storageKey, JSON.stringify(selectedBuild));
   window.dispatchEvent(new Event(AI_SELECTED_BUILD_CHANGED_EVENT));
 }
 
-export function readSelectedAiBuild(): AiSelectedBuild | null {
+export function readSelectedAiBuild(ownerKey: string | null = getAiStorageOwnerKey()): AiSelectedBuild | null {
   if (typeof window === 'undefined') return null;
   try {
-    const raw = window.sessionStorage.getItem(AI_SELECTED_BUILD_STORAGE_KEY);
+    const storageKey = getScopedAiStorageKey(AI_SELECTED_BUILD_STORAGE_KEY, ownerKey);
+    if (!storageKey) return null;
+    const raw = window.sessionStorage.getItem(storageKey);
     if (!raw) return null;
     const parsed = JSON.parse(raw) as AiSelectedBuild;
     const normalized = normalizeAiRecommendedBuild({
@@ -190,16 +281,20 @@ export function readSelectedAiBuild(): AiSelectedBuild | null {
   }
 }
 
-export function clearSelectedAiBuild() {
+export function clearSelectedAiBuild(ownerKey: string | null = getAiStorageOwnerKey()) {
   if (typeof window === 'undefined') return;
-  window.sessionStorage.removeItem(AI_SELECTED_BUILD_STORAGE_KEY);
+  const storageKey = getScopedAiStorageKey(AI_SELECTED_BUILD_STORAGE_KEY, ownerKey);
+  if (!storageKey) return;
+  window.sessionStorage.removeItem(storageKey);
   window.dispatchEvent(new Event(AI_SELECTED_BUILD_CHANGED_EVENT));
 }
 
-export function readAssistantSession(): AiAssistantSession {
+export function readAssistantSession(ownerKey: string | null = getAiStorageOwnerKey()): AiAssistantSession {
   if (typeof window === 'undefined') return emptyAssistantSession();
   try {
-    const raw = window.sessionStorage.getItem(AI_ASSISTANT_SESSION_STORAGE_KEY);
+    const storageKey = getScopedAiStorageKey(AI_ASSISTANT_SESSION_STORAGE_KEY, ownerKey);
+    if (!storageKey) return emptyAssistantSession();
+    const raw = window.sessionStorage.getItem(storageKey);
     if (!raw) return emptyAssistantSession();
     const parsed = JSON.parse(raw) as AiAssistantSession;
     if (!Array.isArray(parsed.messages) || !Array.isArray(parsed.latestBuilds)) {
@@ -209,6 +304,8 @@ export function readAssistantSession(): AiAssistantSession {
       messages: normalizeAssistantMessages(parsed.messages.length > 0 ? parsed.messages : [initialAssistantMessage]),
       latestBuilds: normalizeAiBuilds(parsed.latestBuilds ?? []),
       appliedPartPreferences: parsed.appliedPartPreferences ?? [],
+      latestGraphFocus: parsed.latestGraphFocus,
+      latestActiveBuildId: parsed.latestActiveBuildId,
       updatedAt: parsed.updatedAt ?? initialAssistantMessage.createdAt
     };
   } catch {
@@ -216,9 +313,19 @@ export function readAssistantSession(): AiAssistantSession {
   }
 }
 
-export function saveAssistantSession(session: AiAssistantSession) {
+export function saveAssistantSession(session: AiAssistantSession, ownerKey: string | null = getAiStorageOwnerKey()) {
   if (typeof window === 'undefined') return;
-  window.sessionStorage.setItem(AI_ASSISTANT_SESSION_STORAGE_KEY, JSON.stringify(normalizeAssistantSession(session)));
+  const storageKey = getScopedAiStorageKey(AI_ASSISTANT_SESSION_STORAGE_KEY, ownerKey);
+  if (!storageKey) return;
+  window.sessionStorage.setItem(storageKey, JSON.stringify(normalizeAssistantSession(session)));
+  window.dispatchEvent(new Event(AI_ASSISTANT_SESSION_CHANGED_EVENT));
+}
+
+export function clearAssistantSession(ownerKey: string | null = getAiStorageOwnerKey()) {
+  if (typeof window === 'undefined') return;
+  const storageKey = getScopedAiStorageKey(AI_ASSISTANT_SESSION_STORAGE_KEY, ownerKey);
+  if (!storageKey) return;
+  window.sessionStorage.removeItem(storageKey);
   window.dispatchEvent(new Event(AI_ASSISTANT_SESSION_CHANGED_EVENT));
 }
 
@@ -251,7 +358,9 @@ function normalizeAssistantSession(session: AiAssistantSession): AiAssistantSess
   return {
     ...session,
     messages: normalizeAssistantMessages(session.messages),
-    latestBuilds: normalizeAiBuilds(session.latestBuilds)
+    latestBuilds: normalizeAiBuilds(session.latestBuilds),
+    latestGraphFocus: session.latestGraphFocus,
+    latestActiveBuildId: session.latestActiveBuildId
   };
 }
 

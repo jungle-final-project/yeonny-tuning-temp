@@ -5,34 +5,43 @@ import { getRagEvidence } from '../adminApi';
 import type { RagEvidenceDetail } from '../adminApi';
 
 export function RagEvidenceAdminPage() {
-  const { id = '00000000-0000-4000-8000-000000004001' } = useParams();
+  const { id } = useParams();
   const {
     data: evidence,
     isError,
     isLoading
   } = useQuery({
     queryKey: ['admin-rag-evidence', id],
-    queryFn: () => getRagEvidence(id)
+    queryFn: () => getRagEvidence(id ?? ''),
+    enabled: Boolean(id)
   });
+
+  if (!id) {
+    return (
+      <AdminShell title="검색 근거 상세">
+        <StateMessage type="info" title="검색 근거를 선택하세요" body="에이전트 세션 상세에서 검색 근거 항목을 선택해야 합니다." />
+      </AdminShell>
+    );
+  }
 
   if (isLoading) {
     return (
-      <AdminShell title="RAG Evidence 상세">
-        <StateMessage type="info" title="RAG 근거 로딩 중" body="RAG evidence chunk와 metadata를 불러오고 있습니다." />
+      <AdminShell title="검색 근거 상세">
+        <StateMessage type="info" title="검색 근거 로딩 중" body="검색 근거 본문과 메타데이터를 불러오고 있습니다." />
       </AdminShell>
     );
   }
 
   if (isError || !evidence) {
     return (
-      <AdminShell title="RAG Evidence 상세">
-        <StateMessage type="warn" title="RAG 근거 조회 실패" body="관리자 RAG evidence 상세 API 응답을 불러오지 못했습니다." />
+      <AdminShell title="검색 근거 상세">
+        <StateMessage type="warn" title="검색 근거 조회 실패" body="관리자 검색 근거 상세 응답을 불러오지 못했습니다." />
       </AdminShell>
     );
   }
 
   return (
-    <AdminShell title="RAG Evidence 상세">
+    <AdminShell title="검색 근거 상세">
       <div className="grid grid-cols-[1fr_420px] gap-5">
         <Panel title="근거 문서" subtitle={`${evidence.sourceId} / ${evidence.id}`}>
           <DataTable columns={['필드', '값']} rows={detailRows(evidence)} />
@@ -40,12 +49,12 @@ export function RagEvidenceAdminPage() {
         <Panel title="요약">
           <StateMessage type="info" title={formatScore(evidence.score)} body={evidence.summary} />
         </Panel>
-        <Panel title="근거 Chunk">
+        <Panel title="근거 본문">
           <div className="min-h-[220px] rounded border border-slate-200 bg-white p-4 text-sm leading-7 text-slate-700">
-            {evidence.chunkText ?? '관리자 응답에 chunkText가 없습니다.'}
+            {evidence.chunkText ?? '관리자 응답에 근거 본문이 없습니다.'}
           </div>
         </Panel>
-        <Panel title="Metadata JSON">
+        <Panel title="메타데이터 JSON">
           <JsonBlock value={evidence.metadata ?? {}} />
         </Panel>
       </div>
@@ -55,16 +64,16 @@ export function RagEvidenceAdminPage() {
 
 function detailRows(evidence: RagEvidenceDetail) {
   return [
-    { 필드: 'evidenceId', 값: evidence.id },
-    { 필드: 'sourceId', 값: evidence.sourceId },
-    { 필드: 'score', 값: formatScore(evidence.score) },
+    { 필드: '근거 식별자', 값: evidence.id },
+    { 필드: '출처 식별자', 값: evidence.sourceId },
+    { 필드: '점수', 값: formatScore(evidence.score) },
     {
-      필드: 'agentSessionId',
+      필드: '에이전트 세션 식별자',
       값: evidence.agentSessionId
         ? <Link className="font-bold text-brand-blue" to={`/admin/agent-sessions/${evidence.agentSessionId}`}>{evidence.agentSessionId}</Link>
         : '-'
     },
-    { 필드: 'summary', 값: evidence.summary }
+    { 필드: '요약', 값: evidence.summary }
   ];
 }
 
@@ -77,5 +86,5 @@ function JsonBlock({ value }: { value: unknown }) {
 }
 
 function formatScore(value?: string | number | null) {
-  return value == null ? 'score 없음' : `score ${value}`;
+  return value == null ? '점수 없음' : `점수 ${value}`;
 }

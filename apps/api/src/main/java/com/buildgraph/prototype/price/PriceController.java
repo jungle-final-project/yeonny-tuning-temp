@@ -24,8 +24,8 @@ public class PriceController {
 
     @GetMapping("/price-alerts")
     Map<String, Object> alerts(@RequestHeader(value = "Authorization", required = false) String authorization) {
-        currentUserService.requireUser(authorization);
-        return priceQueryService.alerts();
+        CurrentUserService.CurrentUser user = currentUserService.requireUser(authorization);
+        return priceQueryService.alerts(user);
     }
 
     @PostMapping("/price-alerts")
@@ -34,7 +34,7 @@ public class PriceController {
             @RequestBody(required = false) Map<String, Object> request,
             @RequestHeader(value = "Authorization", required = false) String authorization
     ) {
-        currentUserService.requireUser(authorization);
-        return priceQueryService.createAlert(request);
+        CurrentUserService.CurrentUser user = currentUserService.requireUser(authorization);
+        return priceQueryService.createAlert(request, user);
     }
 }

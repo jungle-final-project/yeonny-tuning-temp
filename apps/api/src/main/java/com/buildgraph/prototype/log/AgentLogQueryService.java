@@ -1,8 +1,17 @@
 package com.buildgraph.prototype.log;
 
+import com.buildgraph.prototype.common.ApiException;
 import com.buildgraph.prototype.common.DbValueMapper;
 import com.buildgraph.prototype.common.MockData;
+import com.buildgraph.prototype.user.CurrentUserService;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import java.io.IOException;
+import java.nio.charset.StandardCharsets;
+import java.util.LinkedHashMap;
 import java.util.Map;
+import java.util.Set;
+import java.util.regex.Pattern;
 import org.springframework.http.HttpStatus;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
@@ -11,19 +20,49 @@ import org.springframework.web.server.ResponseStatusException;
 
 @Service
 public class AgentLogQueryService {
+    private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
+    private static final long MAX_FILE_SIZE = 10L * 1024L * 1024L;
+    private static final int MAX_LINE_COUNT = 20_000;
+    private static final Set<String> ALLOWED_MIME_TYPES = Set.of(
+            "application/json",
+            "application/x-ndjson",
+            "text/plain",
+            "application/octet-stream"
+    );
+    private static final Pattern EMAIL_PATTERN = Pattern.compile(
+            "\\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\\.[A-Za-z]{2,}\\b"
+    );
+    private static final Pattern PHONE_PATTERN = Pattern.compile(
+            "(?<!\\d)(?:\\+82[- ]?)?0\\d{1,2}[- ]?\\d{3,4}[- ]?\\d{4}(?!\\d)"
+    );
+    private static final Pattern AUTHORIZATION_PATTERN = Pattern.compile(
+            "(?i)Authorization\\s*:\\s*Bearer\\s+[^\\s\"'}]+"
+    );
+    private static final Pattern ACCESS_TOKEN_PATTERN = Pattern.compile(
+            "(?i)(access[-_ ]?token\\s*[:=]\\s*)[^\\s\"'}]+"
+    );
+    private static final Pattern REFRESH_TOKEN_PATTERN = Pattern.compile(
+            "(?i)(refresh[-_ ]?token\\s*[:=]\\s*)[^\\s\"'}]+"
+    );
+
     private final JdbcTemplate jdbcTemplate;
 
     public AgentLogQueryService(JdbcTemplate jdbcTemplate) {
         this.jdbcTemplate = jdbcTemplate;
     }
 
-    public Map<String, Object> upload(MultipartFile file, Integer rangeMinutes, Boolean consentAccepted) {
+    public Map<String, Object> upload(
+            MultipartFile file,
+            Integer rangeMinutes,
+            Boolean consentAccepted,
+            CurrentUserService.CurrentUser user
+    ) {
         if (!Boolean.TRUE.equals(consentAccepted)) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "로그 업로드 동의가 필요합니다.");
         }
-        String fileName = file == null ? "agent-log.jsonl" : file.getOriginalFilename();
-        long fileSize = file == null ? 0L : file.getSize();
+        ValidatedLogFile validated = validateLogFile(file);
         Integer minutes = rangeMinutes == null ? 30 : rangeMinutes;
+        String summary = "Validated JSONL log upload (" + validated.lineCount() + " lines).";
         Map<String, Object> row = jdbcTemplate.queryForMap("""
                 INSERT INTO agent_log_uploads (
                   user_id,
@@ -37,27 +76,28 @@ public class AgentLogQueryService {
                   delete_after
                 )
                 VALUES (
-                  (SELECT id FROM users WHERE email = 'user@example.com'),
+                  ?,
                   ?,
                   'UPLOADED',
                   ?,
                   ?,
                   'seed/agent-logs/' || ?,
-                  'Uploaded through DB-backed prototype API.',
+                  ?,
                   now(),
                   now() + interval '30 days'
                 )
                 RETURNING public_id::text AS id, status, file_name, file_size, range_minutes, summary, created_at, delete_after
-                """, minutes, fileName, fileSize, fileName);
+                """, user.internalId(), minutes, validated.fileName(), validated.fileSize(), validated.fileName(), summary);
         return logMap(row);
     }
 
-    public Map<String, Object> detail(String id) {
+    public Map<String, Object> detail(String id, CurrentUserService.CurrentUser user) {
         return jdbcTemplate.queryForList("""
                         SELECT public_id::text AS id, status, file_name, file_size, range_minutes, summary, created_at, delete_after
                         FROM agent_log_uploads
                         WHERE public_id = ?::uuid
-                        """, id)
+                          AND user_id = ?
+                        """, id, user.internalId())
                 .stream()
                 .findFirst()
                 .map(this::logMap)
@@ -75,5 +115,109 @@ public class AgentLogQueryService {
                 "createdAt", DbValueMapper.timestamp(row, "created_at"),
                 "deleteAfter", DbValueMapper.timestamp(row, "delete_after")
         );
+    }
+
+    static ValidatedLogFile validateLogFile(MultipartFile file) {
+        if (file == null || file.isEmpty()) {
+            throw fileValidationError("MISSING_FILE", "업로드할 로그 파일이 필요합니다.");
+        }
+        if (file.getSize() > MAX_FILE_SIZE) {
+            throw fileValidationError("FILE_SIZE_EXCEEDED", "로그 파일은 10MiB 이하만 업로드할 수 있습니다.");
+        }
+        String fileName = normalizeFileName(file.getOriginalFilename());
+        String lowerFileName = fileName.toLowerCase(java.util.Locale.ROOT);
+        if (!lowerFileName.endsWith(".jsonl") && !lowerFileName.endsWith(".ndjson")) {
+            throw fileValidationError("INVALID_EXTENSION", "로그 파일은 .jsonl 또는 .ndjson만 업로드할 수 있습니다.");
+        }
+        String contentType = file.getContentType();
+        if (contentType != null && !contentType.isBlank()
+                && !ALLOWED_MIME_TYPES.contains(contentType.toLowerCase(java.util.Locale.ROOT))) {
+            throw fileValidationError("INVALID_MIME", "로그 파일 MIME 타입이 올바르지 않습니다.");
+        }
+
+        String rawContent;
+        try {
+            rawContent = new String(file.getBytes(), StandardCharsets.UTF_8);
+        } catch (IOException exception) {
+            throw fileValidationError("READ_FAILED", "로그 파일을 읽을 수 없습니다.");
+        }
+
+        int lineCount = 0;
+        StringBuilder sanitized = new StringBuilder(rawContent.length());
+        String[] lines = rawContent.replace("\r\n", "\n").replace('\r', '\n').split("\n", -1);
+        for (int index = 0; index < lines.length; index += 1) {
+            String line = lines[index];
+            boolean finalTrailingLine = index == lines.length - 1 && line.isEmpty();
+            if (finalTrailingLine) {
+                continue;
+            }
+            int lineNumber = index + 1;
+            if (line.isBlank()) {
+                throw fileValidationError("INVALID_JSONL", "빈 JSONL line은 허용하지 않습니다.", Map.of("line", lineNumber));
+            }
+            lineCount += 1;
+            if (lineCount > MAX_LINE_COUNT) {
+                throw fileValidationError("LINE_LIMIT_EXCEEDED", "로그 파일은 최대 20000 line까지만 업로드할 수 있습니다.");
+            }
+            validateJsonObjectLine(line, lineNumber);
+            sanitized.append(maskSensitive(line)).append('\n');
+        }
+        if (lineCount == 0) {
+            throw fileValidationError("EMPTY_JSONL", "로그 파일에 JSONL line이 없습니다.");
+        }
+        String sanitizedContent = sanitized.toString();
+        if (containsSensitiveValue(sanitizedContent)) {
+            throw fileValidationError("PII_MASKING_FAILED", "로그 파일 민감정보 마스킹에 실패했습니다.");
+        }
+        return new ValidatedLogFile(fileName, file.getSize(), lineCount, sanitizedContent);
+    }
+
+    private static void validateJsonObjectLine(String line, int lineNumber) {
+        try {
+            JsonNode node = OBJECT_MAPPER.readTree(line);
+            if (node == null || !node.isObject()) {
+                throw fileValidationError("INVALID_JSONL", "JSONL line은 JSON object여야 합니다.", Map.of("line", lineNumber));
+            }
+        } catch (IOException exception) {
+            throw fileValidationError("INVALID_JSONL", "JSONL line 파싱에 실패했습니다.", Map.of("line", lineNumber));
+        }
+    }
+
+    private static String maskSensitive(String value) {
+        String masked = AUTHORIZATION_PATTERN.matcher(value).replaceAll("[REDACTED_AUTHORIZATION]");
+        masked = REFRESH_TOKEN_PATTERN.matcher(masked).replaceAll("[REDACTED_REFRESH_TOKEN]");
+        masked = ACCESS_TOKEN_PATTERN.matcher(masked).replaceAll("[REDACTED_ACCESS_TOKEN]");
+        masked = EMAIL_PATTERN.matcher(masked).replaceAll("[REDACTED_EMAIL]");
+        return PHONE_PATTERN.matcher(masked).replaceAll("[REDACTED_PHONE]");
+    }
+
+    private static boolean containsSensitiveValue(String value) {
+        return AUTHORIZATION_PATTERN.matcher(value).find()
+                || REFRESH_TOKEN_PATTERN.matcher(value).find()
+                || ACCESS_TOKEN_PATTERN.matcher(value).find()
+                || EMAIL_PATTERN.matcher(value).find()
+                || PHONE_PATTERN.matcher(value).find();
+    }
+
+    private static String normalizeFileName(String originalFilename) {
+        if (originalFilename == null || originalFilename.isBlank()) {
+            return "agent-log.jsonl";
+        }
+        return originalFilename.trim();
+    }
+
+    private static ApiException fileValidationError(String reason, String message) {
+        return fileValidationError(reason, message, Map.of());
+    }
+
+    private static ApiException fileValidationError(String reason, String message, Map<String, Object> extraDetails) {
+        Map<String, Object> details = new LinkedHashMap<>();
+        details.put("field", "file");
+        details.put("reason", reason);
+        details.putAll(extraDetails);
+        return new ApiException(HttpStatus.BAD_REQUEST, "FILE_VALIDATION_ERROR", message, details);
+    }
+
+    record ValidatedLogFile(String fileName, long fileSize, int lineCount, String sanitizedContent) {
     }
 }

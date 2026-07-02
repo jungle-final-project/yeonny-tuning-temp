@@ -26,6 +26,14 @@ import org.springframework.web.server.ResponseStatusException;
 @WebMvcTest(BuildController.class)
 class BuildControllerTest {
     private static final String USER_TOKEN = "Bearer jwt-user-token";
+    private static final CurrentUserService.CurrentUser USER = new CurrentUserService.CurrentUser(
+            1L,
+            "00000000-0000-4000-8000-000000001001",
+            "user@example.com",
+            "Demo User",
+            "USER",
+            null
+    );
 
     @Autowired
     private MockMvc mockMvc;
@@ -43,6 +51,7 @@ class BuildControllerTest {
     void setUpAuth() {
         when(currentUserService.requireUser(null))
                 .thenThrow(new ResponseStatusException(HttpStatus.UNAUTHORIZED, "로그인이 필요합니다."));
+        when(currentUserService.requireUser(USER_TOKEN)).thenReturn(USER);
     }
 
     @Test
@@ -63,7 +72,7 @@ class BuildControllerTest {
 
     @Test
     void buildChatReturnsDbRuleRecommendationsWithToolResults() throws Exception {
-        when(buildChatService.chat(anyMap())).thenReturn(MockData.map(
+        when(buildChatService.chat(anyMap(), eq(USER))).thenReturn(MockData.map(
                 "answerType", "BUDGET",
                 "message", "200만원 예산 기준으로 실속형, 균형형, 성능형 3개 조합을 계산했습니다.",
                 "warnings", List.of(),
@@ -114,12 +123,12 @@ class BuildControllerTest {
                 .andExpect(jsonPath("$.builds[0].toolResults[0].status").value("PASS"));
 
         verify(currentUserService).requireUser(USER_TOKEN);
-        verify(buildChatService).chat(anyMap());
+        verify(buildChatService).chat(anyMap(), eq(USER));
     }
 
     @Test
     void buildChatPassesCurrentBuildsForPartReplacement() throws Exception {
-        when(buildChatService.chat(anyMap())).thenReturn(Map.of(
+        when(buildChatService.chat(anyMap(), eq(USER))).thenReturn(Map.of(
                 "answerType", "PART",
                 "message", "GPU 추천 후보 3개를 반영했습니다.",
                 "warnings", List.of(),
@@ -158,6 +167,6 @@ class BuildControllerTest {
                 .andExpect(jsonPath("$.answerType").value("PART"))
                 .andExpect(jsonPath("$.partRecommendation.category").value("GPU"));
 
-        verify(buildChatService).chat(anyMap());
+        verify(buildChatService).chat(anyMap(), eq(USER));
     }
 }
