@@ -384,6 +384,9 @@ RAG 공개 범위:
 - `agent_session_id`가 없는 `rag_evidence` row는 재사용 지식 청크로 검색 대상에 포함된다.
 - Agent 실행 중 선택된 RAG 청크는 세션별 `rag_evidence` row로 복사되어 `evidenceIds`에 노출된다.
 - `rag_evidence.embedding`이 있고 `OPENAI_API_KEY`가 설정된 환경에서는 `GET /api/rag/search`와 Agent 내부 검색이 pgvector semantic search를 우선 사용한다. 검색 실패, 키 미설정, embedding 미백필 상태에서는 기존 keyword fallback을 사용한다.
+- vector 사용 여부는 전역 `RAG_VECTOR_ENABLED`와 경로별 override로 결정한다. 경로별 값은 `RAG_VECTOR_REQUIREMENT_PARSE_ENABLED`, `RAG_VECTOR_BUILD_RECOMMEND_ENABLED`, `RAG_VECTOR_AS_ANALYZE_ENABLED`, `RAG_VECTOR_PUBLIC_SEARCH_ENABLED`이며 기본값은 전역 값을 상속한다.
+- `REQUIREMENT_PARSE`는 요구사항 파싱과 Build Chat 의도 해석, `BUILD_RECOMMEND`/`BUILD_EXPLAIN`은 추천과 변경 근거, `AS_ANALYZE`는 AS Chat 근거, `PUBLIC_SEARCH`는 `/api/rag/search` 관리자/검증 검색에 해당한다.
+- 이번 계약은 기본값을 바꾸지 않고 경로별 policy benchmark를 가능하게 하는 목적이다. 운영 기본값 변경은 `docs/reports/rag-retrieval-benchmark-YYYYMMDD.md`와 live benchmark 결과를 근거로 별도 PR에서 판단한다.
 - embedding 생성은 Flyway에서 수행하지 않는다. 데모 전 관리자가 `POST /api/admin/rag-embeddings/backfill`을 실행해 reusable RAG chunk를 백필한다.
 
 `POST /api/agent/sessions/{id}/run` 409 조건:

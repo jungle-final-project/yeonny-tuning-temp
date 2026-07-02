@@ -17,11 +17,7 @@ from pathlib import Path
 
 
 DEFAULT_OPENAI_PROFILES = [
-    "AS_CHAT_FAST",
-    "AS_CHAT_54_FAST",
     "AS_CHAT_54_MINI_FAST",
-    "AS_CHAT_NANO_FAST",
-    "AS_CHAT_BALANCED",
 ]
 
 

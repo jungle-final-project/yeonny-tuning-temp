@@ -15,7 +15,7 @@ import urllib.request
 from pathlib import Path
 
 
-DEFAULT_PROFILES = ["BUILD_CHAT_FAST", "BUILD_CHAT_54_FAST", "BUILD_CHAT_54_MINI_FAST"]
+DEFAULT_PROFILES = ["BUILD_CHAT_54_MINI_FAST"]
 
 
 def main() -> int:
@@ -194,7 +194,7 @@ def write_report(output_dir: Path, results: list[dict]) -> Path:
         "## Notes",
         "",
         "- 이 벤치마크는 UI를 변경하지 않고 `/api/ai/build-chat`의 optional profile header만 바꿔 실행한다.",
-        "- 기본 서비스 profile은 별도 gate를 통과하기 전까지 `BUILD_CHAT_FAST`로 유지한다.",
+        "- 기본 서비스 profile은 현재 `BUILD_CHAT_54_MINI_FAST`이며, 모델 비교가 필요하면 `--profiles`로 후보를 명시한다.",
         "- 5090 같은 명시 부품 조건은 추천 build의 GPU item에 보존되어야 한다.",
     ])
     output_path.write_text("\n".join(lines) + "\n", encoding="utf-8")

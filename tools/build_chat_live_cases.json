@@ -1,72 +1,44 @@
 [
-  {
-    "id": "qhd-gaming-budget",
-    "message": "200만원 QHD 게임용 PC 추천해줘",
-    "expectedAnswerType": "BUDGET",
-    "expectedMinBuilds": 3,
-    "expectedIntent": "FULL_BUILD_RECOMMEND"
-  },
-  {
-    "id": "rtx-5090-hard-constraint",
-    "message": "5090 글카 들어간 PC 추천해줘",
-    "expectedAnswerType": "BUDGET",
-    "expectedMinBuilds": 3,
-    "requiredGpuClass": "5090"
-  },
-  {
-    "id": "rtx-5090-under-budget",
-    "message": "300만원 이하 RTX 5090 PC로 맞춰줘",
-    "expectedAnswerType": "BUDGET",
-    "expectedMinBuilds": 3,
-    "requiredGpuClass": "5090",
-    "expectWarning": true
-  },
-  {
-    "id": "cheaper-gpu-draft-edit",
-    "message": "그래픽카드 너무 비싼데 더 싼 걸로 추천해줘",
-    "expectedAnswerType": "PART",
-    "expectedActionType": "REPLACE_DRAFT_PART",
-    "currentQuoteDraft": {
-      "id": "benchmark-draft",
-      "status": "ACTIVE",
-      "name": "벤치마크 견적",
-      "items": [
-        {
-          "id": "draft-gpu",
-          "partId": "00000000-0000-5000-8000-000000000501",
-          "category": "GPU",
-          "name": "RTX 5090 benchmark placeholder",
-          "manufacturer": "NVIDIA",
-          "quantity": 1,
-          "currentPrice": 3000000,
-          "lineTotal": 3000000,
-          "attributes": { "gpuClass": "RTX_5090" }
-        }
-      ]
-    }
-  },
-  {
-    "id": "ram-64gb-draft-edit",
-    "message": "RAM 64GB로 바꿔줘",
-    "expectedAnswerType": "PART",
-    "expectedActionType": "UPDATE_DRAFT_QUANTITY",
-    "currentQuoteDraft": {
-      "id": "benchmark-draft",
-      "status": "ACTIVE",
-      "name": "벤치마크 견적",
-      "items": [
-        {
-          "id": "draft-ram",
-          "partId": "00000000-0000-5000-8000-000000000301",
-          "category": "RAM",
-          "name": "DDR5 32GB Kit benchmark placeholder",
-          "manufacturer": "BuildGraph",
-          "quantity": 1,
-          "currentPrice": 120000,
-          "lineTotal": 120000,
-          "attributes": { "capacityGb": 32 }
-        }
-      ]
-    }
-  }
+  {"id":"qhd-gaming-budget","message":"200만원 QHD 게임용 PC 추천해줘","expectedAnswerType":"BUDGET","expectedMinBuilds":3,"expectedIntent":"FULL_BUILD_RECOMMEND"},
+  {"id":"rtx-5090-hard-constraint","message":"5090 글카 들어간 PC 추천해줘","expectedAnswerType":"BUDGET","expectedMinBuilds":3,"requiredGpuClass":"5090"},
+  {"id":"rtx-5090-under-budget","message":"300만원 이하 RTX 5090 PC로 맞춰줘","expectedAnswerType":"BUDGET","expectedMinBuilds":3,"requiredGpuClass":"5090","expectWarning":true},
+  {"id":"open-budget-enthusiast","message":"돈 상관없이 끝판왕 컴퓨터 만들어줘","expectedAnswerType":"BUDGET","expectedMinBuilds":3},
+  {"id":"premium-with-budget","message":"250만원으로 최고사양 느낌의 게임용 PC","expectedAnswerType":"BUDGET","expectedMinBuilds":3},
+  {"id":"fhd-valorant","message":"FHD 발로란트 240Hz 목표로 추천해줘","expectedAnswerType":"BUDGET","expectedMinBuilds":3},
+  {"id":"qhd-pubg-144","message":"QHD 배그 144Hz 목표로 맞춰줘","expectedAnswerType":"BUDGET","expectedMinBuilds":3},
+  {"id":"4k-cyberpunk","message":"4K 사이버펑크 RT 옵션 욕심내는 PC","expectedAnswerType":"BUDGET","expectedMinBuilds":3},
+  {"id":"lostark-cpu-focus","message":"로스트아크 QHD용인데 CPU도 신경써줘","expectedAnswerType":"BUDGET","expectedMinBuilds":3},
+  {"id":"game-dev-mixed","message":"게임도 하고 개발 IDE Docker도 돌릴 PC","expectedAnswerType":"BUDGET","expectedMinBuilds":3},
+  {"id":"video-edit","message":"프리미어 영상편집용 PC 추천","expectedAnswerType":"BUDGET","expectedMinBuilds":3},
+  {"id":"local-ai-cuda","message":"로컬 AI CUDA 실험용으로 엔비디아 위주 추천","expectedAnswerType":"BUDGET","expectedMinBuilds":3},
+  {"id":"blender-3d","message":"블렌더 3D 작업과 렌더링 위주 컴퓨터","expectedAnswerType":"BUDGET","expectedMinBuilds":3},
+  {"id":"quiet-night","message":"밤에 켜둘 저소음 PC로 맞춰줘","expectedAnswerType":"BUDGET","expectedMinBuilds":3},
+  {"id":"upgrade-headroom","message":"오래 쓸 수 있게 업그레이드 여유 있는 구성","expectedAnswerType":"BUDGET","expectedMinBuilds":3},
+  {"id":"nvidia-preference","message":"라데온 말고 엔비디아 그래픽카드로 추천해줘","expectedAnswerType":"BUDGET","expectedMinBuilds":3},
+  {"id":"intel-preference","message":"인텔 CPU 선호하는 개발용 PC","expectedAnswerType":"BUDGET","expectedMinBuilds":3},
+  {"id":"white-build","message":"화이트 감성 QHD 게임용 PC 추천","expectedAnswerType":"BUDGET","expectedMinBuilds":3},
+  {"id":"compact-case","message":"작은 케이스에 들어가는 고성능 PC","expectedAnswerType":"BUDGET","expectedMinBuilds":3},
+  {"id":"storage-heavy","message":"영상 파일 많이 저장하고 로딩 빠른 PC","expectedAnswerType":"BUDGET","expectedMinBuilds":3},
+  {"id":"rtx-5070-part","message":"RTX 5070 중에 뭐가 좋아?","expectedAnswerType":"PART","expectedActionType":"ADD_PART_TO_DRAFT"},
+  {"id":"cpu-part-dev","message":"개발용 CPU 하나 추천해줘","expectedAnswerType":"PART","expectedActionType":"ADD_PART_TO_DRAFT"},
+  {"id":"psu-part-5090","message":"5090에 맞는 파워 추천해줘","expectedAnswerType":"PART","expectedActionType":"ADD_PART_TO_DRAFT"},
+  {"id":"case-part-airflow","message":"공기 흐름 좋은 케이스 추천해줘","expectedAnswerType":"PART","expectedActionType":"ADD_PART_TO_DRAFT"},
+  {"id":"cooler-part-quiet","message":"조용한 CPU 쿨러 추천","expectedAnswerType":"PART","expectedActionType":"ADD_PART_TO_DRAFT"},
+  {"id":"ssd-part-fast","message":"빠른 2TB SSD 추천해줘","expectedAnswerType":"PART","expectedActionType":"ADD_PART_TO_DRAFT"},
+  {"id":"ram-part-64","message":"DDR5 64GB RAM 구성 추천","expectedAnswerType":"PART","expectedActionType":"ADD_PART_TO_DRAFT"},
+  {"id":"motherboard-part-am5","message":"AM5 메인보드 추천해줘","expectedAnswerType":"PART","expectedActionType":"ADD_PART_TO_DRAFT"},
+  {"id":"cheaper-gpu-draft-edit","message":"그래픽카드 너무 비싼데 더 싼 걸로 추천해줘","expectedAnswerType":"PART","expectedActionType":"REPLACE_DRAFT_PART","currentQuoteDraft":{"id":"benchmark-draft","status":"ACTIVE","name":"벤치마크 견적","items":[{"id":"draft-gpu","partId":"00000000-0000-5000-8000-000000000501","category":"GPU","name":"RTX 5090 benchmark placeholder","manufacturer":"NVIDIA","quantity":1,"currentPrice":3000000,"lineTotal":3000000,"attributes":{"gpuClass":"RTX_5090"}}]}},
+  {"id":"ram-64gb-draft-edit","message":"RAM 64GB로 바꿔줘","expectedAnswerType":"PART","expectedActionType":"UPDATE_DRAFT_QUANTITY","currentQuoteDraft":{"id":"benchmark-draft","status":"ACTIVE","name":"벤치마크 견적","items":[{"id":"draft-ram","partId":"00000000-0000-5000-8000-000000000301","category":"RAM","name":"DDR5 32GB Kit benchmark placeholder","manufacturer":"BuildGraph","quantity":1,"currentPrice":120000,"lineTotal":120000,"attributes":{"capacityGb":32}}]}},
+  {"id":"remove-gpu-draft","message":"GPU 빼줘","expectedAnswerType":"PART","expectedActionType":"REMOVE_DRAFT_PART","currentQuoteDraft":{"id":"benchmark-draft","status":"ACTIVE","name":"벤치마크 견적","items":[{"id":"draft-gpu","partId":"00000000-0000-5000-8000-000000000501","category":"GPU","name":"RTX 5080 benchmark placeholder","manufacturer":"NVIDIA","quantity":1,"currentPrice":1800000,"lineTotal":1800000,"attributes":{"gpuClass":"RTX_5080"}}]}},
+  {"id":"lower-budget-draft","message":"전체 견적을 250만원 안으로 낮춰줘","expectedAnswerType":"PART","expectedActionType":"REPLACE_DRAFT_PART","currentQuoteDraft":{"id":"benchmark-draft","status":"ACTIVE","name":"벤치마크 견적","items":[{"id":"draft-gpu","partId":"00000000-0000-5000-8000-000000000501","category":"GPU","name":"RTX 5090 benchmark placeholder","manufacturer":"NVIDIA","quantity":1,"currentPrice":3000000,"lineTotal":3000000,"attributes":{"gpuClass":"RTX_5090"}},{"id":"draft-cpu","partId":"00000000-0000-5000-8000-000000000101","category":"CPU","name":"Ryzen 9 benchmark placeholder","manufacturer":"AMD","quantity":1,"currentPrice":800000,"lineTotal":800000,"attributes":{"socket":"AM5"}}]}},
+  {"id":"replace-cooler-draft","message":"쿨러를 더 조용한 걸로 바꿔줘","expectedAnswerType":"PART","expectedActionType":"REPLACE_DRAFT_PART","currentQuoteDraft":{"id":"benchmark-draft","status":"ACTIVE","name":"벤치마크 견적","items":[{"id":"draft-cooler","partId":"00000000-0000-5000-8000-000000000801","category":"COOLER","name":"Basic air cooler","manufacturer":"BuildGraph","quantity":1,"currentPrice":50000,"lineTotal":50000,"attributes":{"coolerType":"AIR"}}]}},
+  {"id":"add-storage-draft","message":"SSD 2TB 하나 더 담아줘","expectedAnswerType":"PART","expectedActionType":"ADD_PART_TO_DRAFT","currentQuoteDraft":{"id":"benchmark-draft","status":"ACTIVE","name":"벤치마크 견적","items":[]}},
+  {"id":"price-alert-gpu","message":"이 GPU 80만원 되면 알려줘","expectedAnswerType":"GENERAL","expectedActionType":"CREATE_PRICE_ALERT","currentQuoteDraft":{"id":"benchmark-draft","status":"ACTIVE","name":"벤치마크 견적","items":[{"id":"draft-gpu","partId":"00000000-0000-5000-8000-000000000502","category":"GPU","name":"RTX 5070 benchmark placeholder","manufacturer":"NVIDIA","quantity":1,"currentPrice":950000,"lineTotal":950000,"attributes":{"gpuClass":"RTX_5070"}}]}},
+  {"id":"explain-build","message":"이 견적이 왜 좋은지 설명해줘","expectedAnswerType":"GENERAL","currentQuoteDraft":{"id":"benchmark-draft","status":"ACTIVE","name":"벤치마크 견적","items":[{"id":"draft-gpu","partId":"00000000-0000-5000-8000-000000000502","category":"GPU","name":"RTX 5070 benchmark placeholder","manufacturer":"NVIDIA","quantity":1,"currentPrice":950000,"lineTotal":950000,"attributes":{"gpuClass":"RTX_5070"}},{"id":"draft-ram","partId":"00000000-0000-5000-8000-000000000301","category":"RAM","name":"DDR5 32GB Kit","manufacturer":"BuildGraph","quantity":2,"currentPrice":120000,"lineTotal":240000,"attributes":{"capacityGb":32}}]}},
+  {"id":"ask-followup-vague","message":"컴퓨터 하나 맞춰줘","expectedAnswerType":"GENERAL"},
+  {"id":"ask-followup-monitor","message":"게임용인데 모니터는 아직 안 정했어","expectedAnswerType":"GENERAL"},
+  {"id":"budget-office","message":"100만원 사무 학습용 PC","expectedAnswerType":"BUDGET","expectedMinBuilds":3},
+  {"id":"creator-ram-heavy","message":"영상편집 크롬 탭 많고 RAM 넉넉하게","expectedAnswerType":"BUDGET","expectedMinBuilds":3},
+  {"id":"power-safe-build","message":"전력 여유 넉넉한 5080급 게임용","expectedAnswerType":"BUDGET","expectedMinBuilds":3},
+  {"id":"cheap-gpu-no-draft","message":"RTX 5070보다 저렴한 GPU 추천해줘","expectedAnswerType":"PART","expectedActionType":"ADD_PART_TO_DRAFT"}
 ]

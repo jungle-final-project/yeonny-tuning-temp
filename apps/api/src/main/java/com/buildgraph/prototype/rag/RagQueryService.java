@@ -14,10 +14,16 @@ import org.springframework.web.server.ResponseStatusException;
 public class RagQueryService {
     private final JdbcTemplate jdbcTemplate;
     private final RagEmbeddingService ragEmbeddingService;
+    private final RagVectorPolicy ragVectorPolicy;
 
-    public RagQueryService(JdbcTemplate jdbcTemplate, RagEmbeddingService ragEmbeddingService) {
+    public RagQueryService(
+            JdbcTemplate jdbcTemplate,
+            RagEmbeddingService ragEmbeddingService,
+            RagVectorPolicy ragVectorPolicy
+    ) {
         this.jdbcTemplate = jdbcTemplate;
         this.ragEmbeddingService = ragEmbeddingService;
+        this.ragVectorPolicy = ragVectorPolicy;
     }
 
     public Map<String, Object> search(String query) {
@@ -34,7 +40,9 @@ public class RagQueryService {
         String normalizedSourceType = blankToNull(sourceType);
         int safePage = validatePage(page);
         int safeSize = validateSize(size);
-        if (normalizedQuery != null && ragEmbeddingService.canVectorSearch()) {
+        if (normalizedQuery != null
+                && ragEmbeddingService.canVectorSearch()
+                && ragVectorPolicy.publicSearchEnabledFor(normalizedPurpose)) {
             try {
                 return vectorSearch(normalizedQuery, normalizedPurpose, normalizedSourceType, safePage, safeSize);
             } catch (RuntimeException ignored) {

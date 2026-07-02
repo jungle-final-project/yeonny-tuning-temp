@@ -17,6 +17,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 import com.buildgraph.prototype.rag.RagEmbeddingService;
+import com.buildgraph.prototype.rag.RagVectorPolicy;
 
 @Service
 public class AgentRagRetrievalService {
@@ -24,15 +25,21 @@ public class AgentRagRetrievalService {
     private static final int DEFAULT_EVIDENCE_LIMIT = 3;
     private final JdbcTemplate jdbcTemplate;
     private final RagEmbeddingService ragEmbeddingService;
+    private final RagVectorPolicy ragVectorPolicy;
 
     @Autowired
-    public AgentRagRetrievalService(JdbcTemplate jdbcTemplate, RagEmbeddingService ragEmbeddingService) {
+    public AgentRagRetrievalService(
+            JdbcTemplate jdbcTemplate,
+            RagEmbeddingService ragEmbeddingService,
+            RagVectorPolicy ragVectorPolicy
+    ) {
         this.jdbcTemplate = jdbcTemplate;
         this.ragEmbeddingService = ragEmbeddingService;
+        this.ragVectorPolicy = ragVectorPolicy;
     }
 
     AgentRagRetrievalService(JdbcTemplate jdbcTemplate) {
-        this(jdbcTemplate, null);
+        this(jdbcTemplate, null, RagVectorPolicy.allEnabled());
     }
 
     public AgentRagEvidenceDraft retrieveEvidence(AgentSessionRoot root, AgentRunProfile profile) {
@@ -48,7 +55,7 @@ public class AgentRagRetrievalService {
     public List<AgentRagEvidenceDraft> retrieveEvidenceSet(AgentSessionRoot root, AgentRunProfile profile, String extraQuery, int limit) {
         RootContext context = withExtraQuery(rootContext(root), extraQuery);
         List<String> queryTokens = tokens(context.queryText());
-        List<Map<String, Object>> rows = retrievalRows(context, safeLimit(limit));
+        List<Map<String, Object>> rows = retrievalRows(context, profile, safeLimit(limit));
         List<RetrievalCandidate> ranked = rows.stream()
                 .map(row -> candidate(row, root, profile, context, queryTokens))
                 .filter(candidate -> candidate.allowed())
@@ -88,8 +95,11 @@ public class AgentRagRetrievalService {
                 """);
     }
 
-    private List<Map<String, Object>> retrievalRows(RootContext context, int limit) {
-        if (ragEmbeddingService == null || !ragEmbeddingService.canVectorSearch() || safe(context.queryText()).isBlank()) {
+    private List<Map<String, Object>> retrievalRows(RootContext context, AgentRunProfile profile, int limit) {
+        if (ragEmbeddingService == null
+                || !ragEmbeddingService.canVectorSearch()
+                || !ragVectorPolicy.enabledFor(profile.purpose())
+                || safe(context.queryText()).isBlank()) {
             return reusableEvidenceRows();
         }
         try {
@@ -176,6 +186,8 @@ public class AgentRagRetrievalService {
         metadata.put("rootType", root.type().name());
         metadata.put("rootId", root.publicId());
         metadata.put("retrievalQuery", context.queryText());
+        metadata.put("vectorPolicyEnabled", ragVectorPolicy.enabledFor(profile.purpose()));
+        metadata.put("vectorPolicyPurpose", profile.purpose().name());
         metadata.put("matchedTokenCount", matchedTokens);
         metadata.put("matchedMetadataTokenCount", matchedMetadataTokens);
         metadata.put("queryTokenCount", queryTokens.size());

@@ -47,6 +47,10 @@ openai:
 rag:
   vector:
     enabled: ${RAG_VECTOR_ENABLED:true}
+    requirement-parse-enabled: ${RAG_VECTOR_REQUIREMENT_PARSE_ENABLED:${RAG_VECTOR_ENABLED:true}}
+    build-recommend-enabled: ${RAG_VECTOR_BUILD_RECOMMEND_ENABLED:${RAG_VECTOR_ENABLED:true}}
+    as-analyze-enabled: ${RAG_VECTOR_AS_ANALYZE_ENABLED:${RAG_VECTOR_ENABLED:true}}
+    public-search-enabled: ${RAG_VECTOR_PUBLIC_SEARCH_ENABLED:${RAG_VECTOR_ENABLED:true}}
   embedding:
     backfill-on-startup: ${RAG_EMBEDDING_BACKFILL_ON_STARTUP:false}
 
