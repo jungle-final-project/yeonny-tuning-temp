@@ -1,15 +1,13 @@
 package com.buildgraph.prototype.agent;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.mockito.Mockito.mock;
 
-import com.buildgraph.prototype.part.PartAliasReviewService;
 import java.util.List;
 import java.util.Map;
 import org.junit.jupiter.api.Test;
 
 class PartReplacementRankerTest {
-    private final PartReplacementRanker ranker = new PartReplacementRanker(mock(PartAliasReviewService.class));
+    private final PartReplacementRanker ranker = new PartReplacementRanker();
 
     @Test
     void categoryMatrixKeepsUpgradeDowngradeAndSimilarPriceDirection() {

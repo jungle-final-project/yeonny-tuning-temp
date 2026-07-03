@@ -13,7 +13,6 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
-import com.buildgraph.prototype.part.PartAliasReviewService;
 import java.math.BigDecimal;
 import java.util.List;
 import java.util.Map;
@@ -28,7 +27,6 @@ class DefaultAiChatEngineTest {
     private AgentTraceService agentTraceService;
     private AgentRagRetrievalService agentRagRetrievalService;
     private OpenAiResponsesClient openAiResponsesClient;
-    private PartAliasReviewService partAliasReviewService;
     private DefaultAiChatEngine engine;
 
     @BeforeEach
@@ -37,14 +35,13 @@ class DefaultAiChatEngineTest {
         agentTraceService = mock(AgentTraceService.class);
         agentRagRetrievalService = mock(AgentRagRetrievalService.class);
         openAiResponsesClient = mock(OpenAiResponsesClient.class);
-        partAliasReviewService = mock(PartAliasReviewService.class);
         engine = new DefaultAiChatEngine(
                 jdbcTemplate,
                 agentTraceService,
                 agentRagRetrievalService,
                 openAiResponsesClient,
                 AiProfileConfigTest.config("AS_CHAT_FAST", "BUILD_CHAT_FAST"),
-                new PartReplacementRanker(partAliasReviewService)
+                new PartReplacementRanker()
         );
 
         doAnswer(invocation -> {

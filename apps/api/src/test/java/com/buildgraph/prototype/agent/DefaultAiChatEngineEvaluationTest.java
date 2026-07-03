@@ -8,7 +8,6 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 
-import com.buildgraph.prototype.part.PartAliasReviewService;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.nio.file.Files;
@@ -46,7 +45,7 @@ class DefaultAiChatEngineEvaluationTest {
                 agentRagRetrievalService,
                 openAiResponsesClient,
                 AiProfileConfigTest.config("AS_CHAT_FAST", "BUILD_CHAT_FAST"),
-                new PartReplacementRanker(mock(PartAliasReviewService.class))
+                new PartReplacementRanker()
         );
 
         doAnswer(invocation -> {

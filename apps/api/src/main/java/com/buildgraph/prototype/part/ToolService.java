@@ -275,7 +275,7 @@ public class ToolService {
 
         /* 응답 객체 생성 */
         Map<String, Object> response = Map.of(
-            "tool", "performace",
+            "tool", "performance",
             "status", pass ? "PASS" : "WARN",
             "score", pass ? 1.0 : 0.65,
             "confidence", benchmarkBacked ? "HIGH" : "MEDIUM",

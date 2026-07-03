@@ -1,54 +1,65 @@
 package com.buildgraph.prototype.price;
 
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
-import static org.mockito.ArgumentMatchers.isNull;
-import static org.mockito.Mockito.doThrow;
-import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
 
-import com.buildgraph.prototype.part.DanawaPriceSnapshotService;
 import com.buildgraph.prototype.part.util.NaverShoppingOfferService;
 import java.util.Map;
 import org.junit.jupiter.api.Test;
-import org.mockito.InOrder;
+import org.springframework.jdbc.core.JdbcTemplate;
 
 class PriceJobWorkerTest {
-    private final PriceQueryService priceQueryService = mock(PriceQueryService.class);
+    private final JdbcTemplate jdbcTemplate = mock(JdbcTemplate.class);
     private final NaverShoppingOfferService naverShoppingOfferService = mock(NaverShoppingOfferService.class);
-    private final DanawaPriceSnapshotService danawaPriceSnapshotService = mock(DanawaPriceSnapshotService.class);
+    private final DanawaBackupCollector danawaBackupCollector = mock(DanawaBackupCollector.class);
+    private final PriceAlertEvaluator priceAlertEvaluator = mock(PriceAlertEvaluator.class);
     private final PriceJobWorker worker = new PriceJobWorker(
-            priceQueryService,
+            jdbcTemplate,
             naverShoppingOfferService,
-            danawaPriceSnapshotService
+            danawaBackupCollector,
+            priceAlertEvaluator
     );
 
     @Test
-    void priceJobRefreshesNaverOffersAndDanawaSnapshotsBeforeCompleting() {
-        worker.runPriceRefresh(Map.of("priceJobId", "job-public-id"));
+    void runJobRefreshesNaverAndEvaluatesAlerts() {
+        when(jdbcTemplate.update(anyString(), eq(1L))).thenReturn(1);
+        when(naverShoppingOfferService.refreshDailyOffers()).thenReturn(Map.of(
+                "configured", true,
+                "attempted", 1,
+                "updated", 1,
+                "skipped", 0,
+                "failed", 0
+        ));
+        when(priceAlertEvaluator.evaluateActiveAlerts()).thenReturn(Map.of("triggered", 0, "failed", 0));
 
-        InOrder order = inOrder(priceQueryService, naverShoppingOfferService, danawaPriceSnapshotService);
-        order.verify(priceQueryService).startPriceJob("job-public-id");
-        order.verify(naverShoppingOfferService).refreshOffers(isNull(), isNull(), eq(true));
-        order.verify(danawaPriceSnapshotService).refreshSnapshots(isNull(), isNull(), eq(true));
-        order.verify(priceQueryService).completePriceJob("job-public-id");
-        verify(priceQueryService, never()).failPriceJob(eq("job-public-id"), org.mockito.ArgumentMatchers.anyString());
+        worker.runJob(1L);
+
+        verify(naverShoppingOfferService).refreshDailyOffers();
+        verify(danawaBackupCollector, never()).collectBackupPrices();
+        verify(priceAlertEvaluator).evaluateActiveAlerts();
+        verify(jdbcTemplate).update(anyString(), eq("SUCCEEDED"), anyString(), eq(1L));
     }
 
     @Test
-    void priceJobStoresFailedStatusWhenCollectionFails() {
-        doThrow(new RuntimeException("naver down"))
-                .when(naverShoppingOfferService)
-                .refreshOffers(isNull(), isNull(), eq(true));
+    void runJobUsesBackupWhenNaverIsUnavailable() {
+        when(jdbcTemplate.update(anyString(), eq(2L))).thenReturn(1);
+        when(naverShoppingOfferService.refreshDailyOffers()).thenReturn(Map.of(
+                "configured", false,
+                "attempted", 0,
+                "updated", 0,
+                "skipped", 0,
+                "failed", 0
+        ));
+        when(danawaBackupCollector.collectBackupPrices()).thenReturn(Map.of("updated", 1, "failed", 0));
+        when(priceAlertEvaluator.evaluateActiveAlerts()).thenReturn(Map.of("triggered", 0, "failed", 0));
 
-        assertThatThrownBy(() -> worker.runPriceRefresh(Map.of("priceJobId", "job-public-id")))
-                .isInstanceOf(RuntimeException.class)
-                .hasMessage("naver down");
+        worker.runJob(2L);
 
-        verify(priceQueryService).startPriceJob("job-public-id");
-        verify(priceQueryService).failPriceJob("job-public-id", "naver down");
-        verify(priceQueryService, never()).completePriceJob("job-public-id");
+        verify(danawaBackupCollector).collectBackupPrices();
+        verify(jdbcTemplate).update(anyString(), eq("SUCCEEDED"), anyString(), eq(2L));
     }
 }
