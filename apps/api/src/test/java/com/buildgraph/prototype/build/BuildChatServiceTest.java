@@ -6,6 +6,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyMap;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyList;
+import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.nullable;
 import static org.mockito.Mockito.mock;
@@ -275,6 +276,53 @@ class BuildChatServiceTest {
     }
 
     @Test
+    void partQuestionWithCurrentBuildsKeepsBuildsEmptyAndReturnsPartRecommendationOnly() {
+        JdbcTemplate jdbcTemplate = mock(JdbcTemplate.class);
+        ToolCheckService toolCheckService = mock(ToolCheckService.class);
+        AiChatEngine aiChatEngine = mock(AiChatEngine.class);
+        BuildChatService service = new BuildChatService(jdbcTemplate, toolCheckService, aiChatEngine, BuildChatCacheService.disabled());
+        when(aiChatEngine.respondLlmRequired(any(AiChatEngineRequest.class), nullable(String.class))).thenReturn(partResponse());
+        stubCurrentBuildParts(jdbcTemplate);
+        when(toolCheckService.checkBuild(anyList(), anyInt())).thenReturn(List.of());
+
+        Map<String, Object> response = service.chat(Map.of(
+                "message", "그래픽카드 추천해줘",
+                "currentBuilds", currentBuilds("gpu-current")
+        ));
+
+        assertThat(response).containsEntry("answerType", "PART");
+        assertThat(response.get("builds")).asList().isEmpty();
+        assertThat(response.get("partRecommendation")).isNotNull();
+    }
+
+    @Test
+    void buildModifyWithCurrentBuildsReturnsChangedBuildPreview() {
+        JdbcTemplate jdbcTemplate = mock(JdbcTemplate.class);
+        ToolCheckService toolCheckService = mock(ToolCheckService.class);
+        AiChatEngine aiChatEngine = mock(AiChatEngine.class);
+        BuildChatService service = new BuildChatService(jdbcTemplate, toolCheckService, aiChatEngine, BuildChatCacheService.disabled());
+        when(aiChatEngine.respondLlmRequired(any(AiChatEngineRequest.class), nullable(String.class))).thenReturn(modifyResponse());
+        stubCurrentBuildParts(jdbcTemplate);
+        when(toolCheckService.checkBuild(anyList(), anyInt())).thenReturn(List.of());
+
+        Map<String, Object> response = service.chat(Map.of(
+                "message", "방금 견적에서 그래픽카드 더 싼 걸로 바꿔줘",
+                "currentBuilds", currentBuilds("gpu-current")
+        ));
+
+        assertThat(response).containsEntry("answerType", "PART");
+        @SuppressWarnings("unchecked")
+        List<Map<String, Object>> builds = (List<Map<String, Object>>) response.get("builds");
+        assertThat(builds).hasSize(1);
+        assertThat(builds.get(0).get("appliedPartCategories")).asList().containsExactly("GPU");
+        @SuppressWarnings("unchecked")
+        List<Map<String, Object>> items = (List<Map<String, Object>>) builds.get(0).get("items");
+        assertThat(items.stream().map(item -> String.valueOf(item.get("partId"))).toList())
+                .contains("gpu-1")
+                .doesNotContain("gpu-current");
+    }
+
+    @Test
     void partQuestionUsesExplicitRamSingleQuantityInResponseOptions() {
         JdbcTemplate jdbcTemplate = mock(JdbcTemplate.class);
         ToolCheckService toolCheckService = mock(ToolCheckService.class);
@@ -433,6 +481,24 @@ class BuildChatServiceTest {
         );
     }
 
+    private static AiChatEngineResponse modifyResponse() {
+        return new AiChatEngineResponse(
+                "현재 견적 기준으로 GPU 교체 후보를 정리했습니다.",
+                AiChatIntent.BUILD_MODIFY,
+                List.<AiChatAction>of(),
+                List.of(),
+                List.of(
+                        part("GPU", "gpu-1", 900_000),
+                        part("GPU", "gpu-2", 800_000),
+                        part("GPU", "gpu-3", 700_000)
+                ),
+                Map.of("category", "GPU", "draftEdit", Map.of("category", "GPU", "operation", "REPLACE", "priceDirection", "CHEAPER")),
+                List.of("evidence-1"),
+                List.of(),
+                null
+        );
+    }
+
     private static AiChatEngineResponse singleRamResponse() {
         return new AiChatEngineResponse(
                 "램 32GB 1개 구성으로 추천해드릴게요.",
@@ -494,6 +560,47 @@ class BuildChatServiceTest {
                 "currentPrice", 100_000,
                 "lineTotal", 100_000 * quantity,
                 "attributes", attributes
+        );
+    }
+
+    private static List<Map<String, Object>> currentBuilds(String gpuPartId) {
+        return List.of(Map.of(
+                "id", "ai-engine-current",
+                "tier", "balanced",
+                "budgetWon", 2_000_000,
+                "budgetLabel", "200만원",
+                "items", List.of(
+                        Map.of("partId", "cpu-current", "category", "CPU", "quantity", 1),
+                        Map.of("partId", gpuPartId, "category", "GPU", "quantity", 1),
+                        Map.of("partId", "ram-current", "category", "RAM", "quantity", 1)
+                ),
+                "appliedPartCategories", List.of()
+        ));
+    }
+
+    private static void stubCurrentBuildParts(JdbcTemplate jdbcTemplate) {
+        Map<String, Map<String, Object>> rows = Map.of(
+                "cpu-current", partRow("cpu-current", "CPU", 420_000),
+                "gpu-current", partRow("gpu-current", "GPU", 1_200_000),
+                "ram-current", partRow("ram-current", "RAM", 140_000)
+        );
+        when(jdbcTemplate.queryForList(anyString(), (Object) any())).thenAnswer(invocation -> {
+            Object rawArgument = invocation.getArgument(1);
+            Object publicId = rawArgument instanceof Object[] arguments ? arguments[0] : rawArgument;
+            Map<String, Object> row = rows.get(String.valueOf(publicId));
+            return row == null ? List.of() : List.of(row);
+        });
+    }
+
+    private static Map<String, Object> partRow(String publicId, String category, int price) {
+        return Map.of(
+                "internal_id", 1L,
+                "id", publicId,
+                "category", category,
+                "name", category + " current part",
+                "manufacturer", "BuildGraph",
+                "price", price,
+                "attributes", Map.of("toolReady", true, "shortSpec", category + " spec")
         );
     }
 }

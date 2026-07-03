@@ -27,6 +27,11 @@ public class BuildChatCacheService {
     private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
     private static final TypeReference<Map<String, Object>> MAP_TYPE = new TypeReference<>() {
     };
+    private enum CacheScope {
+        RECOMMENDATION,
+        CONTEXTUAL,
+        DEFAULT
+    }
 
     private final ObjectProvider<StringRedisTemplate> redisTemplateProvider;
     private final JdbcTemplate jdbcTemplate;
@@ -78,13 +83,14 @@ public class BuildChatCacheService {
                 log.warn("Build Chat cache lookup skipped: Redis template is not available while cache is enabled");
                 return Optional.empty();
             }
-            String key = cacheKey(request, requestedAiProfile, userId);
+            CacheScope scope = scopeFor(request);
+            String key = cacheKey(request, requestedAiProfile, userId, scope);
             String cached = redisTemplate.opsForValue().get(key);
             if (cached == null || cached.isBlank()) {
-                log.debug("Build Chat cache miss: {}", key);
+                log.debug("Build Chat cache miss: scope={}, key={}", scope, key);
                 return Optional.empty();
             }
-            log.info("Build Chat cache hit: {}", key);
+            log.info("Build Chat cache hit: scope={}, key={}", scope, key);
             return Optional.of(cacheableResponse(OBJECT_MAPPER.readValue(cached, MAP_TYPE)));
         } catch (Exception error) {
             log.warn("Build Chat cache lookup failed; bypassing cache: {}", error.getMessage());
@@ -112,26 +118,47 @@ public class BuildChatCacheService {
                 log.warn("Build Chat cache store skipped: Redis template is not available while cache is enabled");
                 return;
             }
-            String key = cacheKey(request, requestedAiProfile, userId);
+            CacheScope scope = scopeFor(request);
+            String key = cacheKey(request, requestedAiProfile, userId, scope);
             redisTemplate.opsForValue().set(key, OBJECT_MAPPER.writeValueAsString(cacheableResponse(response)), ttl);
-            log.info("Build Chat cache stored: {}", key);
+            log.info("Build Chat cache stored: scope={}, key={}", scope, key);
         } catch (Exception error) {
             log.warn("Build Chat cache store failed; response returned without caching: {}", error.getMessage());
         }
     }
 
-    private String cacheKey(Map<String, Object> request, String requestedAiProfile, Long userId) throws Exception {
+    private String cacheKey(Map<String, Object> request, String requestedAiProfile, Long userId, CacheScope scope) throws Exception {
         Map<String, Object> fingerprint = new LinkedHashMap<>();
+        fingerprint.put("scope", scope.name());
         fingerprint.put("profile", effectiveProfile(requestedAiProfile));
         fingerprint.put("userId", userId == null ? "anonymous" : userId);
         fingerprint.put("message", normalizeText(request.get("message")));
         fingerprint.put("selectedCategory", normalizeText(request.get("selectedCategory")));
         fingerprint.put("currentQuoteDraft", quoteDraftFingerprint(request.get("currentQuoteDraft")));
-        fingerprint.put("currentBuilds", request.get("currentBuilds"));
-        fingerprint.put("appliedPartPreferences", request.get("appliedPartPreferences"));
+        if (scope != CacheScope.RECOMMENDATION) {
+            fingerprint.put("currentBuilds", currentBuildsFingerprint(request.get("currentBuilds")));
+            fingerprint.put("appliedPartPreferences", appliedPartPreferencesFingerprint(request.get("appliedPartPreferences")));
+        }
         fingerprint.put("versions", dataVersions());
         String json = OBJECT_MAPPER.writeValueAsString(fingerprint);
-        return "buildgraph:build-chat:v7:" + sha256(json);
+        return "buildgraph:build-chat:v8:" + sha256(json);
+    }
+
+    private static CacheScope scopeFor(Map<String, Object> request) {
+        Map<String, Object> body = request == null ? Map.of() : request;
+        String message = normalizeText(body.get("message"));
+        if (hasModifySignal(message)) {
+            return CacheScope.CONTEXTUAL;
+        }
+        boolean hasPartCategory = normalizeText(body.get("selectedCategory")) != null
+                || BuildChatService.detectPartCategory(message) != null;
+        if (hasPartCategory && hasRecommendationSignal(message)) {
+            return CacheScope.RECOMMENDATION;
+        }
+        if ((hasBuildSignal(message) || BuildChatService.parseBudgetWon(message) != null) && hasRecommendationSignal(message)) {
+            return CacheScope.RECOMMENDATION;
+        }
+        return CacheScope.DEFAULT;
     }
 
     private String effectiveProfile(String requestedAiProfile) {
@@ -156,6 +183,63 @@ public class BuildChatCacheService {
                         .thenComparing(item -> String.valueOf(item.get("partId"))))
                 .toList();
         return Map.of("items", items);
+    }
+
+    private Map<String, Object> currentBuildsFingerprint(Object value) {
+        List<Map<String, Object>> builds = objectMaps(value).stream()
+                .map(build -> {
+                    Map<String, Object> normalized = new LinkedHashMap<>();
+                    normalized.put("id", normalizeText(build.get("id")));
+                    normalized.put("tier", normalizeText(build.get("tier")));
+                    normalized.put("budget", build.get("budgetWon") == null ? build.get("budget") : build.get("budgetWon"));
+                    normalized.put("items", buildItemsFingerprint(build.get("items")));
+                    return normalized;
+                })
+                .sorted(Comparator
+                        .comparing((Map<String, Object> build) -> String.valueOf(build.get("id")))
+                        .thenComparing(build -> String.valueOf(build.get("tier")))
+                        .thenComparing(build -> String.valueOf(build.get("budget"))))
+                .toList();
+        return Map.of("builds", builds);
+    }
+
+    private List<Map<String, Object>> buildItemsFingerprint(Object value) {
+        return objectMaps(value).stream()
+                .map(item -> {
+                    Map<String, Object> normalized = new LinkedHashMap<>();
+                    normalized.put("partId", normalizeText(item.get("partId")));
+                    normalized.put("category", normalizeText(item.get("category")));
+                    normalized.put("quantity", item.get("quantity"));
+                    return normalized;
+                })
+                .sorted(Comparator
+                        .comparing((Map<String, Object> item) -> String.valueOf(item.get("category")))
+                        .thenComparing(item -> String.valueOf(item.get("partId")))
+                        .thenComparing(item -> String.valueOf(item.get("quantity"))))
+                .toList();
+    }
+
+    private Map<String, Object> appliedPartPreferencesFingerprint(Object value) {
+        List<Map<String, Object>> preferences = objectMaps(value).stream()
+                .map(preference -> {
+                    Map<String, Object> normalized = new LinkedHashMap<>();
+                    normalized.put("category", normalizeText(preference.get("category")));
+                    normalized.put("optionPartIds", optionPartIdsFingerprint(preference.get("options")));
+                    return normalized;
+                })
+                .sorted(Comparator
+                        .comparing((Map<String, Object> preference) -> String.valueOf(preference.get("category")))
+                        .thenComparing(preference -> String.valueOf(preference.get("optionPartIds"))))
+                .toList();
+        return Map.of("preferences", preferences);
+    }
+
+    private List<String> optionPartIdsFingerprint(Object value) {
+        return objectMaps(value).stream()
+                .map(option -> normalizeText(option.get("partId")))
+                .filter(partId -> partId != null)
+                .sorted()
+                .toList();
     }
 
     private Map<String, Object> dataVersions() {
@@ -224,6 +308,56 @@ public class BuildChatCacheService {
         }
         String text = value.toString().trim().replaceAll("\\s+", " ");
         return text.isEmpty() ? null : text.toLowerCase(java.util.Locale.ROOT);
+    }
+
+    private static boolean hasModifySignal(String message) {
+        return containsAnySignal(
+                message,
+                "바꿔",
+                "변경",
+                "교체",
+                "더 싼",
+                "더싼",
+                "비싸",
+                "낮춰",
+                "줄여",
+                "올려",
+                "높여",
+                "빼줘",
+                "빼",
+                "삭제",
+                "제거",
+                "추가",
+                "현재 견적",
+                "방금 견적",
+                "이 견적"
+        );
+    }
+
+    private static boolean hasRecommendationSignal(String message) {
+        return containsAnySignal(message, "추천", "맞춰", "짜줘", "구성", "골라");
+    }
+
+    private static boolean hasBuildSignal(String message) {
+        return containsAnySignal(message, "pc", "컴퓨터", "본체", "견적", "맞춰");
+    }
+
+    private static boolean containsAnySignal(String message, String... keywords) {
+        if (message == null) {
+            return false;
+        }
+        String compactMessage = compact(message);
+        for (String keyword : keywords) {
+            String normalizedKeyword = normalizeText(keyword);
+            if (normalizedKeyword != null && (message.contains(normalizedKeyword) || compactMessage.contains(compact(normalizedKeyword)))) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private static String compact(String value) {
+        return value == null ? "" : value.toLowerCase(java.util.Locale.ROOT).replaceAll("\\s+", "");
     }
 
     @SuppressWarnings("unchecked")

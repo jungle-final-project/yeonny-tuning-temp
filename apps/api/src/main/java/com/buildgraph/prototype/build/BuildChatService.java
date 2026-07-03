@@ -164,7 +164,8 @@ public class BuildChatService {
         List<AiChatEngineResponse.PartRecommendation> safePartRecommendations = failSafePartRecommendations(engineResponse.partRecommendations(), request, warnings);
         List<Map<String, Object>> builds = switch (engineResponse.intent()) {
             case FULL_BUILD_RECOMMEND -> engineBuilds(engineResponse, warnings);
-            case PART_RECOMMEND, BUILD_MODIFY -> changedCurrentBuilds(engineResponse, request, safePartRecommendations, warnings);
+            case PART_RECOMMEND -> List.of();
+            case BUILD_MODIFY -> changedCurrentBuilds(engineResponse, request, safePartRecommendations, warnings);
             default -> engineBuilds(engineResponse, warnings);
         };
         Map<String, Object> partRecommendation = partRecommendation(safePartRecommendations, engineResponse.parsedContext());
