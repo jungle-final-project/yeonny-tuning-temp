@@ -105,7 +105,9 @@ function buildGraphResponse(mode = 'BUILD_OVERVIEW') {
       { id: 'part-CASE', type: 'PART', category: 'CASE', label: '미들타워 케이스', status: 'PASS', detail: 'GPU 최대 320mm' },
       { id: 'constraint-power', type: 'CONSTRAINT', category: 'PSU', label: '정격 850W', status: 'WARN', detail: '권장 출력 750W / 현재 파워 850W' },
       { id: 'constraint-size', type: 'CONSTRAINT', category: 'CASE', label: '미들타워 케이스', status: 'PASS', detail: 'GPU 길이와 쿨러 높이가 케이스 제약 안에 있습니다.' },
-      { id: 'constraint-compatibility', type: 'CONSTRAINT', category: 'MOTHERBOARD', label: 'B650 Board', status: 'PASS', detail: '소켓과 메모리 규격을 확인합니다.' }
+      { id: 'constraint-compatibility', type: 'CONSTRAINT', category: 'MOTHERBOARD', label: 'B650 Board', status: 'PASS', detail: '소켓과 메모리 규격을 확인합니다.' },
+      { id: 'constraint-budget', type: 'CONSTRAINT', category: 'PRICE', label: '예산', status: 'PASS', detail: '2,500,000원' },
+      { id: 'constraint-total-price', type: 'CONSTRAINT', category: 'PRICE', label: '총액', status: 'PASS', detail: '2,000,000원' }
     ],
     edges: [
       {
@@ -669,19 +671,27 @@ test('chatbot uses build-chat API and updates latest home AI recommendations', a
   await expect(main.getByTestId('build-dependency-graph')).toContainText('호환됨');
   await expect(main.getByTestId('build-dependency-graph')).not.toContainText('여유 있음');
   await expect(main.getByTestId('build-dependency-graph')).toContainText('간섭 주의');
-  await expect(main.getByTestId('build-dependency-graph')).not.toContainText('250W · 길이 304mm');
-  await expect(main.getByTestId('build-dependency-graph')).not.toContainText('권장 출력 750W / 현재 파워 850W');
-  await expect(main.getByTestId('build-dependency-graph')).toContainText('정격 850W');
-  await expect(main.getByTestId('build-dependency-graph')).toContainText('B650 Board');
-  await expect(main.getByTestId('build-dependency-graph')).toContainText('미들타워 케이스');
+  const graphCanvas = main.getByTestId('graph-flow-canvas');
+  const graphSummaryPanel = main.getByTestId('graph-summary-panel');
+  await expect(graphCanvas).not.toContainText('250W · 길이 304mm');
+  await expect(graphCanvas).not.toContainText('권장 출력 750W / 현재 파워 850W');
+  await expect(graphCanvas).not.toContainText('정격 850W');
+  await expect(graphCanvas).not.toContainText('B650 Board');
+  await expect(graphCanvas.locator('.react-flow__node').filter({ hasText: '미들타워 케이스' })).toHaveCount(1);
+  await expect(graphCanvas).not.toContainText('예산');
+  await expect(graphCanvas).toContainText('총액');
+  await expect(graphSummaryPanel).toContainText('전력 조건');
+  await expect(graphSummaryPanel).toContainText('장착 규격');
+  await expect(graphSummaryPanel).toContainText('호환성 조건');
+  await expect(graphSummaryPanel).toContainText('권장 출력 750W / 현재 파워 850W');
+  await expect(graphSummaryPanel).not.toContainText('예산');
+  await expect(graphSummaryPanel).not.toContainText('총액');
   await expect(main.getByTestId('build-dependency-graph')).not.toContainText('기본 호환성');
-  await expect(main.getByTestId('build-dependency-graph')).not.toContainText('장착 규격');
   await expect(main.getByTestId('build-dependency-graph')).not.toContainText('PASS');
   await expect(main.getByTestId('build-dependency-graph')).not.toContainText('WARN');
   await expect.poll(() => buildGraphRequests.length).toBeGreaterThan(0);
   expect((buildGraphRequests[0] as { source?: string; items?: unknown[] }).source).toBe('AI_BUILD');
   expect((buildGraphRequests[0] as { items?: unknown[] }).items?.length).toBe(8);
-  const graphCanvas = main.getByTestId('graph-flow-canvas');
   await graphCanvas.scrollIntoViewIfNeeded();
   await expect(page.getByTestId('floating-dependency-graph')).toHaveCount(0);
   await graphCanvas.getByText('RTX 5070', { exact: true }).click();
@@ -1073,7 +1083,7 @@ test('selects a home AI recommendation through batch API and shows applied cart 
   await expect(page.getByRole('heading', { name: 'AI 선택 조합' })).toBeVisible();
   await expect(page.getByText('200만원 균형형')).toBeVisible();
   await expect(page.getByTestId('ai-selected-build-panel').getByText(`${expectedTotal}원`)).toBeVisible();
-  await expect(page.getByText(`${expectedTotal}원`)).toHaveCount(2);
+  await expect(page.getByText(`${expectedTotal}원`)).toHaveCount(3);
   await expect(page.getByText('GPU 반영됨')).toBeVisible();
   await expect(page.getByText('서버 반영 RTX 5070 서버 GPU').first()).toBeVisible();
   await expect(page.getByRole('heading', { name: '견적 장바구니', exact: true })).toBeVisible();
@@ -1100,7 +1110,7 @@ test('selects a chatbot recommendation and shows the applied cart without a late
   expect((applyRequests[0] as { items?: unknown[] }).items).toHaveLength(8);
   await expect(page).toHaveURL('/self-quote');
   await expect(page.getByRole('heading', { name: '견적 장바구니', exact: true })).toBeVisible();
-  await expect(page.getByText(`${expectedTotal}원`)).toHaveCount(2);
+  await expect(page.getByText(`${expectedTotal}원`)).toHaveCount(3);
   await expect(page.getByText('서버 반영 RTX 5070 서버 GPU').first()).toBeVisible();
   await expect(page.getByRole('button', { name: /서버 반영 RTX 5070 서버 GPU 견적에서 제거/ })).toBeVisible();
 });

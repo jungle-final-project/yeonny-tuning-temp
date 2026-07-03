@@ -99,6 +99,7 @@ export function BuildDependencyGraph({
   const graphCanvasRef = useRef<HTMLDivElement | null>(null);
   const hasSeenGraphRef = useRef(false);
   const displayGraph = useMemo(() => withDisplayTotalPrice(graph, totalPrice), [graph, totalPrice]);
+  const graphModel = useMemo(() => buildGraphDisplayModel(displayGraph), [displayGraph]);
   const activeNode = displayGraph?.nodes.find((node) => node.id === activeNodeId) ?? null;
   const activeNodeCategory = activeNode && typeof activeNode.category === 'string' && isPartCategory(activeNode.category)
     ? activeNode.category
@@ -120,8 +121,11 @@ export function BuildDependencyGraph({
     }),
     enabled: Boolean(candidateContext && activeNodeCategory)
   });
-  const { nodes, edges } = useMemo(() => toFlowElements(displayGraph), [displayGraph]);
-  const canShowFloatingGraph = Boolean(displayGraph && displayGraph.nodes.length > 0 && !isLoading && !isError);
+  const { nodes, edges } = useMemo(
+    () => toFlowElements(displayGraph, graphModel.nodes, graphModel.edges),
+    [displayGraph, graphModel]
+  );
+  const canShowFloatingGraph = Boolean(displayGraph && graphModel.nodes.length > 0 && !isLoading && !isError);
 
   useEffect(() => {
     const mediaQuery = window.matchMedia('(min-width: 1024px)');
@@ -186,8 +190,8 @@ export function BuildDependencyGraph({
           <p className="mt-1 max-w-3xl break-keep text-sm leading-6 text-slate-500">{displayGraph?.summary ?? subtitle}</p>
         </div>
         <div className="grid grid-cols-3 gap-2 text-center text-xs sm:min-w-[260px]">
-          <GraphStat label="노드" value={displayGraph?.nodes.length ?? 0} />
-          <GraphStat label="관계" value={displayGraph?.edges.length ?? 0} />
+          <GraphStat label="노드" value={displayGraph ? graphModel.nodes.length : 0} />
+          <GraphStat label="관계" value={displayGraph ? graphModel.edges.length : 0} />
           <GraphStat label="주의" value={displayGraph?.insights.filter((insight) => insight.status !== 'PASS').length ?? 0} tone="warn" />
         </div>
       </div>
@@ -210,7 +214,7 @@ export function BuildDependencyGraph({
         <div className="m-5 rounded-lg border border-orange-200 bg-orange-50 p-5 text-sm font-bold text-orange-700">
           관계 그래프 API를 불러오지 못했습니다.
         </div>
-      ) : !displayGraph || displayGraph.nodes.length === 0 ? (
+      ) : !displayGraph || graphModel.nodes.length === 0 ? (
         <div className="m-5 rounded-lg border border-dashed border-blue-200 bg-blue-50/70 p-6 text-center">
           <div className="mx-auto grid h-12 w-12 place-items-center rounded-xl bg-white text-brand-blue shadow-product">
             <GitBranch size={23} />
@@ -267,7 +271,7 @@ export function BuildDependencyGraph({
               />
             ) : null}
           </div>
-          <aside className="min-w-0 bg-white p-5">
+          <aside data-testid="graph-summary-panel" className="min-w-0 bg-white p-5">
             <div className="mb-4 flex items-center justify-between gap-3">
               <h3 className="text-sm font-black text-commerce-ink">영향 요약</h3>
               <span className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2 py-1 text-[11px] font-black text-slate-600">
@@ -296,6 +300,25 @@ export function BuildDependencyGraph({
               </div>
             ) : null}
 
+            {graphModel.validationNodes.length > 0 ? (
+              <div data-testid="graph-validation-summary" className="mb-4 space-y-2">
+                <div className="text-xs font-black text-slate-500">검증 결과</div>
+                {graphModel.validationNodes.map((node) => (
+                  <article
+                    key={node.id}
+                    className={`rounded-lg border p-3 ${statusPanelTone(node.status)}`}
+                  >
+                    <div className="flex items-center gap-2 text-xs font-black">
+                      {statusIcon(node.status)}
+                      {statusLabel(node.status)}
+                    </div>
+                    <div className="mt-2 text-sm font-black text-commerce-ink">{validationSummaryTitle(node)}</div>
+                    <p className="mt-1 break-keep text-xs leading-5 text-slate-600">{validationSummaryDescription(node)}</p>
+                  </article>
+                ))}
+              </div>
+            ) : null}
+
             <div className="space-y-2">
               {displayGraph.insights.map((insight) => (
                 <article
@@ -321,7 +344,7 @@ export function BuildDependencyGraph({
                 그래프 읽는 법
               </div>
               <p className="break-keep text-xs leading-5 text-slate-500">
-                노드는 부품과 제약이고, 선은 선택이 영향을 주는 관계입니다. 노란 선은 확인 필요, 빨간 선은 교체 후보를 먼저 봐야 하는 관계입니다.
+                그래프의 선택 관계를 누르면 판단 근거를 확인할 수 있고, 검증 조건은 이 요약에서 확인합니다. 노란 선은 확인 필요, 빨간 선은 교체 후보를 먼저 봐야 하는 관계입니다.
               </p>
             </div>
           </aside>
@@ -567,13 +590,67 @@ function PriceTotalNode({ data }: NodeProps<Node<{ label: ReactNode }>>) {
   return <>{data.label}</>;
 }
 
-function toFlowElements(graph?: BuildGraphResolveResponse | null): { nodes: Node[]; edges: Edge[] } {
+function buildGraphDisplayModel(graph?: BuildGraphResolveResponse | null) {
+  if (!graph) {
+    return { nodes: [], edges: [], validationNodes: [] };
+  }
+
+  const nodes = graph.nodes.filter(isGraphCanvasNode);
+  const visibleNodeIds = new Set(nodes.map((node) => node.id));
+  const edges = graph.edges.filter((edge) => (
+    visibleNodeIds.has(String(edge.source)) && visibleNodeIds.has(String(edge.target))
+  ));
+  const validationNodes = graph.nodes.filter(isValidationSummaryNode);
+
+  return { nodes, edges, validationNodes };
+}
+
+function isGraphCanvasNode(node: BuildGraphNode) {
+  return node.type === 'PART' || isTotalPriceGraphNode(node);
+}
+
+function isValidationSummaryNode(node: BuildGraphNode) {
+  return node.type === 'CONSTRAINT'
+    && !isPriceGraphNode(node)
+    && !isBudgetGraphNode(node);
+}
+
+function isTotalPriceGraphNode(node: Pick<BuildGraphNode, 'category' | 'type' | 'id' | 'label'>) {
+  return isPriceGraphNode(node) && !isBudgetGraphNode(node);
+}
+
+function isBudgetGraphNode(node: Pick<BuildGraphNode, 'id' | 'label'>) {
+  const id = String(node.id ?? '').toLowerCase();
+  const label = String(node.label ?? '').trim();
+  return id.includes('budget') || label.includes('예산');
+}
+
+function validationSummaryTitle(node: BuildGraphNode) {
+  const id = String(node.id ?? '').toLowerCase();
+  const category = String(node.category ?? '').toUpperCase();
+  if (id.includes('power') || category === 'PSU') return '전력 조건';
+  if (id.includes('size') || category === 'CASE') return '장착 규격';
+  if (id.includes('compat') || category === 'CPU' || category === 'MOTHERBOARD' || category === 'RAM' || category === 'COOLER') {
+    return '호환성 조건';
+  }
+  return '검증 조건';
+}
+
+function validationSummaryDescription(node: BuildGraphNode) {
+  return node.detail && node.detail.trim() ? node.detail : validationSummaryTitle(node);
+}
+
+function toFlowElements(
+  graph?: BuildGraphResolveResponse | null,
+  graphNodes: BuildGraphNode[] = graph?.nodes ?? [],
+  graphEdges: BuildGraphEdge[] = graph?.edges ?? []
+): { nodes: Node[]; edges: Edge[] } {
   if (!graph) return { nodes: [], edges: [] };
   const focusNodeIds = new Set(graph.focusNodeIds);
   const nodeIdCounts = new Map<string, number>();
   const firstFlowNodeIdByGraphNodeId = new Map<string, string>();
   const placedNodeRects: Array<{ x: number; y: number; width: number; height: number }> = [];
-  const nodes = graph.nodes.map((node, index) => {
+  const nodes = graphNodes.map((node, index) => {
     const graphNodeId = String(node.id);
     const currentCount = nodeIdCounts.get(graphNodeId) ?? 0;
     nodeIdCounts.set(graphNodeId, currentCount + 1);
@@ -608,7 +685,7 @@ function toFlowElements(graph?: BuildGraphResolveResponse | null): { nodes: Node
       style: nodeStyle(node, size)
     } satisfies Node;
   });
-  const edges = graph.edges.map((edge) => ({
+  const edges = graphEdges.map((edge) => ({
     id: edge.id,
     source: firstFlowNodeIdByGraphNodeId.get(String(edge.source)) ?? edge.source,
     target: firstFlowNodeIdByGraphNodeId.get(String(edge.target)) ?? edge.target,

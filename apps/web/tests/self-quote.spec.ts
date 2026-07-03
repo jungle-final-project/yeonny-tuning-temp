@@ -2191,7 +2191,7 @@ test('renders quote dependency graph with card nodes in the reference layout', a
   expect(price.y).toBeGreaterThan(cooler.y);
 });
 
-test('spreads duplicate quote dependency graph category nodes instead of overlapping cards', async ({ page }) => {
+test('moves quote dependency graph constraint nodes into the summary panel', async ({ page }) => {
   await page.addInitScript(() => {
     localStorage.setItem('buildgraph.token', 'jwt-user-token');
   });
@@ -2257,28 +2257,17 @@ test('spreads duplicate quote dependency graph category nodes instead of overlap
   await page.goto('/self-quote');
 
   const graphCanvas = page.getByTestId('graph-flow-canvas');
+  const graphSummaryPanel = page.getByTestId('graph-summary-panel');
   const psuPart = graphCanvas.locator('.react-flow__node').filter({ hasText: '750W 파워' }).first();
-  const psuConstraint = graphCanvas.locator('.react-flow__node').filter({ hasText: '정격 1000W' }).first();
   await expect(psuPart).toBeVisible();
-  await expect(psuConstraint).toBeVisible();
-
-  const partBox = await psuPart.boundingBox();
-  const constraintBox = await psuConstraint.boundingBox();
-  expect(partBox).not.toBeNull();
-  expect(constraintBox).not.toBeNull();
-
-  const overlapX = Math.max(
-    0,
-    Math.min((partBox?.x ?? 0) + (partBox?.width ?? 0), (constraintBox?.x ?? 0) + (constraintBox?.width ?? 0))
-      - Math.max(partBox?.x ?? 0, constraintBox?.x ?? 0)
-  );
-  const overlapY = Math.max(
-    0,
-    Math.min((partBox?.y ?? 0) + (partBox?.height ?? 0), (constraintBox?.y ?? 0) + (constraintBox?.height ?? 0))
-      - Math.max(partBox?.y ?? 0, constraintBox?.y ?? 0)
-  );
-
-  expect(overlapX * overlapY).toBe(0);
+  await expect(graphCanvas).not.toContainText('정격 1000W');
+  await expect(graphCanvas).not.toContainText('예산 범위 확인');
+  await expect(graphCanvas).toContainText('총액');
+  await expect(graphSummaryPanel).toContainText('검증 결과');
+  await expect(graphSummaryPanel).toContainText('전력 조건');
+  await expect(graphSummaryPanel).toContainText('파워 정격 출력 조건');
+  await expect(graphSummaryPanel).not.toContainText('총액');
+  await expect(graphSummaryPanel).not.toContainText('예산 범위 확인');
 });
 
 test('uses saved graph layout positions returned by the resolve api', async ({ page }) => {
