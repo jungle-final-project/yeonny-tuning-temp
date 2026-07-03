@@ -1588,6 +1588,68 @@ test('opens chatbot build details in a side drawer and saves in place', async ({
   expect(savedMapping).toBe('saved-chat-build-inline');
 });
 
+test('opens the exact recommendation card details when temporary build ids are duplicated', async ({ page }) => {
+  await page.setViewportSize({ width: 1600, height: 900 });
+  await mockBuildGraphApi(page);
+  const duplicatedId = 'ai-engine-current-balanced-base';
+  const expensiveItems = categories.map((category, index) => ({
+    ...item(category, 'balanced', 2_000_000, '고가 '),
+    partId: `expensive-${category.toLowerCase()}`,
+    name: `고가 ${category} 부품`,
+    quantity: category === 'RAM' ? 2 : 1,
+    price: 640_000 + index * 10_000
+  }));
+  const selectedItems = categories.map((category, index) => ({
+    ...item(category, 'balanced', 2_000_000, '선택 '),
+    partId: `selected-${category.toLowerCase()}`,
+    name: `선택 ${category} 부품`,
+    quantity: category === 'RAM' ? 2 : 1,
+    price: 520_000 + index * 1_000
+  }));
+  const latestBuilds = [
+    {
+      ...build('balanced', 2_000_000),
+      id: duplicatedId,
+      title: '512만원 균형형 추천 조합',
+      summary: '첫 번째 중복 id 조합입니다.',
+      totalPrice: expensiveItems.reduce((sum, next) => sum + next.price * next.quantity, 0),
+      items: expensiveItems,
+      toolResults: [
+        { tool: 'price', status: 'PASS', confidence: 'HIGH', summary: '고가 조합 검증 결과입니다.' }
+      ]
+    },
+    {
+      ...build('balanced', 2_000_000),
+      id: duplicatedId,
+      title: '421만원 균형형 추천 조합',
+      summary: '사용자가 선택한 두 번째 중복 id 조합입니다.',
+      totalPrice: selectedItems.reduce((sum, next) => sum + next.price * next.quantity, 0),
+      items: selectedItems,
+      toolResults: [
+        { tool: 'price', status: 'PASS', confidence: 'MEDIUM', summary: '선택한 조합 검증 결과입니다.' }
+      ]
+    }
+  ];
+
+  await openHomeAsUser(page);
+  await page.evaluate(({ session }) => {
+    sessionStorage.setItem('buildgraph.ai.assistantSession:user-1004', JSON.stringify(session));
+  }, { session: storedAssistantSessionWithBuilds('중복 id 추천', latestBuilds) });
+  await page.getByRole('navigation').getByRole('link', { name: '추천 결과' }).click();
+
+  const selectedCard = page.locator('[data-latest-build-card="true"]').filter({ hasText: '421만원 균형형 추천 조합' });
+  await expect(selectedCard.getByText(`${latestBuilds[1].totalPrice.toLocaleString()}원`)).toBeVisible();
+  await selectedCard.getByRole('button', { name: '상세 보기' }).click();
+
+  const drawer = page.getByRole('dialog', { name: '추천 조합 상세' });
+  await expect(drawer).toBeVisible();
+  await expect(drawer.getByRole('heading', { name: `선택한 추천 조합 / ${latestBuilds[1].title}` })).toBeVisible();
+  await expect(drawer.getByText(`${latestBuilds[1].totalPrice.toLocaleString()}원`)).toBeVisible();
+  await expect(drawer.getByRole('link', { name: latestBuilds[1].items[0].name })).toBeVisible();
+  await expect(drawer.getByText('선택한 조합 검증 결과입니다.')).toBeVisible();
+  await expect(drawer.getByText('고가 조합 검증 결과입니다.')).toHaveCount(0);
+});
+
 test('keeps recommendation cards full width while the detail drawer overlays on desktop', async ({ page }) => {
   await page.setViewportSize({ width: 1440, height: 900 });
   const latestBuilds = budgetBuilds(2_000_000);

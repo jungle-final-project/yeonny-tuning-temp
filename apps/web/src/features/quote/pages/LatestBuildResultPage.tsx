@@ -32,6 +32,14 @@ type CompactGraphNodeData = {
   category?: string;
   status: BuildGraphStatus;
 };
+type BuildHistoryEntry = {
+  key: string;
+  build: AiRecommendedBuild;
+};
+type SaveLatestBuildVariables = {
+  key: string;
+  build: AiRecommendedBuild;
+};
 type GraphPreviewAnchor = {
   left: number;
   top: number;
@@ -60,27 +68,35 @@ const compactCategoryPositions: Record<string, { x: number; y: number }> = {
 export function LatestBuildResultPage() {
   const assistantSession = readAssistantSession();
   const builds = assistantSession.latestBuilds;
-  const [selectedBuildId, setSelectedBuildId] = useState<string | null>(null);
-  const [previewBuildId, setPreviewBuildId] = useState<string | null>(null);
+  const buildEntries = useMemo(() => createBuildHistoryEntries(builds), [builds]);
+  const buildIdCounts = useMemo(() => countBuildIds(buildEntries), [buildEntries]);
+  const [selectedBuildKey, setSelectedBuildKey] = useState<string | null>(null);
+  const [previewBuildKey, setPreviewBuildKey] = useState<string | null>(null);
   const [tierFilter, setTierFilter] = useState<RecommendationFilter>('all');
   const [savedBuildIds, setSavedBuildIds] = useState(assistantSession.savedBuildIds);
   const [canShowGraphPreview, setCanShowGraphPreview] = useState(false);
   const [previewAnchor, setPreviewAnchor] = useState<GraphPreviewAnchor | null>(null);
   const previewOpenTimerRef = useRef<number | null>(null);
   const previewCloseTimerRef = useRef<number | null>(null);
-  const visibleBuilds = useMemo(
-    () => tierFilter === 'all' ? builds : builds.filter((build) => build.tier === tierFilter),
-    [builds, tierFilter]
+  const visibleBuildEntries = useMemo(
+    () => tierFilter === 'all' ? buildEntries : buildEntries.filter((entry) => entry.build.tier === tierFilter),
+    [buildEntries, tierFilter]
   );
-  const selectedBuild = selectedBuildId && visibleBuilds.some((build) => build.id === selectedBuildId)
-    ? builds.find((build) => build.id === selectedBuildId)
+  const selectedEntry = selectedBuildKey
+    ? visibleBuildEntries.find((entry) => entry.key === selectedBuildKey)
     : undefined;
-  const previewBuild = !selectedBuild && previewAnchor && canShowGraphPreview && previewBuildId && visibleBuilds.some((build) => build.id === previewBuildId)
-    ? builds.find((build) => build.id === previewBuildId)
+  const selectedBuild = selectedEntry?.build;
+  const previewEntry = !selectedBuild && previewAnchor && canShowGraphPreview && previewBuildKey
+    ? visibleBuildEntries.find((entry) => entry.key === previewBuildKey)
     : undefined;
-  const selectedSavedBuildId = selectedBuild ? savedBuildIds[selectedBuild.id] : undefined;
+  const previewBuild = previewEntry?.build;
+  const savedBuildIdForEntry = useCallback((entry: BuildHistoryEntry) => (
+    savedBuildIds[entry.key]
+    ?? (buildIdCounts.get(entry.build.id) === 1 ? savedBuildIds[entry.build.id] : undefined)
+  ), [buildIdCounts, savedBuildIds]);
+  const selectedSavedBuildId = selectedEntry ? savedBuildIdForEntry(selectedEntry) : undefined;
   const lastUserMessage = latestUserMessage(assistantSession);
-  const closeDetail = useCallback(() => setSelectedBuildId(null), []);
+  const closeDetail = useCallback(() => setSelectedBuildKey(null), []);
   const clearPreviewOpenTimer = useCallback(() => {
     if (previewOpenTimerRef.current !== null) {
       window.clearTimeout(previewOpenTimerRef.current);
@@ -93,14 +109,14 @@ export function LatestBuildResultPage() {
       previewCloseTimerRef.current = null;
     }
   }, []);
-  const openPreview = useCallback((buildId: string, anchorElement: HTMLElement) => {
+  const openPreview = useCallback((buildKey: string, anchorElement: HTMLElement) => {
     if (!canShowGraphPreview) return;
     clearPreviewOpenTimer();
     clearPreviewCloseTimer();
     previewOpenTimerRef.current = window.setTimeout(() => {
       if (!anchorElement.isConnected) return;
       setPreviewAnchor(getGraphPreviewAnchor(anchorElement.getBoundingClientRect()));
-      setPreviewBuildId(buildId);
+      setPreviewBuildKey(buildKey);
       previewOpenTimerRef.current = null;
     }, 180);
   }, [canShowGraphPreview, clearPreviewCloseTimer, clearPreviewOpenTimer]);
@@ -108,27 +124,34 @@ export function LatestBuildResultPage() {
     clearPreviewOpenTimer();
     clearPreviewCloseTimer();
     previewCloseTimerRef.current = window.setTimeout(() => {
-      setPreviewBuildId(null);
+      setPreviewBuildKey(null);
       setPreviewAnchor(null);
       previewCloseTimerRef.current = null;
     }, 120);
   }, [clearPreviewCloseTimer, clearPreviewOpenTimer]);
-  const selectBuild = useCallback((buildId: string) => {
+  const selectBuild = useCallback((buildKey: string) => {
     clearPreviewOpenTimer();
     clearPreviewCloseTimer();
-    setPreviewBuildId(null);
+    setPreviewBuildKey(null);
     setPreviewAnchor(null);
-    setSelectedBuildId(buildId);
+    setSelectedBuildKey(buildKey);
   }, [clearPreviewCloseTimer, clearPreviewOpenTimer]);
   const saveMutation = useMutation({
-    mutationFn: (build: AiRecommendedBuild) => saveBuildFromChat({
+    mutationFn: ({ build }: SaveLatestBuildVariables) => saveBuildFromChat({
       sourceBuildId: build.id,
       lastUserMessage,
       build
     }),
-    onSuccess: (response, sourceBuild) => {
-      markAssistantBuildSaved(sourceBuild.id, response.id);
-      setSavedBuildIds((current) => ({ ...current, [sourceBuild.id]: response.id }));
+    onSuccess: (response, source) => {
+      markAssistantBuildSaved(source.build.id, response.id);
+      if (source.key !== source.build.id) {
+        markAssistantBuildSaved(source.key, response.id);
+      }
+      setSavedBuildIds((current) => ({
+        ...current,
+        [source.build.id]: response.id,
+        [source.key]: response.id
+      }));
     }
   });
 
@@ -148,18 +171,18 @@ export function LatestBuildResultPage() {
   }, [clearPreviewCloseTimer, clearPreviewOpenTimer]);
 
   useEffect(() => {
-    if (selectedBuildId && !visibleBuilds.some((build) => build.id === selectedBuildId)) {
-      setSelectedBuildId(null);
+    if (selectedBuildKey && !visibleBuildEntries.some((entry) => entry.key === selectedBuildKey)) {
+      setSelectedBuildKey(null);
     }
-    if (previewBuildId && !visibleBuilds.some((build) => build.id === previewBuildId)) {
-      setPreviewBuildId(null);
+    if (previewBuildKey && !visibleBuildEntries.some((entry) => entry.key === previewBuildKey)) {
+      setPreviewBuildKey(null);
       setPreviewAnchor(null);
     }
-  }, [previewBuildId, selectedBuildId, visibleBuilds]);
+  }, [previewBuildKey, selectedBuildKey, visibleBuildEntries]);
 
   useEffect(() => {
     if (!canShowGraphPreview || selectedBuild) {
-      setPreviewBuildId(null);
+      setPreviewBuildKey(null);
       setPreviewAnchor(null);
     }
   }, [canShowGraphPreview, selectedBuild]);
@@ -183,19 +206,19 @@ export function LatestBuildResultPage() {
                 <span className="text-xs font-semibold text-slate-500">최신 추천이 앞에 표시됩니다.</span>
               </div>
               <RecommendationFilterTabs value={tierFilter} onChange={setTierFilter} />
-              {visibleBuilds.length > 0 ? (
+              {visibleBuildEntries.length > 0 ? (
                 <div
                   data-testid="latest-build-card-grid"
                   className={`grid gap-4 ${selectedBuild ? 'lg:grid-cols-2' : 'lg:grid-cols-3'}`}
                 >
-                  {visibleBuilds.map((build) => (
+                  {visibleBuildEntries.map((entry) => (
                     <TemporaryBuildCard
-                      key={build.id}
-                      build={build}
-                      selected={build.id === selectedBuildId}
-                      savedBuildId={savedBuildIds[build.id]}
-                      onSelect={() => selectBuild(build.id)}
-                      onPreviewOpen={(anchorElement) => openPreview(build.id, anchorElement)}
+                      key={entry.key}
+                      build={entry.build}
+                      selected={entry.key === selectedBuildKey}
+                      savedBuildId={savedBuildIdForEntry(entry)}
+                      onSelect={() => selectBuild(entry.key)}
+                      onPreviewOpen={(anchorElement) => openPreview(entry.key, anchorElement)}
                       onPreviewClose={schedulePreviewClose}
                     />
                   ))}
@@ -225,9 +248,9 @@ export function LatestBuildResultPage() {
           <LatestBuildDetailDrawer
             build={selectedBuild}
             savedBuildId={selectedSavedBuildId}
-            isSaving={saveMutation.isPending && saveMutation.variables?.id === selectedBuild.id}
-            saveError={saveMutation.isError && saveMutation.variables?.id === selectedBuild.id}
-            onSave={() => saveMutation.mutate(selectedBuild)}
+            isSaving={saveMutation.isPending && saveMutation.variables?.key === selectedEntry?.key}
+            saveError={saveMutation.isError && saveMutation.variables?.key === selectedEntry?.key}
+            onSave={() => selectedEntry ? saveMutation.mutate(selectedEntry) : undefined}
             onClose={closeDetail}
           />
         ) : null}
@@ -777,6 +800,46 @@ function buildGraphSignature(build: AiRecommendedBuild) {
     .map((item) => `${item.category}:${item.partId}:${item.quantity}`)
     .sort()
     .join('|');
+}
+
+function createBuildHistoryEntries(builds: AiRecommendedBuild[]): BuildHistoryEntry[] {
+  const occurrenceCounts = new Map<string, number>();
+  return builds.map((build) => {
+    const baseKey = buildHistoryBaseKey(build);
+    const occurrence = occurrenceCounts.get(baseKey) ?? 0;
+    occurrenceCounts.set(baseKey, occurrence + 1);
+    return {
+      key: occurrence === 0 ? baseKey : `${baseKey}::${occurrence}`,
+      build
+    };
+  });
+}
+
+function buildHistoryBaseKey(build: AiRecommendedBuild) {
+  const exactSignature = build.items
+    .map((item) => [
+      item.category,
+      item.partId,
+      item.quantity,
+      item.price
+    ].join(':'))
+    .sort()
+    .join('|');
+  return [
+    build.id,
+    build.tier,
+    build.title,
+    build.totalPrice,
+    exactSignature
+  ].join('::');
+}
+
+function countBuildIds(entries: BuildHistoryEntry[]) {
+  const counts = new Map<string, number>();
+  entries.forEach((entry) => {
+    counts.set(entry.build.id, (counts.get(entry.build.id) ?? 0) + 1);
+  });
+  return counts;
 }
 
 function getGraphPreviewAnchor(rect: DOMRect): GraphPreviewAnchor {
