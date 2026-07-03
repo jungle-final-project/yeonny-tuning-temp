@@ -32,6 +32,12 @@ type AiBuildAssistantProps = {
 
 const LOGIN_REQUIRED_MESSAGE = '로그인이 필요합니다. 다시 로그인해 주세요.';
 const GENERIC_SUBMIT_ERROR_MESSAGE = 'AI 추천 API 호출에 실패했습니다. 잠시 후 다시 시도해 주세요.';
+const COMMON_QUICK_PROMPTS = [
+  { label: '800만원 PC 추천', prompt: '800만원으로 최고급 PC 추천해줘' },
+  { label: '9950X3D 상세', prompt: 'AMD 라이젠9-6세대 9950X3D 그래니트 릿지 정품(멀티팩) 상세페이지로 이동해' },
+  { label: '내 견적함', prompt: '내 견적함 열어줘' },
+  { label: 'GPU 추천상담', prompt: '고성능 GPU 추천해줘' }
+];
 
 export function AiBuildAssistant({ surface = 'home' }: AiBuildAssistantProps) {
   const navigate = useNavigate();
@@ -405,14 +411,14 @@ export function AiBuildAssistant({ surface = 'home' }: AiBuildAssistantProps) {
       <div className="flex max-h-[78vh] flex-col">
         <div className="border-b border-commerce-line bg-slate-50 px-4 py-3">
           <div className="flex flex-wrap gap-2">
-            {['200만원 PC 추천', '300만원 PC 추천', 'GPU 추천해줘', '쿨러 추천해줘'].map((example) => (
+            {COMMON_QUICK_PROMPTS.map((example) => (
               <button
-                key={example}
+                key={example.label}
                 type="button"
-                onClick={() => setPrompt(example)}
+                onClick={() => setPrompt(example.prompt)}
                 className="rounded-full border border-commerce-line bg-white px-3 py-1 text-[11px] font-black text-slate-600 hover:border-commerce-ink hover:text-commerce-ink"
               >
-                {example}
+                {example.label}
               </button>
             ))}
           </div>
@@ -463,7 +469,7 @@ export function AiBuildAssistant({ surface = 'home' }: AiBuildAssistantProps) {
               value={prompt}
               onChange={(event) => setPrompt(event.target.value)}
               disabled={isSending}
-              placeholder="예: 200만원 PC 추천, GPU 추천해줘"
+              placeholder="예: 800만원 PC 추천, 9950X3D 상세페이지로 이동해"
               className="min-w-0 flex-1 bg-transparent px-2 text-sm font-medium text-slate-900 outline-none placeholder:text-slate-400"
             />
             <button

@@ -119,6 +119,9 @@ ai:
     cache:
       enabled: ${BUILD_CHAT_CACHE_ENABLED:true}
       ttl-seconds: ${BUILD_CHAT_CACHE_TTL_SECONDS:600}
+      prewarm:
+        enabled: ${BUILD_CHAT_CACHE_PREWARM_ENABLED:true}
+        ttl-seconds: ${BUILD_CHAT_CACHE_PREWARM_TTL_SECONDS:3600}
     fast:
       model: ${BUILD_CHAT_FAST_MODEL:gpt-5.5}
       reasoning-effort: ${BUILD_CHAT_FAST_REASONING_EFFORT:low}

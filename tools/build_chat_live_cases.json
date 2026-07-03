@@ -1176,5 +1176,189 @@
       ]
     },
     "benchmarkGroup": "DIRECTION_MATRIX"
+  },
+  {
+    "id": "route-detail-9950x3d-token",
+    "message": "9950X3D 상세페이지 보여줘",
+    "expectedAnswerType": "GENERAL",
+    "expectedActionType": "OPEN_ROUTE",
+    "expectedFastPath": true,
+    "benchmarkGroup": "PRODUCT_DETAIL_ROUTE"
+  },
+  {
+    "id": "route-detail-9950x3d-full-korean",
+    "message": "AMD 라이젠9-6세대 9950X3D 그래니트 릿지 정품(멀티팩) 상세페이지로 이동해",
+    "expectedAnswerType": "GENERAL",
+    "expectedActionType": "OPEN_ROUTE",
+    "expectedFastPath": true,
+    "benchmarkGroup": "PRODUCT_DETAIL_ROUTE"
+  },
+  {
+    "id": "route-detail-9700x-token",
+    "message": "9700X 상세 보여줘",
+    "expectedAnswerType": "GENERAL",
+    "expectedActionType": "OPEN_ROUTE",
+    "expectedFastPath": true,
+    "benchmarkGroup": "PRODUCT_DETAIL_ROUTE"
+  },
+  {
+    "id": "route-detail-5090-ambiguous",
+    "message": "5090 보여줘",
+    "expectedAnswerType": "GENERAL",
+    "expectedActionType": "OPEN_ROUTE",
+    "expectedRoute": "/self-quote?category=GPU",
+    "expectedFastPath": true,
+    "benchmarkGroup": "PRODUCT_DETAIL_ROUTE"
+  },
+  {
+    "id": "route-detail-rtx5080-ambiguous",
+    "message": "RTX 5080 상세",
+    "expectedAnswerType": "GENERAL",
+    "expectedActionType": "OPEN_ROUTE",
+    "expectedRoute": "/self-quote?category=GPU",
+    "expectedFastPath": true,
+    "benchmarkGroup": "PRODUCT_DETAIL_ROUTE"
+  },
+  {
+    "id": "route-detail-ryzen9-ambiguous",
+    "message": "라이젠9 상세 보여줘",
+    "expectedAnswerType": "GENERAL",
+    "expectedActionType": "OPEN_ROUTE",
+    "expectedRoute": "/self-quote?category=CPU",
+    "expectedFastPath": true,
+    "benchmarkGroup": "PRODUCT_DETAIL_ROUTE"
+  },
+  {
+    "id": "route-detail-msi-board-ambiguous",
+    "message": "MSI 보드 보여줘",
+    "expectedAnswerType": "GENERAL",
+    "expectedActionType": "OPEN_ROUTE",
+    "expectedRoute": "/self-quote?category=MOTHERBOARD",
+    "expectedFastPath": true,
+    "benchmarkGroup": "PRODUCT_DETAIL_ROUTE"
+  },
+  {
+    "id": "route-detail-samsung-ssd-ambiguous",
+    "message": "삼성 SSD 보여줘",
+    "expectedAnswerType": "GENERAL",
+    "expectedActionType": "OPEN_ROUTE",
+    "expectedRoute": "/self-quote?category=STORAGE",
+    "expectedFastPath": true,
+    "benchmarkGroup": "PRODUCT_DETAIL_ROUTE"
+  },
+  {
+    "id": "route-detail-corsair-psu-ambiguous",
+    "message": "커세어 파워 보여줘",
+    "expectedAnswerType": "GENERAL",
+    "expectedActionType": "OPEN_ROUTE",
+    "expectedRoute": "/self-quote?category=PSU",
+    "expectedFastPath": true,
+    "benchmarkGroup": "PRODUCT_DETAIL_ROUTE"
+  },
+  {
+    "id": "route-detail-lianli-case-ambiguous",
+    "message": "리안리 케이스 보여줘",
+    "expectedAnswerType": "GENERAL",
+    "expectedActionType": "OPEN_ROUTE",
+    "expectedRoute": "/self-quote?category=CASE",
+    "expectedFastPath": true,
+    "benchmarkGroup": "PRODUCT_DETAIL_ROUTE"
+  },
+  {
+    "id": "route-detail-ddr5-ram-ambiguous",
+    "message": "DDR5 32GB 보여줘",
+    "expectedAnswerType": "GENERAL",
+    "expectedActionType": "OPEN_ROUTE",
+    "expectedRoute": "/self-quote?category=RAM",
+    "expectedFastPath": true,
+    "benchmarkGroup": "PRODUCT_DETAIL_ROUTE"
+  },
+  {
+    "id": "route-detail-liquid-cooler-ambiguous",
+    "message": "수랭 쿨러 보여줘",
+    "expectedAnswerType": "GENERAL",
+    "expectedActionType": "OPEN_ROUTE",
+    "expectedRoute": "/self-quote?category=COOLER",
+    "expectedFastPath": true,
+    "benchmarkGroup": "PRODUCT_DETAIL_ROUTE"
+  },
+  {
+    "id": "route-detail-gpu-recommend-not-route",
+    "message": "GPU 추천해줘",
+    "expectedAnswerType": "PART",
+    "forbiddenActionTypes": ["OPEN_ROUTE"],
+    "expectedFastPath": false,
+    "benchmarkGroup": "PRODUCT_DETAIL_ROUTE"
+  },
+  {
+    "id": "route-detail-5090-build-not-route",
+    "message": "5090 들어간 PC 추천해줘",
+    "expectedAnswerType": "BUDGET",
+    "expectedMinBuilds": 3,
+    "requiredGpuClass": "5090",
+    "forbiddenActionTypes": ["OPEN_ROUTE"],
+    "expectedFastPath": false,
+    "benchmarkGroup": "PRODUCT_DETAIL_ROUTE"
+  },
+  {
+    "id": "route-detail-lianli-replace-not-route",
+    "message": "리안리 216 케이스로 맞춰줘",
+    "expectedAnswerType": "PART",
+    "forbiddenActionTypes": ["OPEN_ROUTE"],
+    "expectedFastPath": false,
+    "benchmarkGroup": "PRODUCT_DETAIL_ROUTE"
+  },
+  {
+    "id": "route-detail-msi-board-replace-not-route",
+    "message": "메인보드 MSI 걸로 맞춰줘",
+    "expectedAnswerType": "PART",
+    "expectedCategory": "MOTHERBOARD",
+    "forbiddenActionTypes": ["OPEN_ROUTE"],
+    "expectedFastPath": false,
+    "benchmarkGroup": "PRODUCT_DETAIL_ROUTE"
+  },
+  {
+    "id": "route-detail-ram-change-not-route",
+    "message": "RAM 64GB로 바꿔줘",
+    "expectedAnswerType": "PART",
+    "forbiddenActionTypes": ["OPEN_ROUTE"],
+    "expectedFastPath": false,
+    "benchmarkGroup": "PRODUCT_DETAIL_ROUTE"
+  },
+  {
+    "id": "route-detail-nvidia-generic-category",
+    "message": "NVIDIA GPU 상세 보여줘",
+    "expectedAnswerType": "GENERAL",
+    "expectedActionType": "OPEN_ROUTE",
+    "expectedRoute": "/self-quote?category=GPU",
+    "expectedFastPath": true,
+    "benchmarkGroup": "PRODUCT_DETAIL_ROUTE"
+  },
+  {
+    "id": "route-detail-nvme-generic-category",
+    "message": "NVMe 제품 페이지 보여줘",
+    "expectedAnswerType": "GENERAL",
+    "expectedActionType": "OPEN_ROUTE",
+    "expectedRoute": "/self-quote?category=STORAGE",
+    "expectedFastPath": true,
+    "benchmarkGroup": "PRODUCT_DETAIL_ROUTE"
+  },
+  {
+    "id": "route-detail-case-page-category",
+    "message": "케이스 제품 페이지 열어줘",
+    "expectedAnswerType": "GENERAL",
+    "expectedActionType": "OPEN_ROUTE",
+    "expectedRoute": "/self-quote?category=CASE",
+    "expectedFastPath": true,
+    "benchmarkGroup": "PRODUCT_DETAIL_ROUTE"
+  },
+  {
+    "id": "route-detail-psu-page-category",
+    "message": "PSU 상품 페이지 보여줘",
+    "expectedAnswerType": "GENERAL",
+    "expectedActionType": "OPEN_ROUTE",
+    "expectedRoute": "/self-quote?category=PSU",
+    "expectedFastPath": true,
+    "benchmarkGroup": "PRODUCT_DETAIL_ROUTE"
   }
 ]

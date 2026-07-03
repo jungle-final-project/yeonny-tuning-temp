@@ -22,7 +22,6 @@ import { AUTH_CHANGED_EVENT } from '../../../lib/api';
 import { partImageUrl } from '../../parts/partDisplay';
 import { applyAiBuildToQuoteDraft, getPart, listHomeRecommendedParts, listParts, recordRecommendationEvent } from '../../parts/partsApi';
 import type { HomeRecommendedPart, PartRow } from '../../parts/types';
-import { AiBuildAssistant } from '../components/AiBuildAssistant';
 import { BuildDependencyGraph } from '../components/BuildDependencyGraph';
 import {
   AI_ASSISTANT_SESSION_CHANGED_EVENT,
@@ -411,7 +410,6 @@ export function HomePage() {
           <WorkflowPanel />
         </section>
       </div>
-      <AiBuildAssistant surface="home" />
     </Screen>
   );
 }

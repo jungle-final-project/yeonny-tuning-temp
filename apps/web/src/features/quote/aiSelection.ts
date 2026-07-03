@@ -203,7 +203,7 @@ export const PART_CATEGORY_LABELS: Record<PartCategory, string> = {
 const initialAssistantMessage: AiChatMessage = {
   id: 'ai-intro',
   role: 'assistant',
-  text: '예산은 “200만원 PC 추천”처럼, 부품은 “GPU 추천해줘”처럼 물어보세요. 추천은 서버의 실제 부품 DB와 룰 기반 검증 결과로 계산됩니다.',
+  text: '예산은 “800만원 PC 추천”처럼, 상세 이동은 “9950X3D 상세페이지로 이동해”처럼 물어보세요. 추천은 서버의 실제 부품 DB와 룰 기반 검증 결과로 계산됩니다.',
   createdAt: '2026-06-30T00:00:00.000Z',
   kind: 'intro'
 };

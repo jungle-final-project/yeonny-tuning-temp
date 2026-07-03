@@ -7,6 +7,8 @@ import com.buildgraph.prototype.agent.AiChatIntent;
 import com.buildgraph.prototype.agent.AiChatAction;
 import com.buildgraph.prototype.common.DbValueMapper;
 import com.buildgraph.prototype.common.MockData;
+import com.buildgraph.prototype.agent.PartReplacementRanker;
+import com.buildgraph.prototype.agent.PartRouteResolver;
 import com.buildgraph.prototype.part.ToolBuildPart;
 import com.buildgraph.prototype.part.ToolCheckService;
 import com.buildgraph.prototype.recommendation.CandidateReranker;
@@ -19,6 +21,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -57,7 +60,9 @@ public class BuildChatService {
     private final ToolCheckService toolCheckService;
     private final AiChatEngine aiChatEngine;
     private final BuildChatCacheService buildChatCacheService;
+    private final PartReplacementRanker partReplacementRanker;
     private final CandidateReranker candidateReranker;
+    private final PartRouteResolver partRouteResolver;
 
     @Autowired
     public BuildChatService(
@@ -65,17 +70,52 @@ public class BuildChatService {
             ToolCheckService toolCheckService,
             AiChatEngine aiChatEngine,
             BuildChatCacheService buildChatCacheService,
-            CandidateReranker candidateReranker
+            PartReplacementRanker partReplacementRanker,
+            CandidateReranker candidateReranker,
+            PartRouteResolver partRouteResolver
     ) {
         this.jdbcTemplate = jdbcTemplate;
         this.toolCheckService = toolCheckService;
         this.aiChatEngine = aiChatEngine;
         this.buildChatCacheService = buildChatCacheService;
+        this.partReplacementRanker = partReplacementRanker;
         this.candidateReranker = candidateReranker;
+        this.partRouteResolver = partRouteResolver;
     }
 
     public BuildChatService(JdbcTemplate jdbcTemplate, ToolCheckService toolCheckService, AiChatEngine aiChatEngine, BuildChatCacheService buildChatCacheService) {
-        this(jdbcTemplate, toolCheckService, aiChatEngine, buildChatCacheService, new NoopCandidateReranker());
+        this(jdbcTemplate, toolCheckService, aiChatEngine, buildChatCacheService, null, new NoopCandidateReranker(), new PartRouteResolver(jdbcTemplate));
+    }
+
+    public BuildChatService(
+            JdbcTemplate jdbcTemplate,
+            ToolCheckService toolCheckService,
+            AiChatEngine aiChatEngine,
+            BuildChatCacheService buildChatCacheService,
+            PartReplacementRanker partReplacementRanker
+    ) {
+        this(jdbcTemplate, toolCheckService, aiChatEngine, buildChatCacheService, partReplacementRanker, new NoopCandidateReranker(), new PartRouteResolver(jdbcTemplate));
+    }
+
+    public BuildChatService(
+            JdbcTemplate jdbcTemplate,
+            ToolCheckService toolCheckService,
+            AiChatEngine aiChatEngine,
+            BuildChatCacheService buildChatCacheService,
+            CandidateReranker candidateReranker
+    ) {
+        this(jdbcTemplate, toolCheckService, aiChatEngine, buildChatCacheService, null, candidateReranker, new PartRouteResolver(jdbcTemplate));
+    }
+
+    public BuildChatService(
+            JdbcTemplate jdbcTemplate,
+            ToolCheckService toolCheckService,
+            AiChatEngine aiChatEngine,
+            BuildChatCacheService buildChatCacheService,
+            PartReplacementRanker partReplacementRanker,
+            CandidateReranker candidateReranker
+    ) {
+        this(jdbcTemplate, toolCheckService, aiChatEngine, buildChatCacheService, partReplacementRanker, candidateReranker, new PartRouteResolver(jdbcTemplate));
     }
 
     public Map<String, Object> chat(Map<String, Object> request) {
@@ -103,6 +143,15 @@ public class BuildChatService {
         RouteIntent routeIntent = routeIntent(message);
         if (routeIntent != null) {
             return routeResponse(routeIntent);
+        }
+        Optional<PartRouteResolver.ResolvedRoute> partRoute = partRouteResolver.resolveFastRoute(message, text(body.get("selectedCategory")));
+        if (partRoute.isPresent()) {
+            PartRouteResolver.ResolvedRoute resolved = partRoute.get();
+            return routeResponse(new RouteIntent(resolved.route(), resolved.label(), resolved.message()));
+        }
+        Optional<Map<String, Object>> fastDraftResponse = fastDraftActionResponse(body, message);
+        if (fastDraftResponse.isPresent()) {
+            return fastDraftResponse.get();
         }
         var cachedResponse = buildChatCacheService.lookup(body, requestedAiProfile, userId);
         if (cachedResponse.isPresent()) {
@@ -232,9 +281,127 @@ public class BuildChatService {
                             false
                     ));
                 }
+            } else if ("ADD_PART_TO_DRAFT".equals(action.type().name())) {
+                Map<String, Object> payload = action.payload() == null ? Map.of() : action.payload();
+                if (text(payload.get("partId")) != null && text(payload.get("category")) != null && numberValue(payload.get("quantity")) != null) {
+                    result.add(actionMap(
+                            "ADD_PART_TO_DRAFT",
+                            firstText(action.label(), categoryLabel(text(payload.get("category"))) + " 추가"),
+                            firstText(text(payload.get("name")), categoryLabel(text(payload.get("category")))) + "을(를) 견적에 추가합니다.",
+                            new LinkedHashMap<>(payload),
+                            false
+                    ));
+                }
+            } else if ("CREATE_PRICE_ALERT".equals(action.type().name())) {
+                Map<String, Object> payload = action.payload() == null ? Map.of() : action.payload();
+                if (numberValue(payload.get("targetPrice")) != null) {
+                    result.add(actionMap(
+                            "CREATE_PRICE_ALERT",
+                            firstText(action.label(), "목표가 알림 설정"),
+                            "요청한 목표가 조건으로 가격 알림을 준비합니다.",
+                            new LinkedHashMap<>(payload),
+                            false
+                    ));
+                }
             }
         }
         return result;
+    }
+
+    private Optional<Map<String, Object>> fastDraftActionResponse(Map<String, Object> request, String message) {
+        Map<String, Object> currentQuoteDraft = objectMap(request.get("currentQuoteDraft"));
+        List<Map<String, Object>> draftItems = objectMaps(currentQuoteDraft.get("items"));
+        if (draftItems.isEmpty()) {
+            return Optional.empty();
+        }
+
+        String category = detectPartCategory(message);
+        if (isRemoveIntent(message)) {
+            Map<String, Object> item = findDraftItem(draftItems, category, message);
+            if (!item.isEmpty()) {
+                return Optional.of(fastResponse(
+                        "PART",
+                        categoryLabel(text(item.get("category"))) + " 제거 변경안을 준비했습니다.",
+                        null,
+                        List.of(removeAction(item)),
+                        List.of()
+                ));
+            }
+            return Optional.empty();
+        }
+
+        if (isFastQuantityIntent(message)) {
+            Map<String, Object> item = findDraftItem(draftItems, category, message);
+            String itemCategory = text(item.get("category"));
+            if (!item.isEmpty() && ("RAM".equals(itemCategory) || "STORAGE".equals(itemCategory))) {
+                return Optional.of(fastResponse(
+                        "PART",
+                        categoryLabel(itemCategory) + " 수량 변경안을 준비했습니다.",
+                        null,
+                        List.of(quantityAction(item, message)),
+                        List.of()
+                ));
+            }
+            return Optional.empty();
+        }
+
+        String priceDirection = fastPriceDirection(message);
+        if (priceDirection == null || partReplacementRanker == null) {
+            return Optional.empty();
+        }
+        Map<String, Object> currentItem = category == null && "CHEAPER".equals(priceDirection)
+                ? highestPricedDraftItem(draftItems)
+                : findDraftItem(draftItems, category, message);
+        if (currentItem.isEmpty()) {
+            return Optional.empty();
+        }
+        String effectiveCategory = text(currentItem.get("category"));
+        if (effectiveCategory == null) {
+            return Optional.empty();
+        }
+
+        Integer targetMaxPrice = category == null ? null : parseBudgetWon(message);
+        List<AiChatEngineResponse.PartRecommendation> candidates = partRecommendations(effectiveCategory, 50);
+        PartReplacementRanker.SelectionResult selection = partReplacementRanker.select(
+                effectiveCategory,
+                currentItem,
+                priceDirection,
+                targetMaxPrice,
+                candidates,
+                3
+        );
+        List<String> warnings = new ArrayList<>(selection.warnings());
+        List<AiChatEngineResponse.PartRecommendation> safeRecommendations = failSafePartRecommendations(selection.parts(), request, warnings);
+        List<Map<String, Object>> actions = replacementActions(safeRecommendations, draftItems, false);
+        if (actions.isEmpty()) {
+            return Optional.empty();
+        }
+        return Optional.of(fastResponse(
+                "PART",
+                categoryLabel(effectiveCategory) + " 교체 후보를 바로 찾았습니다.",
+                partRecommendation(safeRecommendations, Map.of()),
+                actions,
+                warnings
+        ));
+    }
+
+    private Map<String, Object> fastResponse(
+            String answerType,
+            String message,
+            Map<String, Object> partRecommendation,
+            List<Map<String, Object>> actions,
+            List<String> warnings
+    ) {
+        return MockData.map(
+                "answerType", answerType,
+                "message", message,
+                "builds", List.of(),
+                "partRecommendation", partRecommendation,
+                "actions", actions,
+                "warnings", distinct(warnings),
+                "evidenceIds", List.of(),
+                "agentSessionId", null
+        );
     }
 
     private List<Map<String, Object>> engineBuilds(AiChatEngineResponse engineResponse, List<String> warnings) {
@@ -247,6 +414,10 @@ public class BuildChatService {
             Map<String, Object> build = engineBuildMap(recommendations.get(index), index, engineResponse, warnings);
             if (hasBlockingToolFailure(objectMaps(build.get("toolResults")))) {
                 warnings.add("Tool 검증에서 장착/호환/전력 불가로 판정된 추천 조합을 제외했습니다.");
+                continue;
+            }
+            if (!withinBudgetGuard(build, engineResponse.parsedContext())) {
+                warnings.add("명시 예산 범위를 벗어난 추천 조합을 제외했습니다.");
                 continue;
             }
             result.add(build);
@@ -271,6 +442,7 @@ public class BuildChatService {
         List<Map<String, Object>> toolResults = toolResults(parts, toolBudget, warnings);
         List<String> buildWarnings = new ArrayList<>(toolWarnings(toolResults));
         if (userBudget != null && totalPrice > userBudget && hasHardConstraint(parsedContext)) {
+            buildWarnings.add("HARD_CONSTRAINT_OVER_BUDGET");
             buildWarnings.add("명시한 부품 조건을 지키기 위해 예산을 초과했습니다.");
         }
         List<Map<String, Object>> items = parts.stream()
@@ -438,6 +610,10 @@ public class BuildChatService {
         List<AiChatEngineResponse.PartRecommendation> safe = new ArrayList<>();
         int excluded = 0;
         for (AiChatEngineResponse.PartRecommendation recommendation : recommendations) {
+            if (!hasToolCheckContextForRecommendation(draftItems, recommendation.category())) {
+                safe.add(recommendation);
+                continue;
+            }
             List<PartCandidate> nextParts = replacementPreviewParts(draftItems, recommendation);
             List<String> localWarnings = new ArrayList<>();
             List<Map<String, Object>> toolResults = toolResults(nextParts, totalPrice(nextParts), localWarnings);
@@ -451,6 +627,26 @@ public class BuildChatService {
             warnings.add("Tool FAIL 후보 " + excluded + "개를 추천/적용 후보에서 제외했습니다.");
         }
         return safe;
+    }
+
+    private boolean hasToolCheckContextForRecommendation(List<Map<String, Object>> draftItems, String replacementCategory) {
+        LinkedHashSet<String> categories = new LinkedHashSet<>();
+        for (Map<String, Object> item : draftItems) {
+            String category = text(item.get("category"));
+            if (category != null) {
+                categories.add(category);
+            }
+        }
+        return switch (replacementCategory) {
+            case "CPU" -> categories.contains("MOTHERBOARD");
+            case "MOTHERBOARD" -> categories.contains("CPU") || categories.contains("RAM");
+            case "RAM" -> categories.contains("MOTHERBOARD");
+            case "GPU" -> categories.contains("CASE") || categories.contains("PSU");
+            case "PSU" -> categories.contains("GPU");
+            case "CASE" -> categories.contains("GPU") || categories.contains("COOLER") || categories.contains("PSU");
+            case "COOLER" -> categories.contains("CPU") || categories.contains("CASE");
+            default -> false;
+        };
     }
 
     private List<PartCandidate> replacementPreviewParts(List<Map<String, Object>> draftItems, AiChatEngineResponse.PartRecommendation recommendation) {
@@ -593,6 +789,16 @@ public class BuildChatService {
         return engineResponse.partRecommendations().get(0).category();
     }
 
+    private Map<String, Object> highestPricedDraftItem(List<Map<String, Object>> draftItems) {
+        return draftItems.stream()
+                .filter(item -> text(item.get("category")) != null)
+                .max((left, right) -> Integer.compare(
+                        number(firstNumber(left.get("lineTotal"), left.get("currentPrice"), left.get("price"), left.get("unitPriceAtAdd")), 0),
+                        number(firstNumber(right.get("lineTotal"), right.get("currentPrice"), right.get("price"), right.get("unitPriceAtAdd")), 0)
+                ))
+                .orElse(Map.of());
+    }
+
     private boolean isRemoveIntent(String message) {
         return containsAny(message, "빼", "삭제", "제거", "remove", "delete");
     }
@@ -603,6 +809,50 @@ public class BuildChatService {
 
     private boolean isBudgetIntent(String message) {
         return containsAny(message, "예산", "낮춰", "줄여", "안으로", "이하", "초과", "비싸");
+    }
+
+    private boolean isFastQuantityIntent(String message) {
+        String normalized = normalizeCommand(message);
+        return parseQuantity(message) > 0
+                || parseCapacityGb(message) != null
+                || containsAnyNormalized(normalized, "수량", "개로", "장으로", "늘려", "줄여");
+    }
+
+    private String fastPriceDirection(String message) {
+        String normalized = normalizeCommand(message);
+        if (!isFastReplacementCommand(normalized)) {
+            return null;
+        }
+        if (containsAnyNormalized(normalized, "비슷한가격", "비슷한금액", "그가격대", "동급", "유사한가격", "비슷한걸로")) {
+            return "SIMILAR_PRICE";
+        }
+        if (containsAnyNormalized(normalized, "더싼", "싼걸", "저렴", "비싸", "낮춰", "예산낮", "가격낮", "가성비")) {
+            return "CHEAPER";
+        }
+        if (containsAnyNormalized(normalized, "더좋", "상위", "업그레이드", "더빠른", "빠른걸", "여유", "넉넉", "잘식히", "조용", "고성능", "큰그래픽카드")) {
+            return "MORE_EXPENSIVE";
+        }
+        return null;
+    }
+
+    private static boolean isFastReplacementCommand(String normalized) {
+        return containsAnyNormalized(
+                normalized,
+                "바꿔",
+                "교체",
+                "걸로",
+                "추천",
+                "더싼",
+                "더좋",
+                "비슷한가격",
+                "업그레이드",
+                "여유",
+                "넉넉",
+                "빠른",
+                "조용",
+                "잘식히",
+                "낮춰"
+        );
     }
 
     private RouteIntent routeIntent(String message) {
@@ -846,6 +1096,59 @@ public class BuildChatService {
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "AI 추천 부품을 찾을 수 없습니다."));
     }
 
+    private List<AiChatEngineResponse.PartRecommendation> partRecommendations(String category, int limit) {
+        if (category == null) {
+            return List.of();
+        }
+        return jdbcTemplate.queryForList("""
+                        SELECT p.public_id::text AS id,
+                               p.category,
+                               p.name,
+                               p.manufacturer,
+                               p.price,
+                               p.attributes,
+                               b.score AS benchmark_score,
+                               b.summary AS benchmark_summary
+                        FROM parts p
+                        LEFT JOIN LATERAL (
+                          SELECT score, summary
+                          FROM benchmark_summaries bs
+                          WHERE bs.part_id = p.id
+                            AND bs.deleted_at IS NULL
+                          ORDER BY bs.score DESC NULLS LAST, bs.created_at DESC
+                          LIMIT 1
+                        ) b ON true
+                        WHERE p.category = ?
+                          AND p.status = 'ACTIVE'
+                          AND p.deleted_at IS NULL
+                          AND p.price IS NOT NULL
+                        ORDER BY b.score DESC NULLS LAST, p.price ASC, p.name ASC
+                        LIMIT ?
+                        """, category, Math.max(1, limit))
+                .stream()
+                .map(row -> {
+                    Map<String, Object> attributes = new LinkedHashMap<>(objectMap(DbValueMapper.json(row, "attributes", Map.of())));
+                    Integer benchmarkScore = DbValueMapper.integer(row, "benchmark_score");
+                    String benchmarkSummary = DbValueMapper.string(row, "benchmark_summary");
+                    if (benchmarkScore != null) {
+                        attributes.put("_benchmarkScore", benchmarkScore);
+                        attributes.put("benchmarkScore", benchmarkScore);
+                    }
+                    if (benchmarkSummary != null) {
+                        attributes.put("_benchmarkSummary", benchmarkSummary);
+                    }
+                    return new AiChatEngineResponse.PartRecommendation(
+                            DbValueMapper.string(row, "id"),
+                            DbValueMapper.string(row, "category"),
+                            DbValueMapper.string(row, "name"),
+                            DbValueMapper.string(row, "manufacturer"),
+                            DbValueMapper.integer(row, "price"),
+                            attributes
+                    );
+                })
+                .toList();
+    }
+
     private PartCandidate partCandidate(Map<String, Object> row) {
         return new PartCandidate(
                 longValue(row.get("internal_id")),
@@ -922,6 +1225,38 @@ public class BuildChatService {
         return "MUST_INCLUDE".equals(text(parsedContext.get("hardConstraintPolicy")))
                 || !stringList(parsedContext.get("requiredGpuClasses")).isEmpty()
                 || !stringList(parsedContext.get("requiredPartKeywords")).isEmpty();
+    }
+
+    private static boolean withinBudgetGuard(Map<String, Object> build, Map<String, Object> parsedContext) {
+        Map<String, Object> context = parsedContext == null ? Map.of() : parsedContext;
+        Integer budget = numberValue(context.get("budget"));
+        if (budget == null || budget <= 0 || hasHardConstraint(context)) {
+            return true;
+        }
+        Integer totalPrice = numberValue(build.get("totalPrice"));
+        if (totalPrice == null) {
+            return true;
+        }
+        String budgetMode = budgetMode(context);
+        if ("MIN".equals(budgetMode)) {
+            return totalPrice >= budget;
+        }
+        if ("MAX".equals(budgetMode)) {
+            return totalPrice <= budget;
+        }
+        if ("TARGET".equals(budgetMode) || "USER_BUDGET".equals(text(context.get("budgetPolicy")))) {
+            return totalPrice >= Math.floor(budget * 0.875) && totalPrice <= Math.ceil(budget * 1.125);
+        }
+        return true;
+    }
+
+    private static String budgetMode(Map<String, Object> parsedContext) {
+        String mode = text(parsedContext.get("budgetMode"));
+        if (mode == null) {
+            return "UNSPECIFIED";
+        }
+        String upper = mode.toUpperCase(Locale.ROOT);
+        return List.of("TARGET", "MAX", "MIN", "OPEN", "UNSPECIFIED").contains(upper) ? upper : "UNSPECIFIED";
     }
 
     private static Tier tier(String tierId, int index) {

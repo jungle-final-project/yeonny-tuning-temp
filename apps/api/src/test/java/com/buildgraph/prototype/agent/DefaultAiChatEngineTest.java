@@ -44,7 +44,8 @@ class DefaultAiChatEngineTest {
                 agentRagRetrievalService,
                 openAiResponsesClient,
                 AiProfileConfigTest.config("AS_CHAT_FAST", "BUILD_CHAT_FAST"),
-                new PartReplacementRanker(partAliasReviewService)
+                new PartReplacementRanker(partAliasReviewService),
+                new PartRouteResolver(jdbcTemplate)
         );
 
         doAnswer(invocation -> {
@@ -59,7 +60,7 @@ class DefaultAiChatEngineTest {
     @Test
     void fullBuildRecommendationReturnsThreeBuildsAndDraftActions() {
         AiChatEngineResponse response = engine.respond(new AiChatEngineRequest(
-                "200만원 QHD 게임용 PC 추천해줘",
+                "QHD 게임용 PC 추천해줘",
                 "HOME",
                 null,
                 null,
@@ -294,6 +295,53 @@ class DefaultAiChatEngineTest {
         assertThat(response.recommendations().get(0).name()).contains("기준 이상");
         assertThat(response.recommendations())
                 .allSatisfy(recommendation -> assertThat(recommendation.estimatedTotalPrice()).isGreaterThanOrEqualTo(3_000_000));
+        verifyNoJdbcWrites();
+    }
+
+    @Test
+    void targetBudgetRequestStaysInsideBudgetBandEvenWithPremiumWords() {
+        AiChatEngineResponse response = engine.respond(new AiChatEngineRequest(
+                "800만원으로 최고급 PC 추천해줘",
+                "HOME",
+                null,
+                null,
+                null,
+                Map.of(),
+                1L
+        ));
+
+        assertThat(response.intent()).isEqualTo(AiChatIntent.FULL_BUILD_RECOMMEND);
+        assertThat(response.parsedContext())
+                .containsEntry("budget", 8_000_000)
+                .containsEntry("budgetPolicy", "USER_BUDGET")
+                .containsEntry("budgetMode", "TARGET");
+        assertThat(response.recommendations()).isNotEmpty();
+        assertThat(response.recommendations())
+                .allSatisfy(recommendation -> assertThat(recommendation.estimatedTotalPrice())
+                        .isBetween(7_000_000, 9_000_000));
+        verifyNoJdbcWrites();
+    }
+
+    @Test
+    void maxBudgetRequestDoesNotReturnBuildAboveBudgetWithoutHardConstraint() {
+        AiChatEngineResponse response = engine.respond(new AiChatEngineRequest(
+                "800만원 이하로 게임용 PC 추천해줘",
+                "HOME",
+                null,
+                null,
+                null,
+                Map.of(),
+                1L
+        ));
+
+        assertThat(response.intent()).isEqualTo(AiChatIntent.FULL_BUILD_RECOMMEND);
+        assertThat(response.parsedContext())
+                .containsEntry("budget", 8_000_000)
+                .containsEntry("budgetMode", "MAX");
+        assertThat(response.recommendations()).isNotEmpty();
+        assertThat(response.recommendations())
+                .allSatisfy(recommendation -> assertThat(recommendation.estimatedTotalPrice())
+                        .isLessThanOrEqualTo(8_000_000));
         verifyNoJdbcWrites();
     }
 

@@ -238,7 +238,7 @@ function storedAssistantSession(messageText: string) {
       {
         id: 'ai-intro',
         role: 'assistant',
-        text: '예산은 “200만원 PC 추천”처럼, 부품은 “GPU 추천해줘”처럼 물어보세요. 추천은 서버의 실제 부품 DB와 룰 기반 검증 결과로 계산됩니다.',
+        text: '예산은 “800만원 PC 추천”처럼, 상세 이동은 “9950X3D 상세페이지로 이동해”처럼 물어보세요. 추천은 서버의 실제 부품 DB와 룰 기반 검증 결과로 계산됩니다.',
         createdAt: '2026-06-30T00:00:00.000Z',
         kind: 'intro'
       },
@@ -657,8 +657,18 @@ test('chatbot uses build-chat API and updates latest home AI recommendations', a
 
   await expect(page.getByTestId('ai-chatbot-panel')).toHaveCount(0);
   await page.getByRole('button', { name: 'AI 견적 챗봇 열기' }).click();
+  const chatbotPanel = page.getByTestId('ai-chatbot-panel');
+  const chatbotInput = page.getByRole('textbox', { name: 'AI 챗봇에게 PC 사양 질문' });
 
-  await page.getByRole('textbox', { name: 'AI 챗봇에게 PC 사양 질문' }).fill('200만원 PC 추천');
+  await expect(chatbotPanel.getByRole('button', { name: '800만원 PC 추천' })).toBeVisible();
+  await expect(chatbotPanel.getByRole('button', { name: '9950X3D 상세' })).toBeVisible();
+  await expect(chatbotPanel.getByRole('button', { name: '내 견적함' })).toBeVisible();
+  await expect(chatbotPanel.getByRole('button', { name: 'GPU 추천상담' })).toBeVisible();
+  await expect(chatbotPanel.getByRole('button', { name: '쿨러 추천해줘' })).toHaveCount(0);
+  await chatbotPanel.getByRole('button', { name: '800만원 PC 추천' }).click();
+  await expect(chatbotInput).toHaveValue('800만원으로 최고급 PC 추천해줘');
+
+  await chatbotInput.fill('200만원 PC 추천');
   await page.getByRole('button', { name: '질문 보내기' }).click();
 
   await expect.poll(() => buildChatRequests.length).toBe(1);
@@ -887,7 +897,6 @@ test('chatbot routes simple part screen commands without build-chat API call', a
   await page.getByRole('button', { name: '질문 보내기' }).click();
 
   await page.waitForURL(/\/self-quote\?category=GPU$/);
-  await page.getByRole('button', { name: 'AI 견적 챗봇 열기' }).click();
   await expect(page.getByTestId('ai-chat-messages')).toContainText('GPU 부품 화면으로 이동했습니다.');
   expect(buildChatCalls).toBe(0);
 });
@@ -1073,12 +1082,12 @@ test('selects a home AI recommendation through batch API and shows applied cart 
   expect((applyRequests[0] as { conflictPolicy?: string; items?: unknown[] }).conflictPolicy).toBe('REPLACE');
   expect((applyRequests[0] as { items?: unknown[] }).items).toHaveLength(8);
   await expect(page).toHaveURL('/self-quote');
-  await expect(page.getByTestId('ai-selected-build-panel')).toBeVisible();
+  const selectedBuildPanel = page.getByTestId('ai-selected-build-panel');
+  await expect(selectedBuildPanel).toBeVisible();
   await expect(page.getByRole('heading', { name: 'AI 선택 조합' })).toBeVisible();
-  await expect(page.getByText('200만원 균형형')).toBeVisible();
-  await expect(page.getByTestId('ai-selected-build-panel').getByText(`${expectedTotal}원`)).toBeVisible();
-  await expect(page.getByText(`${expectedTotal}원`)).toHaveCount(2);
-  await expect(page.getByText('GPU 반영됨')).toBeVisible();
+  await expect(selectedBuildPanel.getByText('200만원 균형형')).toBeVisible();
+  await expect(selectedBuildPanel.getByText(`${expectedTotal}원`)).toBeVisible();
+  await expect(selectedBuildPanel.getByText('GPU 반영됨')).toBeVisible();
   await expect(page.getByText('서버 반영 RTX 5070 서버 GPU').first()).toBeVisible();
   await expect(page.getByRole('heading', { name: '견적 장바구니', exact: true })).toBeVisible();
 });

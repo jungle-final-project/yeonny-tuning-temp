@@ -46,7 +46,8 @@ class DefaultAiChatEngineEvaluationTest {
                 agentRagRetrievalService,
                 openAiResponsesClient,
                 AiProfileConfigTest.config("AS_CHAT_FAST", "BUILD_CHAT_FAST"),
-                new PartReplacementRanker(mock(PartAliasReviewService.class))
+                new PartReplacementRanker(mock(PartAliasReviewService.class)),
+                new PartRouteResolver(jdbcTemplate)
         );
 
         doAnswer(invocation -> {

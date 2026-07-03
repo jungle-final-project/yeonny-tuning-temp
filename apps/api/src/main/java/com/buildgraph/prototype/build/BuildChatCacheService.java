@@ -97,6 +97,10 @@ public class BuildChatCacheService {
     }
 
     public void store(Map<String, Object> request, String requestedAiProfile, Long userId, Map<String, Object> response) {
+        store(request, requestedAiProfile, userId, response, ttl);
+    }
+
+    public void store(Map<String, Object> request, String requestedAiProfile, Long userId, Map<String, Object> response, Duration ttlOverride) {
         log.debug("Build Chat cache store entered: enabled={}, userId={}, requestedAiProfile={}", enabled, userId, requestedAiProfile);
         if (!enabled) {
             log.info("Build Chat cache store skipped: disabled");
@@ -113,25 +117,55 @@ public class BuildChatCacheService {
                 return;
             }
             String key = cacheKey(request, requestedAiProfile, userId);
-            redisTemplate.opsForValue().set(key, OBJECT_MAPPER.writeValueAsString(cacheableResponse(response)), ttl);
-            log.info("Build Chat cache stored: {}", key);
+            Duration effectiveTtl = ttlOverride == null || ttlOverride.isZero() || ttlOverride.isNegative() ? ttl : ttlOverride;
+            redisTemplate.opsForValue().set(key, OBJECT_MAPPER.writeValueAsString(cacheableResponse(response)), effectiveTtl);
+            log.info("Build Chat cache stored: {}, ttlSeconds={}", key, effectiveTtl.toSeconds());
         } catch (Exception error) {
             log.warn("Build Chat cache store failed; response returned without caching: {}", error.getMessage());
         }
     }
 
     private String cacheKey(Map<String, Object> request, String requestedAiProfile, Long userId) throws Exception {
+        Map<String, Object> body = request == null ? Map.of() : request;
+        boolean sharedRecommendation = isShareableRecommendation(body);
         Map<String, Object> fingerprint = new LinkedHashMap<>();
         fingerprint.put("profile", effectiveProfile(requestedAiProfile));
-        fingerprint.put("userId", userId == null ? "anonymous" : userId);
-        fingerprint.put("message", normalizeText(request.get("message")));
-        fingerprint.put("selectedCategory", normalizeText(request.get("selectedCategory")));
-        fingerprint.put("currentQuoteDraft", quoteDraftFingerprint(request.get("currentQuoteDraft")));
-        fingerprint.put("currentBuilds", request.get("currentBuilds"));
-        fingerprint.put("appliedPartPreferences", request.get("appliedPartPreferences"));
+        fingerprint.put("userId", sharedRecommendation ? "shared" : (userId == null ? "anonymous" : userId));
+        fingerprint.put("message", normalizeText(body.get("message")));
+        fingerprint.put("selectedCategory", normalizeText(body.get("selectedCategory")));
+        fingerprint.put("cacheMode", sharedRecommendation ? "SHARED_STANDALONE_RECOMMENDATION" : "CONTEXTUAL_CHAT");
+        fingerprint.put("currentQuoteDraft", quoteDraftFingerprint(body.get("currentQuoteDraft")));
+        fingerprint.put("currentBuilds", sharedRecommendation ? "ignored" : body.get("currentBuilds"));
+        fingerprint.put("appliedPartPreferences", sharedRecommendation ? "ignored" : body.get("appliedPartPreferences"));
         fingerprint.put("versions", dataVersions());
         String json = OBJECT_MAPPER.writeValueAsString(fingerprint);
-        return "buildgraph:build-chat:v7:" + sha256(json);
+        return "buildgraph:build-chat:v8:" + sha256(json);
+    }
+
+    private static boolean isShareableRecommendation(Map<String, Object> request) {
+        Map<String, Object> body = request == null ? Map.of() : request;
+        String normalized = normalizeCommand(body.get("message"));
+        if (normalized.isBlank()) {
+            return false;
+        }
+        if (normalizeText(body.get("selectedCategory")) != null) {
+            return false;
+        }
+        if (!objectMaps(objectMap(body.get("currentQuoteDraft")).get("items")).isEmpty()) {
+            return false;
+        }
+        if (!objectMaps(body.get("currentBuilds")).isEmpty() || !objectMaps(body.get("appliedPartPreferences")).isEmpty()) {
+            return false;
+        }
+        if (containsAnyNormalized(
+                normalized,
+                "이견적", "그견적", "저견적", "현재견적", "기존견적", "방금", "최근", "아까", "위조합", "이조합", "그조합", "저조합",
+                "장바구니", "담긴", "선택한", "바꿔", "교체", "빼", "삭제", "제거", "담아", "넣어", "추가", "적용", "수량", "변경",
+                "더싼", "저렴", "낮춰", "더좋", "업그레이드", "비슷한가격"
+        )) {
+            return false;
+        }
+        return containsAnyNormalized(normalized, "견적", "pc", "컴퓨터", "본체", "조립pc", "조립컴", "추천상담", "추천해줘", "추천");
     }
 
     private String effectiveProfile(String requestedAiProfile) {
@@ -222,8 +256,23 @@ public class BuildChatCacheService {
         if (value == null) {
             return null;
         }
-        String text = value.toString().trim().replaceAll("\\s+", " ");
+        String text = value.toString().trim()
+                .replaceAll("(?<=\\d),(?=\\d)", "")
+                .replaceAll("\\s+", " ");
         return text.isEmpty() ? null : text.toLowerCase(java.util.Locale.ROOT);
+    }
+
+    private static String normalizeCommand(Object value) {
+        return value == null ? "" : value.toString().toLowerCase(java.util.Locale.ROOT).replaceAll("\\s+", "");
+    }
+
+    private static boolean containsAnyNormalized(String normalized, String... keywords) {
+        for (String keyword : keywords) {
+            if (normalized.contains(normalizeCommand(keyword))) {
+                return true;
+            }
+        }
+        return false;
     }
 
     @SuppressWarnings("unchecked")

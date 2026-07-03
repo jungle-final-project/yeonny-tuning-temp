@@ -5,6 +5,9 @@ import static org.mockito.Mockito.mock;
 
 import com.buildgraph.prototype.agent.AiChatEngine;
 import com.buildgraph.prototype.agent.AiProfileConfig;
+import com.buildgraph.prototype.agent.PartReplacementRanker;
+import com.buildgraph.prototype.agent.PartRouteResolver;
+import com.buildgraph.prototype.part.PartAliasReviewService;
 import com.buildgraph.prototype.part.ToolCheckService;
 import com.buildgraph.prototype.recommendation.CandidateReranker;
 import org.junit.jupiter.api.Test;
@@ -23,6 +26,9 @@ class BuildChatServiceWiringTest {
             .withBean(ToolCheckService.class, () -> mock(ToolCheckService.class))
             .withBean(AiChatEngine.class, () -> mock(AiChatEngine.class))
             .withBean(AiProfileConfig.class, () -> mock(AiProfileConfig.class))
+            .withBean(PartAliasReviewService.class, () -> mock(PartAliasReviewService.class))
+            .withBean(PartReplacementRanker.class)
+            .withBean(PartRouteResolver.class)
             .withBean(CandidateReranker.class, () -> mock(CandidateReranker.class))
             .withBean(StringRedisTemplate.class, () -> mock(StringRedisTemplate.class))
             .withBean(BuildChatCacheService.class)

@@ -5,9 +5,11 @@ import com.buildgraph.prototype.common.MockData;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Set;
 import org.springframework.http.HttpStatus;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
@@ -206,7 +208,7 @@ public class RagQueryService {
 
     private double requirementParseBonus(String query, String sourceId) {
         double bonus = 0;
-        boolean explicitBudget = query.matches(".*\\d+\\s*(만원|만|원|아래|이하|으로|안에서).*");
+        boolean explicitBudget = query.matches(".*\\d+\\s*(만원|만|원|아래|이하|으로|안에서|안쪽|안).*");
         boolean premium = containsAny(query, "끝판왕", "최고급", "하이엔드", "플래그십", "고성능", "성능만", "가격 상관", "돈 상관", "예산 무관",
                 "제일 좋은", "최상급", "최대한 좋은", "가장 좋은");
         boolean openBudget = containsAny(query, "예산 무관", "가격 상관", "돈 상관", "예산 없음", "예산 없이");
@@ -215,12 +217,12 @@ public class RagQueryService {
             bonus += openBudget ? 0.55 : 0.42;
         }
         if (premium && explicitBudget && sourceId.equals("requirement-counterexample-premium-with-user-budget")) {
-            bonus += 0.58;
+            bonus += 0.64;
         }
         if (explicitBudget
-                && containsAny(query, "예산", "아래", "이하", "안에서", "안쪽", "으로")
+                && containsAny(query, "예산", "아래", "이하", "안에서", "안쪽", "으로", "안")
                 && sourceId.equals("requirement-counterexample-premium-with-user-budget")) {
-            bonus += containsAny(query, "제일 좋은", "최상급", "최대한 좋은", "4k", "5090", "그래픽카드") ? 0.42 : 0.26;
+            bonus += containsAny(query, "제일 좋은", "최상급", "최대한 좋은", "4k", "5090", "그래픽카드") ? 0.50 : 0.30;
         }
         if (explicitGpu && sourceId.equals("requirement-rule-explicit-gpu-class-hard-constraint")) {
             bonus += 0.35;
@@ -255,7 +257,7 @@ public class RagQueryService {
         if (containsAny(query, "게임", "배그", "144", "qhd", "4k", "프레임")
                 && (sourceId.equals("requirement-example-gaming-resolution-refresh")
                 || sourceId.equals("benchmark-requirement-parse-gaming-development"))) {
-            bonus += containsAny(query, "배그", "qhd", "4k", "144", "프레임") ? 0.42 : 0.30;
+            bonus += containsAny(query, "배그", "qhd", "4k", "144", "프레임") ? 0.50 : 0.30;
         }
         if (containsAny(query, "개발", "영상", "편집", "ai", "llm", "렌더링", "언리얼", "워크스테이션")
                 && sourceId.equals("requirement-example-workload-mixed-creator-ai")) {
@@ -271,6 +273,11 @@ public class RagQueryService {
 
     private double buildRecommendBonus(String query, String sourceId) {
         double bonus = 0;
+        if (containsAny(query, "qhd", "게임")
+                && containsAny(query, "가격", "스냅샷", "현재가", "parts.price")
+                && sourceId.equals("build-rule-qhd-price-combined-evidence")) {
+            bonus += 0.70;
+        }
         if (containsAny(query, "케이스", "쿨링", "컴팩트", "작은", "길이", "높이", "흡기", "airflow")
                 && sourceId.equals("build-rule-airflow-cooler-case-fit")) {
             bonus += 0.60;
@@ -358,11 +365,8 @@ public class RagQueryService {
             int safeSize
     ) {
         int offset = safePage * safeSize;
-        List<Object> params = new ArrayList<>();
-        params.add(normalizedQuery);
-        params.add(normalizedQuery);
-        params.add(normalizedQuery);
-        params.add(normalizedQuery);
+        TextFilter textFilter = textFilter(normalizedQuery);
+        List<Object> params = new ArrayList<>(textFilter.params());
         params.add(normalizedPurpose);
         params.add(normalizedPurpose);
         params.add(normalizedPurpose);
@@ -380,12 +384,7 @@ public class RagQueryService {
                                re.metadata
                         FROM rag_evidence re
                         LEFT JOIN agent_sessions s ON s.id = re.agent_session_id
-                        WHERE (
-                          ?::text IS NULL
-                          OR lower(re.source_id) LIKE lower(concat('%', ?, '%'))
-                          OR lower(re.summary) LIKE lower(concat('%', ?, '%'))
-                          OR lower(re.chunk_text) LIKE lower(concat('%', ?, '%'))
-                        )
+                        WHERE %s
                         AND (
                           ?::text IS NULL
                           OR re.metadata->>'purpose' = ?::text
@@ -397,37 +396,63 @@ public class RagQueryService {
                                  re.id
                         LIMIT ?
                         OFFSET ?
-                        """, params.toArray())
+                        """.formatted(textFilter.condition()), params.toArray())
                 .stream()
                 .map(this::publicEvidenceMap)
                 .toList();
+        List<Object> countParams = new ArrayList<>(textFilter.params());
+        countParams.add(normalizedPurpose);
+        countParams.add(normalizedPurpose);
+        countParams.add(normalizedPurpose);
+        countParams.add(normalizedSourceType);
+        countParams.add(normalizedSourceType);
         Integer total = jdbcTemplate.queryForObject("""
                 SELECT count(*)
                 FROM rag_evidence re
-                WHERE (
-                  ?::text IS NULL
-                  OR lower(re.source_id) LIKE lower(concat('%', ?, '%'))
-                  OR lower(re.summary) LIKE lower(concat('%', ?, '%'))
-                  OR lower(re.chunk_text) LIKE lower(concat('%', ?, '%'))
-                )
+                WHERE %s
                 AND (
                   ?::text IS NULL
                   OR re.metadata->>'purpose' = ?::text
                   OR jsonb_exists(coalesce(re.metadata->'purposes', '[]'::jsonb), ?::text)
                 )
                 AND (?::text IS NULL OR re.metadata->>'sourceType' = ?::text)
-                """,
+                """.formatted(textFilter.condition()),
                 Integer.class,
-                normalizedQuery,
-                normalizedQuery,
-                normalizedQuery,
-                normalizedQuery,
-                normalizedPurpose,
-                normalizedPurpose,
-                normalizedPurpose,
-                normalizedSourceType,
-                normalizedSourceType);
+                countParams.toArray());
         return MockData.map("items", items, "page", safePage, "size", safeSize, "total", total == null ? 0 : total);
+    }
+
+    private TextFilter textFilter(String normalizedQuery) {
+        if (normalizedQuery == null || normalizedQuery.isBlank()) {
+            return new TextFilter("TRUE", List.of());
+        }
+        Set<String> terms = new LinkedHashSet<>();
+        for (String token : normalizedQuery.toLowerCase(Locale.ROOT).split("[^0-9a-zA-Z가-힣]+")) {
+            if (token.length() >= 2) {
+                terms.add(token);
+            }
+        }
+        if (terms.isEmpty()) {
+            terms.add(normalizedQuery.toLowerCase(Locale.ROOT));
+        }
+        List<String> clauses = new ArrayList<>();
+        List<Object> params = new ArrayList<>();
+        for (String term : terms) {
+            clauses.add("""
+                    (
+                      lower(re.source_id) LIKE ?
+                      OR lower(re.summary) LIKE ?
+                      OR lower(re.chunk_text) LIKE ?
+                      OR lower(coalesce(re.metadata->>'title', '')) LIKE ?
+                    )
+                    """);
+            String pattern = "%" + term + "%";
+            params.add(pattern);
+            params.add(pattern);
+            params.add(pattern);
+            params.add(pattern);
+        }
+        return new TextFilter("(" + String.join(" OR ", clauses) + ")", params);
     }
 
     public Map<String, Object> evidence(String id) {
@@ -533,5 +558,8 @@ public class RagQueryService {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "size는 1 이상 100 이하이어야 합니다.");
         }
         return size;
+    }
+
+    private record TextFilter(String condition, List<Object> params) {
     }
 }

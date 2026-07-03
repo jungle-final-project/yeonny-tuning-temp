@@ -21,8 +21,11 @@ services:
   redis:
     image: redis:7-alpine
     container_name: buildgraph-redis
+    command: ["redis-server", "--appendonly", "yes"]
     ports:
       - "6379:6379"
+    volumes:
+      - redis-data:/data
 
   rabbitmq:
     image: rabbitmq:3-management
@@ -148,6 +151,8 @@ services:
       BUILD_CHAT_DEFAULT_PROFILE: ${BUILD_CHAT_DEFAULT_PROFILE:-BUILD_CHAT_54_MINI_FAST}
       BUILD_CHAT_CACHE_ENABLED: ${BUILD_CHAT_CACHE_ENABLED:-true}
       BUILD_CHAT_CACHE_TTL_SECONDS: ${BUILD_CHAT_CACHE_TTL_SECONDS:-600}
+      BUILD_CHAT_CACHE_PREWARM_ENABLED: ${BUILD_CHAT_CACHE_PREWARM_ENABLED:-true}
+      BUILD_CHAT_CACHE_PREWARM_TTL_SECONDS: ${BUILD_CHAT_CACHE_PREWARM_TTL_SECONDS:-3600}
       BUILD_CHAT_FAST_MODEL: ${BUILD_CHAT_FAST_MODEL:-gpt-5.5}
       BUILD_CHAT_FAST_REASONING_EFFORT: ${BUILD_CHAT_FAST_REASONING_EFFORT:-low}
       BUILD_CHAT_FAST_RAG_TOP_K: ${BUILD_CHAT_FAST_RAG_TOP_K:-3}
@@ -211,3 +216,4 @@ services:
 
 volumes:
   postgres-data:
+  redis-data:

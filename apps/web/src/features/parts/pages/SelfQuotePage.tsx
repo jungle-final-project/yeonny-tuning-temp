@@ -4,7 +4,6 @@ import { useCallback, useEffect, useState } from 'react';
 import { Link, useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import { CategorySidebar, DataTable, Panel, Screen } from '../../../components/ui';
 import { AUTH_CHANGED_EVENT, getToken } from '../../../lib/api';
-import { AiBuildAssistant } from '../../quote/components/AiBuildAssistant';
 import { BuildDependencyGraph } from '../../quote/components/BuildDependencyGraph';
 import {
   AI_SELECTED_BUILD_CHANGED_EVENT,
@@ -409,7 +408,6 @@ export function SelfQuotePage() {
           </aside>
         </div>
       </div>
-      <AiBuildAssistant surface="self-quote" />
     </Screen>
   );
 }

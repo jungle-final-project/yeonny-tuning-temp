@@ -26,13 +26,16 @@ def main() -> int:
     parser.add_argument("--user-password", default="passw0rd!")
     parser.add_argument("--variant-label", default="default")
     parser.add_argument("--strict", action="store_true")
+    parser.add_argument("--fresh", action="store_true", help="Do not merge with an existing same-day report.")
     args = parser.parse_args()
 
     cases = json.loads(Path(args.cases).read_text(encoding="utf-8"))
     token = login(args.base_url, args.user_email, args.user_password)
     results = [run_case(args.base_url, token, args.variant_label, case) for case in cases]
     output_dir = Path(args.output_dir)
-    merged_results = merge_results(output_dir, results)
+    merged_results = results if args.fresh else merge_results(output_dir, results)
+    if args.fresh:
+        write_json(output_dir, results)
     output = write_report(output_dir, merged_results)
     print(output)
     return 0 if not args.strict or all(result["topKHit"] for result in results) else 1
@@ -62,14 +65,22 @@ def run_case(base_url: str, token: str, variant: str, case: dict[str, Any]) -> d
     items = response.get("items", []) if response else []
     top_items = items[:required_top_k]
     top_one = items[:1]
+    top_k_diagnostics = hit_diagnostics(top_items, case)
+    top_one_diagnostics = hit_diagnostics(top_one, case)
     return {
         "variant": variant,
         "caseId": case["id"],
         "purpose": case["purpose"],
         "query": case["query"],
         "latencyMs": latency_ms,
-        "top1Hit": hit(top_one, case),
-        "topKHit": hit(top_items, case),
+        "top1Hit": top_one_diagnostics["hit"],
+        "topKHit": top_k_diagnostics["hit"],
+        "expectedSourceHit": top_k_diagnostics["expectedSourceHit"],
+        "expectedTypeHit": top_k_diagnostics["expectedTypeHit"],
+        "mustTermsHit": top_k_diagnostics["mustTermsHit"],
+        "top1ExpectedSourceHit": top_one_diagnostics["expectedSourceHit"],
+        "top1ExpectedTypeHit": top_one_diagnostics["expectedTypeHit"],
+        "top1MustTermsHit": top_one_diagnostics["mustTermsHit"],
         "requiredTopK": required_top_k,
         "resultCount": len(items),
         "topSources": ", ".join(source_id(item) for item in top_items) or "-",
@@ -79,30 +90,55 @@ def run_case(base_url: str, token: str, variant: str, case: dict[str, Any]) -> d
 
 
 def hit(items: list[dict[str, Any]], case: dict[str, Any]) -> bool:
+    return hit_diagnostics(items, case)["hit"]
+
+
+def hit_diagnostics(items: list[dict[str, Any]], case: dict[str, Any]) -> dict[str, bool]:
     if not items:
-        return False
+        return {
+            "hit": False,
+            "expectedSourceHit": False,
+            "expectedTypeHit": False,
+            "mustTermsHit": False,
+        }
     expected_ids = {str(item).lower() for item in case.get("expectedSourceIds", [])}
+    expected_source_hit = False
     if expected_ids:
         for item in items:
             if source_id(item).lower() in expected_ids or str(item.get("id", "")).lower() in expected_ids:
-                return True
-        return False
+                expected_source_hit = True
+                break
+        return {
+            "hit": expected_source_hit,
+            "expectedSourceHit": expected_source_hit,
+            "expectedTypeHit": True,
+            "mustTermsHit": must_terms_hit(items, case),
+        }
 
     expected_types = {str(item).upper() for item in case.get("expectedSourceTypes", [])}
     term_ok = must_terms_hit(items, case)
+    type_ok = True
     if expected_types:
         type_ok = any(source_type(item).upper() in expected_types for item in items)
-        return type_ok and term_ok
-    return term_ok
+    return {
+        "hit": type_ok and term_ok,
+        "expectedSourceHit": True,
+        "expectedTypeHit": type_ok,
+        "mustTermsHit": term_ok,
+    }
 
 
 def must_terms_hit(items: list[dict[str, Any]], case: dict[str, Any]) -> bool:
-    terms = [str(term).lower() for term in case.get("mustContainTerms", []) if str(term).strip()]
-    if not terms:
+    term_groups = [
+        [alias.strip().lower() for alias in str(term).split("|") if alias.strip()]
+        for term in case.get("mustContainTerms", [])
+        if str(term).strip()
+    ]
+    if not term_groups:
         return True
     haystack = "\n".join(json.dumps(item, ensure_ascii=False).lower() for item in items)
-    matched = sum(1 for term in terms if term in haystack)
-    return matched >= max(1, math.ceil(len(terms) / 2))
+    matched = sum(1 for aliases in term_groups if any(alias in haystack for alias in aliases))
+    return matched >= max(1, math.ceil(len(term_groups) / 2))
 
 
 def retrieval_modes(items: list[dict[str, Any]]) -> set[str]:
@@ -138,6 +174,12 @@ def merge_results(output_dir: Path, current_results: list[dict[str, Any]]) -> li
     merged = [row for row in existing if row.get("variant") not in variants] + current_results
     cache_path.write_text(json.dumps(merged, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
     return merged
+
+
+def write_json(output_dir: Path, results: list[dict[str, Any]]) -> None:
+    output_dir.mkdir(parents=True, exist_ok=True)
+    cache_path = output_dir / f"rag-retrieval-benchmark-{dt.datetime.now().strftime('%Y%m%d')}.json"
+    cache_path.write_text(json.dumps(results, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
 
 
 def write_report(output_dir: Path, results: list[dict[str, Any]]) -> Path:
@@ -188,6 +230,7 @@ def write_report(output_dir: Path, results: list[dict[str, Any]]) -> Path:
         )
 
     failed_rows = [row for row in results if not row["topKHit"]]
+    top1_miss_rows = [row for row in results if row["topKHit"] and not row["top1Hit"]]
     if failed_rows:
         lines.extend([
             "",
@@ -220,6 +263,23 @@ def write_report(output_dir: Path, results: list[dict[str, Any]]) -> Path:
                 f"{failure_bucket(row)} | {query} | {top_sources} |"
             )
 
+    if top1_miss_rows:
+        lines.extend([
+            "",
+            "## Top1 Miss Summary",
+            "",
+            "| variant | purpose | top1OnlyMiss | cases |",
+            "|---|---|---:|---|",
+        ])
+        grouped_top1: dict[tuple[str, str], list[dict[str, Any]]] = {}
+        for row in top1_miss_rows:
+            grouped_top1.setdefault((row["variant"], row["purpose"]), []).append(row)
+        for (variant, purpose), rows in sorted(grouped_top1.items()):
+            case_ids = ", ".join(row["caseId"] for row in rows[:12])
+            if len(rows) > 12:
+                case_ids += f", +{len(rows) - 12} more"
+            lines.append(f"| {variant} | {purpose} | {len(rows)} | {case_ids} |")
+
     lines.extend([
         "",
         "## Policy Reading Guide",
@@ -234,12 +294,20 @@ def write_report(output_dir: Path, results: list[dict[str, Any]]) -> Path:
 
 
 def failure_bucket(row: dict[str, Any]) -> str:
-    query = str(row.get("query") or "").lower()
-    purpose = str(row.get("purpose") or "")
     if row.get("error"):
         return "api-error"
     if int(row.get("resultCount") or 0) == 0:
-        return "empty-result"
+        return "emptyResult"
+    if not row.get("expectedSourceHit", True):
+        return "expectedSourceMiss"
+    if not row.get("expectedTypeHit", True):
+        return "expectedSourceMiss"
+    if not row.get("mustTermsHit", True):
+        return "mustTermMiss"
+    if not row.get("top1Hit") and row.get("topKHit"):
+        return "top1OnlyMiss"
+    query = str(row.get("query") or "").lower()
+    purpose = str(row.get("purpose") or "")
     if purpose == "REQUIREMENT_PARSE":
         if any(term in query for term in ("5090", "5080", "rtx", "글카")):
             return "hard-part-constraint"

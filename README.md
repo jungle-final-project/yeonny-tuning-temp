@@ -55,7 +55,9 @@ docker compose up --build
 | `AS_CHAT_DEFAULT_PROFILE` | 선택 | AS Chat 기본 profile | 기본값은 실측 benchmark 기준 `AS_CHAT_54_MINI_FAST`입니다. |
 | `BUILD_CHAT_DEFAULT_PROFILE` | 선택 | Build Chat 기본 profile | 기본값은 실측 benchmark 기준 `BUILD_CHAT_54_MINI_FAST`입니다. |
 | `BUILD_CHAT_CACHE_ENABLED` | 선택 | Build Chat Redis cache | 기본값은 `true`입니다. Redis 장애 시 자동 우회하며 응답 body에는 cache 상태를 노출하지 않습니다. |
-| `BUILD_CHAT_CACHE_TTL_SECONDS` | 선택 | Build Chat Redis cache | 기본값은 `600`초입니다. 사용자/profile/draft와 parts/benchmark/FPS/RAG/alias version이 바뀌면 cache key도 달라집니다. cache hit 응답은 이전 실행의 agent trace id를 재사용하지 않습니다. |
+| `BUILD_CHAT_CACHE_TTL_SECONDS` | 선택 | Build Chat Redis cache | 기본값은 `600`초입니다. 문맥 없는 견적/부품 추천은 shared key를 사용하고, 장바구니 문맥이 있으면 사용자/profile/draft와 parts/benchmark/FPS/RAG/alias version이 바뀔 때 key도 달라집니다. cache hit 응답은 이전 실행의 agent trace id를 재사용하지 않습니다. |
+| `BUILD_CHAT_CACHE_PREWARM_ENABLED` | 선택 | Build Chat Redis cache prewarm | 기본값은 `true`입니다. 서버 준비 후 자동입력칩용 LLM 요청을 비동기로 캐시에 올립니다. OpenAI key 없음/Redis 장애는 서버 시작을 막지 않습니다. |
+| `BUILD_CHAT_CACHE_PREWARM_TTL_SECONDS` | 선택 | Build Chat Redis cache prewarm | 기본값은 `3600`초입니다. 데모용 공통 칩 응답 유지 시간을 조절합니다. |
 | `RECOMMENDATION_RERANKER_ENDPOINT` | 선택 | 홈 추천부품 XGBoost scorer | Docker 기본값은 `http://xgb-reranker:8091/score`입니다. 로컬 jar 단독 실행 시에는 `http://localhost:8091/score`로 바꿉니다. |
 | `RECOMMENDATION_RERANKER_MODEL_PATH` | 선택 | XGBoost scorer 모델 파일 | Docker에서는 `/models/<model-file>.json` 형식입니다. 비어 있으면 baseline scorer로 동작합니다. |
 | `OPENAI_EMBEDDING_MODEL` | 선택 | RAG vector 검색 | 기본값은 `text-embedding-3-small`입니다. |

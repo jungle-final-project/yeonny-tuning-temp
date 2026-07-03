@@ -113,8 +113,13 @@ def run_case(
     category_ok = category_preserved(response, case)
     direction_ok = direction_preserved(base_url, token, response, case)
     forbidden_candidate_ok = forbidden_candidates_absent(response, case)
+    forbidden_action_ok = forbidden_actions_absent(response, case)
     action_payload_ok = action_payload_valid(response, case)
     required_terms_ok = required_response_terms_present(response, case)
+    fast_path_expected = expected_fast_path_case(case)
+    fast_path_used = trace_empty_fast_path_like(response)
+    fast_path_expected_ok = (not fast_path_expected) or fast_path_used
+    llm_expected = not fast_path_expected
     answer_type_ok = response and response.get("answerType") == case.get("expectedAnswerType")
     min_builds_ok = build_count >= case.get("expectedMinBuilds", 0)
     warning_ok = not case.get("expectWarning") or bool(response and response.get("warnings"))
@@ -127,8 +132,10 @@ def run_case(
         and category_ok
         and direction_ok
         and forbidden_candidate_ok
+        and forbidden_action_ok
         and action_payload_ok
         and required_terms_ok
+        and fast_path_expected_ok
         and warning_ok
     )
     return {
@@ -147,8 +154,13 @@ def run_case(
         "categoryOk": category_ok,
         "directionOk": direction_ok,
         "forbiddenCandidateOk": forbidden_candidate_ok,
+        "forbiddenActionOk": forbidden_action_ok,
         "actionPayloadOk": action_payload_ok,
         "requiredTermsOk": required_terms_ok,
+        "fastPathExpected": fast_path_expected,
+        "fastPathUsed": fast_path_used,
+        "fastPathExpectedOk": fast_path_expected_ok,
+        "llmExpected": llm_expected,
         "slowOk": latency_ms < slow_threshold_ms,
         "warningOk": warning_ok,
         "error": error,
@@ -259,6 +271,13 @@ def forbidden_candidates_absent(response: dict | None, case: dict) -> bool:
     return True
 
 
+def forbidden_actions_absent(response: dict | None, case: dict) -> bool:
+    forbidden = set(case.get("forbiddenActionTypes") or [])
+    if not forbidden:
+        return True
+    return not (action_type_set(response) & forbidden)
+
+
 def action_payload_valid(response: dict | None, case: dict) -> bool:
     expected_action = case.get("expectedActionType")
     if not expected_action:
@@ -279,6 +298,11 @@ def action_payload_valid(response: dict | None, case: dict) -> bool:
             return bool(payload.get("partId") and payload.get("category") and payload.get("quantity"))
         if expected_action == "CREATE_PRICE_ALERT":
             return bool(payload.get("targetPrice"))
+        if expected_action == "OPEN_ROUTE":
+            expected_route = case.get("expectedRoute")
+            if expected_route and payload.get("route") != expected_route:
+                return False
+            return bool(payload.get("route"))
         return True
     return False
 
@@ -291,6 +315,29 @@ def required_response_terms_present(response: dict | None, case: dict) -> bool:
         return False
     haystack = normalize_for_contains(json.dumps(response, ensure_ascii=False))
     return all(normalize_for_contains(str(term)) in haystack for term in terms)
+
+
+def expected_fast_path_case(case: dict) -> bool:
+    action_type = case.get("expectedActionType")
+    draft_items = ((case.get("currentQuoteDraft") or {}).get("items") or [])
+    if "expectedFastPath" in case:
+        return bool(case.get("expectedFastPath"))
+    if case.get("benchmarkGroup") == "PRODUCT_DETAIL_ROUTE":
+        return True
+    return bool(
+        draft_items
+        and action_type in {
+            "REMOVE_DRAFT_PART",
+            "UPDATE_DRAFT_QUANTITY",
+            "REPLACE_DRAFT_PART",
+        }
+    )
+
+
+def trace_empty_fast_path_like(response: dict | None) -> bool:
+    if not response:
+        return False
+    return response.get("agentSessionId") is None and not response.get("evidenceIds")
 
 
 def normalize_for_contains(value: str) -> str:
@@ -504,17 +551,20 @@ def write_report(
         grouped.setdefault((result["variant"], result["profile"]), []).append(result)
 
     lines = [
-        "# Build Chat AI Profile Benchmark",
+        "# Build Chat AI 프로필 벤치마크",
         "",
-        f"- generatedAt: {dt.datetime.now().isoformat(timespec='seconds')}",
-        f"- totalCases: {len(results)}",
+        f"- 생성 시각: {dt.datetime.now().isoformat(timespec='seconds')}",
+        f"- 총 테스트 수: {len(results)}",
         "",
-        "## Summary",
+        "## 요약",
         "",
-        f"- slowThresholdMs: {slow_threshold_ms}",
+        f"- 느린 응답 기준: {slow_threshold_ms}ms 이상",
+        "- successRate는 schema, 기대 answerType, action payload, 하드 조건, 방향성 검증을 모두 통과한 비율이다.",
+        "- fastPathUsedRate는 LLM/RAG trace 없이 서버 fast path로 처리된 응답 비율이다.",
+        "- llmExpectedCases는 fast path가 아니라 기존 LLM/RAG 판단이 필요한 케이스 수다.",
         "",
-        "| variant | profile | successRate | avgLatencyMs | p95LatencyMs | maxLatencyMs | slowCases | slowOkRate | schemaValidRate | directionOkRate | categoryOkRate | actionPayloadOkRate | requiredTermsOkRate |",
-        "|---|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|",
+        "| 실험 라벨 | 프로필 | 성공률 | 평균 지연(ms) | p95 지연(ms) | 최대 지연(ms) | 느린 케이스 | 속도 기준 통과율 | fast path 사용률 | fast path 기대 충족률 | LLM 필요 케이스 | schema 통과율 | 방향성 통과율 | 카테고리 통과율 | 금지 action 제외율 | action payload 통과율 | 필수 문구 통과율 |",
+        "|---|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|",
     ]
     for (variant, profile), rows in grouped.items():
         latencies = [row["latencyMs"] for row in rows]
@@ -523,11 +573,33 @@ def write_report(
             f"| {variant} | {profile} | {ratio(row['success'] for row in rows):.1%} | "
             f"{mean(latencies):.0f} | {percentile(latencies, 95):.0f} | {max(latencies) if latencies else 0} | {slow_cases} | "
             f"{ratio(row['latencyMs'] < slow_threshold_ms for row in rows):.1%} | "
+            f"{ratio(row['fastPathUsed'] for row in rows):.1%} | "
+            f"{ratio(row['fastPathExpectedOk'] for row in rows):.1%} | "
+            f"{sum(1 for row in rows if row['llmExpected'])} | "
             f"{ratio(row['schemaValid'] for row in rows):.1%} | "
             f"{ratio(row['directionOk'] for row in rows):.1%} | "
             f"{ratio(row['categoryOk'] for row in rows):.1%} | "
+            f"{ratio(row['forbiddenActionOk'] for row in rows):.1%} | "
             f"{ratio(row['actionPayloadOk'] for row in rows):.1%} | "
             f"{ratio(row['requiredTermsOk'] for row in rows):.1%} |"
+        )
+
+    lines.extend([
+        "",
+        "## Fast Path 전용 속도",
+        "",
+        "- 이 표는 `expectedFastPath=true` 또는 fast path 기대 케이스만 따로 집계한다. LLM이 필요한 추천/교체 케이스는 제외한다.",
+        "",
+        "| 실험 라벨 | 프로필 | fast path 케이스 | 성공률 | 평균 지연(ms) | p95 지연(ms) | 최대 지연(ms) | fast path 사용률 |",
+        "|---|---|---:|---:|---:|---:|---:|---:|",
+    ])
+    for (variant, profile), rows in grouped.items():
+        fast_rows = [row for row in rows if row["fastPathExpected"]]
+        fast_latencies = [row["latencyMs"] for row in fast_rows]
+        lines.append(
+            f"| {variant} | {profile} | {len(fast_rows)} | {ratio(row['success'] for row in fast_rows):.1%} | "
+            f"{mean(fast_latencies):.0f} | {percentile(fast_latencies, 95):.0f} | {max(fast_latencies) if fast_latencies else 0} | "
+            f"{ratio(row['fastPathUsed'] for row in fast_rows):.1%} |"
         )
 
     if shadow_summary is not None:
@@ -554,9 +626,9 @@ def write_report(
 
     lines.extend([
         "",
-        "## Worst Latency Cases",
+        "## 가장 느린 케이스",
         "",
-        "| variant | profile | case | repeat | latencyMs | ok | slow |",
+        "| 실험 라벨 | 프로필 | 케이스 | 반복 | 지연(ms) | 성공 | 느림 |",
         "|---|---|---|---:|---:|---:|---:|",
     ])
     for row in sorted(results, key=lambda item: item["latencyMs"], reverse=True)[:10]:
@@ -567,28 +639,30 @@ def write_report(
 
     lines.extend([
         "",
-        "## Cases",
+        "## 케이스별 결과",
         "",
-        "| variant | profile | case | repeat | ok | latencyMs | answerType | builds | actions | hardConstraint | categoryOk | directionOk | forbiddenOk | actionPayloadOk | requiredTermsOk | warningOk | error |",
-        "|---|---|---|---:|---:|---:|---|---:|---|---:|---:|---:|---:|---:|---:|---:|---|",
+        "| 실험 라벨 | 프로필 | 케이스 | 반복 | 성공 | 지연(ms) | answerType | 추천 빌드 수 | actions | fast path 기대 | fast path 사용 | 하드 조건 | 카테고리 | 방향성 | 금지 후보 제외 | 금지 action 제외 | action payload | 필수 문구 | warning 조건 | 오류 |",
+        "|---|---|---|---:|---:|---:|---|---:|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---|",
     ])
     for row in results:
         error = (row["error"] or "").replace("|", "/")
         lines.append(
             f"| {row['variant']} | {row['profile']} | {row['caseId']} | {row['repeat']} | {yes(row['success'])} | "
             f"{row['latencyMs']} | {row['answerType']} | {row['buildCount']} | {row['actionTypes']} | "
+            f"{yes(row['fastPathExpected'])} | {yes(row['fastPathUsed'])} | "
             f"{yes(row['hardConstraintOk'])} | {yes(row['categoryOk'])} | {yes(row['directionOk'])} | "
-            f"{yes(row['forbiddenCandidateOk'])} | {yes(row['actionPayloadOk'])} | {yes(row['requiredTermsOk'])} | {yes(row['warningOk'])} | {error} |"
+            f"{yes(row['forbiddenCandidateOk'])} | {yes(row['forbiddenActionOk'])} | {yes(row['actionPayloadOk'])} | {yes(row['requiredTermsOk'])} | {yes(row['warningOk'])} | {error} |"
         )
 
     lines.extend([
         "",
-        "## Notes",
+        "## 해석 기준",
         "",
-        "- 이 벤치마크는 UI를 변경하지 않고 `/api/ai/build-chat`의 optional profile header만 바꿔 실행한다.",
+        "- 이 벤치마크는 UI를 변경하지 않고 `/api/ai/build-chat` API를 직접 호출해 측정한다.",
         "- 기본 서비스 profile은 현재 `BUILD_CHAT_54_MINI_FAST`이며, 모델 비교가 필요하면 `--profiles`로 후보를 명시한다.",
-        "- 5090 같은 명시 부품 조건은 추천 build의 GPU item에 보존되어야 한다.",
+        "- `5090` 같은 명시 부품 조건은 추천 build의 GPU item에 보존되어야 한다.",
         "- 장바구니 교체 케이스는 반환 partId를 `/api/parts/{id}`로 다시 조회해 현재 부품 대비 상향/하향/유사 가격 방향을 검증한다.",
+        "- fast path 케이스는 고확신 장바구니 조작 요청을 LLM 호출 없이 처리하는지 확인하기 위한 속도 회귀 테스트다.",
     ])
     output_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
     return output_path
