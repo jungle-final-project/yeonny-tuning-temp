@@ -273,6 +273,63 @@ async function mockAiBuildChatApi(page: Page) {
     const message = body.message ?? '';
     requests.push({ message, currentBuilds: body.currentBuilds });
 
+    if (message.includes('프레임') || message.includes('시뮬레이션') || message.includes('어떻게')) {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          answerType: 'GENERAL',
+          message: 'RTX 5080에서 RTX 5090으로 바꾸면 배그 FPS가 해상도별로 상승하는 것으로 보입니다. 아래 벤치마크 표를 참고하세요.',
+          builds: [],
+          partRecommendation: null,
+          actions: [],
+          warnings: [],
+          simulation: {
+            type: 'PERFORMANCE_COMPARISON',
+            category: 'GPU',
+            currentPart: {
+              partId: 'part-rtx5080',
+              category: 'GPU',
+              name: 'RTX 5080',
+              manufacturer: 'MSI',
+              price: 1700000
+            },
+            targetPart: {
+              partId: 'part-rtx5090',
+              category: 'GPU',
+              name: 'RTX 5090',
+              manufacturer: 'ZOTAC',
+              price: 3400000
+            },
+            summary: 'RTX 5080에서 RTX 5090으로 바꿨을 때 확인 가능한 벤치마크입니다.',
+            scoreComparison: {
+              label: '벤치마크 기반 점수',
+              currentScore: 95,
+              targetScore: 100,
+              delta: 5
+            },
+            fpsComparisons: [
+              {
+                gameTitle: "PlayerUnknown's Battlegrounds",
+                resolution: 'QHD',
+                graphicsPreset: 'HIGH',
+                currentFps: 223,
+                targetFps: 243,
+                deltaFps: 20,
+                source: 'HowManyFPS'
+              }
+            ],
+            specComparisons: [
+              { label: 'VRAM', currentValue: '16GB', targetValue: '32GB', deltaText: '+16GB' }
+            ],
+            warnings: [],
+            disclaimer: '실제 FPS는 게임 버전, 옵션, 드라이버, 냉각 상태에 따라 달라질 수 있습니다.'
+          }
+        })
+      });
+      return;
+    }
+
     if (/gpu/i.test(message) || message.includes('GPU')) {
       const baseBudget = 2_000_000;
       await route.fulfill({
@@ -802,6 +859,26 @@ test('chatbot part questions show backend parts and apply them to home AI builds
   const latestGraphRequest = buildGraphRequests[buildGraphRequests.length - 1] as { focus?: { mode?: string; category?: string } };
   expect(latestGraphRequest.focus?.mode).toBe('PART_IMPACT');
   expect(latestGraphRequest.focus?.category).toBe('GPU');
+});
+
+test('chatbot renders performance simulation as a benchmark card', async ({ page }) => {
+  await mockBuildGraphApi(page);
+  await mockAiBuildChatApi(page);
+  await openHomeAsUser(page);
+
+  await page.getByRole('button', { name: 'AI 견적 챗봇 열기' }).click();
+  await page.getByRole('textbox', { name: 'AI 챗봇에게 PC 사양 질문' }).fill('지금 견적에 그래픽카드 5090 바꾸면 배그에서 어떻게 되나요?');
+  await page.getByRole('button', { name: '질문 보내기' }).click();
+
+  const messages = page.getByTestId('ai-chat-messages');
+  await expect(messages).toContainText('성능 시뮬레이션');
+  await expect(messages).toContainText('RTX 5080 → RTX 5090');
+  await expect(messages).toContainText('벤치마크 기반 점수');
+  await expect(messages).toContainText("PlayerUnknown's Battlegrounds");
+  await expect(messages).toContainText('223fps → 243fps');
+  await expect(messages).toContainText('+20fps');
+  await expect(messages).not.toContainText('AI DB 답변');
+  await expect(messages).not.toContainText('내부 normalized');
 });
 
 test('chatbot only shows the current user scoped assistant session', async ({ page }) => {
