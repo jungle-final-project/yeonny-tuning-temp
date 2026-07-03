@@ -25,6 +25,7 @@ import org.springframework.stereotype.Service;
 public class BuildChatCacheService {
     private static final Logger log = LoggerFactory.getLogger(BuildChatCacheService.class);
     private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
+    private static final long DATA_VERSION_TTL_NANOS = Duration.ofMinutes(5).toNanos();
     private static final TypeReference<Map<String, Object>> MAP_TYPE = new TypeReference<>() {
     };
 
@@ -33,6 +34,8 @@ public class BuildChatCacheService {
     private final AiProfileConfig aiProfileConfig;
     private final boolean enabled;
     private final Duration ttl;
+    private volatile Map<String, Object> cachedDataVersions;
+    private volatile long cachedDataVersionsAtNanos;
 
     @Autowired
     public BuildChatCacheService(
@@ -139,7 +142,7 @@ public class BuildChatCacheService {
         fingerprint.put("appliedPartPreferences", sharedRecommendation ? "ignored" : body.get("appliedPartPreferences"));
         fingerprint.put("versions", dataVersions());
         String json = OBJECT_MAPPER.writeValueAsString(fingerprint);
-        return "buildgraph:build-chat:v9:" + sha256(json);
+        return "buildgraph:build-chat:v15:" + sha256(json);
     }
 
     private static boolean isShareableRecommendation(Map<String, Object> request) {
@@ -196,8 +199,13 @@ public class BuildChatCacheService {
         if (jdbcTemplate == null) {
             return Map.of();
         }
+        Map<String, Object> cached = cachedDataVersions;
+        long now = System.nanoTime();
+        if (cached != null && now - cachedDataVersionsAtNanos < DATA_VERSION_TTL_NANOS) {
+            return cached;
+        }
         try {
-            return jdbcTemplate.queryForMap("""
+            Map<String, Object> versions = jdbcTemplate.queryForMap("""
                     SELECT
                       coalesce((SELECT max(coalesce(updated_at, created_at))::text FROM parts WHERE deleted_at IS NULL), 'none') AS parts_version,
                       coalesce((SELECT max(created_at)::text FROM benchmark_summaries WHERE deleted_at IS NULL), 'none') AS benchmark_version,
@@ -205,9 +213,17 @@ public class BuildChatCacheService {
                       coalesce((SELECT max(created_at)::text FROM rag_evidence WHERE agent_session_id IS NULL), 'none') AS rag_version,
                       coalesce((SELECT max(coalesce(updated_at, created_at))::text FROM part_alias_rules WHERE deleted_at IS NULL), 'none') AS alias_version
                     """);
+            cachedDataVersions = versions;
+            cachedDataVersionsAtNanos = now;
+            return versions;
         } catch (Exception error) {
             return Map.of("versionError", error.getClass().getSimpleName());
         }
+    }
+
+    void clearDataVersionCacheForTest() {
+        cachedDataVersions = null;
+        cachedDataVersionsAtNanos = 0L;
     }
 
     @SuppressWarnings("unchecked")

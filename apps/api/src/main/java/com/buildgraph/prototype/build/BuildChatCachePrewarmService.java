@@ -16,6 +16,12 @@ public class BuildChatCachePrewarmService {
     private static final Logger log = LoggerFactory.getLogger(BuildChatCachePrewarmService.class);
     private static final List<String> PREWARM_PROMPTS = List.of(
             "800만원으로 최고급 PC 추천해줘",
+            "800만원짜리 컴퓨터 추천해줘",
+            "300만원대 게임용 PC 추천해줘",
+            "300만원으로 게임용 PC 추천해줘",
+            "200만원 QHD 게임용 PC 추천해줘",
+            "AI 학습용 800만원 이하인데 소음 낮은 PC 추천해줘",
+            "맥스엘리트 파워 이슈 걱정되니 안정적인 파워 위주 PC 추천해줘",
             "고성능 GPU 추천해줘"
     );
 

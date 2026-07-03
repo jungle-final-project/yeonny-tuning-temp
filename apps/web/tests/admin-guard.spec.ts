@@ -852,7 +852,16 @@ test('renders manufacturer release demo intake on admin parts page', async ({ pa
   await expect(page.locator('main')).toContainText('초안 열기');
   await expect(page.locator('main')).not.toContainText('source product key');
 
-  await page.locator('button:has-text("offer 재검색"):not([disabled])').first().click();
+  const discoveredCandidateRow = page.getByRole('row', {
+    name: /ASUS ROG Astral GeForce RTX 5090 OC 32GB.*DISCOVERED/
+  });
+  await expect(discoveredCandidateRow.getByRole('button', { name: 'offer 재검색' })).toBeEnabled();
+  await Promise.all([
+    page.waitForRequest((request) => request.method() === 'POST'
+      && request.url().includes('/api/admin/part-catalog-candidates/')
+      && request.url().endsWith('/refresh-offers')),
+    discoveredCandidateRow.getByRole('button', { name: 'offer 재검색' }).click()
+  ]);
   expect(refreshOfferCalls).toBe(1);
   await expect(page.locator('main')).toContainText('offer 재검색 완료');
 

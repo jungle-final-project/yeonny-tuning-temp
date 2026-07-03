@@ -977,7 +977,6 @@ class DefaultAiChatEngineTest {
         when(jdbcTemplate.queryForList(
                 anyString(),
                 eq("GPU"),
-                eq("GPU"),
                 eq("5090"),
                 eq("5090"),
                 eq("5090")
@@ -1046,7 +1045,6 @@ class DefaultAiChatEngineTest {
                 """);
         when(jdbcTemplate.queryForList(
                 anyString(),
-                eq("CPU"),
                 eq("CPU"),
                 eq("9950X3D"),
                 eq("9950X3D"),
@@ -1124,7 +1122,6 @@ class DefaultAiChatEngineTest {
                 """);
         when(jdbcTemplate.queryForList(
                 anyString(),
-                eq("GPU"),
                 eq("GPU"),
                 eq("5090"),
                 eq("5090"),

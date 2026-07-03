@@ -42,7 +42,7 @@ public class PartRouteResolver {
                     "FAST_PART_DETAIL_ROUTE"
             ));
         }
-        if (category != null && hasConcreteProductHint(message)) {
+        if (category != null) {
             String filterRoute = resolveCategoryFilterRoute(partQuery, category);
             return Optional.of(new ResolvedRoute(
                     filterRoute,
@@ -71,6 +71,11 @@ public class PartRouteResolver {
         if (query == null) {
             return null;
         }
+        String safeCategory = categoryFrom(category);
+        List<Map<String, Object>> rawExactRows = exactRawRows(query.trim(), safeCategory);
+        if (rawExactRows.size() == 1) {
+            return "/parts/" + DbValueMapper.string(rawExactRows.get(0), "id");
+        }
         if (UUID_TEXT.matcher(query.trim()).matches()) {
             List<Map<String, Object>> rows = jdbcTemplate.queryForList("""
                             SELECT public_id::text AS id, category, name, manufacturer
@@ -87,25 +92,42 @@ public class PartRouteResolver {
         if (normalizedQuery.length() < 3) {
             return null;
         }
+        List<Map<String, Object>> normalizedExactRows = exactNormalizedRows(normalizedQuery, safeCategory);
+        if (normalizedExactRows.size() == 1) {
+            return "/parts/" + DbValueMapper.string(normalizedExactRows.get(0), "id");
+        }
         String searchTerm = routeSearchTerm(normalizedQuery);
         if (searchTerm == null) {
             return null;
         }
-        String safeCategory = categoryFrom(category);
-        List<Map<String, Object>> rows = jdbcTemplate.queryForList("""
-                        SELECT public_id::text AS id, category, name, manufacturer
-                        FROM parts
-                        WHERE status = 'ACTIVE'
-                          AND deleted_at IS NULL
-                          AND (? IS NULL OR category = ?)
-                          AND (
-                            lower(name) LIKE '%' || lower(?) || '%'
-                            OR lower(coalesce(manufacturer, '')) LIKE '%' || lower(?) || '%'
-                            OR lower(coalesce(manufacturer, '') || ' ' || name) LIKE '%' || lower(?) || '%'
-                          )
-                        ORDER BY price DESC, id ASC
-                        LIMIT 12
-                        """, safeCategory, safeCategory, searchTerm, searchTerm, searchTerm);
+        List<Map<String, Object>> rows = safeCategory == null
+                ? jdbcTemplate.queryForList("""
+                                SELECT public_id::text AS id, category, name, manufacturer
+                                FROM parts
+                                WHERE status = 'ACTIVE'
+                                  AND deleted_at IS NULL
+                                  AND (
+                                    lower(name) LIKE '%' || lower(?) || '%'
+                                    OR lower(coalesce(manufacturer, '')) LIKE '%' || lower(?) || '%'
+                                    OR lower(coalesce(manufacturer, '') || ' ' || name) LIKE '%' || lower(?) || '%'
+                                  )
+                                ORDER BY price DESC, id ASC
+                                LIMIT 50
+                                """, searchTerm, searchTerm, searchTerm)
+                : jdbcTemplate.queryForList("""
+                                SELECT public_id::text AS id, category, name, manufacturer
+                                FROM parts
+                                WHERE status = 'ACTIVE'
+                                  AND deleted_at IS NULL
+                                  AND category = ?
+                                  AND (
+                                    lower(name) LIKE '%' || lower(?) || '%'
+                                    OR lower(coalesce(manufacturer, '')) LIKE '%' || lower(?) || '%'
+                                    OR lower(coalesce(manufacturer, '') || ' ' || name) LIKE '%' || lower(?) || '%'
+                                  )
+                                ORDER BY price DESC, id ASC
+                                LIMIT 50
+                                """, safeCategory, searchTerm, searchTerm, searchTerm);
         List<Map<String, Object>> exactMatches = rows.stream()
                 .filter(row -> isExactPartRouteMatch(normalizedQuery, row))
                 .toList();
@@ -123,6 +145,72 @@ public class PartRouteResolver {
             return "/parts/" + DbValueMapper.string(rows.get(0), "id");
         }
         return null;
+    }
+
+    private List<Map<String, Object>> exactRawRows(String query, String safeCategory) {
+        if (query == null || query.isBlank()) {
+            return List.of();
+        }
+        if (safeCategory == null) {
+            return jdbcTemplate.queryForList("""
+                            SELECT public_id::text AS id, category, name, manufacturer
+                            FROM parts
+                            WHERE status = 'ACTIVE'
+                              AND deleted_at IS NULL
+                              AND (
+                                lower(name) = lower(?)
+                                OR lower(coalesce(manufacturer, '') || ' ' || name) = lower(?)
+                              )
+                            ORDER BY price DESC, id ASC
+                            LIMIT 3
+                            """, query, query);
+        }
+        return jdbcTemplate.queryForList("""
+                        SELECT public_id::text AS id, category, name, manufacturer
+                        FROM parts
+                        WHERE status = 'ACTIVE'
+                          AND deleted_at IS NULL
+                          AND category = ?
+                          AND (
+                            lower(name) = lower(?)
+                            OR lower(coalesce(manufacturer, '') || ' ' || name) = lower(?)
+                          )
+                        ORDER BY price DESC, id ASC
+                        LIMIT 3
+                        """, safeCategory, query, query);
+    }
+
+    private List<Map<String, Object>> exactNormalizedRows(String normalizedQuery, String safeCategory) {
+        String normalizedNameSql = "trim(regexp_replace(regexp_replace(upper(%s), '[^0-9A-Z가-힣]+', ' ', 'g'), '\\s+', ' ', 'g'))";
+        String nameExpr = normalizedNameSql.formatted("name");
+        String manufacturerNameExpr = normalizedNameSql.formatted("coalesce(manufacturer, '') || ' ' || name");
+        if (safeCategory == null) {
+            return jdbcTemplate.queryForList("""
+                            SELECT public_id::text AS id, category, name, manufacturer
+                            FROM parts
+                            WHERE status = 'ACTIVE'
+                              AND deleted_at IS NULL
+                              AND (
+                                %s = ?
+                                OR %s = ?
+                              )
+                            ORDER BY price DESC, id ASC
+                            LIMIT 3
+                            """.formatted(nameExpr, manufacturerNameExpr), normalizedQuery, normalizedQuery);
+        }
+        return jdbcTemplate.queryForList("""
+                        SELECT public_id::text AS id, category, name, manufacturer
+                        FROM parts
+                        WHERE status = 'ACTIVE'
+                          AND deleted_at IS NULL
+                          AND category = ?
+                          AND (
+                            %s = ?
+                            OR %s = ?
+                          )
+                        ORDER BY price DESC, id ASC
+                        LIMIT 3
+                        """.formatted(nameExpr, manufacturerNameExpr), safeCategory, normalizedQuery, normalizedQuery);
     }
 
     public static String inferCategory(String message) {
@@ -180,7 +268,7 @@ public class PartRouteResolver {
     private static String extractPartQuery(String message) {
         String query = safe(message)
                 .replaceAll("(?i)(상세\\s*페이지|상품\\s*페이지|제품\\s*페이지|제품\\s*상세|상품\\s*상세|상세|보여줘봐|보여줘|보여|열어줘|열어|이동해줘|이동해|이동|가줘|가자|페이지|화면|정보|좀)", " ")
-                .replaceAll("\\s+(로|으로)$", " ")
+                .replaceAll("\\s+(로|으로)\\s*$", " ")
                 .replaceAll("\\s+", " ")
                 .trim();
         return query.isEmpty() ? message : query;

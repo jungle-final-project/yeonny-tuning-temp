@@ -58,6 +58,7 @@ class BuildChatCacheServiceTest {
         assertThat(cache.service.lookup(request(2), "BUILD_CHAT_54_MINI_FAST", 42L)).isEmpty();
 
         cache.versions.set(versions("parts-v2"));
+        cache.service.clearDataVersionCacheForTest();
         assertThat(cache.service.lookup(request, "BUILD_CHAT_54_MINI_FAST", 42L)).isEmpty();
     }
 

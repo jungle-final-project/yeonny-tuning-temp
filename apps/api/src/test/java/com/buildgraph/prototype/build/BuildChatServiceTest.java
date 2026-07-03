@@ -9,6 +9,7 @@ import static org.mockito.ArgumentMatchers.anyList;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.nullable;
+import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
@@ -270,7 +271,6 @@ class BuildChatServiceTest {
         when(jdbcTemplate.queryForList(
                 anyString(),
                 eq("GPU"),
-                eq("GPU"),
                 eq("5090"),
                 eq("5090"),
                 eq("5090")
@@ -304,7 +304,6 @@ class BuildChatServiceTest {
         BuildChatService service = new BuildChatService(jdbcTemplate, toolCheckService, aiChatEngine, cacheService);
         when(jdbcTemplate.queryForList(
                 anyString(),
-                eq("CPU"),
                 eq("CPU"),
                 eq("9950X3D"),
                 eq("9950X3D"),
@@ -344,7 +343,6 @@ class BuildChatServiceTest {
         when(jdbcTemplate.queryForList(
                 anyString(),
                 eq("CPU"),
-                eq("CPU"),
                 eq("9950X3D"),
                 eq("9950X3D"),
                 eq("9950X3D")
@@ -374,7 +372,6 @@ class BuildChatServiceTest {
         BuildChatService service = new BuildChatService(jdbcTemplate, toolCheckService, aiChatEngine, cacheService);
         when(jdbcTemplate.queryForList(
                 anyString(),
-                eq("GPU"),
                 eq("GPU"),
                 eq("5090"),
                 eq("5090"),
@@ -448,7 +445,7 @@ class BuildChatServiceTest {
         BuildChatCacheService cacheService = mock(BuildChatCacheService.class);
         PartReplacementRanker ranker = new PartReplacementRanker(mock(PartAliasReviewService.class));
         BuildChatService service = new BuildChatService(jdbcTemplate, toolCheckService, aiChatEngine, cacheService, ranker);
-        when(jdbcTemplate.queryForList(anyString(), eq("GPU"), eq(50))).thenReturn(List.of(
+        when(jdbcTemplate.queryForList(anyString(), eq("GPU"), eq(200))).thenReturn(List.of(
                 partRow("gpu-5070", "GPU", "RTX 5070", 900_000, Map.of("gpuClass", "RTX_5070", "vramGb", 12), 72),
                 partRow("gpu-5080", "GPU", "RTX 5080", 1_700_000, Map.of("gpuClass", "RTX_5080", "vramGb", 16), 88),
                 partRow("gpu-5090", "GPU", "RTX 5090", 3_000_000, Map.of("gpuClass", "RTX_5090", "vramGb", 32), 100)
@@ -484,6 +481,61 @@ class BuildChatServiceTest {
         assertThat(actions.get(0).get("payload")).asInstanceOf(org.assertj.core.api.InstanceOfAssertFactories.MAP)
                 .containsEntry("partId", "gpu-5080")
                 .containsEntry("category", "GPU");
+        verifyNoInteractions(aiChatEngine, cacheService);
+    }
+
+    @Test
+    void buildChatSimulatesGpuFrameImpactWithoutApplyingDraftAction() {
+        JdbcTemplate jdbcTemplate = mock(JdbcTemplate.class);
+        ToolCheckService toolCheckService = mock(ToolCheckService.class);
+        AiChatEngine aiChatEngine = mock(AiChatEngine.class);
+        BuildChatCacheService cacheService = mock(BuildChatCacheService.class);
+        BuildChatService service = new BuildChatService(jdbcTemplate, toolCheckService, aiChatEngine, cacheService);
+        doAnswer(invocation -> {
+            String sql = invocation.getArgument(0, String.class);
+            if (sql.contains("FROM parts p")) {
+                return List.of(partRow("gpu-5080", "GPU", "RTX 5080", 1_700_000, Map.of("gpuClass", "RTX_5080", "hardwareClass", "RTX_5080"), 88));
+            }
+            if (sql.contains("FROM game_fps_benchmarks")) {
+                return List.of(Map.of(
+                        "game_title", "PUBG",
+                        "game_key", "pubg",
+                        "resolution", "QHD",
+                        "graphics_preset", "HIGH",
+                        "avg_fps", 180,
+                        "one_percent_low_fps", 130,
+                        "source_name", "HowManyFPS",
+                        "confidence", "MEDIUM",
+                        "metadata", Map.of("gpuClass", "RTX_5080", "cpuClass", "RYZEN_9_9950X")
+                ));
+            }
+            return List.of();
+        }).when(jdbcTemplate).queryForList(anyString(), any(Object[].class));
+        when(toolCheckService.checkBuild(anyList(), anyInt())).thenReturn(List.of(Map.of(
+                "tool", "size",
+                "status", "PASS",
+                "confidence", "HIGH",
+                "summary", "장착 가능"
+        )));
+
+        Map<String, Object> response = service.chat(Map.of(
+                "message", "지금 견적에서 그래픽카드를 5080으로 바꾸면 프레임이 어떻게되?",
+                "currentQuoteDraft", draftWithItems(List.of(
+                        draftItem("cpu-current", "CPU", "Ryzen 9 9950X", 1, Map.of("cpuClass", "RYZEN_9_9950X", "hardwareClass", "RYZEN_9_9950X")),
+                        draftItem("gpu-current", "GPU", "RTX 5070 Ti", 1, Map.of("gpuClass", "RTX_5070_TI", "hardwareClass", "RTX_5070_TI")),
+                        draftItem("case-current", "CASE", "Airflow Case", 1, Map.of("maxGpuLengthMm", 380)),
+                        draftItem("psu-current", "PSU", "1000W PSU", 1, Map.of("capacityW", 1000))
+                ))
+        ));
+
+        assertThat(response).containsEntry("answerType", "GENERAL");
+        assertThat(response.get("message").toString())
+                .contains("시뮬레이션")
+                .contains("RTX 5080")
+                .contains("장바구니는 아직 변경하지 않았습니다")
+                .contains("FPS");
+        assertThat(response.get("actions")).asList().isEmpty();
+        assertThat(response.get("partRecommendation")).isNull();
         verifyNoInteractions(aiChatEngine, cacheService);
     }
 

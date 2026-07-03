@@ -163,11 +163,17 @@ export function AiBuildAssistant({ surface = 'home' }: AiBuildAssistantProps) {
     setIsSending(true);
 
     try {
+      const currentQuoteDraft = surface === 'self-quote'
+        ? quoteDraftQuery.data ?? await queryClient.fetchQuery({
+          queryKey: ['quote-draft', 'current'],
+          queryFn: getCurrentQuoteDraft
+        })
+        : undefined;
       const response = await buildChat({
         message: nextPrompt,
         currentBuilds: baseSession.latestBuilds,
         appliedPartPreferences: baseSession.appliedPartPreferences,
-        currentQuoteDraft: surface === 'self-quote' ? quoteDraftQuery.data : undefined
+        currentQuoteDraft
       });
       const responseTime = new Date().toISOString();
       const responseBuilds = response.builds?.length ? normalizeAiBuilds(response.builds) : undefined;
