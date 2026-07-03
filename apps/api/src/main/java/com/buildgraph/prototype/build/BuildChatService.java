@@ -458,8 +458,10 @@ public class BuildChatService {
 
     private static boolean isPerformanceSimulationIntent(String message) {
         String normalized = normalizeCommand(message);
-        return containsAnyNormalized(normalized, "프레임", "fps", "성능", "벤치", "얼마나", "어떻게되", "차이", "향상")
-                && containsAnyNormalized(normalized, "바꾸면", "교체하면", "넣으면", "달면", "변경하면", "업그레이드하면", "으로가면");
+        boolean changeHypothesis = containsAnyNormalized(normalized, "바꾸면", "교체하면", "넣으면", "달면", "변경하면", "업그레이드하면", "으로가면", "로가면");
+        boolean explicitImpactQuestion = containsAnyNormalized(normalized, "프레임", "fps", "성능", "벤치", "얼마나", "어떻게되", "어떻게", "어떨", "차이", "향상");
+        boolean shortWhatIfQuestion = changeHypothesis && (normalized.endsWith("?") || normalized.endsWith("면") || containsAnyNormalized(normalized, "좋을까", "나을까"));
+        return changeHypothesis && (explicitImpactQuestion || shortWhatIfQuestion);
     }
 
     private Optional<PartCandidate> simulationTargetPart(String category, String message) {

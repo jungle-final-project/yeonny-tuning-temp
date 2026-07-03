@@ -620,6 +620,64 @@ class BuildChatServiceTest {
     }
 
     @Test
+    void buildChatTreatsShortCpuWhatIfAsReadOnlySimulation() {
+        JdbcTemplate jdbcTemplate = mock(JdbcTemplate.class);
+        ToolCheckService toolCheckService = mock(ToolCheckService.class);
+        AiChatEngine aiChatEngine = mock(AiChatEngine.class);
+        BuildChatCacheService cacheService = mock(BuildChatCacheService.class);
+        BuildChatService service = new BuildChatService(jdbcTemplate, toolCheckService, aiChatEngine, cacheService);
+        doAnswer(invocation -> {
+            String sql = invocation.getArgument(0, String.class);
+            if (sql.contains("FROM parts p")) {
+                return List.of(partRow("cpu-9700x", "CPU", "AMD Ryzen 7 9700X", 377_500, Map.of(
+                        "cpuClass", "RYZEN_7_9700X",
+                        "coreCount", 8,
+                        "threadCount", 16,
+                        "tdpW", 65
+                ), 84));
+            }
+            return List.of();
+        }).when(jdbcTemplate).queryForList(anyString(), any(Object[].class));
+        when(toolCheckService.checkBuild(anyList(), anyInt())).thenReturn(List.of(Map.of(
+                "tool", "compatibility",
+                "status", "PASS",
+                "confidence", "HIGH",
+                "summary", "호환 가능"
+        )));
+
+        Map<String, Object> response = service.chat(Map.of(
+                "message", "지금 견적에서 cpu를 9700x 로바꾸면?",
+                "currentQuoteDraft", draftWithItems(List.of(
+                        draftItem("cpu-current", "CPU", "Ryzen 9 9950X3D", 1, Map.of(
+                                "cpuClass", "RYZEN_9_9950X3D",
+                                "coreCount", 16,
+                                "threadCount", 32,
+                                "tdpW", 120
+                        )),
+                        draftItem("board-current", "MOTHERBOARD", "B850 Board", 1, Map.of("socket", "AM5"))
+                ))
+        ));
+
+        assertThat(response).containsEntry("answerType", "GENERAL");
+        assertThat(response.get("simulation")).asInstanceOf(org.assertj.core.api.InstanceOfAssertFactories.MAP)
+                .containsEntry("type", "PERFORMANCE_COMPARISON")
+                .containsEntry("category", "CPU");
+        @SuppressWarnings("unchecked")
+        Map<String, Object> simulation = (Map<String, Object>) response.get("simulation");
+        assertThat(simulation.get("targetPart")).asInstanceOf(org.assertj.core.api.InstanceOfAssertFactories.MAP)
+                .containsEntry("name", "AMD Ryzen 7 9700X");
+        assertThat(simulation.get("specComparisons")).asList()
+                .anySatisfy(row -> assertThat(row)
+                        .asInstanceOf(org.assertj.core.api.InstanceOfAssertFactories.MAP)
+                        .containsEntry("label", "코어")
+                        .containsEntry("currentValue", "16개")
+                        .containsEntry("targetValue", "8개"));
+        assertThat(response.get("actions")).asList().isEmpty();
+        assertThat(response.get("partRecommendation")).isNull();
+        verifyNoInteractions(aiChatEngine, cacheService);
+    }
+
+    @Test
     void partQuestionWithoutCurrentBuildsKeepsBuildsEmptyAndReturnsPartRecommendation() {
         JdbcTemplate jdbcTemplate = mock(JdbcTemplate.class);
         ToolCheckService toolCheckService = mock(ToolCheckService.class);
