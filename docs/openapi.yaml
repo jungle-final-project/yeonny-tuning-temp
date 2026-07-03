@@ -182,6 +182,25 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/BuildRecommendResponse"
+  /api/builds/from-chat:
+    post:
+      summary: AI 챗봇 임시 추천 Build 저장
+      description: sessionStorage에만 있던 AI 챗봇 추천 조합을 사용자가 저장할 때 requirements, builds, build_items에 저장한다. AI/RAG를 다시 호출하지 않고 partId/category를 서버 DB와 대조한 뒤 Tool 검증은 저장 시 다시 실행한다.
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/BuildSaveFromChatRequest"
+      responses:
+        "200":
+          description: 저장된 Build id
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BuildSaveFromChatResponse"
   /api/builds/{id}:
     get:
       summary: Build 상세 조회
@@ -2759,6 +2778,26 @@ components:
           description: Agent worker 완료 전에는 빈 배열일 수 있다.
           items:
             $ref: "#/components/schemas/ToolResultDto"
+    BuildSaveFromChatRequest:
+      type: object
+      required: [sourceBuildId, build]
+      properties:
+        sourceBuildId:
+          type: string
+          description: 프론트 sessionStorage.latestBuilds에 있던 임시 추천 build id
+        lastUserMessage:
+          type: string
+          description: requirement raw_message로 저장할 마지막 사용자 요청. 없으면 build.summary를 사용한다.
+        build:
+          $ref: "#/components/schemas/AiBuildRecommendationDto"
+    BuildSaveFromChatResponse:
+      type: object
+      required: [id]
+      properties:
+        id:
+          type: string
+          format: uuid
+          description: 저장된 DB build public id
     BuildDto:
       type: object
       required: [id, name, totalPrice, confidence, items, warnings, evidenceIds, changeableCategories]
