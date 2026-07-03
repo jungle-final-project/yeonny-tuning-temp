@@ -158,6 +158,12 @@ public class BuildChatService {
                     "FAST_FILTER_ROUTE".equals(pathType) ? BuildChatGuardStats.routeFallback() : BuildChatGuardStats.empty());
             return response;
         }
+        Optional<Map<String, Object>> simulationResponse = performanceSimulationResponse(body, message);
+        if (simulationResponse.isPresent()) {
+            Map<String, Object> response = simulationResponse.get();
+            logBuildChatPath("FAST_SIMULATION", startedNanos, userId, requestedAiProfile, false, BuildChatGuardStats.empty());
+            return response;
+        }
         Optional<Map<String, Object>> fastDraftResponse = fastDraftActionResponse(body, message);
         if (fastDraftResponse.isPresent()) {
             Map<String, Object> response = fastDraftResponse.get();
@@ -392,6 +398,353 @@ public class BuildChatService {
             }
         }
         return result;
+    }
+
+    private Optional<Map<String, Object>> performanceSimulationResponse(Map<String, Object> request, String message) {
+        if (!isPerformanceSimulationIntent(message)) {
+            return Optional.empty();
+        }
+        String category = firstText(detectPartCategory(message), EXPLICIT_GPU_MODEL.matcher(message == null ? "" : message).find() ? "GPU" : null);
+        if (!"GPU".equals(category)) {
+            return Optional.empty();
+        }
+        Map<String, Object> currentQuoteDraft = objectMap(request.get("currentQuoteDraft"));
+        List<Map<String, Object>> draftItems = objectMaps(currentQuoteDraft.get("items"));
+        if (draftItems.isEmpty()) {
+            return Optional.empty();
+        }
+        Map<String, Object> currentGpuItem = findDraftItem(draftItems, "GPU", message);
+        if (currentGpuItem.isEmpty()) {
+            return Optional.empty();
+        }
+        PartCandidate currentGpu = draftPartCandidate(currentGpuItem);
+        PartCandidate currentCpu = draftPartCandidate(findDraftItem(draftItems, "CPU", message));
+        Optional<PartCandidate> targetGpu = simulationTargetPart("GPU", message);
+        if (targetGpu.isEmpty()) {
+            return Optional.of(fastResponse(
+                    "GENERAL",
+                    "프레임 시뮬레이션을 하려면 바꿀 GPU를 내부 자산에서 특정해야 합니다. 예: RTX 5080으로 바꾸면 프레임이 어떻게 돼?",
+                    null,
+                    List.of(),
+                    List.of("SIMULATION_TARGET_NOT_FOUND")
+            ));
+        }
+
+        PartCandidate target = targetGpu.get();
+        List<String> warnings = new ArrayList<>();
+        List<PartCandidate> previewParts = simulationPreviewParts(draftItems, target);
+        List<Map<String, Object>> toolResults = toolResults(previewParts, totalPrice(previewParts), warnings);
+        boolean hasBlockingFail = hasBlockingToolFailure(toolResults);
+        if (hasBlockingFail) {
+            warnings.add("현재 견적 기준 Tool FAIL 가능성이 있어 실제 적용 전 부품 호환 확인이 필요합니다.");
+        }
+
+        BenchmarkSnapshot currentBenchmark = latestBenchmark(currentGpu).orElse(null);
+        BenchmarkSnapshot targetBenchmark = latestBenchmark(target).orElse(null);
+        List<Map<String, Object>> currentFps = simulationFpsEvidence(currentCpu, currentGpu, message);
+        List<Map<String, Object>> targetFps = simulationFpsEvidence(currentCpu, target, message);
+
+        return Optional.of(fastResponse(
+                "GENERAL",
+                simulationMessage(currentGpu, target, currentBenchmark, targetBenchmark, currentFps, targetFps, hasBlockingFail),
+                null,
+                List.of(),
+                warnings
+        ));
+    }
+
+    private static boolean isPerformanceSimulationIntent(String message) {
+        String normalized = normalizeCommand(message);
+        return containsAnyNormalized(normalized, "프레임", "fps", "성능", "벤치", "얼마나", "어떻게되", "차이", "향상")
+                && containsAnyNormalized(normalized, "바꾸면", "교체하면", "넣으면", "달면", "변경하면", "업그레이드하면", "으로가면");
+    }
+
+    private Optional<PartCandidate> simulationTargetPart(String category, String message) {
+        String gpuClass = targetGpuClass(message);
+        if (!"GPU".equals(category) || gpuClass == null) {
+            return Optional.empty();
+        }
+        String modelToken = gpuClass.replace("RTX_", "").replace("_", " ");
+        return jdbcTemplate.queryForList("""
+                        SELECT p.id AS internal_id,
+                               p.public_id::text AS id,
+                               p.category,
+                               p.name,
+                               p.manufacturer,
+                               p.price,
+                               p.attributes,
+                               b.score AS benchmark_score
+                        FROM parts p
+                        LEFT JOIN LATERAL (
+                          SELECT score
+                          FROM benchmark_summaries bs
+                          WHERE bs.part_id = p.id
+                            AND bs.deleted_at IS NULL
+                          ORDER BY bs.score DESC NULLS LAST, bs.created_at DESC
+                          LIMIT 1
+                        ) b ON true
+                        WHERE p.category = ?
+                          AND p.status = 'ACTIVE'
+                          AND p.deleted_at IS NULL
+                          AND p.price IS NOT NULL
+                          AND (
+                            p.attributes->>'gpuClass' = ?
+                            OR upper(p.name) LIKE '%' || upper(?) || '%'
+                          )
+                        ORDER BY
+                          CASE WHEN p.attributes->>'gpuClass' = ? THEN 0 ELSE 1 END,
+                          b.score DESC NULLS LAST,
+                          p.price ASC,
+                          p.name ASC
+                        LIMIT 1
+                        """, category, gpuClass, modelToken, gpuClass)
+                .stream()
+                .findFirst()
+                .map(this::partCandidate);
+    }
+
+    private static String targetGpuClass(String message) {
+        Matcher matcher = EXPLICIT_GPU_MODEL.matcher(message == null ? "" : message);
+        if (!matcher.find()) {
+            return null;
+        }
+        String model = matcher.group(1);
+        String suffix = matcher.group(2);
+        String result = "RTX_" + model;
+        if (suffix != null && !suffix.isBlank()) {
+            result += "_" + suffix.toUpperCase(Locale.ROOT);
+        }
+        return result;
+    }
+
+    private PartCandidate draftPartCandidate(Map<String, Object> item) {
+        String publicId = text(item.get("partId"));
+        if (publicId != null && isUuid(publicId)) {
+            try {
+                return partByPublicId(publicId);
+            } catch (RuntimeException ignored) {
+                // Draft data is still usable for lightweight simulation if the catalog row was removed.
+            }
+        }
+        PartCandidate candidate = partCandidateFromDraftItem(item);
+        if (candidate == null) {
+            return new PartCandidate(null, null, text(item.get("category")), firstText(text(item.get("name")), "부품"), text(item.get("manufacturer")), 0, objectMap(item.get("attributes")));
+        }
+        return candidate;
+    }
+
+    private List<PartCandidate> simulationPreviewParts(List<Map<String, Object>> draftItems, PartCandidate target) {
+        List<PartCandidate> result = new ArrayList<>();
+        boolean replaced = false;
+        for (Map<String, Object> item : draftItems) {
+            String category = text(item.get("category"));
+            if (target.category().equals(category)) {
+                if (!replaced) {
+                    result.add(target);
+                    replaced = true;
+                }
+                continue;
+            }
+            PartCandidate candidate = draftPartCandidate(item);
+            if (candidate != null) {
+                result.add(candidate);
+            }
+        }
+        if (!replaced) {
+            result.add(target);
+        }
+        return result;
+    }
+
+    private Optional<BenchmarkSnapshot> latestBenchmark(PartCandidate part) {
+        if (part == null || part.internalId() == null) {
+            return Optional.empty();
+        }
+        return jdbcTemplate.queryForList("""
+                        SELECT score,
+                               summary
+                        FROM benchmark_summaries
+                        WHERE part_id = ?
+                          AND deleted_at IS NULL
+                        ORDER BY score DESC NULLS LAST, created_at DESC, id DESC
+                        LIMIT 1
+                        """, part.internalId())
+                .stream()
+                .findFirst()
+                .map(row -> new BenchmarkSnapshot(doubleValue(row.get("score")), text(row.get("summary"))));
+    }
+
+    private List<Map<String, Object>> simulationFpsEvidence(PartCandidate cpu, PartCandidate gpu, String message) {
+        if (gpu == null) {
+            return List.of();
+        }
+        String gpuClass = hardwareClass(gpu);
+        if (gpuClass == null) {
+            return List.of();
+        }
+        String cpuClass = hardwareClass(cpu);
+        Long gpuId = gpu.internalId() == null ? -1L : gpu.internalId();
+        Long cpuId = cpu == null || cpu.internalId() == null ? -1L : cpu.internalId();
+        String gameKey = gameKeyFromText(message);
+        String resolution = resolutionFromText(message);
+        List<Object> params = new ArrayList<>();
+        params.add(gpuId);
+        params.add(gpuClass);
+        params.add(cpuId);
+        params.add(cpuClass);
+        String resolutionRank = "0 AS resolution_rank\n";
+        if (resolution != null) {
+            resolutionRank = "CASE WHEN resolution = ? THEN 0 ELSE 1 END AS resolution_rank\n";
+            params.add(resolution);
+        }
+        params.add(gpuId);
+        params.add(gpuClass);
+        String gameFilter = "";
+        if (gameKey != null) {
+            gameFilter = " AND game_key = ?\n";
+            params.add(gameKey);
+        }
+        params.add(4);
+        return jdbcTemplate.queryForList("""
+                        SELECT game_title,
+                               game_key,
+                               resolution,
+                               graphics_preset,
+                               avg_fps,
+                               one_percent_low_fps,
+                               source_name,
+                               confidence,
+                               metadata,
+                               CASE WHEN gpu_part_id = ? THEN 0 WHEN metadata->>'gpuClass' = ? THEN 1 ELSE 2 END AS gpu_rank,
+                               CASE WHEN cpu_part_id = ? THEN 0 WHEN metadata->>'cpuClass' = ? THEN 1 ELSE 2 END AS cpu_rank,
+                               """ + resolutionRank + """
+                        FROM game_fps_benchmarks
+                        WHERE deleted_at IS NULL
+                          AND (gpu_part_id = ? OR metadata->>'gpuClass' = ?)
+                        """ + gameFilter + """
+                        ORDER BY gpu_rank,
+                                 cpu_rank,
+                                 resolution_rank,
+                                 CASE confidence WHEN 'HIGH' THEN 0 WHEN 'MEDIUM' THEN 1 ELSE 2 END,
+                                 source_checked_at DESC,
+                                 id DESC
+                        LIMIT ?
+                        """, params.toArray());
+    }
+
+    private String simulationMessage(
+            PartCandidate currentGpu,
+            PartCandidate targetGpu,
+            BenchmarkSnapshot currentBenchmark,
+            BenchmarkSnapshot targetBenchmark,
+            List<Map<String, Object>> currentFps,
+            List<Map<String, Object>> targetFps,
+            boolean hasBlockingFail
+    ) {
+        List<String> lines = new ArrayList<>();
+        lines.add("시뮬레이션 기준으로 " + currentGpu.name() + "에서 " + targetGpu.name() + "(으)로 바꾸면 GPU 쪽 성능 변화가 예상됩니다. 장바구니는 아직 변경하지 않았습니다.");
+        if (currentBenchmark != null && targetBenchmark != null && currentBenchmark.score() != null && targetBenchmark.score() != null) {
+            double delta = targetBenchmark.score() - currentBenchmark.score();
+            String direction = delta >= 0 ? "+" : "";
+            lines.add("내부 normalized GPU 점수: " + formatScore(currentBenchmark.score()) + " -> " + formatScore(targetBenchmark.score()) + " (" + direction + formatScore(delta) + "점).");
+        } else if (targetBenchmark != null && targetBenchmark.score() != null) {
+            lines.add("대상 GPU 내부 normalized 점수: " + formatScore(targetBenchmark.score()) + "점.");
+        }
+
+        List<String> fpsLines = simulationFpsLines(currentFps, targetFps);
+        if (fpsLines.isEmpty()) {
+            lines.add("현재 조건과 정확히 맞는 게임 FPS seed는 부족해서, 확정 FPS 대신 benchmark 기반 경향으로만 봐야 합니다.");
+        } else {
+            lines.add("공개 FPS seed 참고:");
+            lines.addAll(fpsLines);
+        }
+        if (hasBlockingFail) {
+            lines.add("단, 현재 견적 기준 Tool FAIL 가능성이 있어 실제 교체 적용 전 케이스/파워 호환을 먼저 확인해야 합니다.");
+        }
+        lines.add("FPS는 게임 버전, 옵션, 드라이버, 냉각 상태에 따라 달라지는 참고값이며 보장값은 아닙니다.");
+        return String.join("\n", lines);
+    }
+
+    private List<String> simulationFpsLines(List<Map<String, Object>> currentFps, List<Map<String, Object>> targetFps) {
+        if (targetFps == null || targetFps.isEmpty()) {
+            return List.of();
+        }
+        List<String> lines = new ArrayList<>();
+        for (Map<String, Object> target : targetFps.stream().limit(3).toList()) {
+            String key = text(target.get("game_key")) + "|" + text(target.get("resolution"));
+            Map<String, Object> current = currentFps == null ? Map.of() : currentFps.stream()
+                    .filter(item -> key.equals(text(item.get("game_key")) + "|" + text(item.get("resolution"))))
+                    .findFirst()
+                    .orElse(Map.of());
+            Double targetAvg = doubleValue(target.get("avg_fps"));
+            Double currentAvg = doubleValue(current.get("avg_fps"));
+            String label = firstText(text(target.get("game_title")), "게임") + " " + firstText(text(target.get("resolution")), "해상도 미상");
+            if (currentAvg != null && targetAvg != null) {
+                double delta = targetAvg - currentAvg;
+                lines.add("- " + label + ": 평균 " + formatScore(currentAvg) + "fps -> " + formatScore(targetAvg) + "fps (" + (delta >= 0 ? "+" : "") + formatScore(delta) + "fps)");
+            } else if (targetAvg != null) {
+                lines.add("- " + label + ": 대상 GPU 기준 평균 " + formatScore(targetAvg) + "fps 참고");
+            }
+        }
+        return lines;
+    }
+
+    private static String hardwareClass(PartCandidate part) {
+        if (part == null) {
+            return null;
+        }
+        String explicit = firstText(text(part.attributes().get("hardwareClass")), firstText(text(part.attributes().get("gpuClass")), text(part.attributes().get("cpuClass"))));
+        if (explicit != null) {
+            return explicit;
+        }
+        String name = firstText(part.name(), "").toLowerCase(Locale.ROOT);
+        if ("GPU".equals(part.category())) {
+            if (name.contains("5090")) return "RTX_5090";
+            if (name.contains("5080")) return "RTX_5080";
+            if (name.matches(".*5070\\s*ti.*") || name.contains("5070ti")) return "RTX_5070_TI";
+            if (name.contains("5070")) return "RTX_5070";
+            if (name.matches(".*5060\\s*ti.*") || name.contains("5060ti")) return "RTX_5060_TI";
+            if (name.contains("5060")) return "RTX_5060";
+        }
+        if ("CPU".equals(part.category())) {
+            if (name.contains("9950x3d")) return "RYZEN_9_9950X3D";
+            if (name.contains("9950x")) return "RYZEN_9_9950X";
+            if (name.contains("9900x3d")) return "RYZEN_9_9900X3D";
+            if (name.contains("9800x3d")) return "RYZEN_7_9800X3D";
+            if (name.contains("9700x")) return "RYZEN_7_9700X";
+            if (name.contains("9600x")) return "RYZEN_5_9600X";
+        }
+        return null;
+    }
+
+    private static String gameKeyFromText(String message) {
+        String text = message == null ? "" : message.toLowerCase(Locale.ROOT);
+        if (containsAnyText(text, "배그", "pubg", "battleground")) return "pubg";
+        if (containsAnyText(text, "로아", "로스트아크", "lost ark")) return "lost-ark";
+        if (containsAnyText(text, "발로란트", "valorant")) return "valorant";
+        if (containsAnyText(text, "오버워치", "overwatch")) return "overwatch-2";
+        if (containsAnyText(text, "사이버펑크", "사펑", "cyberpunk")) return "cyberpunk-2077";
+        return null;
+    }
+
+    private static String resolutionFromText(String message) {
+        String text = message == null ? "" : message.toLowerCase(Locale.ROOT);
+        if (containsAnyText(text, "4k", "uhd", "2160")) return "4K";
+        if (containsAnyText(text, "qhd", "1440", "2560")) return "QHD";
+        if (containsAnyText(text, "fhd", "1080", "1920")) return "FHD";
+        return null;
+    }
+
+    private static boolean containsAnyText(String value, String... needles) {
+        if (value == null) {
+            return false;
+        }
+        for (String needle : needles) {
+            if (value.contains(needle)) {
+                return true;
+            }
+        }
+        return false;
     }
 
     private Optional<Map<String, Object>> fastDraftActionResponse(Map<String, Object> request, String message) {
@@ -2063,6 +2416,31 @@ public class BuildChatService {
         return Integer.parseInt(text.replace(",", ""));
     }
 
+    private static Double doubleValue(Object value) {
+        if (value instanceof Number number) {
+            return number.doubleValue();
+        }
+        String text = text(value);
+        if (text == null) {
+            return null;
+        }
+        return Double.parseDouble(text.replace(",", ""));
+    }
+
+    private static String formatScore(Double value) {
+        if (value == null) {
+            return "-";
+        }
+        if (Math.abs(value - Math.rint(value)) < 0.05) {
+            return String.valueOf(Math.round(value));
+        }
+        return String.format(Locale.ROOT, "%.1f", value);
+    }
+
+    private static boolean isUuid(String value) {
+        return value != null && value.matches("(?i)^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$");
+    }
+
     private static Integer firstNumber(Object... values) {
         for (Object value : values) {
             Integer number = numberValue(value);
@@ -2147,6 +2525,9 @@ public class BuildChatService {
     }
 
     private record AiBuildCandidate(Tier tier, int budgetWon, String budgetLabel, List<PartCandidate> parts, List<String> appliedPartCategories) {
+    }
+
+    private record BenchmarkSnapshot(Double score, String summary) {
     }
 
     private record PartCandidate(
