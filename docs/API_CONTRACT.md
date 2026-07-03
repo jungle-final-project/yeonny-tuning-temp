@@ -227,6 +227,8 @@ Google OAuth 정책:
 - 각 AI build에는 기존 Tool 검증 결과를 `toolResults`로 포함한다. Tool 실패 시 build 자체는 반환하되 `warnings`에 실패 사유를 넣는다.
 - AI build는 대화용 DTO이며 `POST /api/ai/build-chat` 응답 시점에는 `builds/build_items`에 저장하지 않는다. 대화 이력 저장은 프론트 `sessionStorage` 범위다. 사용자가 저장 버튼을 누르면 프론트가 `POST /api/builds/from-chat`을 호출해 현재 로그인 사용자 기준 `requirements`, `builds`, `build_items`로 저장한다.
 - `POST /api/builds/from-chat`은 AI 재호출이나 RAG 재검색을 하지 않는다. 요청의 `build.items[].partId`와 `category`를 서버 DB의 ACTIVE 부품과 대조하고, 사용자가 본 `price * quantity`를 `build_items.price` 라인 가격으로 저장한다. 저장 시 Tool 검증은 서버에서 다시 실행해 `warnings`에 반영한다.
+- `POST /api/builds/from-chat`은 V1에서 category별 1개 `build_items` row만 저장한다. `build_items`에는 `quantity` 컬럼을 추가하지 않으며, 요청의 `quantity`는 표시 line total 계산 입력으로만 사용한다. RAM/STORAGE 다중 수량을 정확히 영속화하는 사용자 장바구니 흐름은 `quote_drafts`, `quote_draft_items`가 담당한다.
+- `sourceBuildId`는 `sessionStorage` 기반 임시 추천 식별자다. 서버는 같은 `sourceBuildId`의 중복 저장을 DB unique key로 막지 않는다. 중복 클릭 방지는 프론트 성공 상태/버튼 상태로 처리하고, 저장 API idempotency는 V1 범위에서 제외한다.
 - 순수 화면 이동 명령은 사용자 체감 속도를 위해 프론트가 먼저 처리한다. API 직접 호출에 대해서는 서버도 LLM 전에 `OPEN_ROUTE` fast path를 제공한다.
 - fast route는 전체 자연어 이해가 아니라 명확한 이동 표현만 처리하는 shortcut이다. `GPU 추천해줘`, `GPU 더 싼 걸로`, `이 견적 담아줘` 같은 추천/교체/삭제/담기 명령은 fast route로 처리하지 않고 Build Chat으로 보낸다.
 - fast route가 잡지 못한 이동 의도는 LLM structured output의 `routeIntent`로 판단한다. 내부 `routeIntent`는 `shouldNavigate`, `routeType`, `category`, `partQuery`, `confidence`, `reason`을 가지며, 서버는 `shouldNavigate=true`이고 `confidence=HIGH`일 때만 `OPEN_ROUTE` action으로 변환한다.

@@ -350,6 +350,8 @@ MVP 기준 결정값:
 
 - 한 build 안에는 category별 부품을 1개만 저장한다.
 - 같은 `build_id`와 `category`에 여러 `build_items` row를 append하지 않는다.
+- `build_items`에는 `quantity` 컬럼을 두지 않는다. `POST /api/builds/from-chat`이 AI 챗봇 추천을 저장할 때 요청의 `quantity`는 사용자가 본 `price * quantity` 표시 line total을 `build_items.price`에 반영하는 계산 입력으로만 사용하고, quantity 자체는 영속화하지 않는다.
+- RAM/STORAGE 다중 수량을 정확히 관리해야 하는 사용자 장바구니 흐름은 `quote_drafts`, `quote_draft_items`가 담당한다. saved build의 다중 수량 영속화는 V1 범위가 아니다.
 - `POST /api/builds/{id}/change-part`는 같은 transaction 안에서 기존 category row를 물리 삭제한 뒤 새 `build_items` row를 insert한다. 내부 `build_items.id`는 public API에 노출하지 않으므로 교체 후 바뀌어도 된다.
 - 교체 이력 테이블은 V1에서 만들지 않는다. 교체 전후 diff는 API 응답으로만 반환한다.
 - category 값은 `parts.category`와 동일한 대문자 식별자를 사용한다. 예: `CPU`, `GPU`, `RAM`, `MOTHERBOARD`, `STORAGE`, `PSU`, `CASE`, `COOLER`.
@@ -380,6 +382,8 @@ Index:
 MVP 기준 결정값:
 
 - 저장 기준은 node id가 아니라 `category` 키다. 예: `CPU`, `MOTHERBOARD`, `RAM`, `GPU`, `STORAGE`, `PSU`, `CASE`, `COOLER`, `PRICE`.
+- `positions_json`은 UI layout 설정을 저장하기 위한 가변 JSONB다. 이 값은 부품 관계나 FK를 숨기는 용도가 아니며, 관계도 렌더링 좌표만 가진다.
+- `PRICE`는 `parts.category` 값이 아니라 예산/총액 제약을 표시하는 관계도 전용 pseudo node category다. `parts.category`나 `build_items.category`에 `PRICE`를 저장하지 않는다.
 - 사용자/홈 관계도 API는 `build_graph_layouts.layout_key = 'DEFAULT'` 좌표를 `nodes[].position`으로 내려준다.
 - 저장된 좌표가 없는 category는 서버 기본 좌표로 보정한다.
 - 프론트는 같은 category 노드가 여러 개면 저장 좌표를 기준점으로 삼고 겹침 방지 오프셋을 적용할 수 있다.
