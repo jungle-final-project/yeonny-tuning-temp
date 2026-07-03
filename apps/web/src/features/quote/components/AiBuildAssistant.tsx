@@ -1,7 +1,7 @@
 import { type FormEvent, useEffect, useRef, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
-import { Bot, CheckCircle2, Cpu, PackageCheck, Send, ShoppingCart, Sparkles, X, Zap } from 'lucide-react';
+import { BarChart3, Bot, CheckCircle2, Cpu, PackageCheck, Send, ShoppingCart, Sparkles, X, Zap } from 'lucide-react';
 import { AUTH_CHANGED_EVENT, ApiError, clearToken, getToken } from '../../../lib/api';
 import { applyAiBuildToQuoteDraft, deleteQuoteDraftItem, getCurrentQuoteDraft, patchQuoteDraftItem, putQuoteDraftItem } from '../../parts/partsApi';
 import {
@@ -20,6 +20,7 @@ import {
   type AiChatMessage,
   type AiDraftAction,
   type AiDraftActionStatus,
+  type AiPerformanceSimulation,
   type AiRecommendedBuild,
   type BuildGraphFocus,
   type PartCategory
@@ -196,6 +197,7 @@ export function AiBuildAssistant({ surface = 'home' }: AiBuildAssistantProps) {
         builds: responseBuilds,
         partRecommendation: response.partRecommendation ?? undefined,
         actions: response.actions?.length ? response.actions.map((action) => ({ ...action, status: 'PENDING' })) : undefined,
+        simulation: response.simulation ?? undefined,
         warnings: response.warnings ?? []
       };
       const nextSession = {
@@ -699,11 +701,15 @@ function ChatMessage({
           {!isUser ? (
             <div className="mb-1 flex items-center gap-2 text-[11px] font-black text-brand-blue">
               <Sparkles size={13} />
-              AI DB 답변
+              {message.simulation ? '성능 시뮬레이션' : 'BuildGraph Assistant'}
             </div>
           ) : null}
           <p className="break-keep">{message.text}</p>
         </div>
+
+        {message.simulation ? (
+          <SimulationResultCard simulation={message.simulation} />
+        ) : null}
 
         {message.builds ? (
           <div className="mt-2 grid gap-2">
@@ -726,6 +732,124 @@ function ChatMessage({
           />
         ) : null}
       </div>
+    </div>
+  );
+}
+
+function SimulationResultCard({ simulation }: { simulation: AiPerformanceSimulation }) {
+  const fpsRows = simulation.fpsComparisons ?? [];
+  const specRows = simulation.specComparisons ?? [];
+  const score = simulation.scoreComparison;
+  const maxFps = Math.max(
+    1,
+    ...fpsRows.flatMap((row) => [row.currentFps ?? 0, row.targetFps ?? 0])
+  );
+
+  return (
+    <section className="mt-2 rounded-lg border border-blue-100 bg-blue-50 p-3">
+      <div className="flex flex-wrap items-start justify-between gap-2">
+        <div className="min-w-0">
+          <div className="flex items-center gap-2 text-xs font-black text-brand-blue">
+            <BarChart3 size={14} />
+            성능 시뮬레이션
+          </div>
+          <div className="mt-1 break-keep text-sm font-black text-commerce-ink">
+            {simulation.currentPart.name} → {simulation.targetPart.name}
+          </div>
+        </div>
+        <span className="rounded bg-white px-2 py-1 text-[11px] font-black text-slate-600">
+          {PART_CATEGORY_LABELS[simulation.category]}
+        </span>
+      </div>
+
+      {score ? (
+        <div className="mt-3 rounded-md bg-white p-3">
+          <div className="flex items-center justify-between gap-2 text-xs">
+            <span className="font-black text-slate-700">{score.label}</span>
+            <span className={`font-black ${score.delta && score.delta > 0 ? 'text-commerce-green' : score.delta && score.delta < 0 ? 'text-commerce-sale' : 'text-slate-500'}`}>
+              {formatSigned(score.delta, '점')}
+            </span>
+          </div>
+          <div className="mt-2 grid gap-2">
+            <ComparisonBar label="현재" value={score.currentScore} max={100} tone="slate" />
+            <ComparisonBar label="변경 후" value={score.targetScore} max={100} tone="blue" />
+          </div>
+        </div>
+      ) : null}
+
+      {fpsRows.length ? (
+        <div className="mt-3 overflow-hidden rounded-md border border-blue-100 bg-white">
+          <div className="grid grid-cols-[1.2fr_0.8fr_1.2fr] gap-2 border-b border-blue-50 px-3 py-2 text-[11px] font-black text-slate-500">
+            <span>게임/해상도</span>
+            <span className="text-right">FPS 변화</span>
+            <span>비교 막대</span>
+          </div>
+          <div className="divide-y divide-blue-50">
+            {fpsRows.map((row) => (
+              <div key={`${row.gameTitle}-${row.resolution}-${row.graphicsPreset ?? ''}`} className="grid grid-cols-[1.2fr_0.8fr_1.2fr] gap-2 px-3 py-2 text-xs">
+                <div className="min-w-0">
+                  <div className="break-keep font-black text-commerce-ink">{row.gameTitle}</div>
+                  <div className="mt-0.5 text-[11px] font-bold text-slate-500">{row.resolution}{row.graphicsPreset ? ` · ${row.graphicsPreset}` : ''}</div>
+                </div>
+                <div className="text-right font-black text-slate-700">
+                  <div>{formatFps(row.currentFps)} → {formatFps(row.targetFps)}</div>
+                  <div className={`${row.deltaFps && row.deltaFps > 0 ? 'text-commerce-green' : row.deltaFps && row.deltaFps < 0 ? 'text-commerce-sale' : 'text-slate-400'}`}>
+                    {formatSigned(row.deltaFps, 'fps')}
+                  </div>
+                </div>
+                <div className="grid content-center gap-1">
+                  <MiniBar value={row.currentFps} max={maxFps} className="bg-slate-300" />
+                  <MiniBar value={row.targetFps} max={maxFps} className="bg-brand-blue" />
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      ) : null}
+
+      {specRows.length ? (
+        <div className="mt-3 grid gap-2 sm:grid-cols-2">
+          {specRows.map((row) => (
+            <div key={row.label} className="rounded-md border border-blue-100 bg-white p-2 text-xs">
+              <div className="font-black text-commerce-ink">{row.label}</div>
+              <div className="mt-1 flex items-center justify-between gap-2 text-slate-600">
+                <span className="truncate">{row.currentValue ?? '-'}</span>
+                <span className="font-black text-slate-400">→</span>
+                <span className="truncate font-black text-brand-blue">{row.targetValue ?? '-'}</span>
+              </div>
+              {row.deltaText ? <div className="mt-1 text-[11px] font-bold text-commerce-green">{row.deltaText}</div> : null}
+            </div>
+          ))}
+        </div>
+      ) : null}
+
+      {simulation.warnings?.length ? (
+        <div className="mt-3 rounded-md bg-amber-50 px-3 py-2 text-xs font-bold leading-5 text-amber-700">
+          {simulation.warnings[0]}
+        </div>
+      ) : null}
+      <p className="mt-3 break-keep text-[11px] font-bold leading-5 text-slate-500">
+        {simulation.disclaimer ?? '실제 FPS는 게임 버전, 옵션, 드라이버, 냉각 상태에 따라 달라질 수 있습니다.'}
+      </p>
+    </section>
+  );
+}
+
+function ComparisonBar({ label, value, max, tone }: { label: string; value?: number | null; max: number; tone: 'slate' | 'blue' }) {
+  return (
+    <div className="grid grid-cols-[48px_1fr_44px] items-center gap-2 text-[11px] font-bold text-slate-500">
+      <span>{label}</span>
+      <MiniBar value={value} max={max} className={tone === 'blue' ? 'bg-brand-blue' : 'bg-slate-300'} />
+      <span className="text-right text-commerce-ink">{formatPlainNumber(value)}</span>
+    </div>
+  );
+}
+
+function MiniBar({ value, max, className }: { value?: number | null; max: number; className: string }) {
+  const width = Math.max(4, Math.min(100, Math.round(((value ?? 0) / Math.max(1, max)) * 100)));
+  return (
+    <div className="h-2 overflow-hidden rounded-full bg-slate-100">
+      <div className={`h-full rounded-full ${className}`} style={{ width: `${width}%` }} />
     </div>
   );
 }
@@ -775,6 +899,21 @@ function CompactBuildCard({
       </button>
     </article>
   );
+}
+
+function formatPlainNumber(value?: number | null) {
+  if (value === null || value === undefined) return '-';
+  return Math.abs(value - Math.round(value)) < 0.05 ? String(Math.round(value)) : value.toFixed(1);
+}
+
+function formatFps(value?: number | null) {
+  return value === null || value === undefined ? '-' : `${formatPlainNumber(value)}fps`;
+}
+
+function formatSigned(value?: number | null, unit = '') {
+  if (value === null || value === undefined) return '-';
+  const prefix = value > 0 ? '+' : '';
+  return `${prefix}${formatPlainNumber(value)}${unit}`;
 }
 
 function PartRecommendationCards({ options, label }: { options: AiBuildItem[]; label: string }) {

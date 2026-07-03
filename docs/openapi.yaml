@@ -2843,6 +2843,11 @@ components:
           description: 사용자 화면 이동 또는 견적초안 변경 action. OPEN_ROUTE는 fast route 또는 LLM routeIntent가 고확신일 때만 내려오며, 프론트는 route allowlist를 재검증해야 한다. 애매한 상품 상세 요청은 /self-quote?category=...&q=... 후보 필터 화면으로 이동할 수 있다. 견적초안 저장은 quote-drafts API가 수행한다.
           items:
             $ref: "#/components/schemas/AiDraftActionDto"
+        simulation:
+          nullable: true
+          description: 부품을 실제로 바꾸지 않고 성능/FPS/스펙 변화를 보여주는 읽기 전용 시뮬레이션 결과.
+          allOf:
+            - $ref: "#/components/schemas/AiPerformanceSimulationDto"
         warnings:
           type: array
           items:
@@ -2856,6 +2861,109 @@ components:
           type: string
           nullable: true
           description: 저장 가능한 Agent root가 있을 때만 채워진다. 홈 챗봇 단독 대화는 null일 수 있다.
+    AiPerformanceSimulationDto:
+      type: object
+      required: [type, category, currentPart, targetPart, summary]
+      properties:
+        type:
+          type: string
+          enum: [PERFORMANCE_COMPARISON]
+        category:
+          $ref: "#/components/schemas/PartCategory"
+        currentPart:
+          $ref: "#/components/schemas/AiSimulationPartDto"
+        targetPart:
+          $ref: "#/components/schemas/AiSimulationPartDto"
+        summary:
+          type: string
+        scoreComparison:
+          nullable: true
+          allOf:
+            - $ref: "#/components/schemas/AiSimulationScoreComparisonDto"
+        fpsComparisons:
+          type: array
+          items:
+            $ref: "#/components/schemas/AiSimulationFpsComparisonDto"
+        specComparisons:
+          type: array
+          items:
+            $ref: "#/components/schemas/AiSimulationSpecComparisonDto"
+        warnings:
+          type: array
+          items:
+            type: string
+        disclaimer:
+          type: string
+    AiSimulationPartDto:
+      type: object
+      required: [category, name]
+      properties:
+        partId:
+          type: string
+          nullable: true
+        category:
+          $ref: "#/components/schemas/PartCategory"
+        name:
+          type: string
+        manufacturer:
+          type: string
+          nullable: true
+        price:
+          type: integer
+          nullable: true
+    AiSimulationScoreComparisonDto:
+      type: object
+      required: [label]
+      properties:
+        label:
+          type: string
+        currentScore:
+          type: number
+          nullable: true
+        targetScore:
+          type: number
+          nullable: true
+        delta:
+          type: number
+          nullable: true
+    AiSimulationFpsComparisonDto:
+      type: object
+      required: [gameTitle, resolution]
+      properties:
+        gameTitle:
+          type: string
+        resolution:
+          type: string
+        graphicsPreset:
+          type: string
+          nullable: true
+        currentFps:
+          type: number
+          nullable: true
+        targetFps:
+          type: number
+          nullable: true
+        deltaFps:
+          type: number
+          nullable: true
+        source:
+          type: string
+          nullable: true
+    AiSimulationSpecComparisonDto:
+      type: object
+      required: [label]
+      properties:
+        label:
+          type: string
+        currentValue:
+          type: string
+          nullable: true
+        targetValue:
+          type: string
+          nullable: true
+        deltaText:
+          type: string
+          nullable: true
     RecommendationEventType:
       type: string
       description: 저장 가능한 추천 학습 이벤트 타입. Public `/api/recommendation-events`는 관리자 전용 이벤트인 AS_CONFIRMED_NEGATIVE, ADMIN_PROMOTE, ADMIN_DEMOTE를 거부한다.

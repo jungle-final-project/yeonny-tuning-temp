@@ -530,12 +530,92 @@ class BuildChatServiceTest {
 
         assertThat(response).containsEntry("answerType", "GENERAL");
         assertThat(response.get("message").toString())
-                .contains("시뮬레이션")
                 .contains("RTX 5080")
-                .contains("장바구니는 아직 변경하지 않았습니다")
-                .contains("FPS");
+                .contains("벤치마크")
+                .doesNotContain("내부")
+                .doesNotContain("normalized")
+                .doesNotContain("DB");
+        assertThat(response.get("simulation")).asInstanceOf(org.assertj.core.api.InstanceOfAssertFactories.MAP)
+                .containsEntry("type", "PERFORMANCE_COMPARISON")
+                .containsEntry("category", "GPU");
+        @SuppressWarnings("unchecked")
+        Map<String, Object> simulation = (Map<String, Object>) response.get("simulation");
+        assertThat(simulation.get("currentPart")).asInstanceOf(org.assertj.core.api.InstanceOfAssertFactories.MAP)
+                .containsEntry("name", "RTX 5070 Ti");
+        assertThat(simulation.get("targetPart")).asInstanceOf(org.assertj.core.api.InstanceOfAssertFactories.MAP)
+                .containsEntry("name", "RTX 5080");
+        assertThat(simulation.get("fpsComparisons")).asList()
+                .singleElement()
+                .asInstanceOf(org.assertj.core.api.InstanceOfAssertFactories.MAP)
+                .containsEntry("gameTitle", "PUBG")
+                .containsEntry("resolution", "QHD")
+                .containsEntry("targetFps", 180.0);
         assertThat(response.get("actions")).asList().isEmpty();
         assertThat(response.get("partRecommendation")).isNull();
+        verifyNoInteractions(aiChatEngine, cacheService);
+    }
+
+    @Test
+    void buildChatSimulatesNonGpuPartWithSpecComparisonCard() {
+        JdbcTemplate jdbcTemplate = mock(JdbcTemplate.class);
+        ToolCheckService toolCheckService = mock(ToolCheckService.class);
+        AiChatEngine aiChatEngine = mock(AiChatEngine.class);
+        BuildChatCacheService cacheService = mock(BuildChatCacheService.class);
+        BuildChatService service = new BuildChatService(jdbcTemplate, toolCheckService, aiChatEngine, cacheService);
+        doAnswer(invocation -> {
+            String sql = invocation.getArgument(0, String.class);
+            if (sql.contains("FROM parts p")) {
+                return List.of(partRow("ram-64", "RAM", "DDR5 64GB Kit", 240_000, Map.of(
+                        "capacityGb", 64,
+                        "moduleCount", 2,
+                        "speedMhz", 6000,
+                        "memoryType", "DDR5"
+                ), 92));
+            }
+            return List.of();
+        }).when(jdbcTemplate).queryForList(anyString(), any(Object[].class));
+        when(toolCheckService.checkBuild(anyList(), anyInt())).thenReturn(List.of(Map.of(
+                "tool", "compatibility",
+                "status", "PASS",
+                "confidence", "HIGH",
+                "summary", "호환 가능"
+        )));
+
+        Map<String, Object> response = service.chat(Map.of(
+                "message", "RAM 64GB로 바꾸면 성능이 어떻게 돼?",
+                "currentQuoteDraft", draftWithItems(List.of(
+                        draftItem("cpu-current", "CPU", "Ryzen 7 9700X", 1, Map.of("cpuClass", "RYZEN_7_9700X")),
+                        draftItem("board-current", "MOTHERBOARD", "B850 Board", 1, Map.of("memoryType", "DDR5")),
+                        draftItem("ram-current", "RAM", "DDR5 32GB Kit", 1, Map.of(
+                                "capacityGb", 32,
+                                "moduleCount", 2,
+                                "speedMhz", 5600,
+                                "memoryType", "DDR5"
+                        ))
+                ))
+        ));
+
+        assertThat(response).containsEntry("answerType", "GENERAL");
+        assertThat(response.get("message").toString())
+                .contains("RAM")
+                .contains("주요 스펙")
+                .doesNotContain("내부")
+                .doesNotContain("normalized")
+                .doesNotContain("DB");
+        assertThat(response.get("simulation")).asInstanceOf(org.assertj.core.api.InstanceOfAssertFactories.MAP)
+                .containsEntry("type", "PERFORMANCE_COMPARISON")
+                .containsEntry("category", "RAM");
+        @SuppressWarnings("unchecked")
+        Map<String, Object> simulation = (Map<String, Object>) response.get("simulation");
+        assertThat(simulation.get("fpsComparisons")).asList().isEmpty();
+        assertThat(simulation.get("specComparisons")).asList()
+                .anySatisfy(row -> assertThat(row)
+                        .asInstanceOf(org.assertj.core.api.InstanceOfAssertFactories.MAP)
+                        .containsEntry("label", "총 용량")
+                        .containsEntry("currentValue", "32GB")
+                        .containsEntry("targetValue", "64GB")
+                        .containsEntry("deltaText", "+32GB"));
+        assertThat(response.get("actions")).asList().isEmpty();
         verifyNoInteractions(aiChatEngine, cacheService);
     }
 

@@ -72,6 +72,51 @@ export type AiPartRecommendation = {
   options: AiBuildItem[];
 };
 
+export type AiSimulationPart = {
+  partId?: string | null;
+  category: PartCategory;
+  name: string;
+  manufacturer?: string | null;
+  price?: number | null;
+};
+
+export type AiSimulationScoreComparison = {
+  label: string;
+  currentScore?: number | null;
+  targetScore?: number | null;
+  delta?: number | null;
+};
+
+export type AiSimulationFpsComparison = {
+  gameTitle: string;
+  resolution: string;
+  graphicsPreset?: string | null;
+  currentFps?: number | null;
+  targetFps?: number | null;
+  deltaFps?: number | null;
+  source?: string | null;
+};
+
+export type AiSimulationSpecComparison = {
+  label: string;
+  currentValue?: string | null;
+  targetValue?: string | null;
+  deltaText?: string | null;
+};
+
+export type AiPerformanceSimulation = {
+  type: 'PERFORMANCE_COMPARISON';
+  category: PartCategory;
+  currentPart: AiSimulationPart;
+  targetPart: AiSimulationPart;
+  summary: string;
+  scoreComparison?: AiSimulationScoreComparison | null;
+  fpsComparisons?: AiSimulationFpsComparison[];
+  specComparisons?: AiSimulationSpecComparison[];
+  warnings?: string[];
+  disclaimer?: string;
+};
+
 export type AiDraftAction = {
   id: string;
   type: AiDraftActionType;
@@ -161,6 +206,7 @@ export type AiChatMessage = {
   builds?: AiRecommendedBuild[];
   partRecommendation?: AiPartRecommendation | null;
   actions?: AiDraftAction[];
+  simulation?: AiPerformanceSimulation | null;
   warnings?: string[];
 };
 
@@ -186,6 +232,7 @@ export type AiBuildChatResponse = {
   builds: AiRecommendedBuild[];
   partRecommendation?: AiPartRecommendation | null;
   actions?: AiDraftAction[];
+  simulation?: AiPerformanceSimulation | null;
   warnings?: string[];
 };
 

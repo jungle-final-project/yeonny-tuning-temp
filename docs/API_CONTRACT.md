@@ -651,7 +651,13 @@ AS AI Chat 규칙:
 | `AiBuildChatResponse` | `builds` | `AiBuildRecommendationDto[]` | no | `[{ "tier": "balanced" }]` |
 | `AiBuildChatResponse` | `partRecommendation` | `AiPartRecommendationDto` | yes | `{ "category": "GPU", "options": [] }` |
 | `AiBuildChatResponse` | `actions` | `AiDraftActionDto[]` | yes | `[{ "type": "REMOVE_DRAFT_PART" }]` |
+| `AiBuildChatResponse` | `simulation` | `AiPerformanceSimulationDto` | yes | `{ "type": "PERFORMANCE_COMPARISON", "category": "GPU" }` |
 | `AiBuildChatResponse` | `warnings` | `string[]` | no | `[]` |
+| `AiPerformanceSimulationDto` | `currentPart` | `AiSimulationPartDto` | no | `{ "name": "RTX 5080" }` |
+| `AiPerformanceSimulationDto` | `targetPart` | `AiSimulationPartDto` | no | `{ "name": "RTX 5090" }` |
+| `AiPerformanceSimulationDto` | `scoreComparison` | `object` | yes | `{ "label": "벤치마크 기반 점수", "currentScore": 95, "targetScore": 100, "delta": 5 }` |
+| `AiPerformanceSimulationDto` | `fpsComparisons` | `object[]` | yes | `[{ "gameTitle": "PUBG", "resolution": "QHD", "currentFps": 223, "targetFps": 243 }]` |
+| `AiPerformanceSimulationDto` | `specComparisons` | `object[]` | yes | `[{ "label": "VRAM", "currentValue": "16GB", "targetValue": "32GB" }]` |
 | `AiBuildRecommendationDto` | `id` | `string` | no | `ai-2000000-balanced` |
 | `AiBuildRecommendationDto` | `tier` | `string` | no | `balanced` |
 | `AiBuildRecommendationDto` | `items` | `AiBuildItemDto[]` | no | `[{ "category": "GPU" }]` |
