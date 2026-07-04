@@ -537,10 +537,11 @@ public class BuildChatService {
             params.add(wattage);
         }
 
+        // 바꿀 대상 제품을 특정할 신호(모델/용량/와트)가 하나도 없으면 임의 후보를 잡지 않는다.
+        // 축소 정책상 target 불명확 시뮬레이션은 임의 비교 대신 되묻기로 처리해야 한다
+        // (호출부 performanceSimulationResponse가 empty를 받으면 simulationClarificationResponse로 유도).
         if (filters.isEmpty()) {
-            return partRecommendations(category, 1).stream()
-                    .findFirst()
-                    .map(this::partCandidate);
+            return Optional.empty();
         }
 
         List<String> order = new ArrayList<>();

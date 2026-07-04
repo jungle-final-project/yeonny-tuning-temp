@@ -289,6 +289,29 @@ class BuildChatServiceTest {
     }
 
     @Test
+    void buildChatDoesNotPickArbitrarySimulationTargetWhenModelIsUnspecified() {
+        JdbcTemplate jdbcTemplate = mock(JdbcTemplate.class);
+        ToolCheckService toolCheckService = mock(ToolCheckService.class);
+        AiChatEngine aiChatEngine = mock(AiChatEngine.class);
+        BuildChatCacheService cacheService = mock(BuildChatCacheService.class);
+        BuildChatService service = new BuildChatService(jdbcTemplate, toolCheckService, aiChatEngine, cacheService);
+
+        // 구체적 교체 대상(모델/용량/와트) 신호가 없는 시뮬레이션 요청
+        Map<String, Object> response = service.chat(Map.of(
+                "message", "그래픽카드 바꾸면 성능 어떻게 돼?",
+                "currentQuoteDraft", draftWithItems(List.of(
+                        draftItem("gpu-current", "GPU", "RTX 5060", 1, Map.of("gpuClass", "RTX_5060"))
+                ))
+        ));
+
+        // 임의 후보(카탈로그 최상위 GPU)를 잡지 않고 되묻기로 유도해야 한다
+        assertThat(response).containsEntry("answerType", "GENERAL");
+        assertThat(response.get("warnings")).asList().contains("SIMULATION_TARGET_NOT_FOUND");
+        assertThat(response).doesNotContainKey("simulation");
+        verifyNoInteractions(aiChatEngine, cacheService);
+    }
+
+    @Test
     void buildChatRecordsShadowScoresAfterGeneratingFreshAiResponse() {
         JdbcTemplate jdbcTemplate = mock(JdbcTemplate.class);
         ToolCheckService toolCheckService = mock(ToolCheckService.class);

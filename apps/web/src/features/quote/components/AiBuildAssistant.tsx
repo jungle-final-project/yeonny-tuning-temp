@@ -168,10 +168,14 @@ export function AiBuildAssistant({ surface = 'home' }: AiBuildAssistantProps) {
     setIsSending(true);
 
     try {
-      const currentQuoteDraft = quoteDraftQuery.data ?? await queryClient.fetchQuery({
-        queryKey: ['quote-draft', 'current'],
-        queryFn: getCurrentQuoteDraft
-      });
+      // 견적 완성/성능 비교만 현재 견적(드래프트) 문맥이 필요하다. 예산 추천·미지원·명확화는
+      // draft 없이 즉시 서버로 보내 체감 지연을 줄인다. 이미 캐시된 draft는 그대로 활용한다.
+      const currentQuoteDraft = needsDraftContext(nextPrompt)
+        ? quoteDraftQuery.data ?? await queryClient.fetchQuery({
+          queryKey: ['quote-draft', 'current'],
+          queryFn: getCurrentQuoteDraft
+        })
+        : quoteDraftQuery.data;
       const response = await buildChat({
         message: nextPrompt,
         currentBuilds: recentBuildsForChatContext(baseSession),
@@ -380,6 +384,15 @@ export function AiBuildAssistant({ surface = 'home' }: AiBuildAssistantProps) {
       </div>
     </section>
   );
+}
+
+// 서버가 현재 견적(드래프트) 문맥을 실제로 쓰는 요청만 draft를 먼저 확보한다.
+// 백엔드 BuildChatIntentRouter의 시뮬레이션/견적완성 판정 어휘와 맞춘다.
+function needsDraftContext(prompt: string) {
+  const normalized = prompt.toLowerCase().replace(/\s+/g, '');
+  const completionLike = /지금|현재|이견적|그래프|나머지|마저|채워|완성/.test(normalized);
+  const simulationLike = /바꾸면|바꿨|교체하면|교체시|넣으면|달면|끼우면|끼면|박으면|올리면|올렸|내리면|내려|낮추면|늘리면|줄이면|갈아|넘어가면|업그레이드하면|다운그레이드하면|프레임|fps|성능|체감|비교/.test(normalized);
+  return completionLike || simulationLike;
 }
 
 function messageKind(answerType: 'BUDGET' | 'PART' | 'GENERAL'): AiChatMessage['kind'] {

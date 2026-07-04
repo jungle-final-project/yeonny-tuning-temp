@@ -1,0 +1,140 @@
+[
+  {
+    "id": "budget-tier-200",
+    "message": "200만원 게이밍 PC 추천해줘",
+    "expectedAnswerType": "BUDGET",
+    "expectedMinBuilds": 1,
+    "maxLatencyMs": 100,
+    "note": "prewarm/tier snapshot 대상"
+  },
+  {
+    "id": "budget-tier-437",
+    "message": "437만원으로 게이밍 PC 추천해줘",
+    "expectedAnswerType": "BUDGET",
+    "expectedMinBuilds": 1,
+    "maxLatencyMs": 100,
+    "note": "tier 근접, 콜드 시 그리디"
+  },
+  {
+    "id": "budget-korean-1300",
+    "message": "일천삼백만원 예산으로 AI 모델 돌릴 컴퓨터 견적 뽑아줘",
+    "expectedAnswerType": "BUDGET",
+    "expectedMinBuilds": 1,
+    "maxLatencyMs": 200,
+    "note": "한글 숫자 파싱 + 고예산"
+  },
+  {
+    "id": "budget-high-2000",
+    "message": "2000만원짜리 하이엔드 견적 부탁드립니다",
+    "expectedAnswerType": "BUDGET",
+    "expectedMinBuilds": 1,
+    "maxLatencyMs": 200,
+    "note": "티어 밖 고예산, 그리디"
+  },
+  {
+    "id": "budget-usecase-only",
+    "message": "영상편집용 PC 필요해",
+    "expectedAnswerType": "BUDGET",
+    "expectedMinBuilds": 1,
+    "maxLatencyMs": 6000,
+    "note": "예산 없는 용도 추천 (open-budget or LLM)"
+  },
+  {
+    "id": "budget-below-minimum",
+    "message": "60만원 사무용 PC 추천",
+    "expectedAnswerType": "BUDGET",
+    "expectedMinBuilds": 1,
+    "expectWarning": true,
+    "maxLatencyMs": 100,
+    "note": "최소 구성 미달 → 가능한 최소 구성 카드"
+  },
+  {
+    "id": "unsupported-navigate",
+    "message": "GPU 보여줘",
+    "expectedAnswerType": "GENERAL",
+    "expectedMinBuilds": 0,
+    "expectWarning": true,
+    "maxLatencyMs": 50,
+    "note": "화면 이동 미지원 고정 안내"
+  },
+  {
+    "id": "unsupported-mutation",
+    "message": "그래픽카드 빼줘",
+    "expectedAnswerType": "GENERAL",
+    "expectedMinBuilds": 0,
+    "expectWarning": true,
+    "maxLatencyMs": 50,
+    "note": "장바구니 조작 미지원"
+  },
+  {
+    "id": "unsupported-part-recommend",
+    "message": "가성비 SSD 하나 추천해줘",
+    "expectedAnswerType": "GENERAL",
+    "expectedMinBuilds": 0,
+    "expectWarning": true,
+    "maxLatencyMs": 50,
+    "note": "단일 부품 추천 미지원"
+  },
+  {
+    "id": "clarify-vague",
+    "message": "뭐 사면 돼?",
+    "expectedAnswerType": "GENERAL",
+    "expectedMinBuilds": 0,
+    "expectWarning": true,
+    "maxLatencyMs": 50,
+    "note": "정보 부족 되묻기"
+  },
+  {
+    "id": "clarify-purchase-intent",
+    "message": "컴퓨터 하나 장만하려고요",
+    "expectedAnswerType": "GENERAL",
+    "expectedMinBuilds": 0,
+    "expectWarning": true,
+    "maxLatencyMs": 50,
+    "note": "모호 구매 의향 되묻기"
+  },
+  {
+    "id": "simulation-cpu-model",
+    "message": "CPU를 9700X로 바꾸면?",
+    "expectedAnswerType": "GENERAL",
+    "expectedMinBuilds": 0,
+    "maxLatencyMs": 500,
+    "expectSimulationOrClarify": true,
+    "currentQuoteDraft": {
+      "items": [
+        {"partId": "cpu-1", "category": "CPU", "name": "Ryzen 7 9700X", "quantity": 1},
+        {"partId": "gpu-1", "category": "GPU", "name": "RTX 5070", "quantity": 1}
+      ]
+    },
+    "note": "구체적 모델 시뮬레이션 (draft 필요)"
+  },
+  {
+    "id": "simulation-target-ambiguous",
+    "message": "그래픽카드 바꾸면 성능 어떻게 돼?",
+    "expectedAnswerType": "GENERAL",
+    "expectedMinBuilds": 0,
+    "expectSimulationAbsent": true,
+    "maxLatencyMs": 500,
+    "currentQuoteDraft": {
+      "items": [
+        {"partId": "gpu-1", "category": "GPU", "name": "RTX 5060", "quantity": 1},
+        {"partId": "cpu-1", "category": "CPU", "name": "Ryzen 7", "quantity": 1}
+      ]
+    },
+    "note": "target 불명확 → 임의 후보 금지, 되묻기 (simulation 없어야 함)"
+  },
+  {
+    "id": "draft-completion",
+    "message": "지금 견적 기준으로 나머지 부품 채워줘",
+    "expectedAnswerType": "BUDGET",
+    "expectedMinBuilds": 1,
+    "maxLatencyMs": 200,
+    "currentQuoteDraft": {
+      "items": [
+        {"partId": "cpu-1", "category": "CPU", "name": "Ryzen 7 9700X", "quantity": 1},
+        {"partId": "gpu-1", "category": "GPU", "name": "RTX 5070", "quantity": 1}
+      ]
+    },
+    "note": "드래프트 완성 deterministic"
+  }
+]

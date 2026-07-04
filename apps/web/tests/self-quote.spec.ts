@@ -1251,8 +1251,8 @@ test('self quote chatbot sends current draft and never mutates the draft automat
       status: 200,
       contentType: 'application/json',
       body: JSON.stringify({
-        answerType: 'GENERAL',
-        message: 'GPU 제거는 견적 장바구니에서 직접 진행해 주세요. 현재 견적 기준으로 대안을 안내해 드릴 수 있습니다.',
+        answerType: 'BUDGET',
+        message: '현재 견적에 담긴 부품은 유지하고 나머지 카테고리를 내부 자산 기준으로 채웠습니다.',
         builds: [],
         warnings: []
       })
@@ -1269,12 +1269,13 @@ test('self quote chatbot sends current draft and never mutates the draft automat
   await expect(chatbotPanel.getByRole('button', { name: '800만원 PC 추천' })).toHaveCount(0);
   await expect(chatbotPanel.getByRole('button', { name: '9950X3D 상세' })).toHaveCount(0);
   await expect(chatbotPanel.getByRole('button', { name: '내 견적함' })).toHaveCount(0);
-  await page.getByRole('textbox', { name: 'AI 챗봇에게 PC 사양 질문' }).fill('GPU 빼줘');
+  // 견적 완성 요청은 현재 견적(드래프트) 문맥이 필요하므로 서버로 draft가 전송돼야 한다
+  await page.getByRole('textbox', { name: 'AI 챗봇에게 PC 사양 질문' }).fill('지금 견적 기준으로 나머지 부품 채워줘');
   await page.getByRole('button', { name: '질문 보내기' }).click();
 
   await expect.poll(() => buildChatBodies.length).toBe(1);
   expect((buildChatBodies[0] as { currentQuoteDraft?: { items?: Array<{ partId: string }> } }).currentQuoteDraft?.items?.[0]?.partId).toBe('part-gpu-chat');
-  await expect(page.getByTestId('ai-chat-messages')).toContainText('GPU 제거는 견적 장바구니에서 직접 진행해 주세요.');
+  await expect(page.getByTestId('ai-chat-messages')).toContainText('나머지 카테고리를 내부 자산 기준으로 채웠습니다.');
 
   expect(draftMutationMethods).toHaveLength(0);
   await expect(page.getByText('RTX 5070 챗봇 테스트')).toBeVisible();

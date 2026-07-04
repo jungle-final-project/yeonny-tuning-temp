@@ -168,16 +168,16 @@ def run_case(
 
 
 def build_chat_schema_valid(response: dict | None) -> bool:
+    # PR #53 이후 축소 계약: partRecommendation/actions/evidenceIds는 더 이상 필수가 아니다.
+    # 이 스크립트는 제거 전 케이스 파일 전용이므로, 최신 fast-path 측정은
+    # benchmark_build_chat_fastpaths.py를 사용한다.
     if not isinstance(response, dict):
         return False
     return (
         isinstance(response.get("answerType"), str)
         and isinstance(response.get("message"), str)
         and isinstance(response.get("builds"), list)
-        and "partRecommendation" in response
-        and isinstance(response.get("actions"), list)
         and isinstance(response.get("warnings"), list)
-        and isinstance(response.get("evidenceIds"), list)
     )
 
 
