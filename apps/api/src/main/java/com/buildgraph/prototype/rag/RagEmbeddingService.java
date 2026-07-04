@@ -1,6 +1,6 @@
 package com.buildgraph.prototype.rag;
 
-import com.buildgraph.prototype.agent.OpenAiEmbeddingClient;
+import com.buildgraph.prototype.opsagent.profile.OpenAiEmbeddingClient;
 import com.buildgraph.prototype.common.DbValueMapper;
 import com.buildgraph.prototype.common.MockData;
 import com.fasterxml.jackson.databind.ObjectMapper;

@@ -1,6 +1,6 @@
 package com.buildgraph.prototype.rag;
 
-import com.buildgraph.prototype.agent.AgentPurpose;
+import com.buildgraph.prototype.opsagent.profile.AgentPurpose;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 

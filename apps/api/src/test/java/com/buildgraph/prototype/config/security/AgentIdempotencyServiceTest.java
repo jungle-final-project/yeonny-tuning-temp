@@ -5,8 +5,8 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
-import com.buildgraph.prototype.agent.persistence.AgentIdempotencyRecordEntity;
-import com.buildgraph.prototype.agent.persistence.AgentIdempotencyRecordRepository;
+import com.buildgraph.prototype.opsagent.persistence.AgentIdempotencyRecordEntity;
+import com.buildgraph.prototype.opsagent.persistence.AgentIdempotencyRecordRepository;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.ZoneOffset;

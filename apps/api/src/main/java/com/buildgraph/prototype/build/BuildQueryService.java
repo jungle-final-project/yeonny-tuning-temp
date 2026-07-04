@@ -1,14 +1,12 @@
 package com.buildgraph.prototype.build;
 
-import com.buildgraph.prototype.agent.AgentRunProfile;
-import com.buildgraph.prototype.agent.AgentRunProfiles;
-import com.buildgraph.prototype.agent.AgentSessionRoot;
-import com.buildgraph.prototype.agent.AgentSessionRootType;
-import com.buildgraph.prototype.agent.AgentTraceService;
-import com.buildgraph.prototype.agent.AgentJobPublisher;
-import com.buildgraph.prototype.agent.AiChatEngine;
-import com.buildgraph.prototype.agent.QuoteRequirementAnalysisRequest;
-import com.buildgraph.prototype.agent.QuoteRequirementAnalysisResult;
+import com.buildgraph.prototype.opsagent.profile.AgentRunProfile;
+import com.buildgraph.prototype.opsagent.profile.AgentRunProfiles;
+import com.buildgraph.prototype.opsagent.trace.AgentSessionRoot;
+import com.buildgraph.prototype.opsagent.trace.AgentSessionRootType;
+import com.buildgraph.prototype.opsagent.trace.AgentTraceService;
+import com.buildgraph.prototype.opsagent.runner.AgentJobPublisher;
+import com.buildgraph.prototype.quoteagent.chat.AiChatEngine;
 import com.buildgraph.prototype.common.DbValueMapper;
 import com.buildgraph.prototype.common.MockData;
 import com.buildgraph.prototype.part.ToolBuildPart;
@@ -103,12 +101,9 @@ public class BuildQueryService {
                 RETURNING public_id::text
                 """, String.class, user.internalId(), message, fallbackBudget, String.join(",", fallbackUsageTags), json(pendingContext));
 
-        Map<String, Object> analysisInputs = new LinkedHashMap<>(body);
-        analysisInputs.put("_userInternalId", user.internalId());
-        QuoteRequirementAnalysisResult parseResult = aiChatEngine.analyzeQuoteRequirement(
-                new QuoteRequirementAnalysisRequest(id, message, analysisInputs, fallbackContext)
-        );
-        Map<String, Object> parsedContext = parseResult.parsedContext();
+        Map<String, Object> parsedContext = new LinkedHashMap<>(fallbackContext);
+        parsedContext.put("parseMode", "DETERMINISTIC");
+        parsedContext.put("parser", "requirement-parse-fallback-v1");
         Integer budget = numberValue(parsedContext.get("budget"));
         List<String> usageTags = stringList(parsedContext.get("usageTags"));
         jdbcTemplate.update("""
@@ -126,9 +121,9 @@ public class BuildQueryService {
                 "usageTags", usageTags,
                 "parsedContext", parsedContext,
                 "questions", questions(parsedContext),
-                "agentSessionId", parseResult.agentSessionId(),
-                "agentSummary", parseResult.agentSummary(),
-                "evidenceIds", parseResult.evidenceIds()
+                "agentSessionId", null,
+                "agentSummary", null,
+                "evidenceIds", List.of()
         );
     }
 

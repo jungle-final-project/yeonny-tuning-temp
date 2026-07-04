@@ -1,6 +1,6 @@
 package com.buildgraph.prototype.admin;
 
-import com.buildgraph.prototype.agent.AgentQueryService;
+import com.buildgraph.prototype.opsagent.trace.AgentQueryService;
 import com.buildgraph.prototype.price.PriceQueryService;
 import com.buildgraph.prototype.rag.RagEmbeddingService;
 import com.buildgraph.prototype.rag.RagQueryService;

@@ -1,6 +1,6 @@
 package com.buildgraph.prototype.build;
 
-import com.buildgraph.prototype.agent.AiProfileConfig;
+import com.buildgraph.prototype.opsagent.profile.AiProfileConfig;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.nio.charset.StandardCharsets;

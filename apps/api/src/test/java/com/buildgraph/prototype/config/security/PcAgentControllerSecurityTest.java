@@ -16,9 +16,9 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 import com.buildgraph.prototype.admin.AdminController;
 import com.buildgraph.prototype.admin.AdminQueryService;
-import com.buildgraph.prototype.agent.AgentQueryService;
-import com.buildgraph.prototype.agent.PcAgentAsService;
-import com.buildgraph.prototype.agent.PcAgentController;
+import com.buildgraph.prototype.opsagent.trace.AgentQueryService;
+import com.buildgraph.prototype.opsagent.as.PcAgentAsService;
+import com.buildgraph.prototype.opsagent.as.PcAgentController;
 import com.buildgraph.prototype.rag.RagEmbeddingService;
 import com.buildgraph.prototype.rag.RagQueryService;
 import com.buildgraph.prototype.ticket.TicketController;

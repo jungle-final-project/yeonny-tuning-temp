@@ -1,9 +1,9 @@
 package com.buildgraph.prototype.build;
 
-import com.buildgraph.prototype.agent.AiChatEngine;
-import com.buildgraph.prototype.agent.AiChatEngineRequest;
-import com.buildgraph.prototype.agent.AiChatEngineResponse;
-import com.buildgraph.prototype.agent.AiChatIntent;
+import com.buildgraph.prototype.quoteagent.chat.AiChatRequestDto;
+import com.buildgraph.prototype.quoteagent.chat.AiChatResponseDto;
+import com.buildgraph.prototype.quoteagent.chat.AiChatIntent;
+import com.buildgraph.prototype.quoteagent.chat.AiChatEngine;
 import com.buildgraph.prototype.common.DbValueMapper;
 import com.buildgraph.prototype.common.MockData;
 import com.buildgraph.prototype.part.ToolBuildPart;
@@ -89,14 +89,9 @@ public class BuildChatService {
         if (cachedResponse.isPresent()) {
             return cachedResponse.get();
         }
-        AiChatEngineResponse engineResponse = aiChatEngine.respondLlmRequired(new AiChatEngineRequest(
+        AiChatResponseDto engineResponse = aiChatEngine.respondLlmRequired(new AiChatRequestDto(
                 message,
-                "HOME",
-                firstText(text(body.get("selectedCategory")), detectPartCategory(message)),
-                text(body.get("buildId")),
-                text(body.get("draftId")),
-                body,
-                userId
+                text(body.get("sessionId"))
         ), requestedAiProfile);
         Map<String, Object> response = responseMap(engineResponse, body);
         log.debug("Build Chat response generated: userId={}, requestedAiProfile={}, cacheStore=true", userId, requestedAiProfile);
@@ -139,9 +134,9 @@ public class BuildChatService {
                 .orElse(null);
     }
 
-    private Map<String, Object> responseMap(AiChatEngineResponse engineResponse, Map<String, Object> request) {
+    private Map<String, Object> responseMap(AiChatResponseDto engineResponse, Map<String, Object> request) {
         List<String> warnings = new ArrayList<>();
-        List<AiChatEngineResponse.PartRecommendation> safePartRecommendations = failSafePartRecommendations(engineResponse.partRecommendations(), request, warnings);
+        List<AiChatResponseDto.PartRecommendation> safePartRecommendations = failSafePartRecommendations(engineResponse.partRecommendations(), request, warnings);
         List<Map<String, Object>> builds = switch (engineResponse.intent()) {
             case FULL_BUILD_RECOMMEND -> engineBuilds(engineResponse, warnings);
             case PART_RECOMMEND, BUILD_MODIFY -> changedCurrentBuilds(engineResponse, request, safePartRecommendations, warnings);
@@ -163,8 +158,8 @@ public class BuildChatService {
         );
     }
 
-    private List<Map<String, Object>> engineBuilds(AiChatEngineResponse engineResponse, List<String> warnings) {
-        List<AiChatEngineResponse.BuildRecommendation> recommendations = engineResponse.recommendations();
+    private List<Map<String, Object>> engineBuilds(AiChatResponseDto engineResponse, List<String> warnings) {
+        List<AiChatResponseDto.BuildRecommendation> recommendations = engineResponse.recommendations();
         if (recommendations == null || recommendations.isEmpty()) {
             return List.of();
         }
@@ -181,9 +176,9 @@ public class BuildChatService {
     }
 
     private Map<String, Object> engineBuildMap(
-            AiChatEngineResponse.BuildRecommendation recommendation,
+            AiChatResponseDto.BuildRecommendation recommendation,
             int index,
-            AiChatEngineResponse engineResponse,
+            AiChatResponseDto engineResponse,
             List<String> warnings
     ) {
         Tier tier = TIERS.get(Math.max(0, Math.min(index, TIERS.size() - 1)));
@@ -223,9 +218,9 @@ public class BuildChatService {
     }
 
     private List<Map<String, Object>> changedCurrentBuilds(
-            AiChatEngineResponse engineResponse,
+            AiChatResponseDto engineResponse,
             Map<String, Object> request,
-            List<AiChatEngineResponse.PartRecommendation> options,
+            List<AiChatResponseDto.PartRecommendation> options,
             List<String> warnings
     ) {
         if (options == null || options.isEmpty()) {
@@ -251,7 +246,7 @@ public class BuildChatService {
         return updatedBuilds;
     }
 
-    private Map<String, Object> partRecommendation(List<AiChatEngineResponse.PartRecommendation> parts) {
+    private Map<String, Object> partRecommendation(List<AiChatResponseDto.PartRecommendation> parts) {
         if (parts == null || parts.isEmpty()) {
             return null;
         }
@@ -267,9 +262,9 @@ public class BuildChatService {
     }
 
     private List<Map<String, Object>> draftActions(
-            AiChatEngineResponse engineResponse,
+            AiChatResponseDto engineResponse,
             Map<String, Object> request,
-            List<AiChatEngineResponse.PartRecommendation> safePartRecommendations
+            List<AiChatResponseDto.PartRecommendation> safePartRecommendations
     ) {
         Map<String, Object> currentQuoteDraft = objectMap(request.get("currentQuoteDraft"));
         if (currentQuoteDraft.isEmpty()) {
@@ -314,7 +309,7 @@ public class BuildChatService {
     }
 
     private List<Map<String, Object>> replacementActions(
-            List<AiChatEngineResponse.PartRecommendation> recommendations,
+            List<AiChatResponseDto.PartRecommendation> recommendations,
             List<Map<String, Object>> draftItems,
             boolean multiple
     ) {
@@ -324,7 +319,7 @@ public class BuildChatService {
         List<Map<String, Object>> actions = new ArrayList<>();
         int limit = multiple ? Math.min(3, recommendations.size()) : 1;
         for (int index = 0; index < limit; index += 1) {
-            AiChatEngineResponse.PartRecommendation candidate = recommendations.get(index);
+            AiChatResponseDto.PartRecommendation candidate = recommendations.get(index);
             Map<String, Object> existing = findDraftItem(draftItems, candidate.category(), candidate.name());
             String type = existing.isEmpty() ? "ADD_PART_TO_DRAFT" : "REPLACE_DRAFT_PART";
             int quantity = defaultQuantity(candidate.category());
@@ -344,8 +339,8 @@ public class BuildChatService {
         return actions;
     }
 
-    private List<AiChatEngineResponse.PartRecommendation> failSafePartRecommendations(
-            List<AiChatEngineResponse.PartRecommendation> recommendations,
+    private List<AiChatResponseDto.PartRecommendation> failSafePartRecommendations(
+            List<AiChatResponseDto.PartRecommendation> recommendations,
             Map<String, Object> request,
             List<String> warnings
     ) {
@@ -357,9 +352,9 @@ public class BuildChatService {
         if (draftItems.isEmpty()) {
             return recommendations;
         }
-        List<AiChatEngineResponse.PartRecommendation> safe = new ArrayList<>();
+        List<AiChatResponseDto.PartRecommendation> safe = new ArrayList<>();
         int excluded = 0;
-        for (AiChatEngineResponse.PartRecommendation recommendation : recommendations) {
+        for (AiChatResponseDto.PartRecommendation recommendation : recommendations) {
             List<PartCandidate> nextParts = replacementPreviewParts(draftItems, recommendation);
             List<String> localWarnings = new ArrayList<>();
             List<Map<String, Object>> toolResults = toolResults(nextParts, totalPrice(nextParts), localWarnings);
@@ -375,7 +370,7 @@ public class BuildChatService {
         return safe;
     }
 
-    private List<PartCandidate> replacementPreviewParts(List<Map<String, Object>> draftItems, AiChatEngineResponse.PartRecommendation recommendation) {
+    private List<PartCandidate> replacementPreviewParts(List<Map<String, Object>> draftItems, AiChatResponseDto.PartRecommendation recommendation) {
         String category = recommendation.category();
         List<PartCandidate> nextParts = new ArrayList<>();
         boolean replaced = false;
@@ -504,7 +499,7 @@ public class BuildChatService {
                 .orElse(Map.of());
     }
 
-    private String firstRecommendedCategory(AiChatEngineResponse engineResponse) {
+    private String firstRecommendedCategory(AiChatResponseDto engineResponse) {
         if (engineResponse.partRecommendations() == null || engineResponse.partRecommendations().isEmpty()) {
             return null;
         }
@@ -685,7 +680,7 @@ public class BuildChatService {
         );
     }
 
-    private PartCandidate partCandidate(AiChatEngineResponse.PartRecommendation part) {
+    private PartCandidate partCandidate(AiChatResponseDto.PartRecommendation part) {
         return new PartCandidate(
                 null,
                 part.partId(),
@@ -725,7 +720,7 @@ public class BuildChatService {
         return switch (intent) {
             case FULL_BUILD_RECOMMEND -> "BUDGET";
             case PART_RECOMMEND, BUILD_MODIFY -> "PART";
-            case PRICE_ALERT_HELP, EXPLAIN, ASK_FOLLOW_UP -> "GENERAL";
+            case PRICE_ALERT_HELP, CONVERSATION -> "GENERAL";
         };
     }
 

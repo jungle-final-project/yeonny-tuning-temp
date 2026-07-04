@@ -1,7 +1,7 @@
 package com.buildgraph.prototype.config.security;
 
-import com.buildgraph.prototype.agent.persistence.AgentIdempotencyRecordEntity;
-import com.buildgraph.prototype.agent.persistence.AgentIdempotencyRecordRepository;
+import com.buildgraph.prototype.opsagent.persistence.AgentIdempotencyRecordEntity;
+import com.buildgraph.prototype.opsagent.persistence.AgentIdempotencyRecordRepository;
 import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
