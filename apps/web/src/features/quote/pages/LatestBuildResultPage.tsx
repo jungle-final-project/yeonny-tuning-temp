@@ -14,6 +14,7 @@ import '@xyflow/react/dist/style.css';
 import { X } from 'lucide-react';
 import { Link, useNavigate } from 'react-router-dom';
 import { Panel, Screen, StateMessage, StatusBadge } from '../../../components/ui';
+import { BENCHMARK_REFERENCE_NOTICE } from '../../../lib/disclaimers';
 import { latestUserMessage, temporaryBuildToBuildSummary } from '../components/BuildDetailSections';
 import {
   AI_ASSISTANT_BUILD_HISTORY_LIMIT,
@@ -452,6 +453,7 @@ function LatestBuildDetailPanelContent({
                     </div>
                   ))}
                 </div>
+                <p className="break-keep text-[11px] font-bold leading-5 text-slate-500">{BENCHMARK_REFERENCE_NOTICE}</p>
               </>
             ) : (
               <StateMessage type="info" title="검증 결과 없음" body="저장 버튼을 누르면 서버에서 다시 Tool 검증 후 견적으로 저장합니다." />

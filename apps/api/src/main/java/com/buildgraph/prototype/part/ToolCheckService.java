@@ -190,7 +190,9 @@ public class ToolCheckService {
         return tool("performance",
                 pass ? "PASS" : "WARN",
                 benchmarkBacked ? "HIGH" : "MEDIUM",
-                pass ? "공개 벤치마크/공식 스펙 기반 적합도 점수상 요구 작업에 무리가 적은 조합입니다." : "성능 또는 작업 적합도 여유가 낮아 상위 부품을 검토해야 합니다.",
+                pass
+                        ? "공개 벤치마크/공식 스펙 기반 적합도 점수상 요구 작업에 무리가 적은 조합입니다. 점수는 참고용이며 실제 성능을 보장하지 않습니다."
+                        : "성능 또는 작업 적합도 여유가 낮아 상위 부품을 검토해야 합니다. 점수는 참고용이며 실제 성능을 보장하지 않습니다.",
                 details);
     }
 

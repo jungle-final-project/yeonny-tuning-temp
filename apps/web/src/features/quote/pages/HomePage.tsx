@@ -788,7 +788,7 @@ function homeReasonLabels(tags: string[]) {
 function homePartDetail(part: PartRow) {
   const score = part.benchmarkSummary?.score;
   if (score !== undefined && score !== null) {
-    return `${part.manufacturer ?? part.category} · 벤치/스펙 점수 ${score}`;
+    return `${part.manufacturer ?? part.category} · 벤치/스펙 점수 ${score} (참고용)`;
   }
   if (part.externalOffer?.supplierName) {
     return `${part.manufacturer ?? part.category} · ${part.externalOffer.supplierName} 기준`;

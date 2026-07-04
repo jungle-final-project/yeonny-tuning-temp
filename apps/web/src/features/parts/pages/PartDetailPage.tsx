@@ -184,7 +184,7 @@ export function PartDetailPage() {
       </div>
 
       <div className="mt-6 grid gap-6 lg:grid-cols-[minmax(280px,420px)_minmax(0,1fr)]">
-        <Panel title="주요 스펙" subtitle="내부 자산 attributes 기준">
+        <Panel title="주요 스펙" subtitle="내부 자산 attributes 기준 · 성능 관련 수치는 참고용이며 실제 성능은 사용 환경에 따라 달라질 수 있습니다">
           {rows.length === 0 ? (
             <div className="rounded border border-dashed border-slate-300 p-5 text-sm text-slate-500">표시할 세부 스펙이 없습니다.</div>
           ) : (

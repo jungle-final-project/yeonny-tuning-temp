@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react';
 import { Link } from 'react-router-dom';
 import { DataTable, MetricCard, Panel, StateMessage, StatusBadge } from '../../../components/ui';
+import { BENCHMARK_REFERENCE_NOTICE } from '../../../lib/disclaimers';
 import type { AiAssistantSession, AiRecommendedBuild } from '../aiSelection';
 import type { BuildSummary, ToolResult, WarningDto } from '../types';
 
@@ -78,6 +79,7 @@ export function BuildDetailSections({
           <div className="hidden md:block">
             <DataTable columns={['검증 항목', '상태', '신뢰도', '요약']} rows={toolRows(toolResults)} />
           </div>
+          <p className="mt-3 break-keep text-[11px] font-bold leading-5 text-slate-500">{BENCHMARK_REFERENCE_NOTICE}</p>
         </Panel>
       </div>
       <Panel title="견적 요약 / 액션">
