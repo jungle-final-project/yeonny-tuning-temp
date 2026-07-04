@@ -59,6 +59,8 @@ export type RecommendationTrainingOverview = {
   untrainedEligibleEvents: number;
   excludedDatasetItems: number;
   recentSevenDayEvents: number;
+  asFeedbackEvents?: number;
+  untrainedAsFeedbackEvents?: number;
   activeModel?: RecommendationModelVersion | null;
   latestJob?: RecommendationTrainingJob | null;
   generatedAt?: string;
@@ -280,6 +282,19 @@ export type AdminAsTicket = {
   detailDescription?: string | null;
   logUploadId?: string | null;
   logSummary?: string | null;
+  logSummaryId?: string | null;
+  logSummaryPayload?: Record<string, unknown>;
+  logFeaturePayload?: Record<string, unknown>;
+  logRiskFlags?: Record<string, unknown>;
+  asTrainingLabel?: {
+    id: string;
+    failureCategory?: string | null;
+    severity?: string | null;
+    relatedPartId?: string | null;
+    recommendationId?: string | null;
+    useForRecommendationTraining?: boolean | null;
+    note?: string | null;
+  } | null;
   userEmail?: string | null;
   userName?: string | null;
   assignedAdminId?: string | null;
@@ -308,6 +323,18 @@ export type AdminAsTicketUpdateRequest = {
 };
 
 export type AdminTicketPayload = AdminAsTicketUpdateRequest;
+
+export type AsRecommendationFeedbackPayload = {
+  failureCategory: string;
+  severity: string;
+  relatedPartId?: string;
+  relatedBuildId?: string;
+  recommendationId?: string;
+  category?: string;
+  useForRecommendationTraining: boolean;
+  note?: string;
+  reason?: string;
+};
 
 export type PriceJob = {
   id: string;
@@ -684,7 +711,7 @@ export function listRecommendationTrainingDatasets() {
   return api<RecommendationTrainingDatasetsResponse>('/api/admin/recommendation-training-datasets');
 }
 
-export function createRecommendationTrainingDataset(payload: { name?: string; from?: string; to?: string; eventTypes?: string[]; categories?: string[] }) {
+export function createRecommendationTrainingDataset(payload: { name?: string; from?: string; to?: string; sourceSurfaces?: string[]; eventTypes?: string[]; categories?: string[] }) {
   return api<RecommendationTrainingDataset>('/api/admin/recommendation-training-datasets', {
     method: 'POST',
     body: JSON.stringify(payload)
@@ -877,6 +904,13 @@ export function listAdminTickets() {
 export function updateAdminTicket(ticketId: string, payload: AdminAsTicketUpdateRequest) {
   return api<AdminAsTicket>(`/api/admin/as-tickets/${ticketId}`, {
     method: 'PATCH',
+    body: JSON.stringify(payload)
+  });
+}
+
+export function createAsRecommendationFeedback(ticketId: string, payload: AsRecommendationFeedbackPayload) {
+  return api<Record<string, unknown>>(`/api/admin/recommendation-feedback/as-tickets/${ticketId}`, {
+    method: 'POST',
     body: JSON.stringify(payload)
   });
 }

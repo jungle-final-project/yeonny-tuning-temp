@@ -87,6 +87,7 @@ services:
       SPRING_MAIL_HOST: mailpit
       SPRING_MAIL_PORT: 1025
       AGENT_RUNNER_MODE: ${AGENT_RUNNER_MODE:-deterministic}
+      AGENT_LOG_STORAGE_ROOT: ${AGENT_LOG_STORAGE_ROOT:-/data/agent-logs}
       OPENAI_BASE_URL: ${OPENAI_BASE_URL:-https://api.openai.com/v1}
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
       OPENAI_MODEL: ${OPENAI_MODEL:-gpt-5.5}
@@ -207,6 +208,8 @@ services:
         condition: service_healthy
     ports:
       - "8080:8080"
+    volumes:
+      - agent-log-data:/data/agent-logs
 
   web:
     build:
@@ -220,3 +223,4 @@ services:
 volumes:
   postgres-data:
   redis-data:
+  agent-log-data:

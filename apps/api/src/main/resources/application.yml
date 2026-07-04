@@ -38,6 +38,7 @@ management:
 agent:
   runner:
     mode: ${AGENT_RUNNER_MODE:deterministic}
+  log-storage-root: ${AGENT_LOG_STORAGE_ROOT:data/agent-logs}
 
 openai:
   base-url: ${OPENAI_BASE_URL:https://api.openai.com/v1}
