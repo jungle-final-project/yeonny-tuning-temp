@@ -38,6 +38,7 @@ management:
 agent:
   runner:
     mode: ${AGENT_RUNNER_MODE:deterministic}
+  log-storage-root: ${AGENT_LOG_STORAGE_ROOT:data/agent-logs}
 
 openai:
   base-url: ${OPENAI_BASE_URL:https://api.openai.com/v1}
@@ -122,6 +123,10 @@ ai:
       prewarm:
         enabled: ${BUILD_CHAT_CACHE_PREWARM_ENABLED:true}
         ttl-seconds: ${BUILD_CHAT_CACHE_PREWARM_TTL_SECONDS:3600}
+    semantic-cache:
+      enabled: ${BUILD_CHAT_SEMANTIC_CACHE_ENABLED:true}
+      threshold: ${BUILD_CHAT_SEMANTIC_CACHE_THRESHOLD:0.94}
+      ttl-seconds: ${BUILD_CHAT_SEMANTIC_CACHE_TTL_SECONDS:600}
     fast:
       model: ${BUILD_CHAT_FAST_MODEL:gpt-5.5}
       reasoning-effort: ${BUILD_CHAT_FAST_REASONING_EFFORT:low}

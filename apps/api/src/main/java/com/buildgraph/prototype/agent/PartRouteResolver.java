@@ -234,7 +234,7 @@ public class PartRouteResolver {
         if (containsAnyNormalized(compact, "ram", "램", "메모리", "memory", "ddr5", "ddr4")) {
             return "RAM";
         }
-        if (containsAnyNormalized(compact, "gpu", "그래픽카드", "그래픽", "글카", "vga", "rtx", "geforce", "지포스")
+        if (containsAnyNormalized(compact, "gpu", "그래픽카드", "그래픽", "글카", "vga", "rtx", "geforce", "지포스", "nvidia", "엔비디아")
                 || GPU_CLASS.matcher(normalized).find()) {
             return "GPU";
         }
@@ -265,7 +265,7 @@ public class PartRouteResolver {
                 "nvidia", "엔비디아", "ddr5", "ddr4", "nvme", "수랭", "공랭", "aio");
     }
 
-    private static String extractPartQuery(String message) {
+    public static String extractPartQuery(String message) {
         String query = safe(message)
                 .replaceAll("(?i)(상세\\s*페이지|상품\\s*페이지|제품\\s*페이지|제품\\s*상세|상품\\s*상세|상세|보여줘봐|보여줘|보여|열어줘|열어|이동해줘|이동해|이동|가줘|가자|페이지|화면|정보|좀)", " ")
                 .replaceAll("\\s+(로|으로)\\s*$", " ")

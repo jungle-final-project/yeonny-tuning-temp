@@ -1,15 +1,16 @@
 {
-  "generatedAt": "2026-07-03T14:40:35.110Z",
+  "generatedAt": "2026-07-03T19:21:02.327Z",
   "results": [
     {
       "id": "local-001",
       "group": "FAST_LOCAL_ROUTE",
       "prompt": "GPU 보여줘",
       "ok": true,
-      "totalMs": 311,
-      "submitStart": "2026-07-03T14:40:01.546Z",
-      "assistantRenderedMs": 57,
-      "navigationSettledMs": 59,
+      "totalMs": 756,
+      "submitStart": "2026-07-03T19:20:04.304Z",
+      "actionStartedMs": 121,
+      "actionSettledMs": 121,
+      "navigationSettledMs": 503,
       "actionTypes": [],
       "buildCount": 0,
       "warningCount": 0,
@@ -17,92 +18,92 @@
         {
           "method": "GET",
           "path": "/api/auth/me",
-          "startedMs": 72,
-          "endedMs": 90,
+          "startedMs": 121,
+          "endedMs": 173,
           "status": 200
         },
         {
           "method": "GET",
           "path": "/api/parts?category=GPU&page=0&size=20&sort=compatibility&compatibilitySource=QUOTE_DRAFT_CURRENT",
-          "startedMs": 72,
-          "endedMs": 123,
+          "startedMs": 121,
+          "endedMs": 208,
           "status": 200
         },
         {
           "method": "GET",
           "path": "/api/quote-drafts/current",
-          "startedMs": 72,
-          "endedMs": 90,
+          "startedMs": 122,
+          "endedMs": 174,
           "status": 200
         },
         {
           "method": "GET",
           "path": "/api/auth/me",
-          "startedMs": 72,
-          "endedMs": 90,
+          "startedMs": 122,
+          "endedMs": 174,
           "status": 200
         },
         {
           "method": "GET",
-          "path": "/api/parts/45e8cee4-e344-4b2a-b01a-0471098d67ab/price-history?days=3650&limit=60",
-          "startedMs": 102,
-          "endedMs": 119,
+          "path": "/api/parts/fe0dc08b-e7d8-493a-a5d8-b5a6e6b0f1c1/price-history?days=3650&limit=60",
+          "startedMs": 195,
+          "endedMs": 220,
           "status": 200
         },
         {
           "method": "GET",
           "path": "/api/parts/00000000-0000-4000-8000-000000013001/price-history?days=3650&limit=60",
-          "startedMs": 102,
-          "endedMs": 117,
+          "startedMs": 196,
+          "endedMs": 220,
           "status": 200
         },
         {
           "method": "GET",
           "path": "/api/parts/00000000-0000-4000-8000-000000013009/price-history?days=3650&limit=60",
-          "startedMs": 102,
-          "endedMs": 120,
+          "startedMs": 197,
+          "endedMs": 220,
           "status": 200
         },
         {
           "method": "GET",
-          "path": "/api/parts/9f3d289c-6739-459c-9e79-5a1417165ded/price-history?days=3650&limit=60",
-          "startedMs": 102,
-          "endedMs": 119,
+          "path": "/api/parts/1fab808e-5dec-462c-91ca-91b4485b169e/price-history?days=3650&limit=60",
+          "startedMs": 198,
+          "endedMs": 220,
           "status": 200
         },
         {
           "method": "GET",
           "path": "/api/parts/48cd2efc-af67-43d4-aab4-5bcc909fe1f9/price-history?days=3650&limit=60",
-          "startedMs": 102,
-          "endedMs": 152,
+          "startedMs": 198,
+          "endedMs": 239,
           "status": 200
         },
         {
           "method": "GET",
           "path": "/api/parts/00000000-0000-4000-8000-000000013032/price-history?days=3650&limit=60",
-          "startedMs": 103,
-          "endedMs": 152,
+          "startedMs": 204,
+          "endedMs": 241,
           "status": 200
         },
         {
           "method": "GET",
-          "path": "/api/parts/f59177c1-3b47-4546-b1ef-63b531f8977f/price-history?days=3650&limit=60",
-          "startedMs": 103,
-          "endedMs": 152,
+          "path": "/api/parts/657e4da4-7c49-478f-91cd-87e1337e08ee/price-history?days=3650&limit=60",
+          "startedMs": 205,
+          "endedMs": 239,
           "status": 200
         },
         {
           "method": "GET",
-          "path": "/api/parts/6281a784-5368-4544-b242-474aca613b2b/price-history?days=3650&limit=60",
-          "startedMs": 103,
-          "endedMs": 152,
+          "path": "/api/parts/8dbee14e-9521-40b4-b0c0-a35550ed8695/price-history?days=3650&limit=60",
+          "startedMs": 206,
+          "endedMs": 239,
           "status": 200
         },
         {
           "method": "POST",
           "path": "/api/build-graphs/resolve",
-          "startedMs": 103,
-          "endedMs": 152,
+          "startedMs": 206,
+          "endedMs": 269,
           "status": 200
         }
       ],
@@ -113,10 +114,11 @@
       "group": "FAST_LOCAL_ROUTE",
       "prompt": "CPU 부품 화면 열어줘",
       "ok": true,
-      "totalMs": 311,
-      "submitStart": "2026-07-03T14:40:02.001Z",
-      "assistantRenderedMs": 49,
-      "navigationSettledMs": 50,
+      "totalMs": 697,
+      "submitStart": "2026-07-03T19:20:05.266Z",
+      "actionStartedMs": 64,
+      "actionSettledMs": 64,
+      "navigationSettledMs": 439,
       "actionTypes": [],
       "buildCount": 0,
       "warningCount": 0,
@@ -124,92 +126,92 @@
         {
           "method": "GET",
           "path": "/api/auth/me",
-          "startedMs": 64,
-          "endedMs": 68,
+          "startedMs": 63,
+          "endedMs": 74,
           "status": 200
         },
         {
           "method": "GET",
           "path": "/api/parts?category=CPU&page=0&size=20&sort=compatibility&compatibilitySource=QUOTE_DRAFT_CURRENT",
-          "startedMs": 65,
-          "endedMs": 89,
+          "startedMs": 64,
+          "endedMs": 93,
           "status": 200
         },
         {
           "method": "GET",
           "path": "/api/quote-drafts/current",
-          "startedMs": 65,
-          "endedMs": 70,
+          "startedMs": 64,
+          "endedMs": 75,
           "status": 200
         },
         {
           "method": "GET",
           "path": "/api/auth/me",
-          "startedMs": 65,
-          "endedMs": 72,
+          "startedMs": 64,
+          "endedMs": 75,
           "status": 200
         },
         {
           "method": "GET",
-          "path": "/api/parts/45e8cee4-e344-4b2a-b01a-0471098d67ab/price-history?days=3650&limit=60",
-          "startedMs": 87,
-          "endedMs": 97,
+          "path": "/api/parts/fe0dc08b-e7d8-493a-a5d8-b5a6e6b0f1c1/price-history?days=3650&limit=60",
+          "startedMs": 91,
+          "endedMs": 98,
           "status": 200
         },
         {
           "method": "GET",
           "path": "/api/parts/00000000-0000-4000-8000-000000013001/price-history?days=3650&limit=60",
-          "startedMs": 88,
-          "endedMs": 97,
+          "startedMs": 92,
+          "endedMs": 98,
           "status": 200
         },
         {
           "method": "GET",
           "path": "/api/parts/00000000-0000-4000-8000-000000013009/price-history?days=3650&limit=60",
-          "startedMs": 88,
-          "endedMs": 97,
+          "startedMs": 92,
+          "endedMs": 98,
           "status": 200
         },
         {
           "method": "GET",
-          "path": "/api/parts/9f3d289c-6739-459c-9e79-5a1417165ded/price-history?days=3650&limit=60",
-          "startedMs": 88,
-          "endedMs": 97,
+          "path": "/api/parts/1fab808e-5dec-462c-91ca-91b4485b169e/price-history?days=3650&limit=60",
+          "startedMs": 93,
+          "endedMs": 98,
           "status": 200
         },
         {
           "method": "GET",
           "path": "/api/parts/48cd2efc-af67-43d4-aab4-5bcc909fe1f9/price-history?days=3650&limit=60",
-          "startedMs": 88,
-          "endedMs": 97,
+          "startedMs": 93,
+          "endedMs": 98,
           "status": 200
         },
         {
           "method": "GET",
           "path": "/api/parts/00000000-0000-4000-8000-000000013032/price-history?days=3650&limit=60",
-          "startedMs": 88,
-          "endedMs": 111,
+          "startedMs": 93,
+          "endedMs": 125,
           "status": 200
         },
         {
           "method": "GET",
-          "path": "/api/parts/f59177c1-3b47-4546-b1ef-63b531f8977f/price-history?days=3650&limit=60",
-          "startedMs": 88,
-          "endedMs": 111,
+          "path": "/api/parts/657e4da4-7c49-478f-91cd-87e1337e08ee/price-history?days=3650&limit=60",
+          "startedMs": 93,
+          "endedMs": 126,
           "status": 200
         },
         {
           "method": "GET",
-          "path": "/api/parts/6281a784-5368-4544-b242-474aca613b2b/price-history?days=3650&limit=60",
-          "startedMs": 88,
-          "endedMs": 111,
+          "path": "/api/parts/8dbee14e-9521-40b4-b0c0-a35550ed8695/price-history?days=3650&limit=60",
+          "startedMs": 93,
+          "endedMs": 125,
           "status": 200
         },
         {
           "method": "POST",
           "path": "/api/build-graphs/resolve",
-          "startedMs": 89,
-          "endedMs": 111,
+          "startedMs": 93,
+          "endedMs": 126,
           "status": 200
         }
       ],
@@ -220,10 +222,11 @@
       "group": "FAST_LOCAL_ROUTE",
       "prompt": "램 부품 목록 보여줘",
       "ok": true,
-      "totalMs": 303,
-      "submitStart": "2026-07-03T14:40:02.450Z",
-      "assistantRenderedMs": 50,
-      "navigationSettledMs": 51,
+      "totalMs": 706,
+      "submitStart": "2026-07-03T19:20:06.166Z",
+      "actionStartedMs": 65,
+      "actionSettledMs": 65,
+      "navigationSettledMs": 454,
       "actionTypes": [],
       "buildCount": 0,
       "warningCount": 0,
@@ -232,91 +235,91 @@
           "method": "GET",
           "path": "/api/auth/me",
           "startedMs": 64,
-          "endedMs": 69,
+          "endedMs": 76,
           "status": 200
         },
         {
           "method": "GET",
           "path": "/api/parts?category=RAM&page=0&size=20&sort=compatibility&compatibilitySource=QUOTE_DRAFT_CURRENT",
           "startedMs": 65,
-          "endedMs": 90,
+          "endedMs": 94,
           "status": 200
         },
         {
           "method": "GET",
           "path": "/api/quote-drafts/current",
           "startedMs": 65,
-          "endedMs": 70,
+          "endedMs": 76,
           "status": 200
         },
         {
           "method": "GET",
           "path": "/api/auth/me",
           "startedMs": 65,
-          "endedMs": 87,
+          "endedMs": 94,
           "status": 200
         },
         {
           "method": "GET",
-          "path": "/api/parts/45e8cee4-e344-4b2a-b01a-0471098d67ab/price-history?days=3650&limit=60",
-          "startedMs": 79,
-          "endedMs": 90,
+          "path": "/api/parts/fe0dc08b-e7d8-493a-a5d8-b5a6e6b0f1c1/price-history?days=3650&limit=60",
+          "startedMs": 90,
+          "endedMs": 120,
           "status": 200
         },
         {
           "method": "GET",
           "path": "/api/parts/00000000-0000-4000-8000-000000013001/price-history?days=3650&limit=60",
-          "startedMs": 79,
-          "endedMs": 90,
+          "startedMs": 90,
+          "endedMs": 120,
           "status": 200
         },
         {
           "method": "GET",
           "path": "/api/parts/00000000-0000-4000-8000-000000013009/price-history?days=3650&limit=60",
-          "startedMs": 80,
-          "endedMs": 90,
+          "startedMs": 90,
+          "endedMs": 120,
           "status": 200
         },
         {
           "method": "GET",
-          "path": "/api/parts/9f3d289c-6739-459c-9e79-5a1417165ded/price-history?days=3650&limit=60",
-          "startedMs": 80,
-          "endedMs": 90,
+          "path": "/api/parts/1fab808e-5dec-462c-91ca-91b4485b169e/price-history?days=3650&limit=60",
+          "startedMs": 93,
+          "endedMs": 120,
           "status": 200
         },
         {
           "method": "GET",
           "path": "/api/parts/48cd2efc-af67-43d4-aab4-5bcc909fe1f9/price-history?days=3650&limit=60",
-          "startedMs": 80,
-          "endedMs": 91,
+          "startedMs": 94,
+          "endedMs": 120,
           "status": 200
         },
         {
           "method": "GET",
           "path": "/api/parts/00000000-0000-4000-8000-000000013032/price-history?days=3650&limit=60",
-          "startedMs": 80,
-          "endedMs": 91,
+          "startedMs": 94,
+          "endedMs": 141,
           "status": 200
         },
         {
           "method": "GET",
-          "path": "/api/parts/f59177c1-3b47-4546-b1ef-63b531f8977f/price-history?days=3650&limit=60",
-          "startedMs": 80,
-          "endedMs": 91,
+          "path": "/api/parts/657e4da4-7c49-478f-91cd-87e1337e08ee/price-history?days=3650&limit=60",
+          "startedMs": 94,
+          "endedMs": 142,
           "status": 200
         },
         {
           "method": "GET",
-          "path": "/api/parts/6281a784-5368-4544-b242-474aca613b2b/price-history?days=3650&limit=60",
-          "startedMs": 80,
-          "endedMs": 101,
+          "path": "/api/parts/8dbee14e-9521-40b4-b0c0-a35550ed8695/price-history?days=3650&limit=60",
+          "startedMs": 94,
+          "endedMs": 141,
           "status": 200
         },
         {
           "method": "POST",
           "path": "/api/build-graphs/resolve",
-          "startedMs": 80,
-          "endedMs": 101,
+          "startedMs": 94,
+          "endedMs": 142,
           "status": 200
         }
       ],
@@ -327,10 +330,11 @@
       "group": "FAST_LOCAL_ROUTE",
       "prompt": "셀프 견적 열어줘",
       "ok": true,
-      "totalMs": 309,
-      "submitStart": "2026-07-03T14:40:02.917Z",
-      "assistantRenderedMs": 52,
-      "navigationSettledMs": 52,
+      "totalMs": 701,
+      "submitStart": "2026-07-03T19:20:07.065Z",
+      "actionStartedMs": 65,
+      "actionSettledMs": 65,
+      "navigationSettledMs": 443,
       "actionTypes": [],
       "buildCount": 0,
       "warningCount": 0,
@@ -339,91 +343,91 @@
           "method": "GET",
           "path": "/api/auth/me",
           "startedMs": 65,
-          "endedMs": 69,
+          "endedMs": 70,
           "status": 200
         },
         {
           "method": "GET",
           "path": "/api/parts?page=0&size=20&sort=category",
-          "startedMs": 66,
-          "endedMs": 90,
+          "startedMs": 65,
+          "endedMs": 76,
           "status": 200
         },
         {
           "method": "GET",
           "path": "/api/quote-drafts/current",
-          "startedMs": 66,
-          "endedMs": 71,
+          "startedMs": 65,
+          "endedMs": 76,
           "status": 200
         },
         {
           "method": "GET",
           "path": "/api/auth/me",
-          "startedMs": 66,
-          "endedMs": 90,
+          "startedMs": 65,
+          "endedMs": 76,
           "status": 200
         },
         {
           "method": "GET",
-          "path": "/api/parts/45e8cee4-e344-4b2a-b01a-0471098d67ab/price-history?days=3650&limit=60",
-          "startedMs": 80,
-          "endedMs": 91,
+          "path": "/api/parts/fe0dc08b-e7d8-493a-a5d8-b5a6e6b0f1c1/price-history?days=3650&limit=60",
+          "startedMs": 107,
+          "endedMs": 121,
           "status": 200
         },
         {
           "method": "GET",
           "path": "/api/parts/00000000-0000-4000-8000-000000013001/price-history?days=3650&limit=60",
-          "startedMs": 80,
-          "endedMs": 91,
+          "startedMs": 108,
+          "endedMs": 121,
           "status": 200
         },
         {
           "method": "GET",
           "path": "/api/parts/00000000-0000-4000-8000-000000013009/price-history?days=3650&limit=60",
-          "startedMs": 80,
-          "endedMs": 92,
+          "startedMs": 108,
+          "endedMs": 122,
           "status": 200
         },
         {
           "method": "GET",
-          "path": "/api/parts/9f3d289c-6739-459c-9e79-5a1417165ded/price-history?days=3650&limit=60",
-          "startedMs": 80,
-          "endedMs": 92,
+          "path": "/api/parts/1fab808e-5dec-462c-91ca-91b4485b169e/price-history?days=3650&limit=60",
+          "startedMs": 108,
+          "endedMs": 122,
           "status": 200
         },
         {
           "method": "GET",
           "path": "/api/parts/48cd2efc-af67-43d4-aab4-5bcc909fe1f9/price-history?days=3650&limit=60",
-          "startedMs": 81,
-          "endedMs": 92,
+          "startedMs": 108,
+          "endedMs": 122,
           "status": 200
         },
         {
           "method": "GET",
           "path": "/api/parts/00000000-0000-4000-8000-000000013032/price-history?days=3650&limit=60",
-          "startedMs": 81,
-          "endedMs": 93,
+          "startedMs": 108,
+          "endedMs": 122,
           "status": 200
         },
         {
           "method": "GET",
-          "path": "/api/parts/f59177c1-3b47-4546-b1ef-63b531f8977f/price-history?days=3650&limit=60",
-          "startedMs": 81,
-          "endedMs": 108,
+          "path": "/api/parts/657e4da4-7c49-478f-91cd-87e1337e08ee/price-history?days=3650&limit=60",
+          "startedMs": 108,
+          "endedMs": 122,
           "status": 200
         },
         {
           "method": "GET",
-          "path": "/api/parts/6281a784-5368-4544-b242-474aca613b2b/price-history?days=3650&limit=60",
-          "startedMs": 81,
-          "endedMs": 94,
+          "path": "/api/parts/8dbee14e-9521-40b4-b0c0-a35550ed8695/price-history?days=3650&limit=60",
+          "startedMs": 108,
+          "endedMs": 122,
           "status": 200
         },
         {
           "method": "POST",
           "path": "/api/build-graphs/resolve",
-          "startedMs": 81,
-          "endedMs": 108,
+          "startedMs": 109,
+          "endedMs": 126,
           "status": 200
         }
       ],
@@ -434,10 +438,9 @@
       "group": "FAST_LOCAL_ROUTE",
       "prompt": "내 견적함 열어줘",
       "ok": true,
-      "totalMs": 306,
-      "submitStart": "2026-07-03T14:40:03.368Z",
-      "assistantRenderedMs": 50,
-      "navigationSettledMs": 51,
+      "totalMs": 738,
+      "submitStart": "2026-07-03T19:20:07.992Z",
+      "navigationSettledMs": 478,
       "actionTypes": [],
       "buildCount": 0,
       "warningCount": 0,
@@ -445,29 +448,29 @@
         {
           "method": "GET",
           "path": "/api/auth/me",
-          "startedMs": 61,
-          "endedMs": 66,
+          "startedMs": 88,
+          "endedMs": 102,
           "status": 200
         },
         {
           "method": "GET",
           "path": "/api/builds/history",
-          "startedMs": 62,
-          "endedMs": 75,
+          "startedMs": 88,
+          "endedMs": 116,
           "status": 200
         },
         {
           "method": "GET",
           "path": "/api/price-alerts",
-          "startedMs": 62,
-          "endedMs": 68,
+          "startedMs": 88,
+          "endedMs": 102,
           "status": 200
         },
         {
           "method": "GET",
           "path": "/api/auth/me",
-          "startedMs": 62,
-          "endedMs": 70,
+          "startedMs": 88,
+          "endedMs": 102,
           "status": 200
         }
       ],
@@ -478,10 +481,9 @@
       "group": "FAST_LOCAL_ROUTE",
       "prompt": "AI 견적 입력 화면으로 가자",
       "ok": true,
-      "totalMs": 306,
-      "submitStart": "2026-07-03T14:40:03.817Z",
-      "assistantRenderedMs": 50,
-      "navigationSettledMs": 51,
+      "totalMs": 888,
+      "submitStart": "2026-07-03T19:20:09.116Z",
+      "navigationSettledMs": 622,
       "actionTypes": [],
       "buildCount": 0,
       "warningCount": 0,
@@ -489,15 +491,15 @@
         {
           "method": "GET",
           "path": "/api/auth/me",
-          "startedMs": 61,
-          "endedMs": 67,
+          "startedMs": 139,
+          "endedMs": 166,
           "status": 200
         },
         {
           "method": "GET",
           "path": "/api/auth/me",
-          "startedMs": 61,
-          "endedMs": 77,
+          "startedMs": 139,
+          "endedMs": 181,
           "status": 200
         }
       ],
@@ -508,10 +510,9 @@
       "group": "FAST_LOCAL_ROUTE",
       "prompt": "AS 접수하러 가자",
       "ok": true,
-      "totalMs": 303,
-      "submitStart": "2026-07-03T14:40:04.251Z",
-      "assistantRenderedMs": 50,
-      "navigationSettledMs": 51,
+      "totalMs": 798,
+      "submitStart": "2026-07-03T19:20:10.450Z",
+      "navigationSettledMs": 546,
       "actionTypes": [],
       "buildCount": 0,
       "warningCount": 0,
@@ -519,15 +520,15 @@
         {
           "method": "GET",
           "path": "/api/auth/me",
-          "startedMs": 60,
-          "endedMs": 65,
+          "startedMs": 101,
+          "endedMs": 144,
           "status": 200
         },
         {
           "method": "GET",
           "path": "/api/auth/me",
-          "startedMs": 60,
-          "endedMs": 69,
+          "startedMs": 102,
+          "endedMs": 144,
           "status": 200
         }
       ],
@@ -538,12 +539,11 @@
       "group": "FAST_LOCAL_ROUTE",
       "prompt": "구매하기 화면 열어줘",
       "ok": true,
-      "totalMs": 319,
-      "submitStart": "2026-07-03T14:40:04.683Z",
-      "assistantRenderedMs": 63,
-      "actionStartedMs": 62,
-      "actionSettledMs": 62,
-      "navigationSettledMs": 64,
+      "totalMs": 766,
+      "submitStart": "2026-07-03T19:20:11.509Z",
+      "actionStartedMs": 121,
+      "actionSettledMs": 121,
+      "navigationSettledMs": 510,
       "actionTypes": [],
       "buildCount": 0,
       "warningCount": 0,
@@ -551,22 +551,22 @@
         {
           "method": "GET",
           "path": "/api/auth/me",
-          "startedMs": 62,
-          "endedMs": 66,
+          "startedMs": 121,
+          "endedMs": 154,
           "status": 200
         },
         {
           "method": "GET",
           "path": "/api/quote-drafts/current",
-          "startedMs": 62,
-          "endedMs": 67,
+          "startedMs": 121,
+          "endedMs": 155,
           "status": 200
         },
         {
           "method": "GET",
           "path": "/api/auth/me",
-          "startedMs": 62,
-          "endedMs": 73,
+          "startedMs": 121,
+          "endedMs": 172,
           "status": 200
         }
       ],
@@ -577,13 +577,12 @@
       "group": "FAST_SERVER_ROUTE",
       "prompt": "AMD 라이젠9-6세대 9950X3D 그래니트 릿지 정품(멀티팩) 상세페이지로 이동해",
       "ok": true,
-      "totalMs": 427,
-      "submitStart": "2026-07-03T14:40:05.133Z",
-      "assistantRenderedMs": 164,
-      "actionStartedMs": 50,
-      "actionSettledMs": 50,
-      "navigationSettledMs": 166,
-      "buildChatMs": 6,
+      "totalMs": 776,
+      "submitStart": "2026-07-03T19:20:12.481Z",
+      "actionStartedMs": 109,
+      "actionSettledMs": 109,
+      "navigationSettledMs": 516,
+      "buildChatMs": 15,
       "answerType": "GENERAL",
       "actionTypes": [
         "OPEN_ROUTE"
@@ -595,36 +594,36 @@
         {
           "method": "POST",
           "path": "/api/ai/build-chat",
-          "startedMs": 50,
-          "endedMs": 56,
+          "startedMs": 109,
+          "endedMs": 124,
           "status": 200
         },
         {
           "method": "GET",
           "path": "/api/auth/me",
-          "startedMs": 72,
-          "endedMs": 77,
+          "startedMs": 159,
+          "endedMs": 177,
           "status": 200
         },
         {
           "method": "GET",
           "path": "/api/parts/a75d6544-2296-4c4c-a7cd-64596e66f6d7",
-          "startedMs": 72,
-          "endedMs": 77,
+          "startedMs": 159,
+          "endedMs": 177,
           "status": 200
         },
         {
           "method": "GET",
           "path": "/api/parts/a75d6544-2296-4c4c-a7cd-64596e66f6d7/price-history?days=3650&limit=120",
-          "startedMs": 72,
-          "endedMs": 77,
+          "startedMs": 160,
+          "endedMs": 177,
           "status": 200
         },
         {
           "method": "GET",
           "path": "/api/auth/me",
-          "startedMs": 72,
-          "endedMs": 84,
+          "startedMs": 161,
+          "endedMs": 184,
           "status": 200
         }
       ],
@@ -635,13 +634,12 @@
       "group": "FAST_SERVER_ROUTE",
       "prompt": "ASUS ROG MATRIX 지포스 RTX 5090 OC 32GB PLATINUM 상세페이지로 이동해",
       "ok": true,
-      "totalMs": 430,
-      "submitStart": "2026-07-03T14:40:05.702Z",
-      "assistantRenderedMs": 168,
-      "actionStartedMs": 46,
-      "actionSettledMs": 46,
-      "navigationSettledMs": 170,
-      "buildChatMs": 11,
+      "totalMs": 737,
+      "submitStart": "2026-07-03T19:20:13.502Z",
+      "actionStartedMs": 82,
+      "actionSettledMs": 82,
+      "navigationSettledMs": 480,
+      "buildChatMs": 1,
       "answerType": "GENERAL",
       "actionTypes": [
         "OPEN_ROUTE"
@@ -653,36 +651,36 @@
         {
           "method": "POST",
           "path": "/api/ai/build-chat",
-          "startedMs": 46,
-          "endedMs": 57,
+          "startedMs": 82,
+          "endedMs": 83,
           "status": 200
         },
         {
           "method": "GET",
           "path": "/api/auth/me",
-          "startedMs": 69,
-          "endedMs": 76,
+          "startedMs": 123,
+          "endedMs": 133,
           "status": 200
         },
         {
           "method": "GET",
           "path": "/api/parts/a2f9d478-b368-4c16-9048-4a064828c5c1",
-          "startedMs": 69,
-          "endedMs": 77,
+          "startedMs": 124,
+          "endedMs": 133,
           "status": 200
         },
         {
           "method": "GET",
           "path": "/api/parts/a2f9d478-b368-4c16-9048-4a064828c5c1/price-history?days=3650&limit=120",
-          "startedMs": 69,
-          "endedMs": 77,
+          "startedMs": 124,
+          "endedMs": 133,
           "status": 200
         },
         {
           "method": "GET",
           "path": "/api/auth/me",
-          "startedMs": 69,
-          "endedMs": 82,
+          "startedMs": 124,
+          "endedMs": 140,
           "status": 200
         }
       ],
@@ -693,13 +691,12 @@
       "group": "FAST_SERVER_ROUTE",
       "prompt": "리안리 LANCOOL 217 INF 화이트 상세페이지로 이동해",
       "ok": true,
-      "totalMs": 419,
-      "submitStart": "2026-07-03T14:40:06.284Z",
-      "assistantRenderedMs": 158,
-      "actionStartedMs": 46,
-      "actionSettledMs": 46,
-      "navigationSettledMs": 160,
-      "buildChatMs": 9,
+      "totalMs": 739,
+      "submitStart": "2026-07-03T19:20:14.542Z",
+      "actionStartedMs": 58,
+      "actionSettledMs": 58,
+      "navigationSettledMs": 485,
+      "buildChatMs": 20,
       "answerType": "GENERAL",
       "actionTypes": [
         "OPEN_ROUTE"
@@ -711,36 +708,36 @@
         {
           "method": "POST",
           "path": "/api/ai/build-chat",
-          "startedMs": 46,
-          "endedMs": 55,
+          "startedMs": 58,
+          "endedMs": 78,
           "status": 200
         },
         {
           "method": "GET",
           "path": "/api/auth/me",
-          "startedMs": 67,
-          "endedMs": 71,
+          "startedMs": 106,
+          "endedMs": 114,
           "status": 200
         },
         {
           "method": "GET",
           "path": "/api/parts/09f39d2a-de00-4cbc-bd1a-241e9790111d",
-          "startedMs": 67,
-          "endedMs": 73,
+          "startedMs": 107,
+          "endedMs": 115,
           "status": 200
         },
         {
           "method": "GET",
           "path": "/api/parts/09f39d2a-de00-4cbc-bd1a-241e9790111d/price-history?days=3650&limit=120",
-          "startedMs": 67,
-          "endedMs": 73,
+          "startedMs": 107,
+          "endedMs": 115,
           "status": 200
         },
         {
           "method": "GET",
           "path": "/api/auth/me",
-          "startedMs": 67,
-          "endedMs": 76,
+          "startedMs": 107,
+          "endedMs": 121,
           "status": 200
         }
       ],
@@ -751,13 +748,12 @@
       "group": "FAST_SERVER_ROUTE",
       "prompt": "커세어 RMx Series RM850x ATX3.1, 블랙 상세페이지로 이동해",
       "ok": true,
-      "totalMs": 424,
-      "submitStart": "2026-07-03T14:40:06.852Z",
-      "assistantRenderedMs": 162,
-      "actionStartedMs": 46,
-      "actionSettledMs": 46,
-      "navigationSettledMs": 164,
-      "buildChatMs": 9,
+      "totalMs": 712,
+      "submitStart": "2026-07-03T19:20:15.519Z",
+      "actionStartedMs": 63,
+      "actionSettledMs": 63,
+      "navigationSettledMs": 455,
+      "buildChatMs": 3,
       "answerType": "GENERAL",
       "actionTypes": [
         "OPEN_ROUTE"
@@ -769,36 +765,36 @@
         {
           "method": "POST",
           "path": "/api/ai/build-chat",
-          "startedMs": 46,
-          "endedMs": 55,
+          "startedMs": 63,
+          "endedMs": 66,
           "status": 200
         },
         {
           "method": "GET",
           "path": "/api/auth/me",
-          "startedMs": 75,
-          "endedMs": 78,
+          "startedMs": 88,
+          "endedMs": 96,
           "status": 200
         },
         {
           "method": "GET",
           "path": "/api/parts/47c8753d-4544-4322-9aab-c175531eceeb",
-          "startedMs": 75,
-          "endedMs": 79,
+          "startedMs": 88,
+          "endedMs": 96,
           "status": 200
         },
         {
           "method": "GET",
           "path": "/api/parts/47c8753d-4544-4322-9aab-c175531eceeb/price-history?days=3650&limit=120",
-          "startedMs": 75,
-          "endedMs": 79,
+          "startedMs": 88,
+          "endedMs": 96,
           "status": 200
         },
         {
           "method": "GET",
           "path": "/api/auth/me",
-          "startedMs": 75,
-          "endedMs": 84,
+          "startedMs": 88,
+          "endedMs": 104,
           "status": 200
         }
       ],
@@ -809,13 +805,12 @@
       "group": "FAST_SERVER_ROUTE",
       "prompt": "5090 보여줘",
       "ok": true,
-      "totalMs": 419,
-      "submitStart": "2026-07-03T14:40:07.417Z",
-      "assistantRenderedMs": 154,
-      "actionStartedMs": 46,
-      "actionSettledMs": 46,
-      "navigationSettledMs": 156,
-      "buildChatMs": 11,
+      "totalMs": 719,
+      "submitStart": "2026-07-03T19:20:16.465Z",
+      "actionStartedMs": 48,
+      "actionSettledMs": 48,
+      "navigationSettledMs": 459,
+      "buildChatMs": 5,
       "answerType": "GENERAL",
       "actionTypes": [
         "OPEN_ROUTE"
@@ -827,99 +822,99 @@
         {
           "method": "POST",
           "path": "/api/ai/build-chat",
-          "startedMs": 46,
-          "endedMs": 57,
+          "startedMs": 48,
+          "endedMs": 53,
           "status": 200
         },
         {
           "method": "GET",
           "path": "/api/auth/me",
-          "startedMs": 74,
-          "endedMs": 81,
+          "startedMs": 79,
+          "endedMs": 83,
           "status": 200
         },
         {
           "method": "GET",
           "path": "/api/parts?category=GPU&q=5090&page=0&size=20&sort=compatibility&compatibilitySource=QUOTE_DRAFT_CURRENT",
-          "startedMs": 75,
-          "endedMs": 91,
+          "startedMs": 79,
+          "endedMs": 110,
           "status": 200
         },
         {
           "method": "GET",
           "path": "/api/quote-drafts/current",
-          "startedMs": 75,
-          "endedMs": 82,
+          "startedMs": 79,
+          "endedMs": 83,
           "status": 200
         },
         {
           "method": "GET",
           "path": "/api/auth/me",
-          "startedMs": 75,
-          "endedMs": 82,
+          "startedMs": 79,
+          "endedMs": 110,
           "status": 200
         },
         {
           "method": "GET",
-          "path": "/api/parts/45e8cee4-e344-4b2a-b01a-0471098d67ab/price-history?days=3650&limit=60",
-          "startedMs": 89,
-          "endedMs": 95,
+          "path": "/api/parts/fe0dc08b-e7d8-493a-a5d8-b5a6e6b0f1c1/price-history?days=3650&limit=60",
+          "startedMs": 95,
+          "endedMs": 111,
           "status": 200
         },
         {
           "method": "GET",
           "path": "/api/parts/00000000-0000-4000-8000-000000013001/price-history?days=3650&limit=60",
-          "startedMs": 89,
-          "endedMs": 95,
+          "startedMs": 96,
+          "endedMs": 112,
           "status": 200
         },
         {
           "method": "GET",
           "path": "/api/parts/00000000-0000-4000-8000-000000013009/price-history?days=3650&limit=60",
-          "startedMs": 89,
-          "endedMs": 95,
+          "startedMs": 96,
+          "endedMs": 112,
           "status": 200
         },
         {
           "method": "GET",
-          "path": "/api/parts/9f3d289c-6739-459c-9e79-5a1417165ded/price-history?days=3650&limit=60",
-          "startedMs": 89,
-          "endedMs": 96,
+          "path": "/api/parts/1fab808e-5dec-462c-91ca-91b4485b169e/price-history?days=3650&limit=60",
+          "startedMs": 96,
+          "endedMs": 112,
           "status": 200
         },
         {
           "method": "GET",
           "path": "/api/parts/48cd2efc-af67-43d4-aab4-5bcc909fe1f9/price-history?days=3650&limit=60",
-          "startedMs": 89,
-          "endedMs": 96,
+          "startedMs": 96,
+          "endedMs": 111,
           "status": 200
         },
         {
           "method": "GET",
           "path": "/api/parts/00000000-0000-4000-8000-000000013032/price-history?days=3650&limit=60",
-          "startedMs": 89,
-          "endedMs": 105,
+          "startedMs": 97,
+          "endedMs": 112,
           "status": 200
         },
         {
           "method": "GET",
-          "path": "/api/parts/f59177c1-3b47-4546-b1ef-63b531f8977f/price-history?days=3650&limit=60",
-          "startedMs": 89,
-          "endedMs": 105,
+          "path": "/api/parts/657e4da4-7c49-478f-91cd-87e1337e08ee/price-history?days=3650&limit=60",
+          "startedMs": 97,
+          "endedMs": 112,
           "status": 200
         },
         {
           "method": "GET",
-          "path": "/api/parts/6281a784-5368-4544-b242-474aca613b2b/price-history?days=3650&limit=60",
-          "startedMs": 89,
-          "endedMs": 105,
+          "path": "/api/parts/8dbee14e-9521-40b4-b0c0-a35550ed8695/price-history?days=3650&limit=60",
+          "startedMs": 97,
+          "endedMs": 112,
           "status": 200
         },
         {
           "method": "POST",
           "path": "/api/build-graphs/resolve",
-          "startedMs": 89,
-          "endedMs": 105,
+          "startedMs": 97,
+          "endedMs": 130,
           "status": 200
         }
       ],
@@ -930,13 +925,12 @@
       "group": "FAST_SERVER_ROUTE",
       "prompt": "9950X3D 보여줘",
       "ok": true,
-      "totalMs": 423,
-      "submitStart": "2026-07-03T14:40:07.967Z",
-      "assistantRenderedMs": 163,
+      "totalMs": 700,
+      "submitStart": "2026-07-03T19:20:17.401Z",
       "actionStartedMs": 47,
       "actionSettledMs": 47,
-      "navigationSettledMs": 165,
-      "buildChatMs": 10,
+      "navigationSettledMs": 442,
+      "buildChatMs": 4,
       "answerType": "GENERAL",
       "actionTypes": [
         "OPEN_ROUTE"
@@ -949,98 +943,98 @@
           "method": "POST",
           "path": "/api/ai/build-chat",
           "startedMs": 47,
-          "endedMs": 57,
+          "endedMs": 51,
           "status": 200
         },
         {
           "method": "GET",
           "path": "/api/auth/me",
-          "startedMs": 74,
-          "endedMs": 79,
+          "startedMs": 80,
+          "endedMs": 89,
           "status": 200
         },
         {
           "method": "GET",
           "path": "/api/parts?category=CPU&q=9950X3D&page=0&size=20&sort=compatibility&compatibilitySource=QUOTE_DRAFT_CURRENT",
-          "startedMs": 74,
+          "startedMs": 80,
           "endedMs": 89,
           "status": 200
         },
         {
           "method": "GET",
           "path": "/api/quote-drafts/current",
-          "startedMs": 74,
-          "endedMs": 79,
+          "startedMs": 80,
+          "endedMs": 89,
           "status": 200
         },
         {
           "method": "GET",
           "path": "/api/auth/me",
-          "startedMs": 74,
-          "endedMs": 80,
+          "startedMs": 80,
+          "endedMs": 89,
           "status": 200
         },
         {
           "method": "GET",
-          "path": "/api/parts/45e8cee4-e344-4b2a-b01a-0471098d67ab/price-history?days=3650&limit=60",
-          "startedMs": 89,
-          "endedMs": 101,
+          "path": "/api/parts/fe0dc08b-e7d8-493a-a5d8-b5a6e6b0f1c1/price-history?days=3650&limit=60",
+          "startedMs": 107,
+          "endedMs": 119,
           "status": 200
         },
         {
           "method": "GET",
           "path": "/api/parts/00000000-0000-4000-8000-000000013001/price-history?days=3650&limit=60",
-          "startedMs": 89,
-          "endedMs": 101,
+          "startedMs": 107,
+          "endedMs": 119,
           "status": 200
         },
         {
           "method": "GET",
           "path": "/api/parts/00000000-0000-4000-8000-000000013009/price-history?days=3650&limit=60",
-          "startedMs": 89,
-          "endedMs": 101,
+          "startedMs": 107,
+          "endedMs": 119,
           "status": 200
         },
         {
           "method": "GET",
-          "path": "/api/parts/9f3d289c-6739-459c-9e79-5a1417165ded/price-history?days=3650&limit=60",
-          "startedMs": 89,
-          "endedMs": 101,
+          "path": "/api/parts/1fab808e-5dec-462c-91ca-91b4485b169e/price-history?days=3650&limit=60",
+          "startedMs": 107,
+          "endedMs": 120,
           "status": 200
         },
         {
           "method": "GET",
           "path": "/api/parts/48cd2efc-af67-43d4-aab4-5bcc909fe1f9/price-history?days=3650&limit=60",
-          "startedMs": 89,
-          "endedMs": 101,
+          "startedMs": 107,
+          "endedMs": 120,
           "status": 200
         },
         {
           "method": "GET",
           "path": "/api/parts/00000000-0000-4000-8000-000000013032/price-history?days=3650&limit=60",
-          "startedMs": 89,
-          "endedMs": 109,
+          "startedMs": 107,
+          "endedMs": 120,
           "status": 200
         },
         {
           "method": "GET",
-          "path": "/api/parts/f59177c1-3b47-4546-b1ef-63b531f8977f/price-history?days=3650&limit=60",
-          "startedMs": 89,
-          "endedMs": 110,
+          "path": "/api/parts/657e4da4-7c49-478f-91cd-87e1337e08ee/price-history?days=3650&limit=60",
+          "startedMs": 107,
+          "endedMs": 120,
           "status": 200
         },
         {
           "method": "GET",
-          "path": "/api/parts/6281a784-5368-4544-b242-474aca613b2b/price-history?days=3650&limit=60",
-          "startedMs": 89,
-          "endedMs": 110,
+          "path": "/api/parts/8dbee14e-9521-40b4-b0c0-a35550ed8695/price-history?days=3650&limit=60",
+          "startedMs": 107,
+          "endedMs": 120,
           "status": 200
         },
         {
           "method": "POST",
           "path": "/api/build-graphs/resolve",
-          "startedMs": 89,
-          "endedMs": 110,
+          "startedMs": 107,
+          "endedMs": 120,
           "status": 200
         }
       ],
@@ -1051,13 +1045,12 @@
       "group": "FAST_SERVER_ROUTE",
       "prompt": "MSI 보드 보여줘",
       "ok": true,
-      "totalMs": 429,
-      "submitStart": "2026-07-03T14:40:08.515Z",
-      "assistantRenderedMs": 169,
-      "actionStartedMs": 49,
-      "actionSettledMs": 49,
-      "navigationSettledMs": 171,
-      "buildChatMs": 9,
+      "totalMs": 691,
+      "submitStart": "2026-07-03T19:20:18.301Z",
+      "actionStartedMs": 44,
+      "actionSettledMs": 44,
+      "navigationSettledMs": 430,
+      "buildChatMs": 7,
       "answerType": "GENERAL",
       "actionTypes": [
         "OPEN_ROUTE"
@@ -1069,8 +1062,8 @@
         {
           "method": "POST",
           "path": "/api/ai/build-chat",
-          "startedMs": 49,
-          "endedMs": 58,
+          "startedMs": 44,
+          "endedMs": 51,
           "status": 200
         },
         {
@@ -1084,7 +1077,7 @@
           "method": "GET",
           "path": "/api/parts?category=MOTHERBOARD&q=MSI+%EB%B3%B4%EB%93%9C&page=0&size=20&sort=compatibility&compatibilitySource=QUOTE_DRAFT_CURRENT",
           "startedMs": 76,
-          "endedMs": 81,
+          "endedMs": 87,
           "status": 200
         },
         {
@@ -1098,70 +1091,70 @@
           "method": "GET",
           "path": "/api/auth/me",
           "startedMs": 76,
-          "endedMs": 81,
+          "endedMs": 87,
           "status": 200
         },
         {
           "method": "GET",
-          "path": "/api/parts/45e8cee4-e344-4b2a-b01a-0471098d67ab/price-history?days=3650&limit=60",
-          "startedMs": 89,
-          "endedMs": 94,
+          "path": "/api/parts/fe0dc08b-e7d8-493a-a5d8-b5a6e6b0f1c1/price-history?days=3650&limit=60",
+          "startedMs": 99,
+          "endedMs": 107,
           "status": 200
         },
         {
           "method": "GET",
           "path": "/api/parts/00000000-0000-4000-8000-000000013001/price-history?days=3650&limit=60",
-          "startedMs": 89,
-          "endedMs": 94,
+          "startedMs": 99,
+          "endedMs": 107,
           "status": 200
         },
         {
           "method": "GET",
           "path": "/api/parts/00000000-0000-4000-8000-000000013009/price-history?days=3650&limit=60",
-          "startedMs": 89,
-          "endedMs": 94,
+          "startedMs": 99,
+          "endedMs": 107,
           "status": 200
         },
         {
           "method": "GET",
-          "path": "/api/parts/9f3d289c-6739-459c-9e79-5a1417165ded/price-history?days=3650&limit=60",
-          "startedMs": 89,
-          "endedMs": 95,
+          "path": "/api/parts/1fab808e-5dec-462c-91ca-91b4485b169e/price-history?days=3650&limit=60",
+          "startedMs": 100,
+          "endedMs": 107,
           "status": 200
         },
         {
           "method": "GET",
           "path": "/api/parts/48cd2efc-af67-43d4-aab4-5bcc909fe1f9/price-history?days=3650&limit=60",
-          "startedMs": 89,
-          "endedMs": 95,
+          "startedMs": 100,
+          "endedMs": 107,
           "status": 200
         },
         {
           "method": "GET",
           "path": "/api/parts/00000000-0000-4000-8000-000000013032/price-history?days=3650&limit=60",
-          "startedMs": 89,
-          "endedMs": 96,
+          "startedMs": 100,
+          "endedMs": 110,
           "status": 200
         },
         {
           "method": "GET",
-          "path": "/api/parts/f59177c1-3b47-4546-b1ef-63b531f8977f/price-history?days=3650&limit=60",
-          "startedMs": 89,
-          "endedMs": 97,
+          "path": "/api/parts/657e4da4-7c49-478f-91cd-87e1337e08ee/price-history?days=3650&limit=60",
+          "startedMs": 100,
+          "endedMs": 110,
           "status": 200
         },
         {
           "method": "GET",
-          "path": "/api/parts/6281a784-5368-4544-b242-474aca613b2b/price-history?days=3650&limit=60",
-          "startedMs": 89,
-          "endedMs": 97,
+          "path": "/api/parts/8dbee14e-9521-40b4-b0c0-a35550ed8695/price-history?days=3650&limit=60",
+          "startedMs": 100,
+          "endedMs": 110,
           "status": 200
         },
         {
           "method": "POST",
           "path": "/api/build-graphs/resolve",
-          "startedMs": 89,
-          "endedMs": 98,
+          "startedMs": 100,
+          "endedMs": 111,
           "status": 200
         }
       ],
@@ -1172,13 +1165,12 @@
       "group": "FAST_SERVER_ROUTE",
       "prompt": "리안리 케이스 보여줘",
       "ok": true,
-      "totalMs": 418,
-      "submitStart": "2026-07-03T14:40:09.084Z",
-      "assistantRenderedMs": 155,
-      "actionStartedMs": 47,
-      "actionSettledMs": 47,
-      "navigationSettledMs": 157,
-      "buildChatMs": 8,
+      "totalMs": 720,
+      "submitStart": "2026-07-03T19:20:19.206Z",
+      "actionStartedMs": 68,
+      "actionSettledMs": 68,
+      "navigationSettledMs": 462,
+      "buildChatMs": 1,
       "answerType": "GENERAL",
       "actionTypes": [
         "OPEN_ROUTE"
@@ -1190,99 +1182,99 @@
         {
           "method": "POST",
           "path": "/api/ai/build-chat",
-          "startedMs": 47,
-          "endedMs": 55,
+          "startedMs": 68,
+          "endedMs": 69,
           "status": 200
         },
         {
           "method": "GET",
           "path": "/api/auth/me",
-          "startedMs": 69,
-          "endedMs": 77,
+          "startedMs": 98,
+          "endedMs": 106,
           "status": 200
         },
         {
           "method": "GET",
           "path": "/api/parts?category=CASE&q=%EB%A6%AC%EC%95%88%EB%A6%AC+%EC%BC%80%EC%9D%B4%EC%8A%A4&page=0&size=20&sort=compatibility&compatibilitySource=QUOTE_DRAFT_CURRENT",
-          "startedMs": 70,
-          "endedMs": 77,
+          "startedMs": 98,
+          "endedMs": 107,
           "status": 200
         },
         {
           "method": "GET",
           "path": "/api/quote-drafts/current",
-          "startedMs": 70,
-          "endedMs": 77,
+          "startedMs": 98,
+          "endedMs": 107,
           "status": 200
         },
         {
           "method": "GET",
           "path": "/api/auth/me",
-          "startedMs": 70,
-          "endedMs": 77,
+          "startedMs": 98,
+          "endedMs": 107,
           "status": 200
         },
         {
           "method": "GET",
-          "path": "/api/parts/45e8cee4-e344-4b2a-b01a-0471098d67ab/price-history?days=3650&limit=60",
-          "startedMs": 86,
-          "endedMs": 92,
+          "path": "/api/parts/fe0dc08b-e7d8-493a-a5d8-b5a6e6b0f1c1/price-history?days=3650&limit=60",
+          "startedMs": 118,
+          "endedMs": 125,
           "status": 200
         },
         {
           "method": "GET",
           "path": "/api/parts/00000000-0000-4000-8000-000000013001/price-history?days=3650&limit=60",
-          "startedMs": 86,
-          "endedMs": 94,
+          "startedMs": 119,
+          "endedMs": 125,
           "status": 200
         },
         {
           "method": "GET",
           "path": "/api/parts/00000000-0000-4000-8000-000000013009/price-history?days=3650&limit=60",
-          "startedMs": 86,
-          "endedMs": 92,
+          "startedMs": 119,
+          "endedMs": 126,
           "status": 200
         },
         {
           "method": "GET",
-          "path": "/api/parts/9f3d289c-6739-459c-9e79-5a1417165ded/price-history?days=3650&limit=60",
-          "startedMs": 86,
-          "endedMs": 92,
+          "path": "/api/parts/1fab808e-5dec-462c-91ca-91b4485b169e/price-history?days=3650&limit=60",
+          "startedMs": 120,
+          "endedMs": 126,
           "status": 200
         },
         {
           "method": "GET",
           "path": "/api/parts/48cd2efc-af67-43d4-aab4-5bcc909fe1f9/price-history?days=3650&limit=60",
-          "startedMs": 86,
-          "endedMs": 93,
+          "startedMs": 120,
+          "endedMs": 128,
           "status": 200
         },
         {
           "method": "GET",
           "path": "/api/parts/00000000-0000-4000-8000-000000013032/price-history?days=3650&limit=60",
-          "startedMs": 86,
-          "endedMs": 96,
+          "startedMs": 120,
+          "endedMs": 135,
           "status": 200
         },
         {
           "method": "GET",
-          "path": "/api/parts/f59177c1-3b47-4546-b1ef-63b531f8977f/price-history?days=3650&limit=60",
-          "startedMs": 86,
-          "endedMs": 112,
+          "path": "/api/parts/657e4da4-7c49-478f-91cd-87e1337e08ee/price-history?days=3650&limit=60",
+          "startedMs": 120,
+          "endedMs": 135,
           "status": 200
         },
         {
           "method": "GET",
-          "path": "/api/parts/6281a784-5368-4544-b242-474aca613b2b/price-history?days=3650&limit=60",
-          "startedMs": 86,
-          "endedMs": 97,
+          "path": "/api/parts/8dbee14e-9521-40b4-b0c0-a35550ed8695/price-history?days=3650&limit=60",
+          "startedMs": 120,
+          "endedMs": 135,
           "status": 200
         },
         {
           "method": "POST",
           "path": "/api/build-graphs/resolve",
-          "startedMs": 86,
-          "endedMs": 96,
+          "startedMs": 120,
+          "endedMs": 135,
           "status": 200
         }
       ],
@@ -1293,13 +1285,12 @@
       "group": "FAST_SERVER_ROUTE",
       "prompt": "DDR5 램 보여줘",
       "ok": true,
-      "totalMs": 439,
-      "submitStart": "2026-07-03T14:40:09.634Z",
-      "assistantRenderedMs": 167,
-      "actionStartedMs": 46,
-      "actionSettledMs": 46,
-      "navigationSettledMs": 173,
-      "buildChatMs": 10,
+      "totalMs": 700,
+      "submitStart": "2026-07-03T19:20:20.114Z",
+      "actionStartedMs": 48,
+      "actionSettledMs": 48,
+      "navigationSettledMs": 441,
+      "buildChatMs": 7,
       "answerType": "GENERAL",
       "actionTypes": [
         "OPEN_ROUTE"
@@ -1311,99 +1302,99 @@
         {
           "method": "POST",
           "path": "/api/ai/build-chat",
-          "startedMs": 46,
-          "endedMs": 56,
+          "startedMs": 48,
+          "endedMs": 55,
           "status": 200
         },
         {
           "method": "GET",
           "path": "/api/auth/me",
-          "startedMs": 74,
-          "endedMs": 81,
+          "startedMs": 75,
+          "endedMs": 82,
           "status": 200
         },
         {
           "method": "GET",
           "path": "/api/parts?category=RAM&q=DDR5+%EB%9E%A8&page=0&size=20&sort=compatibility&compatibilitySource=QUOTE_DRAFT_CURRENT",
-          "startedMs": 74,
-          "endedMs": 81,
+          "startedMs": 75,
+          "endedMs": 83,
           "status": 200
         },
         {
           "method": "GET",
           "path": "/api/quote-drafts/current",
-          "startedMs": 74,
-          "endedMs": 81,
+          "startedMs": 75,
+          "endedMs": 83,
           "status": 200
         },
         {
           "method": "GET",
           "path": "/api/auth/me",
-          "startedMs": 74,
-          "endedMs": 81,
+          "startedMs": 75,
+          "endedMs": 83,
           "status": 200
         },
         {
           "method": "GET",
-          "path": "/api/parts/45e8cee4-e344-4b2a-b01a-0471098d67ab/price-history?days=3650&limit=60",
-          "startedMs": 88,
-          "endedMs": 95,
+          "path": "/api/parts/fe0dc08b-e7d8-493a-a5d8-b5a6e6b0f1c1/price-history?days=3650&limit=60",
+          "startedMs": 93,
+          "endedMs": 97,
           "status": 200
         },
         {
           "method": "GET",
           "path": "/api/parts/00000000-0000-4000-8000-000000013001/price-history?days=3650&limit=60",
-          "startedMs": 88,
-          "endedMs": 95,
+          "startedMs": 94,
+          "endedMs": 98,
           "status": 200
         },
         {
           "method": "GET",
           "path": "/api/parts/00000000-0000-4000-8000-000000013009/price-history?days=3650&limit=60",
-          "startedMs": 88,
-          "endedMs": 95,
+          "startedMs": 94,
+          "endedMs": 99,
           "status": 200
         },
         {
           "method": "GET",
-          "path": "/api/parts/9f3d289c-6739-459c-9e79-5a1417165ded/price-history?days=3650&limit=60",
-          "startedMs": 88,
-          "endedMs": 95,
+          "path": "/api/parts/1fab808e-5dec-462c-91ca-91b4485b169e/price-history?days=3650&limit=60",
+          "startedMs": 94,
+          "endedMs": 100,
           "status": 200
         },
         {
           "method": "GET",
           "path": "/api/parts/48cd2efc-af67-43d4-aab4-5bcc909fe1f9/price-history?days=3650&limit=60",
-          "startedMs": 89,
-          "endedMs": 95,
+          "startedMs": 94,
+          "endedMs": 99,
           "status": 200
         },
         {
           "method": "GET",
           "path": "/api/parts/00000000-0000-4000-8000-000000013032/price-history?days=3650&limit=60",
-          "startedMs": 89,
-          "endedMs": 97,
+          "startedMs": 94,
+          "endedMs": 108,
           "status": 200
         },
         {
           "method": "GET",
-          "path": "/api/parts/f59177c1-3b47-4546-b1ef-63b531f8977f/price-history?days=3650&limit=60",
-          "startedMs": 89,
-          "endedMs": 97,
+          "path": "/api/parts/657e4da4-7c49-478f-91cd-87e1337e08ee/price-history?days=3650&limit=60",
+          "startedMs": 94,
+          "endedMs": 108,
           "status": 200
         },
         {
           "method": "GET",
-          "path": "/api/parts/6281a784-5368-4544-b242-474aca613b2b/price-history?days=3650&limit=60",
-          "startedMs": 89,
-          "endedMs": 97,
+          "path": "/api/parts/8dbee14e-9521-40b4-b0c0-a35550ed8695/price-history?days=3650&limit=60",
+          "startedMs": 94,
+          "endedMs": 108,
           "status": 200
         },
         {
           "method": "POST",
           "path": "/api/build-graphs/resolve",
-          "startedMs": 89,
-          "endedMs": 98,
+          "startedMs": 94,
+          "endedMs": 108,
           "status": 200
         }
       ],
@@ -1414,13 +1405,12 @@
       "group": "FAST_SERVER_ROUTE",
       "prompt": "NVME SSD 보여줘",
       "ok": true,
-      "totalMs": 428,
-      "submitStart": "2026-07-03T14:40:10.216Z",
-      "assistantRenderedMs": 166,
-      "actionStartedMs": 48,
-      "actionSettledMs": 48,
-      "navigationSettledMs": 168,
-      "buildChatMs": 9,
+      "totalMs": 686,
+      "submitStart": "2026-07-03T19:20:21.015Z",
+      "actionStartedMs": 49,
+      "actionSettledMs": 49,
+      "navigationSettledMs": 433,
+      "buildChatMs": 4,
       "answerType": "GENERAL",
       "actionTypes": [
         "OPEN_ROUTE"
@@ -1432,99 +1422,99 @@
         {
           "method": "POST",
           "path": "/api/ai/build-chat",
-          "startedMs": 48,
-          "endedMs": 57,
+          "startedMs": 49,
+          "endedMs": 53,
           "status": 200
         },
         {
           "method": "GET",
           "path": "/api/auth/me",
-          "startedMs": 72,
-          "endedMs": 78,
+          "startedMs": 81,
+          "endedMs": 82,
           "status": 200
         },
         {
           "method": "GET",
           "path": "/api/parts?category=STORAGE&q=NVME+SSD&page=0&size=20&sort=compatibility&compatibilitySource=QUOTE_DRAFT_CURRENT",
-          "startedMs": 72,
-          "endedMs": 78,
+          "startedMs": 81,
+          "endedMs": 95,
           "status": 200
         },
         {
           "method": "GET",
           "path": "/api/quote-drafts/current",
-          "startedMs": 72,
-          "endedMs": 78,
+          "startedMs": 81,
+          "endedMs": 83,
           "status": 200
         },
         {
           "method": "GET",
           "path": "/api/auth/me",
-          "startedMs": 72,
-          "endedMs": 78,
+          "startedMs": 81,
+          "endedMs": 108,
           "status": 200
         },
         {
           "method": "GET",
-          "path": "/api/parts/45e8cee4-e344-4b2a-b01a-0471098d67ab/price-history?days=3650&limit=60",
-          "startedMs": 88,
-          "endedMs": 97,
+          "path": "/api/parts/fe0dc08b-e7d8-493a-a5d8-b5a6e6b0f1c1/price-history?days=3650&limit=60",
+          "startedMs": 95,
+          "endedMs": 110,
           "status": 200
         },
         {
           "method": "GET",
           "path": "/api/parts/00000000-0000-4000-8000-000000013001/price-history?days=3650&limit=60",
-          "startedMs": 88,
-          "endedMs": 97,
+          "startedMs": 95,
+          "endedMs": 110,
           "status": 200
         },
         {
           "method": "GET",
           "path": "/api/parts/00000000-0000-4000-8000-000000013009/price-history?days=3650&limit=60",
-          "startedMs": 88,
-          "endedMs": 97,
+          "startedMs": 95,
+          "endedMs": 110,
           "status": 200
         },
         {
           "method": "GET",
-          "path": "/api/parts/9f3d289c-6739-459c-9e79-5a1417165ded/price-history?days=3650&limit=60",
-          "startedMs": 88,
-          "endedMs": 97,
+          "path": "/api/parts/1fab808e-5dec-462c-91ca-91b4485b169e/price-history?days=3650&limit=60",
+          "startedMs": 95,
+          "endedMs": 110,
           "status": 200
         },
         {
           "method": "GET",
           "path": "/api/parts/48cd2efc-af67-43d4-aab4-5bcc909fe1f9/price-history?days=3650&limit=60",
-          "startedMs": 89,
-          "endedMs": 97,
+          "startedMs": 95,
+          "endedMs": 110,
           "status": 200
         },
         {
           "method": "GET",
           "path": "/api/parts/00000000-0000-4000-8000-000000013032/price-history?days=3650&limit=60",
-          "startedMs": 89,
-          "endedMs": 97,
+          "startedMs": 95,
+          "endedMs": 110,
           "status": 200
         },
         {
           "method": "GET",
-          "path": "/api/parts/f59177c1-3b47-4546-b1ef-63b531f8977f/price-history?days=3650&limit=60",
-          "startedMs": 89,
-          "endedMs": 98,
+          "path": "/api/parts/657e4da4-7c49-478f-91cd-87e1337e08ee/price-history?days=3650&limit=60",
+          "startedMs": 95,
+          "endedMs": 111,
           "status": 200
         },
         {
           "method": "GET",
-          "path": "/api/parts/6281a784-5368-4544-b242-474aca613b2b/price-history?days=3650&limit=60",
-          "startedMs": 89,
-          "endedMs": 98,
+          "path": "/api/parts/8dbee14e-9521-40b4-b0c0-a35550ed8695/price-history?days=3650&limit=60",
+          "startedMs": 95,
+          "endedMs": 111,
           "status": 200
         },
         {
           "method": "POST",
           "path": "/api/build-graphs/resolve",
-          "startedMs": 89,
-          "endedMs": 100,
+          "startedMs": 95,
+          "endedMs": 111,
           "status": 200
         }
       ],
@@ -1535,13 +1525,12 @@
       "group": "FAST_SERVER_ROUTE",
       "prompt": "1000W 파워 보여줘",
       "ok": true,
-      "totalMs": 419,
-      "submitStart": "2026-07-03T14:40:10.782Z",
-      "assistantRenderedMs": 159,
-      "actionStartedMs": 49,
-      "actionSettledMs": 49,
-      "navigationSettledMs": 160,
-      "buildChatMs": 9,
+      "totalMs": 704,
+      "submitStart": "2026-07-03T19:20:21.884Z",
+      "actionStartedMs": 50,
+      "actionSettledMs": 50,
+      "navigationSettledMs": 445,
+      "buildChatMs": 2,
       "answerType": "GENERAL",
       "actionTypes": [
         "OPEN_ROUTE"
@@ -1553,99 +1542,99 @@
         {
           "method": "POST",
           "path": "/api/ai/build-chat",
-          "startedMs": 49,
-          "endedMs": 58,
+          "startedMs": 50,
+          "endedMs": 52,
           "status": 200
         },
         {
           "method": "GET",
           "path": "/api/auth/me",
-          "startedMs": 74,
-          "endedMs": 79,
+          "startedMs": 79,
+          "endedMs": 88,
           "status": 200
         },
         {
           "method": "GET",
           "path": "/api/parts?category=PSU&q=1000W+%ED%8C%8C%EC%9B%8C&page=0&size=20&sort=compatibility&compatibilitySource=QUOTE_DRAFT_CURRENT",
-          "startedMs": 74,
-          "endedMs": 79,
+          "startedMs": 79,
+          "endedMs": 89,
           "status": 200
         },
         {
           "method": "GET",
           "path": "/api/quote-drafts/current",
-          "startedMs": 74,
-          "endedMs": 79,
+          "startedMs": 79,
+          "endedMs": 89,
           "status": 200
         },
         {
           "method": "GET",
           "path": "/api/auth/me",
-          "startedMs": 74,
-          "endedMs": 79,
+          "startedMs": 79,
+          "endedMs": 103,
           "status": 200
         },
         {
           "method": "GET",
-          "path": "/api/parts/45e8cee4-e344-4b2a-b01a-0471098d67ab/price-history?days=3650&limit=60",
-          "startedMs": 87,
-          "endedMs": 90,
+          "path": "/api/parts/fe0dc08b-e7d8-493a-a5d8-b5a6e6b0f1c1/price-history?days=3650&limit=60",
+          "startedMs": 102,
+          "endedMs": 112,
           "status": 200
         },
         {
           "method": "GET",
           "path": "/api/parts/00000000-0000-4000-8000-000000013001/price-history?days=3650&limit=60",
-          "startedMs": 87,
-          "endedMs": 94,
+          "startedMs": 102,
+          "endedMs": 112,
           "status": 200
         },
         {
           "method": "GET",
           "path": "/api/parts/00000000-0000-4000-8000-000000013009/price-history?days=3650&limit=60",
-          "startedMs": 87,
-          "endedMs": 94,
+          "startedMs": 103,
+          "endedMs": 112,
           "status": 200
         },
         {
           "method": "GET",
-          "path": "/api/parts/9f3d289c-6739-459c-9e79-5a1417165ded/price-history?days=3650&limit=60",
-          "startedMs": 87,
-          "endedMs": 94,
+          "path": "/api/parts/1fab808e-5dec-462c-91ca-91b4485b169e/price-history?days=3650&limit=60",
+          "startedMs": 103,
+          "endedMs": 112,
           "status": 200
         },
         {
           "method": "GET",
           "path": "/api/parts/48cd2efc-af67-43d4-aab4-5bcc909fe1f9/price-history?days=3650&limit=60",
-          "startedMs": 87,
-          "endedMs": 94,
+          "startedMs": 103,
+          "endedMs": 112,
           "status": 200
         },
         {
           "method": "GET",
           "path": "/api/parts/00000000-0000-4000-8000-000000013032/price-history?days=3650&limit=60",
-          "startedMs": 87,
-          "endedMs": 96,
+          "startedMs": 103,
+          "endedMs": 116,
           "status": 200
         },
         {
           "method": "GET",
-          "path": "/api/parts/f59177c1-3b47-4546-b1ef-63b531f8977f/price-history?days=3650&limit=60",
-          "startedMs": 87,
-          "endedMs": 95,
+          "path": "/api/parts/657e4da4-7c49-478f-91cd-87e1337e08ee/price-history?days=3650&limit=60",
+          "startedMs": 103,
+          "endedMs": 139,
           "status": 200
         },
         {
           "method": "GET",
-          "path": "/api/parts/6281a784-5368-4544-b242-474aca613b2b/price-history?days=3650&limit=60",
-          "startedMs": 87,
-          "endedMs": 96,
+          "path": "/api/parts/8dbee14e-9521-40b4-b0c0-a35550ed8695/price-history?days=3650&limit=60",
+          "startedMs": 103,
+          "endedMs": 151,
           "status": 200
         },
         {
           "method": "POST",
           "path": "/api/build-graphs/resolve",
-          "startedMs": 87,
-          "endedMs": 97,
+          "startedMs": 103,
+          "endedMs": 112,
           "status": 200
         }
       ],
@@ -1656,13 +1645,12 @@
       "group": "FAST_SERVER_ROUTE",
       "prompt": "수랭 쿨러 보여줘",
       "ok": true,
-      "totalMs": 423,
-      "submitStart": "2026-07-03T14:40:11.333Z",
-      "assistantRenderedMs": 163,
-      "actionStartedMs": 47,
-      "actionSettledMs": 47,
-      "navigationSettledMs": 165,
-      "buildChatMs": 9,
+      "totalMs": 714,
+      "submitStart": "2026-07-03T19:20:22.809Z",
+      "actionStartedMs": 57,
+      "actionSettledMs": 57,
+      "navigationSettledMs": 455,
+      "buildChatMs": 7,
       "answerType": "GENERAL",
       "actionTypes": [
         "OPEN_ROUTE"
@@ -1674,99 +1662,99 @@
         {
           "method": "POST",
           "path": "/api/ai/build-chat",
-          "startedMs": 47,
-          "endedMs": 56,
+          "startedMs": 57,
+          "endedMs": 64,
           "status": 200
         },
         {
           "method": "GET",
           "path": "/api/auth/me",
-          "startedMs": 74,
-          "endedMs": 78,
+          "startedMs": 94,
+          "endedMs": 101,
           "status": 200
         },
         {
           "method": "GET",
           "path": "/api/parts?category=COOLER&q=%EC%88%98%EB%9E%AD+%EC%BF%A8%EB%9F%AC&page=0&size=20&sort=compatibility&compatibilitySource=QUOTE_DRAFT_CURRENT",
-          "startedMs": 74,
-          "endedMs": 78,
+          "startedMs": 94,
+          "endedMs": 101,
           "status": 200
         },
         {
           "method": "GET",
           "path": "/api/quote-drafts/current",
-          "startedMs": 74,
-          "endedMs": 78,
+          "startedMs": 94,
+          "endedMs": 101,
           "status": 200
         },
         {
           "method": "GET",
           "path": "/api/auth/me",
-          "startedMs": 74,
-          "endedMs": 79,
+          "startedMs": 94,
+          "endedMs": 118,
           "status": 200
         },
         {
           "method": "GET",
-          "path": "/api/parts/45e8cee4-e344-4b2a-b01a-0471098d67ab/price-history?days=3650&limit=60",
-          "startedMs": 87,
-          "endedMs": 94,
+          "path": "/api/parts/fe0dc08b-e7d8-493a-a5d8-b5a6e6b0f1c1/price-history?days=3650&limit=60",
+          "startedMs": 116,
+          "endedMs": 126,
           "status": 200
         },
         {
           "method": "GET",
           "path": "/api/parts/00000000-0000-4000-8000-000000013001/price-history?days=3650&limit=60",
-          "startedMs": 88,
-          "endedMs": 94,
+          "startedMs": 116,
+          "endedMs": 129,
           "status": 200
         },
         {
           "method": "GET",
           "path": "/api/parts/00000000-0000-4000-8000-000000013009/price-history?days=3650&limit=60",
-          "startedMs": 88,
-          "endedMs": 94,
+          "startedMs": 116,
+          "endedMs": 131,
           "status": 200
         },
         {
           "method": "GET",
-          "path": "/api/parts/9f3d289c-6739-459c-9e79-5a1417165ded/price-history?days=3650&limit=60",
-          "startedMs": 88,
-          "endedMs": 94,
+          "path": "/api/parts/1fab808e-5dec-462c-91ca-91b4485b169e/price-history?days=3650&limit=60",
+          "startedMs": 117,
+          "endedMs": 131,
           "status": 200
         },
         {
           "method": "GET",
           "path": "/api/parts/48cd2efc-af67-43d4-aab4-5bcc909fe1f9/price-history?days=3650&limit=60",
-          "startedMs": 88,
-          "endedMs": 94,
+          "startedMs": 117,
+          "endedMs": 158,
           "status": 200
         },
         {
           "method": "GET",
           "path": "/api/parts/00000000-0000-4000-8000-000000013032/price-history?days=3650&limit=60",
-          "startedMs": 88,
-          "endedMs": 96,
+          "startedMs": 117,
+          "endedMs": 158,
           "status": 200
         },
         {
           "method": "GET",
-          "path": "/api/parts/f59177c1-3b47-4546-b1ef-63b531f8977f/price-history?days=3650&limit=60",
-          "startedMs": 88,
-          "endedMs": 96,
+          "path": "/api/parts/657e4da4-7c49-478f-91cd-87e1337e08ee/price-history?days=3650&limit=60",
+          "startedMs": 117,
+          "endedMs": 158,
           "status": 200
         },
         {
           "method": "GET",
-          "path": "/api/parts/6281a784-5368-4544-b242-474aca613b2b/price-history?days=3650&limit=60",
-          "startedMs": 88,
-          "endedMs": 96,
+          "path": "/api/parts/8dbee14e-9521-40b4-b0c0-a35550ed8695/price-history?days=3650&limit=60",
+          "startedMs": 117,
+          "endedMs": 158,
           "status": 200
         },
         {
           "method": "POST",
           "path": "/api/build-graphs/resolve",
-          "startedMs": 88,
-          "endedMs": 96,
+          "startedMs": 117,
+          "endedMs": 131,
           "status": 200
         }
       ],
@@ -1777,13 +1765,12 @@
       "group": "DRAFT_ACTION",
       "prompt": "GPU 빼줘",
       "ok": true,
-      "totalMs": 422,
-      "submitStart": "2026-07-03T14:40:12.018Z",
-      "assistantRenderedMs": 158,
-      "actionStartedMs": 41,
-      "actionSettledMs": 162,
-      "draftSettledMs": 162,
-      "buildChatMs": 13,
+      "totalMs": 710,
+      "submitStart": "2026-07-03T19:20:23.920Z",
+      "actionStartedMs": 56,
+      "actionSettledMs": 443,
+      "draftSettledMs": 443,
+      "buildChatMs": 11,
       "answerType": "PART",
       "actionTypes": [
         "REMOVE_DRAFT_PART"
@@ -1794,29 +1781,29 @@
         {
           "method": "POST",
           "path": "/api/ai/build-chat",
-          "startedMs": 41,
-          "endedMs": 54,
+          "startedMs": 56,
+          "endedMs": 67,
           "status": 200
         },
         {
           "method": "DELETE",
           "path": "/api/quote-drafts/current/items/1fab808e-5dec-462c-91ca-91b4485b169e",
-          "startedMs": 55,
-          "endedMs": 65,
+          "startedMs": 68,
+          "endedMs": 78,
           "status": 200
         },
         {
           "method": "GET",
           "path": "/api/quote-drafts/current",
-          "startedMs": 65,
-          "endedMs": 69,
+          "startedMs": 79,
+          "endedMs": 87,
           "status": 200
         },
         {
           "method": "POST",
           "path": "/api/build-graphs/resolve",
-          "startedMs": 79,
-          "endedMs": 90,
+          "startedMs": 104,
+          "endedMs": 122,
           "status": 200
         }
       ],
@@ -1827,13 +1814,12 @@
       "group": "DRAFT_ACTION",
       "prompt": "RAM 64GB로 바꿔줘",
       "ok": true,
-      "totalMs": 421,
-      "submitStart": "2026-07-03T14:40:12.699Z",
-      "assistantRenderedMs": 160,
-      "actionStartedMs": 45,
-      "actionSettledMs": 163,
-      "draftSettledMs": 163,
-      "buildChatMs": 12,
+      "totalMs": 721,
+      "submitStart": "2026-07-03T19:20:24.968Z",
+      "actionStartedMs": 58,
+      "actionSettledMs": 453,
+      "draftSettledMs": 453,
+      "buildChatMs": 8,
       "answerType": "PART",
       "actionTypes": [
         "UPDATE_DRAFT_QUANTITY"
@@ -1844,29 +1830,29 @@
         {
           "method": "POST",
           "path": "/api/ai/build-chat",
-          "startedMs": 45,
-          "endedMs": 57,
-          "status": 200
-        },
-        {
-          "method": "PATCH",
-          "path": "/api/quote-drafts/current/items/00000000-0000-4000-8000-000000013009",
           "startedMs": 58,
           "endedMs": 66,
           "status": 200
         },
         {
+          "method": "PATCH",
+          "path": "/api/quote-drafts/current/items/00000000-0000-4000-8000-000000013009",
+          "startedMs": 67,
+          "endedMs": 78,
+          "status": 200
+        },
+        {
           "method": "GET",
           "path": "/api/quote-drafts/current",
-          "startedMs": 67,
-          "endedMs": 71,
+          "startedMs": 78,
+          "endedMs": 84,
           "status": 200
         },
         {
           "method": "POST",
           "path": "/api/build-graphs/resolve",
-          "startedMs": 81,
-          "endedMs": 92,
+          "startedMs": 98,
+          "endedMs": 112,
           "status": 200
         }
       ],
@@ -1877,13 +1863,11 @@
       "group": "DRAFT_ACTION",
       "prompt": "파워 1000W 이상으로 바꿔줘",
       "ok": true,
-      "totalMs": 417,
-      "submitStart": "2026-07-03T14:40:13.367Z",
-      "assistantRenderedMs": 157,
-      "actionStartedMs": 43,
-      "actionSettledMs": 161,
-      "draftSettledMs": 161,
-      "buildChatMs": 13,
+      "totalMs": 734,
+      "submitStart": "2026-07-03T19:20:26.094Z",
+      "actionStartedMs": 70,
+      "actionSettledMs": 70,
+      "buildChatMs": 18,
       "answerType": "PART",
       "actionTypes": [
         "REPLACE_DRAFT_PART"
@@ -1894,22 +1878,8 @@
         {
           "method": "POST",
           "path": "/api/ai/build-chat",
-          "startedMs": 43,
-          "endedMs": 56,
-          "status": 200
-        },
-        {
-          "method": "PUT",
-          "path": "/api/quote-drafts/current/items/00000000-0000-4000-8000-000000013032",
-          "startedMs": 56,
-          "endedMs": 81,
-          "status": 200
-        },
-        {
-          "method": "GET",
-          "path": "/api/quote-drafts/current",
-          "startedMs": 81,
-          "endedMs": 85,
+          "startedMs": 70,
+          "endedMs": 88,
           "status": 200
         }
       ],
@@ -1920,13 +1890,11 @@
       "group": "DRAFT_ACTION",
       "prompt": "그래픽카드 더 싼데 성능 너무 떨어지지 않게 추천해줘",
       "ok": true,
-      "totalMs": 419,
-      "submitStart": "2026-07-03T14:40:13.999Z",
-      "assistantRenderedMs": 158,
-      "actionStartedMs": 45,
-      "actionSettledMs": 162,
-      "draftSettledMs": 162,
-      "buildChatMs": 12,
+      "totalMs": 731,
+      "submitStart": "2026-07-03T19:20:27.297Z",
+      "actionStartedMs": 66,
+      "actionSettledMs": 66,
+      "buildChatMs": 16,
       "answerType": "PART",
       "actionTypes": [
         "REPLACE_DRAFT_PART"
@@ -1937,36 +1905,8 @@
         {
           "method": "POST",
           "path": "/api/ai/build-chat",
-          "startedMs": 45,
-          "endedMs": 57,
-          "status": 200
-        },
-        {
-          "method": "PUT",
-          "path": "/api/quote-drafts/current/items/4f615852-d0ec-4d05-9353-bc5d26906e5b",
-          "startedMs": 58,
-          "endedMs": 78,
-          "status": 200
-        },
-        {
-          "method": "GET",
-          "path": "/api/quote-drafts/current",
-          "startedMs": 79,
-          "endedMs": 83,
-          "status": 200
-        },
-        {
-          "method": "GET",
-          "path": "/api/parts/4f615852-d0ec-4d05-9353-bc5d26906e5b/price-history?days=3650&limit=60",
-          "startedMs": 94,
-          "endedMs": 109,
-          "status": 200
-        },
-        {
-          "method": "POST",
-          "path": "/api/build-graphs/resolve",
-          "startedMs": 95,
-          "endedMs": 109,
+          "startedMs": 66,
+          "endedMs": 82,
           "status": 200
         }
       ],
@@ -1977,13 +1917,11 @@
       "group": "DRAFT_ACTION",
       "prompt": "CPU 더 좋은 걸로 바꿔줘",
       "ok": true,
-      "totalMs": 416,
-      "submitStart": "2026-07-03T14:40:14.649Z",
-      "assistantRenderedMs": 155,
-      "actionStartedMs": 44,
-      "actionSettledMs": 160,
-      "draftSettledMs": 160,
-      "buildChatMs": 13,
+      "totalMs": 726,
+      "submitStart": "2026-07-03T19:20:28.419Z",
+      "actionStartedMs": 58,
+      "actionSettledMs": 58,
+      "buildChatMs": 11,
       "answerType": "PART",
       "actionTypes": [
         "REPLACE_DRAFT_PART"
@@ -1994,36 +1932,8 @@
         {
           "method": "POST",
           "path": "/api/ai/build-chat",
-          "startedMs": 44,
-          "endedMs": 57,
-          "status": 200
-        },
-        {
-          "method": "PUT",
-          "path": "/api/quote-drafts/current/items/66a7866a-b4fd-4913-b2d8-5d2222365086",
-          "startedMs": 57,
-          "endedMs": 65,
-          "status": 200
-        },
-        {
-          "method": "GET",
-          "path": "/api/quote-drafts/current",
-          "startedMs": 65,
+          "startedMs": 58,
           "endedMs": 69,
-          "status": 200
-        },
-        {
-          "method": "GET",
-          "path": "/api/parts/66a7866a-b4fd-4913-b2d8-5d2222365086/price-history?days=3650&limit=60",
-          "startedMs": 81,
-          "endedMs": 92,
-          "status": 200
-        },
-        {
-          "method": "POST",
-          "path": "/api/build-graphs/resolve",
-          "startedMs": 81,
-          "endedMs": 92,
           "status": 200
         }
       ],
@@ -2034,13 +1944,11 @@
       "group": "DRAFT_ACTION",
       "prompt": "메인보드 MSI 걸로 맞춰줘",
       "ok": true,
-      "totalMs": 414,
-      "submitStart": "2026-07-03T14:40:15.301Z",
-      "assistantRenderedMs": 152,
-      "actionStartedMs": 42,
-      "actionSettledMs": 156,
-      "draftSettledMs": 156,
-      "buildChatMs": 14,
+      "totalMs": 707,
+      "submitStart": "2026-07-03T19:20:29.560Z",
+      "actionStartedMs": 48,
+      "actionSettledMs": 48,
+      "buildChatMs": 10,
       "answerType": "PART",
       "actionTypes": [
         "REPLACE_DRAFT_PART"
@@ -2051,36 +1959,8 @@
         {
           "method": "POST",
           "path": "/api/ai/build-chat",
-          "startedMs": 42,
-          "endedMs": 56,
-          "status": 200
-        },
-        {
-          "method": "PUT",
-          "path": "/api/quote-drafts/current/items/00000000-0000-4000-8000-000000013002",
-          "startedMs": 56,
-          "endedMs": 64,
-          "status": 200
-        },
-        {
-          "method": "GET",
-          "path": "/api/quote-drafts/current",
-          "startedMs": 65,
-          "endedMs": 69,
-          "status": 200
-        },
-        {
-          "method": "GET",
-          "path": "/api/parts/00000000-0000-4000-8000-000000013002/price-history?days=3650&limit=60",
-          "startedMs": 79,
-          "endedMs": 90,
-          "status": 200
-        },
-        {
-          "method": "POST",
-          "path": "/api/build-graphs/resolve",
-          "startedMs": 79,
-          "endedMs": 90,
+          "startedMs": 48,
+          "endedMs": 58,
           "status": 200
         }
       ],
@@ -2091,13 +1971,11 @@
       "group": "DRAFT_ACTION",
       "prompt": "SSD 더 빠른 걸로 바꿔줘",
       "ok": true,
-      "totalMs": 415,
-      "submitStart": "2026-07-03T14:40:15.950Z",
-      "assistantRenderedMs": 153,
-      "actionStartedMs": 45,
-      "actionSettledMs": 158,
-      "draftSettledMs": 158,
-      "buildChatMs": 11,
+      "totalMs": 723,
+      "submitStart": "2026-07-03T19:20:30.696Z",
+      "actionStartedMs": 65,
+      "actionSettledMs": 65,
+      "buildChatMs": 10,
       "answerType": "PART",
       "actionTypes": [
         "REPLACE_DRAFT_PART"
@@ -2108,36 +1986,8 @@
         {
           "method": "POST",
           "path": "/api/ai/build-chat",
-          "startedMs": 45,
-          "endedMs": 56,
-          "status": 200
-        },
-        {
-          "method": "PUT",
-          "path": "/api/quote-drafts/current/items/00000000-0000-4000-8000-000000013020",
-          "startedMs": 56,
-          "endedMs": 65,
-          "status": 200
-        },
-        {
-          "method": "GET",
-          "path": "/api/quote-drafts/current",
-          "startedMs": 66,
-          "endedMs": 70,
-          "status": 200
-        },
-        {
-          "method": "GET",
-          "path": "/api/parts/00000000-0000-4000-8000-000000013020/price-history?days=3650&limit=60",
-          "startedMs": 80,
-          "endedMs": 91,
-          "status": 200
-        },
-        {
-          "method": "POST",
-          "path": "/api/build-graphs/resolve",
-          "startedMs": 81,
-          "endedMs": 91,
+          "startedMs": 65,
+          "endedMs": 75,
           "status": 200
         }
       ],
@@ -2148,13 +1998,11 @@
       "group": "DRAFT_ACTION",
       "prompt": "케이스 리안리 216 모델꺼로 맞춰줘",
       "ok": true,
-      "totalMs": 417,
-      "submitStart": "2026-07-03T14:40:16.598Z",
-      "assistantRenderedMs": 156,
-      "actionStartedMs": 46,
-      "actionSettledMs": 160,
-      "draftSettledMs": 160,
-      "buildChatMs": 13,
+      "totalMs": 707,
+      "submitStart": "2026-07-03T19:20:31.846Z",
+      "actionStartedMs": 63,
+      "actionSettledMs": 63,
+      "buildChatMs": 10,
       "answerType": "PART",
       "actionTypes": [
         "REPLACE_DRAFT_PART"
@@ -2165,36 +2013,8 @@
         {
           "method": "POST",
           "path": "/api/ai/build-chat",
-          "startedMs": 46,
-          "endedMs": 59,
-          "status": 200
-        },
-        {
-          "method": "PUT",
-          "path": "/api/quote-drafts/current/items/09f39d2a-de00-4cbc-bd1a-241e9790111d",
-          "startedMs": 60,
-          "endedMs": 82,
-          "status": 200
-        },
-        {
-          "method": "GET",
-          "path": "/api/quote-drafts/current",
-          "startedMs": 83,
-          "endedMs": 88,
-          "status": 200
-        },
-        {
-          "method": "GET",
-          "path": "/api/parts/09f39d2a-de00-4cbc-bd1a-241e9790111d/price-history?days=3650&limit=60",
-          "startedMs": 99,
-          "endedMs": 112,
-          "status": 200
-        },
-        {
-          "method": "POST",
-          "path": "/api/build-graphs/resolve",
-          "startedMs": 99,
-          "endedMs": 113,
+          "startedMs": 63,
+          "endedMs": 73,
           "status": 200
         }
       ],
@@ -2205,13 +2025,11 @@
       "group": "DRAFT_ACTION",
       "prompt": "쿨러 더 잘 식히는 걸로 바꿔줘",
       "ok": true,
-      "totalMs": 417,
-      "submitStart": "2026-07-03T14:40:17.231Z",
-      "assistantRenderedMs": 156,
-      "actionStartedMs": 47,
-      "actionSettledMs": 160,
-      "draftSettledMs": 160,
-      "buildChatMs": 11,
+      "totalMs": 692,
+      "submitStart": "2026-07-03T19:20:32.921Z",
+      "actionStartedMs": 54,
+      "actionSettledMs": 54,
+      "buildChatMs": 9,
       "answerType": "PART",
       "actionTypes": [
         "REPLACE_DRAFT_PART"
@@ -2222,36 +2040,8 @@
         {
           "method": "POST",
           "path": "/api/ai/build-chat",
-          "startedMs": 47,
-          "endedMs": 58,
-          "status": 200
-        },
-        {
-          "method": "PUT",
-          "path": "/api/quote-drafts/current/items/00000000-0000-4000-8000-000000011701",
-          "startedMs": 59,
-          "endedMs": 78,
-          "status": 200
-        },
-        {
-          "method": "GET",
-          "path": "/api/quote-drafts/current",
-          "startedMs": 78,
-          "endedMs": 82,
-          "status": 200
-        },
-        {
-          "method": "GET",
-          "path": "/api/parts/00000000-0000-4000-8000-000000011701/price-history?days=3650&limit=60",
-          "startedMs": 93,
-          "endedMs": 102,
-          "status": 200
-        },
-        {
-          "method": "POST",
-          "path": "/api/build-graphs/resolve",
-          "startedMs": 93,
-          "endedMs": 102,
+          "startedMs": 54,
+          "endedMs": 63,
           "status": 200
         }
       ],
@@ -2262,13 +2052,12 @@
       "group": "DRAFT_ACTION",
       "prompt": "RAM 수량 2개로 변경해줘",
       "ok": true,
-      "totalMs": 412,
-      "submitStart": "2026-07-03T14:40:17.882Z",
-      "assistantRenderedMs": 154,
-      "actionStartedMs": 45,
-      "actionSettledMs": 158,
-      "draftSettledMs": 158,
-      "buildChatMs": 12,
+      "totalMs": 709,
+      "submitStart": "2026-07-03T19:20:33.995Z",
+      "actionStartedMs": 47,
+      "actionSettledMs": 440,
+      "draftSettledMs": 440,
+      "buildChatMs": 9,
       "answerType": "PART",
       "actionTypes": [
         "UPDATE_DRAFT_QUANTITY"
@@ -2279,22 +2068,22 @@
         {
           "method": "POST",
           "path": "/api/ai/build-chat",
-          "startedMs": 45,
-          "endedMs": 57,
+          "startedMs": 47,
+          "endedMs": 56,
           "status": 200
         },
         {
           "method": "PATCH",
           "path": "/api/quote-drafts/current/items/00000000-0000-4000-8000-000000013009",
-          "startedMs": 58,
-          "endedMs": 81,
+          "startedMs": 57,
+          "endedMs": 67,
           "status": 200
         },
         {
           "method": "GET",
           "path": "/api/quote-drafts/current",
-          "startedMs": 82,
-          "endedMs": 86,
+          "startedMs": 68,
+          "endedMs": 74,
           "status": 200
         }
       ],
@@ -2305,13 +2094,11 @@
       "group": "DRAFT_ACTION",
       "prompt": "그래픽카드 더 좋은 걸로 바꿔줘",
       "ok": true,
-      "totalMs": 418,
-      "submitStart": "2026-07-03T14:40:18.533Z",
-      "assistantRenderedMs": 161,
-      "actionStartedMs": 44,
-      "actionSettledMs": 166,
-      "draftSettledMs": 166,
-      "buildChatMs": 13,
+      "totalMs": 708,
+      "submitStart": "2026-07-03T19:20:35.073Z",
+      "actionStartedMs": 53,
+      "actionSettledMs": 53,
+      "buildChatMs": 10,
       "answerType": "PART",
       "actionTypes": [
         "REPLACE_DRAFT_PART"
@@ -2322,36 +2109,8 @@
         {
           "method": "POST",
           "path": "/api/ai/build-chat",
-          "startedMs": 44,
-          "endedMs": 57,
-          "status": 200
-        },
-        {
-          "method": "PUT",
-          "path": "/api/quote-drafts/current/items/9f3d289c-6739-459c-9e79-5a1417165ded",
-          "startedMs": 58,
-          "endedMs": 67,
-          "status": 200
-        },
-        {
-          "method": "GET",
-          "path": "/api/quote-drafts/current",
-          "startedMs": 67,
-          "endedMs": 72,
-          "status": 200
-        },
-        {
-          "method": "GET",
-          "path": "/api/parts/9f3d289c-6739-459c-9e79-5a1417165ded/price-history?days=3650&limit=60",
-          "startedMs": 85,
-          "endedMs": 97,
-          "status": 200
-        },
-        {
-          "method": "POST",
-          "path": "/api/build-graphs/resolve",
-          "startedMs": 85,
-          "endedMs": 97,
+          "startedMs": 53,
+          "endedMs": 63,
           "status": 200
         }
       ],
@@ -2362,12 +2121,10 @@
       "group": "DRAFT_ACTION",
       "prompt": "파워 1200W 이상으로 바꿔줘",
       "ok": true,
-      "totalMs": 413,
-      "submitStart": "2026-07-03T14:40:19.166Z",
-      "assistantRenderedMs": 156,
-      "actionStartedMs": 46,
-      "actionSettledMs": 160,
-      "draftSettledMs": 160,
+      "totalMs": 708,
+      "submitStart": "2026-07-03T19:20:36.135Z",
+      "actionStartedMs": 59,
+      "actionSettledMs": 59,
       "buildChatMs": 10,
       "answerType": "PART",
       "actionTypes": [
@@ -2379,22 +2136,8 @@
         {
           "method": "POST",
           "path": "/api/ai/build-chat",
-          "startedMs": 46,
-          "endedMs": 56,
-          "status": 200
-        },
-        {
-          "method": "PUT",
-          "path": "/api/quote-drafts/current/items/00000000-0000-4000-8000-000000013032",
-          "startedMs": 57,
-          "endedMs": 80,
-          "status": 200
-        },
-        {
-          "method": "GET",
-          "path": "/api/quote-drafts/current",
-          "startedMs": 81,
-          "endedMs": 86,
+          "startedMs": 59,
+          "endedMs": 69,
           "status": 200
         }
       ],
@@ -2405,12 +2148,11 @@
       "group": "DETERMINISTIC_RECOMMEND",
       "prompt": "800만원으로 최고급 PC 추천해줘",
       "ok": true,
-      "totalMs": 414,
-      "submitStart": "2026-07-03T14:40:19.718Z",
-      "assistantRenderedMs": 156,
-      "actionStartedMs": 46,
-      "actionSettledMs": 46,
-      "buildChatMs": 8,
+      "totalMs": 747,
+      "submitStart": "2026-07-03T19:20:37.092Z",
+      "actionStartedMs": 58,
+      "actionSettledMs": 58,
+      "buildChatMs": 18,
       "answerType": "BUDGET",
       "actionTypes": [],
       "buildCount": 2,
@@ -2419,57 +2161,57 @@
         {
           "method": "POST",
           "path": "/api/ai/build-chat",
-          "startedMs": 46,
-          "endedMs": 54,
+          "startedMs": 58,
+          "endedMs": 76,
           "status": 200
         },
         {
           "method": "GET",
-          "path": "/api/parts/f59177c1-3b47-4546-b1ef-63b531f8977f",
-          "startedMs": 64,
-          "endedMs": 69,
+          "path": "/api/parts/657e4da4-7c49-478f-91cd-87e1337e08ee",
+          "startedMs": 96,
+          "endedMs": 110,
           "status": 200
         },
         {
           "method": "GET",
-          "path": "/api/parts/f59177c1-3b47-4546-b1ef-63b531f8977f",
-          "startedMs": 64,
-          "endedMs": 74,
+          "path": "/api/parts/657e4da4-7c49-478f-91cd-87e1337e08ee",
+          "startedMs": 96,
+          "endedMs": 111,
           "status": 200
         },
         {
           "method": "POST",
           "path": "/api/build-graphs/resolve",
-          "startedMs": 64,
-          "endedMs": 74,
+          "startedMs": 97,
+          "endedMs": 111,
           "status": 200
         },
         {
           "method": "POST",
           "path": "/api/recommendation-events",
-          "startedMs": 231,
-          "endedMs": 241,
+          "startedMs": 264,
+          "endedMs": 281,
           "status": 201
         },
         {
           "method": "POST",
           "path": "/api/recommendation-events",
-          "startedMs": 231,
-          "endedMs": 241,
+          "startedMs": 264,
+          "endedMs": 280,
           "status": 201
         },
         {
           "method": "POST",
           "path": "/api/recommendation-events",
-          "startedMs": 231,
-          "endedMs": 240,
+          "startedMs": 264,
+          "endedMs": 281,
           "status": 201
         },
         {
           "method": "POST",
           "path": "/api/recommendation-events",
-          "startedMs": 231,
-          "endedMs": 241,
+          "startedMs": 265,
+          "endedMs": 281,
           "status": 201
         }
       ],
@@ -2480,12 +2222,11 @@
       "group": "DETERMINISTIC_RECOMMEND",
       "prompt": "800만원짜리 컴퓨터 추천해줘",
       "ok": true,
-      "totalMs": 419,
-      "submitStart": "2026-07-03T14:40:20.282Z",
-      "assistantRenderedMs": 160,
-      "actionStartedMs": 47,
-      "actionSettledMs": 47,
-      "buildChatMs": 10,
+      "totalMs": 696,
+      "submitStart": "2026-07-03T19:20:38.031Z",
+      "actionStartedMs": 48,
+      "actionSettledMs": 48,
+      "buildChatMs": 5,
       "answerType": "BUDGET",
       "actionTypes": [],
       "buildCount": 2,
@@ -2494,57 +2235,57 @@
         {
           "method": "POST",
           "path": "/api/ai/build-chat",
-          "startedMs": 47,
-          "endedMs": 57,
+          "startedMs": 48,
+          "endedMs": 53,
           "status": 200
         },
         {
           "method": "GET",
-          "path": "/api/parts/f59177c1-3b47-4546-b1ef-63b531f8977f",
-          "startedMs": 66,
-          "endedMs": 70,
-          "status": 200
-        },
-        {
-          "method": "GET",
-          "path": "/api/parts/f59177c1-3b47-4546-b1ef-63b531f8977f",
+          "path": "/api/parts/657e4da4-7c49-478f-91cd-87e1337e08ee",
           "startedMs": 67,
+          "endedMs": 76,
+          "status": 200
+        },
+        {
+          "method": "GET",
+          "path": "/api/parts/657e4da4-7c49-478f-91cd-87e1337e08ee",
+          "startedMs": 68,
           "endedMs": 76,
           "status": 200
         },
         {
           "method": "POST",
           "path": "/api/build-graphs/resolve",
-          "startedMs": 67,
+          "startedMs": 68,
           "endedMs": 76,
           "status": 200
         },
         {
           "method": "POST",
           "path": "/api/recommendation-events",
-          "startedMs": 214,
-          "endedMs": 220,
+          "startedMs": 286,
+          "endedMs": 296,
           "status": 201
         },
         {
           "method": "POST",
           "path": "/api/recommendation-events",
-          "startedMs": 214,
-          "endedMs": 220,
+          "startedMs": 286,
+          "endedMs": 295,
           "status": 201
         },
         {
           "method": "POST",
           "path": "/api/recommendation-events",
-          "startedMs": 214,
-          "endedMs": 220,
+          "startedMs": 286,
+          "endedMs": 294,
           "status": 201
         },
         {
           "method": "POST",
           "path": "/api/recommendation-events",
-          "startedMs": 214,
-          "endedMs": 221,
+          "startedMs": 286,
+          "endedMs": 295,
           "status": 201
         }
       ],
@@ -2555,12 +2296,11 @@
       "group": "DETERMINISTIC_RECOMMEND",
       "prompt": "300만원대 게임용 PC 추천해줘",
       "ok": true,
-      "totalMs": 424,
-      "submitStart": "2026-07-03T14:40:20.832Z",
-      "assistantRenderedMs": 164,
-      "actionStartedMs": 47,
-      "actionSettledMs": 47,
-      "buildChatMs": 10,
+      "totalMs": 702,
+      "submitStart": "2026-07-03T19:20:38.916Z",
+      "actionStartedMs": 62,
+      "actionSettledMs": 62,
+      "buildChatMs": 7,
       "answerType": "BUDGET",
       "actionTypes": [],
       "buildCount": 3,
@@ -2569,64 +2309,64 @@
         {
           "method": "POST",
           "path": "/api/ai/build-chat",
-          "startedMs": 47,
-          "endedMs": 57,
+          "startedMs": 62,
+          "endedMs": 69,
           "status": 200
         },
         {
           "method": "GET",
           "path": "/api/parts/00000000-0000-4000-8000-000000013033",
-          "startedMs": 68,
-          "endedMs": 72,
+          "startedMs": 83,
+          "endedMs": 93,
           "status": 200
         },
         {
           "method": "GET",
           "path": "/api/parts/00000000-0000-4000-8000-000000013033",
-          "startedMs": 68,
-          "endedMs": 97,
+          "startedMs": 83,
+          "endedMs": 93,
           "status": 200
         },
         {
           "method": "GET",
           "path": "/api/parts/00000000-0000-4000-8000-000000013033",
-          "startedMs": 68,
-          "endedMs": 97,
+          "startedMs": 84,
+          "endedMs": 129,
           "status": 200
         },
         {
           "method": "POST",
           "path": "/api/build-graphs/resolve",
-          "startedMs": 68,
-          "endedMs": 72,
+          "startedMs": 84,
+          "endedMs": 93,
           "status": 200
         },
         {
           "method": "POST",
           "path": "/api/recommendation-events",
-          "startedMs": 201,
-          "endedMs": 209,
+          "startedMs": 259,
+          "endedMs": 270,
           "status": 201
         },
         {
           "method": "POST",
           "path": "/api/recommendation-events",
-          "startedMs": 201,
-          "endedMs": 209,
+          "startedMs": 259,
+          "endedMs": 266,
           "status": 201
         },
         {
           "method": "POST",
           "path": "/api/recommendation-events",
-          "startedMs": 201,
-          "endedMs": 209,
+          "startedMs": 259,
+          "endedMs": 269,
           "status": 201
         },
         {
           "method": "POST",
           "path": "/api/recommendation-events",
-          "startedMs": 201,
-          "endedMs": 209,
+          "startedMs": 259,
+          "endedMs": 270,
           "status": 201
         }
       ],
@@ -2637,93 +2377,10 @@
       "group": "DETERMINISTIC_RECOMMEND",
       "prompt": "300만원으로 게임용 PC 추천해줘",
       "ok": true,
-      "totalMs": 425,
-      "submitStart": "2026-07-03T14:40:21.382Z",
-      "assistantRenderedMs": 166,
-      "actionStartedMs": 48,
-      "actionSettledMs": 48,
-      "buildChatMs": 9,
-      "answerType": "BUDGET",
-      "actionTypes": [],
-      "buildCount": 3,
-      "warningCount": 7,
-      "apiCalls": [
-        {
-          "method": "POST",
-          "path": "/api/ai/build-chat",
-          "startedMs": 48,
-          "endedMs": 57,
-          "status": 200
-        },
-        {
-          "method": "GET",
-          "path": "/api/parts/00000000-0000-4000-8000-000000013033",
-          "startedMs": 66,
-          "endedMs": 71,
-          "status": 200
-        },
-        {
-          "method": "GET",
-          "path": "/api/parts/00000000-0000-4000-8000-000000013033",
-          "startedMs": 66,
-          "endedMs": 71,
-          "status": 200
-        },
-        {
-          "method": "GET",
-          "path": "/api/parts/00000000-0000-4000-8000-000000013033",
-          "startedMs": 66,
-          "endedMs": 97,
-          "status": 200
-        },
-        {
-          "method": "POST",
-          "path": "/api/build-graphs/resolve",
-          "startedMs": 66,
-          "endedMs": 71,
-          "status": 200
-        },
-        {
-          "method": "POST",
-          "path": "/api/recommendation-events",
-          "startedMs": 217,
-          "endedMs": 222,
-          "status": 201
-        },
-        {
-          "method": "POST",
-          "path": "/api/recommendation-events",
-          "startedMs": 217,
-          "endedMs": 225,
-          "status": 201
-        },
-        {
-          "method": "POST",
-          "path": "/api/recommendation-events",
-          "startedMs": 217,
-          "endedMs": 225,
-          "status": 201
-        },
-        {
-          "method": "POST",
-          "path": "/api/recommendation-events",
-          "startedMs": 217,
-          "endedMs": 225,
-          "status": 201
-        }
-      ],
-      "errors": []
-    },
-    {
-      "id": "det-build-005",
-      "group": "DETERMINISTIC_RECOMMEND",
-      "prompt": "200만원 QHD 게임용 PC 추천해줘",
-      "ok": true,
-      "totalMs": 416,
-      "submitStart": "2026-07-03T14:40:21.933Z",
-      "assistantRenderedMs": 155,
-      "actionStartedMs": 48,
-      "actionSettledMs": 48,
+      "totalMs": 694,
+      "submitStart": "2026-07-03T19:20:39.799Z",
+      "actionStartedMs": 45,
+      "actionSettledMs": 45,
       "buildChatMs": 8,
       "answerType": "BUDGET",
       "actionTypes": [],
@@ -2733,357 +2390,29 @@
         {
           "method": "POST",
           "path": "/api/ai/build-chat",
-          "startedMs": 48,
-          "endedMs": 56,
+          "startedMs": 45,
+          "endedMs": 53,
           "status": 200
         },
         {
           "method": "GET",
           "path": "/api/parts/00000000-0000-4000-8000-000000013033",
           "startedMs": 65,
-          "endedMs": 69,
+          "endedMs": 77,
           "status": 200
         },
         {
           "method": "GET",
           "path": "/api/parts/00000000-0000-4000-8000-000000013033",
-          "startedMs": 65,
-          "endedMs": 74,
-          "status": 200
-        },
-        {
-          "method": "GET",
-          "path": "/api/parts/00000000-0000-4000-8000-000000013033",
-          "startedMs": 65,
-          "endedMs": 75,
-          "status": 200
-        },
-        {
-          "method": "POST",
-          "path": "/api/build-graphs/resolve",
-          "startedMs": 65,
-          "endedMs": 74,
-          "status": 200
-        },
-        {
-          "method": "POST",
-          "path": "/api/recommendation-events",
-          "startedMs": 199,
-          "endedMs": 204,
-          "status": 201
-        },
-        {
-          "method": "POST",
-          "path": "/api/recommendation-events",
-          "startedMs": 199,
-          "endedMs": 205,
-          "status": 201
-        },
-        {
-          "method": "POST",
-          "path": "/api/recommendation-events",
-          "startedMs": 199,
-          "endedMs": 203,
-          "status": 201
-        },
-        {
-          "method": "POST",
-          "path": "/api/recommendation-events",
-          "startedMs": 199,
-          "endedMs": 205,
-          "status": 201
-        }
-      ],
-      "errors": []
-    },
-    {
-      "id": "det-build-006",
-      "group": "DETERMINISTIC_RECOMMEND",
-      "prompt": "100만원 사무 학습용 PC 추천해줘",
-      "ok": true,
-      "totalMs": 439,
-      "submitStart": "2026-07-03T14:40:22.482Z",
-      "assistantRenderedMs": 161,
-      "actionStartedMs": 47,
-      "actionSettledMs": 47,
-      "buildChatMs": 10,
-      "answerType": "BUDGET",
-      "actionTypes": [],
-      "buildCount": 3,
-      "warningCount": 6,
-      "apiCalls": [
-        {
-          "method": "POST",
-          "path": "/api/ai/build-chat",
-          "startedMs": 47,
-          "endedMs": 57,
+          "startedMs": 66,
+          "endedMs": 77,
           "status": 200
         },
         {
           "method": "GET",
           "path": "/api/parts/00000000-0000-4000-8000-000000013033",
           "startedMs": 67,
-          "endedMs": 70,
-          "status": 200
-        },
-        {
-          "method": "GET",
-          "path": "/api/parts/00000000-0000-4000-8000-000000013036",
-          "startedMs": 67,
-          "endedMs": 70,
-          "status": 200
-        },
-        {
-          "method": "GET",
-          "path": "/api/parts/00000000-0000-4000-8000-000000013033",
-          "startedMs": 67,
-          "endedMs": 76,
-          "status": 200
-        },
-        {
-          "method": "POST",
-          "path": "/api/build-graphs/resolve",
-          "startedMs": 67,
-          "endedMs": 70,
-          "status": 200
-        },
-        {
-          "method": "POST",
-          "path": "/api/recommendation-events",
-          "startedMs": 215,
-          "endedMs": 222,
-          "status": 201
-        },
-        {
-          "method": "POST",
-          "path": "/api/recommendation-events",
-          "startedMs": 215,
-          "endedMs": 227,
-          "status": 201
-        },
-        {
-          "method": "POST",
-          "path": "/api/recommendation-events",
-          "startedMs": 216,
-          "endedMs": 227,
-          "status": 201
-        },
-        {
-          "method": "POST",
-          "path": "/api/recommendation-events",
-          "startedMs": 216,
-          "endedMs": 222,
-          "status": 201
-        }
-      ],
-      "errors": []
-    },
-    {
-      "id": "det-build-007",
-      "group": "DETERMINISTIC_RECOMMEND",
-      "prompt": "QHD 배그 144Hz PC 추천해줘",
-      "ok": true,
-      "totalMs": 427,
-      "submitStart": "2026-07-03T14:40:23.065Z",
-      "assistantRenderedMs": 166,
-      "actionStartedMs": 47,
-      "actionSettledMs": 47,
-      "buildChatMs": 10,
-      "answerType": "BUDGET",
-      "actionTypes": [],
-      "buildCount": 3,
-      "warningCount": 1,
-      "apiCalls": [
-        {
-          "method": "POST",
-          "path": "/api/ai/build-chat",
-          "startedMs": 47,
-          "endedMs": 57,
-          "status": 200
-        },
-        {
-          "method": "GET",
-          "path": "/api/parts/92edda29-cd3e-4860-83d6-053b6f56610c",
-          "startedMs": 68,
-          "endedMs": 72,
-          "status": 200
-        },
-        {
-          "method": "GET",
-          "path": "/api/parts/9df1082c-a2e5-410a-a678-78e9cfc1ae19",
-          "startedMs": 68,
-          "endedMs": 72,
-          "status": 200
-        },
-        {
-          "method": "GET",
-          "path": "/api/parts/5b8a4881-0828-4d7e-93dc-71defababc17",
-          "startedMs": 68,
-          "endedMs": 72,
-          "status": 200
-        },
-        {
-          "method": "POST",
-          "path": "/api/build-graphs/resolve",
-          "startedMs": 68,
-          "endedMs": 72,
-          "status": 200
-        },
-        {
-          "method": "POST",
-          "path": "/api/recommendation-events",
-          "startedMs": 204,
-          "endedMs": 210,
-          "status": 201
-        },
-        {
-          "method": "POST",
-          "path": "/api/recommendation-events",
-          "startedMs": 204,
-          "endedMs": 209,
-          "status": 201
-        },
-        {
-          "method": "POST",
-          "path": "/api/recommendation-events",
-          "startedMs": 204,
-          "endedMs": 210,
-          "status": 201
-        },
-        {
-          "method": "POST",
-          "path": "/api/recommendation-events",
-          "startedMs": 204,
-          "endedMs": 210,
-          "status": 201
-        }
-      ],
-      "errors": []
-    },
-    {
-      "id": "det-build-008",
-      "group": "DETERMINISTIC_RECOMMEND",
-      "prompt": "4K 영상편집 PC 추천해줘",
-      "ok": true,
-      "totalMs": 432,
-      "submitStart": "2026-07-03T14:40:23.632Z",
-      "assistantRenderedMs": 169,
-      "actionStartedMs": 51,
-      "actionSettledMs": 51,
-      "buildChatMs": 6,
-      "answerType": "BUDGET",
-      "actionTypes": [],
-      "buildCount": 3,
-      "warningCount": 1,
-      "apiCalls": [
-        {
-          "method": "POST",
-          "path": "/api/ai/build-chat",
-          "startedMs": 51,
-          "endedMs": 57,
-          "status": 200
-        },
-        {
-          "method": "GET",
-          "path": "/api/parts/92edda29-cd3e-4860-83d6-053b6f56610c",
-          "startedMs": 67,
-          "endedMs": 71,
-          "status": 200
-        },
-        {
-          "method": "GET",
-          "path": "/api/parts/9df1082c-a2e5-410a-a678-78e9cfc1ae19",
-          "startedMs": 67,
-          "endedMs": 71,
-          "status": 200
-        },
-        {
-          "method": "GET",
-          "path": "/api/parts/5b8a4881-0828-4d7e-93dc-71defababc17",
-          "startedMs": 67,
-          "endedMs": 71,
-          "status": 200
-        },
-        {
-          "method": "POST",
-          "path": "/api/build-graphs/resolve",
-          "startedMs": 67,
-          "endedMs": 72,
-          "status": 200
-        },
-        {
-          "method": "POST",
-          "path": "/api/recommendation-events",
-          "startedMs": 248,
-          "endedMs": 253,
-          "status": 201
-        },
-        {
-          "method": "POST",
-          "path": "/api/recommendation-events",
-          "startedMs": 248,
-          "endedMs": 253,
-          "status": 201
-        },
-        {
-          "method": "POST",
-          "path": "/api/recommendation-events",
-          "startedMs": 248,
-          "endedMs": 254,
-          "status": 201
-        },
-        {
-          "method": "POST",
-          "path": "/api/recommendation-events",
-          "startedMs": 248,
-          "endedMs": 253,
-          "status": 201
-        }
-      ],
-      "errors": []
-    },
-    {
-      "id": "det-build-009",
-      "group": "DETERMINISTIC_RECOMMEND",
-      "prompt": "개발이랑 게임 같이 할 PC 추천해줘",
-      "ok": true,
-      "totalMs": 422,
-      "submitStart": "2026-07-03T14:40:24.199Z",
-      "assistantRenderedMs": 161,
-      "actionStartedMs": 47,
-      "actionSettledMs": 47,
-      "buildChatMs": 9,
-      "answerType": "BUDGET",
-      "actionTypes": [],
-      "buildCount": 3,
-      "warningCount": 1,
-      "apiCalls": [
-        {
-          "method": "POST",
-          "path": "/api/ai/build-chat",
-          "startedMs": 47,
-          "endedMs": 56,
-          "status": 200
-        },
-        {
-          "method": "GET",
-          "path": "/api/parts/92edda29-cd3e-4860-83d6-053b6f56610c",
-          "startedMs": 67,
-          "endedMs": 71,
-          "status": 200
-        },
-        {
-          "method": "GET",
-          "path": "/api/parts/9df1082c-a2e5-410a-a678-78e9cfc1ae19",
-          "startedMs": 67,
-          "endedMs": 70,
-          "status": 200
-        },
-        {
-          "method": "GET",
-          "path": "/api/parts/5b8a4881-0828-4d7e-93dc-71defababc17",
-          "startedMs": 67,
-          "endedMs": 71,
+          "endedMs": 111,
           "status": 200
         },
         {
@@ -3096,29 +2425,434 @@
         {
           "method": "POST",
           "path": "/api/recommendation-events",
-          "startedMs": 202,
-          "endedMs": 208,
+          "startedMs": 241,
+          "endedMs": 253,
           "status": 201
         },
         {
           "method": "POST",
           "path": "/api/recommendation-events",
-          "startedMs": 202,
-          "endedMs": 208,
+          "startedMs": 241,
+          "endedMs": 259,
           "status": 201
         },
         {
           "method": "POST",
           "path": "/api/recommendation-events",
-          "startedMs": 202,
-          "endedMs": 208,
+          "startedMs": 241,
+          "endedMs": 258,
           "status": 201
         },
         {
           "method": "POST",
           "path": "/api/recommendation-events",
-          "startedMs": 202,
-          "endedMs": 208,
+          "startedMs": 241,
+          "endedMs": 261,
+          "status": 201
+        }
+      ],
+      "errors": []
+    },
+    {
+      "id": "det-build-005",
+      "group": "DETERMINISTIC_RECOMMEND",
+      "prompt": "200만원 QHD 게임용 PC 추천해줘",
+      "ok": true,
+      "totalMs": 703,
+      "submitStart": "2026-07-03T19:20:40.723Z",
+      "actionStartedMs": 59,
+      "actionSettledMs": 59,
+      "buildChatMs": 3,
+      "answerType": "BUDGET",
+      "actionTypes": [],
+      "buildCount": 3,
+      "warningCount": 7,
+      "apiCalls": [
+        {
+          "method": "POST",
+          "path": "/api/ai/build-chat",
+          "startedMs": 59,
+          "endedMs": 62,
+          "status": 200
+        },
+        {
+          "method": "GET",
+          "path": "/api/parts/00000000-0000-4000-8000-000000013033",
+          "startedMs": 79,
+          "endedMs": 89,
+          "status": 200
+        },
+        {
+          "method": "GET",
+          "path": "/api/parts/00000000-0000-4000-8000-000000013033",
+          "startedMs": 79,
+          "endedMs": 89,
+          "status": 200
+        },
+        {
+          "method": "GET",
+          "path": "/api/parts/00000000-0000-4000-8000-000000013033",
+          "startedMs": 79,
+          "endedMs": 90,
+          "status": 200
+        },
+        {
+          "method": "POST",
+          "path": "/api/build-graphs/resolve",
+          "startedMs": 79,
+          "endedMs": 89,
+          "status": 200
+        },
+        {
+          "method": "POST",
+          "path": "/api/recommendation-events",
+          "startedMs": 282,
+          "endedMs": 288,
+          "status": 201
+        },
+        {
+          "method": "POST",
+          "path": "/api/recommendation-events",
+          "startedMs": 282,
+          "endedMs": 287,
+          "status": 201
+        },
+        {
+          "method": "POST",
+          "path": "/api/recommendation-events",
+          "startedMs": 282,
+          "endedMs": 288,
+          "status": 201
+        },
+        {
+          "method": "POST",
+          "path": "/api/recommendation-events",
+          "startedMs": 282,
+          "endedMs": 287,
+          "status": 201
+        }
+      ],
+      "errors": []
+    },
+    {
+      "id": "det-build-006",
+      "group": "DETERMINISTIC_RECOMMEND",
+      "prompt": "100만원 사무 학습용 PC 추천해줘",
+      "ok": true,
+      "totalMs": 703,
+      "submitStart": "2026-07-03T19:20:41.614Z",
+      "actionStartedMs": 51,
+      "actionSettledMs": 51,
+      "buildChatMs": 4,
+      "answerType": "BUDGET",
+      "actionTypes": [],
+      "buildCount": 3,
+      "warningCount": 6,
+      "apiCalls": [
+        {
+          "method": "POST",
+          "path": "/api/ai/build-chat",
+          "startedMs": 51,
+          "endedMs": 55,
+          "status": 200
+        },
+        {
+          "method": "GET",
+          "path": "/api/parts/00000000-0000-4000-8000-000000013033",
+          "startedMs": 71,
+          "endedMs": 81,
+          "status": 200
+        },
+        {
+          "method": "GET",
+          "path": "/api/parts/00000000-0000-4000-8000-000000013036",
+          "startedMs": 71,
+          "endedMs": 81,
+          "status": 200
+        },
+        {
+          "method": "GET",
+          "path": "/api/parts/00000000-0000-4000-8000-000000013033",
+          "startedMs": 71,
+          "endedMs": 81,
+          "status": 200
+        },
+        {
+          "method": "POST",
+          "path": "/api/build-graphs/resolve",
+          "startedMs": 72,
+          "endedMs": 81,
+          "status": 200
+        },
+        {
+          "method": "POST",
+          "path": "/api/recommendation-events",
+          "startedMs": 268,
+          "endedMs": 275,
+          "status": 201
+        },
+        {
+          "method": "POST",
+          "path": "/api/recommendation-events",
+          "startedMs": 268,
+          "endedMs": 276,
+          "status": 201
+        },
+        {
+          "method": "POST",
+          "path": "/api/recommendation-events",
+          "startedMs": 269,
+          "endedMs": 276,
+          "status": 201
+        },
+        {
+          "method": "POST",
+          "path": "/api/recommendation-events",
+          "startedMs": 269,
+          "endedMs": 276,
+          "status": 201
+        }
+      ],
+      "errors": []
+    },
+    {
+      "id": "det-build-007",
+      "group": "DETERMINISTIC_RECOMMEND",
+      "prompt": "QHD 배그 144Hz PC 추천해줘",
+      "ok": true,
+      "totalMs": 693,
+      "submitStart": "2026-07-03T19:20:42.498Z",
+      "actionStartedMs": 47,
+      "actionSettledMs": 47,
+      "buildChatMs": 6,
+      "answerType": "BUDGET",
+      "actionTypes": [],
+      "buildCount": 3,
+      "warningCount": 1,
+      "apiCalls": [
+        {
+          "method": "POST",
+          "path": "/api/ai/build-chat",
+          "startedMs": 47,
+          "endedMs": 53,
+          "status": 200
+        },
+        {
+          "method": "GET",
+          "path": "/api/parts/92edda29-cd3e-4860-83d6-053b6f56610c",
+          "startedMs": 70,
+          "endedMs": 80,
+          "status": 200
+        },
+        {
+          "method": "GET",
+          "path": "/api/parts/9df1082c-a2e5-410a-a678-78e9cfc1ae19",
+          "startedMs": 71,
+          "endedMs": 80,
+          "status": 200
+        },
+        {
+          "method": "GET",
+          "path": "/api/parts/5b8a4881-0828-4d7e-93dc-71defababc17",
+          "startedMs": 71,
+          "endedMs": 80,
+          "status": 200
+        },
+        {
+          "method": "POST",
+          "path": "/api/build-graphs/resolve",
+          "startedMs": 71,
+          "endedMs": 80,
+          "status": 200
+        },
+        {
+          "method": "POST",
+          "path": "/api/recommendation-events",
+          "startedMs": 235,
+          "endedMs": 243,
+          "status": 201
+        },
+        {
+          "method": "POST",
+          "path": "/api/recommendation-events",
+          "startedMs": 235,
+          "endedMs": 242,
+          "status": 201
+        },
+        {
+          "method": "POST",
+          "path": "/api/recommendation-events",
+          "startedMs": 235,
+          "endedMs": 242,
+          "status": 201
+        },
+        {
+          "method": "POST",
+          "path": "/api/recommendation-events",
+          "startedMs": 235,
+          "endedMs": 243,
+          "status": 201
+        }
+      ],
+      "errors": []
+    },
+    {
+      "id": "det-build-008",
+      "group": "DETERMINISTIC_RECOMMEND",
+      "prompt": "4K 영상편집 PC 추천해줘",
+      "ok": true,
+      "totalMs": 703,
+      "submitStart": "2026-07-03T19:20:43.380Z",
+      "actionStartedMs": 50,
+      "actionSettledMs": 50,
+      "buildChatMs": 3,
+      "answerType": "BUDGET",
+      "actionTypes": [],
+      "buildCount": 3,
+      "warningCount": 1,
+      "apiCalls": [
+        {
+          "method": "POST",
+          "path": "/api/ai/build-chat",
+          "startedMs": 50,
+          "endedMs": 53,
+          "status": 200
+        },
+        {
+          "method": "GET",
+          "path": "/api/parts/92edda29-cd3e-4860-83d6-053b6f56610c",
+          "startedMs": 68,
+          "endedMs": 80,
+          "status": 200
+        },
+        {
+          "method": "GET",
+          "path": "/api/parts/9df1082c-a2e5-410a-a678-78e9cfc1ae19",
+          "startedMs": 68,
+          "endedMs": 80,
+          "status": 200
+        },
+        {
+          "method": "GET",
+          "path": "/api/parts/5b8a4881-0828-4d7e-93dc-71defababc17",
+          "startedMs": 68,
+          "endedMs": 80,
+          "status": 200
+        },
+        {
+          "method": "POST",
+          "path": "/api/build-graphs/resolve",
+          "startedMs": 68,
+          "endedMs": 80,
+          "status": 200
+        },
+        {
+          "method": "POST",
+          "path": "/api/recommendation-events",
+          "startedMs": 253,
+          "endedMs": 264,
+          "status": 201
+        },
+        {
+          "method": "POST",
+          "path": "/api/recommendation-events",
+          "startedMs": 253,
+          "endedMs": 265,
+          "status": 201
+        },
+        {
+          "method": "POST",
+          "path": "/api/recommendation-events",
+          "startedMs": 253,
+          "endedMs": 265,
+          "status": 201
+        },
+        {
+          "method": "POST",
+          "path": "/api/recommendation-events",
+          "startedMs": 253,
+          "endedMs": 265,
+          "status": 201
+        }
+      ],
+      "errors": []
+    },
+    {
+      "id": "det-build-009",
+      "group": "DETERMINISTIC_RECOMMEND",
+      "prompt": "개발이랑 게임 같이 할 PC 추천해줘",
+      "ok": true,
+      "totalMs": 715,
+      "submitStart": "2026-07-03T19:20:44.286Z",
+      "actionStartedMs": 61,
+      "actionSettledMs": 61,
+      "buildChatMs": 6,
+      "answerType": "BUDGET",
+      "actionTypes": [],
+      "buildCount": 3,
+      "warningCount": 1,
+      "apiCalls": [
+        {
+          "method": "POST",
+          "path": "/api/ai/build-chat",
+          "startedMs": 61,
+          "endedMs": 67,
+          "status": 200
+        },
+        {
+          "method": "GET",
+          "path": "/api/parts/92edda29-cd3e-4860-83d6-053b6f56610c",
+          "startedMs": 86,
+          "endedMs": 99,
+          "status": 200
+        },
+        {
+          "method": "GET",
+          "path": "/api/parts/9df1082c-a2e5-410a-a678-78e9cfc1ae19",
+          "startedMs": 87,
+          "endedMs": 99,
+          "status": 200
+        },
+        {
+          "method": "GET",
+          "path": "/api/parts/5b8a4881-0828-4d7e-93dc-71defababc17",
+          "startedMs": 87,
+          "endedMs": 99,
+          "status": 200
+        },
+        {
+          "method": "POST",
+          "path": "/api/build-graphs/resolve",
+          "startedMs": 87,
+          "endedMs": 99,
+          "status": 200
+        },
+        {
+          "method": "POST",
+          "path": "/api/recommendation-events",
+          "startedMs": 239,
+          "endedMs": 262,
+          "status": 201
+        },
+        {
+          "method": "POST",
+          "path": "/api/recommendation-events",
+          "startedMs": 239,
+          "endedMs": 265,
+          "status": 201
+        },
+        {
+          "method": "POST",
+          "path": "/api/recommendation-events",
+          "startedMs": 239,
+          "endedMs": 265,
+          "status": 201
+        },
+        {
+          "method": "POST",
+          "path": "/api/recommendation-events",
+          "startedMs": 239,
+          "endedMs": 262,
           "status": 201
         }
       ],
@@ -3129,12 +2863,11 @@
       "group": "DETERMINISTIC_RECOMMEND",
       "prompt": "화이트 감성 PC 추천해줘",
       "ok": true,
-      "totalMs": 432,
-      "submitStart": "2026-07-03T14:40:24.748Z",
-      "assistantRenderedMs": 169,
-      "actionStartedMs": 48,
-      "actionSettledMs": 48,
-      "buildChatMs": 10,
+      "totalMs": 744,
+      "submitStart": "2026-07-03T19:20:45.241Z",
+      "actionStartedMs": 58,
+      "actionSettledMs": 58,
+      "buildChatMs": 19,
       "answerType": "BUDGET",
       "actionTypes": [],
       "buildCount": 3,
@@ -3143,64 +2876,64 @@
         {
           "method": "POST",
           "path": "/api/ai/build-chat",
-          "startedMs": 48,
-          "endedMs": 58,
+          "startedMs": 58,
+          "endedMs": 77,
           "status": 200
         },
         {
           "method": "GET",
           "path": "/api/parts/92edda29-cd3e-4860-83d6-053b6f56610c",
-          "startedMs": 68,
-          "endedMs": 72,
+          "startedMs": 94,
+          "endedMs": 106,
           "status": 200
         },
         {
           "method": "GET",
           "path": "/api/parts/9df1082c-a2e5-410a-a678-78e9cfc1ae19",
-          "startedMs": 68,
-          "endedMs": 72,
+          "startedMs": 94,
+          "endedMs": 106,
           "status": 200
         },
         {
           "method": "GET",
           "path": "/api/parts/5b8a4881-0828-4d7e-93dc-71defababc17",
-          "startedMs": 68,
-          "endedMs": 72,
+          "startedMs": 94,
+          "endedMs": 106,
           "status": 200
         },
         {
           "method": "POST",
           "path": "/api/build-graphs/resolve",
-          "startedMs": 68,
-          "endedMs": 72,
+          "startedMs": 94,
+          "endedMs": 106,
           "status": 200
         },
         {
           "method": "POST",
           "path": "/api/recommendation-events",
           "startedMs": 239,
-          "endedMs": 245,
+          "endedMs": 247,
           "status": 201
         },
         {
           "method": "POST",
           "path": "/api/recommendation-events",
           "startedMs": 239,
-          "endedMs": 244,
+          "endedMs": 247,
           "status": 201
         },
         {
           "method": "POST",
           "path": "/api/recommendation-events",
           "startedMs": 239,
-          "endedMs": 245,
+          "endedMs": 247,
           "status": 201
         },
         {
           "method": "POST",
           "path": "/api/recommendation-events",
           "startedMs": 239,
-          "endedMs": 245,
+          "endedMs": 247,
           "status": 201
         }
       ],
@@ -3211,12 +2944,11 @@
       "group": "DETERMINISTIC_RECOMMEND",
       "prompt": "저장공간 넉넉한 PC 추천해줘",
       "ok": true,
-      "totalMs": 418,
-      "submitStart": "2026-07-03T14:40:25.299Z",
-      "assistantRenderedMs": 158,
-      "actionStartedMs": 47,
-      "actionSettledMs": 47,
-      "buildChatMs": 10,
+      "totalMs": 704,
+      "submitStart": "2026-07-03T19:20:46.172Z",
+      "actionStartedMs": 58,
+      "actionSettledMs": 58,
+      "buildChatMs": 3,
       "answerType": "BUDGET",
       "actionTypes": [],
       "buildCount": 3,
@@ -3225,64 +2957,64 @@
         {
           "method": "POST",
           "path": "/api/ai/build-chat",
-          "startedMs": 47,
-          "endedMs": 57,
+          "startedMs": 58,
+          "endedMs": 61,
           "status": 200
         },
         {
           "method": "GET",
           "path": "/api/parts/92edda29-cd3e-4860-83d6-053b6f56610c",
-          "startedMs": 67,
-          "endedMs": 70,
+          "startedMs": 79,
+          "endedMs": 88,
           "status": 200
         },
         {
           "method": "GET",
           "path": "/api/parts/9df1082c-a2e5-410a-a678-78e9cfc1ae19",
-          "startedMs": 67,
-          "endedMs": 70,
+          "startedMs": 79,
+          "endedMs": 89,
           "status": 200
         },
         {
           "method": "GET",
           "path": "/api/parts/5b8a4881-0828-4d7e-93dc-71defababc17",
-          "startedMs": 67,
-          "endedMs": 70,
+          "startedMs": 79,
+          "endedMs": 89,
           "status": 200
         },
         {
           "method": "POST",
           "path": "/api/build-graphs/resolve",
-          "startedMs": 67,
-          "endedMs": 71,
+          "startedMs": 79,
+          "endedMs": 89,
           "status": 200
         },
         {
           "method": "POST",
           "path": "/api/recommendation-events",
-          "startedMs": 263,
-          "endedMs": 269,
+          "startedMs": 274,
+          "endedMs": 285,
           "status": 201
         },
         {
           "method": "POST",
           "path": "/api/recommendation-events",
-          "startedMs": 263,
-          "endedMs": 270,
+          "startedMs": 274,
+          "endedMs": 285,
           "status": 201
         },
         {
           "method": "POST",
           "path": "/api/recommendation-events",
-          "startedMs": 263,
-          "endedMs": 269,
+          "startedMs": 274,
+          "endedMs": 286,
           "status": 201
         },
         {
           "method": "POST",
           "path": "/api/recommendation-events",
-          "startedMs": 263,
-          "endedMs": 269,
+          "startedMs": 274,
+          "endedMs": 285,
           "status": 201
         }
       ],
@@ -3293,12 +3025,11 @@
       "group": "DETERMINISTIC_RECOMMEND",
       "prompt": "가성비형 조합 추천해줘",
       "ok": true,
-      "totalMs": 422,
-      "submitStart": "2026-07-03T14:40:25.832Z",
-      "assistantRenderedMs": 163,
-      "actionStartedMs": 47,
-      "actionSettledMs": 47,
-      "buildChatMs": 10,
+      "totalMs": 688,
+      "submitStart": "2026-07-03T19:20:47.066Z",
+      "actionStartedMs": 46,
+      "actionSettledMs": 46,
+      "buildChatMs": 5,
       "answerType": "BUDGET",
       "actionTypes": [],
       "buildCount": 3,
@@ -3307,64 +3038,64 @@
         {
           "method": "POST",
           "path": "/api/ai/build-chat",
-          "startedMs": 47,
-          "endedMs": 57,
-          "status": 200
-        },
-        {
-          "method": "GET",
-          "path": "/api/parts/a71d093f-8a9f-4f00-b18b-a586ff1b50b2",
-          "startedMs": 67,
-          "endedMs": 71,
+          "startedMs": 46,
+          "endedMs": 51,
           "status": 200
         },
         {
           "method": "GET",
           "path": "/api/parts/00000000-0000-4000-8000-000000013037",
-          "startedMs": 67,
-          "endedMs": 71,
+          "startedMs": 66,
+          "endedMs": 75,
+          "status": 200
+        },
+        {
+          "method": "GET",
+          "path": "/api/parts/a71d093f-8a9f-4f00-b18b-a586ff1b50b2",
+          "startedMs": 66,
+          "endedMs": 75,
           "status": 200
         },
         {
           "method": "GET",
           "path": "/api/parts/09f39d2a-de00-4cbc-bd1a-241e9790111d",
-          "startedMs": 67,
-          "endedMs": 71,
+          "startedMs": 66,
+          "endedMs": 75,
           "status": 200
         },
         {
           "method": "POST",
           "path": "/api/build-graphs/resolve",
-          "startedMs": 67,
-          "endedMs": 71,
+          "startedMs": 66,
+          "endedMs": 75,
           "status": 200
         },
         {
           "method": "POST",
           "path": "/api/recommendation-events",
-          "startedMs": 228,
-          "endedMs": 233,
+          "startedMs": 217,
+          "endedMs": 222,
           "status": 201
         },
         {
           "method": "POST",
           "path": "/api/recommendation-events",
-          "startedMs": 228,
-          "endedMs": 232,
+          "startedMs": 217,
+          "endedMs": 224,
           "status": 201
         },
         {
           "method": "POST",
           "path": "/api/recommendation-events",
-          "startedMs": 228,
-          "endedMs": 234,
+          "startedMs": 217,
+          "endedMs": 223,
           "status": 201
         },
         {
           "method": "POST",
           "path": "/api/recommendation-events",
-          "startedMs": 228,
-          "endedMs": 233,
+          "startedMs": 217,
+          "endedMs": 223,
           "status": 201
         }
       ],
@@ -3375,12 +3106,11 @@
       "group": "DETERMINISTIC_RECOMMEND",
       "prompt": "끝판왕 PC 추천해줘",
       "ok": true,
-      "totalMs": 430,
-      "submitStart": "2026-07-03T14:40:26.382Z",
-      "assistantRenderedMs": 168,
-      "actionStartedMs": 48,
-      "actionSettledMs": 48,
-      "buildChatMs": 9,
+      "totalMs": 690,
+      "submitStart": "2026-07-03T19:20:47.934Z",
+      "actionStartedMs": 44,
+      "actionSettledMs": 44,
+      "buildChatMs": 7,
       "answerType": "BUDGET",
       "actionTypes": [],
       "buildCount": 3,
@@ -3389,64 +3119,64 @@
         {
           "method": "POST",
           "path": "/api/ai/build-chat",
-          "startedMs": 48,
-          "endedMs": 57,
+          "startedMs": 44,
+          "endedMs": 51,
           "status": 200
         },
         {
           "method": "GET",
           "path": "/api/parts/92edda29-cd3e-4860-83d6-053b6f56610c",
-          "startedMs": 67,
-          "endedMs": 71,
+          "startedMs": 64,
+          "endedMs": 74,
           "status": 200
         },
         {
           "method": "GET",
           "path": "/api/parts/9df1082c-a2e5-410a-a678-78e9cfc1ae19",
-          "startedMs": 67,
-          "endedMs": 71,
+          "startedMs": 64,
+          "endedMs": 74,
           "status": 200
         },
         {
           "method": "GET",
           "path": "/api/parts/5b8a4881-0828-4d7e-93dc-71defababc17",
-          "startedMs": 67,
-          "endedMs": 71,
+          "startedMs": 64,
+          "endedMs": 74,
           "status": 200
         },
         {
           "method": "POST",
           "path": "/api/build-graphs/resolve",
-          "startedMs": 67,
-          "endedMs": 71,
+          "startedMs": 64,
+          "endedMs": 74,
           "status": 200
         },
         {
           "method": "POST",
           "path": "/api/recommendation-events",
-          "startedMs": 236,
-          "endedMs": 242,
+          "startedMs": 244,
+          "endedMs": 251,
           "status": 201
         },
         {
           "method": "POST",
           "path": "/api/recommendation-events",
-          "startedMs": 236,
-          "endedMs": 242,
+          "startedMs": 244,
+          "endedMs": 251,
           "status": 201
         },
         {
           "method": "POST",
           "path": "/api/recommendation-events",
-          "startedMs": 236,
-          "endedMs": 241,
+          "startedMs": 244,
+          "endedMs": 251,
           "status": 201
         },
         {
           "method": "POST",
           "path": "/api/recommendation-events",
-          "startedMs": 236,
-          "endedMs": 242,
+          "startedMs": 244,
+          "endedMs": 251,
           "status": 201
         }
       ],
@@ -3457,12 +3187,11 @@
       "group": "DETERMINISTIC_RECOMMEND",
       "prompt": "고성능 GPU 추천해줘",
       "ok": true,
-      "totalMs": 420,
-      "submitStart": "2026-07-03T14:40:26.949Z",
-      "assistantRenderedMs": 158,
+      "totalMs": 819,
+      "submitStart": "2026-07-03T19:20:48.865Z",
       "actionStartedMs": 48,
       "actionSettledMs": 48,
-      "buildChatMs": 8,
+      "buildChatMs": 5,
       "answerType": "PART",
       "actionTypes": [
         "ADD_PART_TO_DRAFT"
@@ -3474,42 +3203,35 @@
           "method": "POST",
           "path": "/api/ai/build-chat",
           "startedMs": 48,
-          "endedMs": 56,
-          "status": 200
-        },
-        {
-          "method": "PUT",
-          "path": "/api/quote-drafts/current/items/9f3d289c-6739-459c-9e79-5a1417165ded",
-          "startedMs": 57,
-          "endedMs": 66,
+          "endedMs": 53,
           "status": 200
         },
         {
           "method": "POST",
           "path": "/api/recommendation-events",
-          "startedMs": 201,
-          "endedMs": 208,
+          "startedMs": 705,
+          "endedMs": 715,
           "status": 201
         },
         {
           "method": "POST",
           "path": "/api/recommendation-events",
-          "startedMs": 201,
-          "endedMs": 207,
+          "startedMs": 705,
+          "endedMs": 720,
           "status": 201
         },
         {
           "method": "POST",
           "path": "/api/recommendation-events",
-          "startedMs": 201,
-          "endedMs": 207,
+          "startedMs": 706,
+          "endedMs": 718,
           "status": 201
         },
         {
           "method": "POST",
           "path": "/api/recommendation-events",
-          "startedMs": 201,
-          "endedMs": 208,
+          "startedMs": 706,
+          "endedMs": 720,
           "status": 201
         }
       ],
@@ -3520,12 +3242,11 @@
       "group": "DETERMINISTIC_RECOMMEND",
       "prompt": "가성비 CPU 추천해줘",
       "ok": true,
-      "totalMs": 422,
-      "submitStart": "2026-07-03T14:40:27.500Z",
-      "assistantRenderedMs": 162,
-      "actionStartedMs": 46,
-      "actionSettledMs": 46,
-      "buildChatMs": 10,
+      "totalMs": 712,
+      "submitStart": "2026-07-03T19:20:49.954Z",
+      "actionStartedMs": 60,
+      "actionSettledMs": 60,
+      "buildChatMs": 3,
       "answerType": "PART",
       "actionTypes": [
         "ADD_PART_TO_DRAFT"
@@ -3536,43 +3257,36 @@
         {
           "method": "POST",
           "path": "/api/ai/build-chat",
-          "startedMs": 46,
-          "endedMs": 56,
-          "status": 200
-        },
-        {
-          "method": "PUT",
-          "path": "/api/quote-drafts/current/items/45e8cee4-e344-4b2a-b01a-0471098d67ab",
-          "startedMs": 56,
-          "endedMs": 62,
+          "startedMs": 60,
+          "endedMs": 63,
           "status": 200
         },
         {
           "method": "POST",
           "path": "/api/recommendation-events",
-          "startedMs": 226,
-          "endedMs": 232,
+          "startedMs": 291,
+          "endedMs": 298,
           "status": 201
         },
         {
           "method": "POST",
           "path": "/api/recommendation-events",
-          "startedMs": 226,
-          "endedMs": 233,
+          "startedMs": 292,
+          "endedMs": 299,
           "status": 201
         },
         {
           "method": "POST",
           "path": "/api/recommendation-events",
-          "startedMs": 226,
-          "endedMs": 233,
+          "startedMs": 292,
+          "endedMs": 299,
           "status": 201
         },
         {
           "method": "POST",
           "path": "/api/recommendation-events",
-          "startedMs": 226,
-          "endedMs": 233,
+          "startedMs": 292,
+          "endedMs": 299,
           "status": 201
         }
       ],
@@ -3583,12 +3297,11 @@
       "group": "DETERMINISTIC_RECOMMEND",
       "prompt": "저소음 쿨러 추천해줘",
       "ok": true,
-      "totalMs": 427,
-      "submitStart": "2026-07-03T14:40:28.049Z",
-      "assistantRenderedMs": 166,
-      "actionStartedMs": 48,
-      "actionSettledMs": 48,
-      "buildChatMs": 8,
+      "totalMs": 696,
+      "submitStart": "2026-07-03T19:20:50.869Z",
+      "actionStartedMs": 45,
+      "actionSettledMs": 45,
+      "buildChatMs": 4,
       "answerType": "PART",
       "actionTypes": [
         "ADD_PART_TO_DRAFT"
@@ -3599,43 +3312,36 @@
         {
           "method": "POST",
           "path": "/api/ai/build-chat",
-          "startedMs": 48,
-          "endedMs": 56,
-          "status": 200
-        },
-        {
-          "method": "PUT",
-          "path": "/api/quote-drafts/current/items/6281a784-5368-4544-b242-474aca613b2b",
-          "startedMs": 56,
-          "endedMs": 66,
+          "startedMs": 45,
+          "endedMs": 49,
           "status": 200
         },
         {
           "method": "POST",
           "path": "/api/recommendation-events",
-          "startedMs": 196,
-          "endedMs": 201,
+          "startedMs": 250,
+          "endedMs": 259,
           "status": 201
         },
         {
           "method": "POST",
           "path": "/api/recommendation-events",
-          "startedMs": 196,
-          "endedMs": 202,
+          "startedMs": 251,
+          "endedMs": 266,
           "status": 201
         },
         {
           "method": "POST",
           "path": "/api/recommendation-events",
-          "startedMs": 196,
-          "endedMs": 202,
+          "startedMs": 251,
+          "endedMs": 266,
           "status": 201
         },
         {
           "method": "POST",
           "path": "/api/recommendation-events",
-          "startedMs": 196,
-          "endedMs": 202,
+          "startedMs": 251,
+          "endedMs": 259,
           "status": 201
         }
       ],
@@ -3646,262 +3352,15 @@
       "group": "LLM_FULL_COMPLEX",
       "prompt": "300만원 이하 RTX 5090 PC 추천해줘",
       "ok": true,
-      "totalMs": 415,
-      "submitStart": "2026-07-03T14:40:28.598Z",
-      "assistantRenderedMs": 158,
-      "actionStartedMs": 50,
-      "actionSettledMs": 50,
-      "buildChatMs": 7,
-      "answerType": "BUDGET",
-      "actionTypes": [],
-      "buildCount": 3,
-      "warningCount": 12,
-      "apiCalls": [
-        {
-          "method": "POST",
-          "path": "/api/ai/build-chat",
-          "startedMs": 50,
-          "endedMs": 57,
-          "status": 200
-        },
-        {
-          "method": "GET",
-          "path": "/api/parts/00000000-0000-4000-8000-000000013036",
-          "startedMs": 67,
-          "endedMs": 71,
-          "status": 200
-        },
-        {
-          "method": "GET",
-          "path": "/api/parts/a71d093f-8a9f-4f00-b18b-a586ff1b50b2",
-          "startedMs": 68,
-          "endedMs": 71,
-          "status": 200
-        },
-        {
-          "method": "GET",
-          "path": "/api/parts/00000000-0000-4000-8000-000000013037",
-          "startedMs": 68,
-          "endedMs": 71,
-          "status": 200
-        },
-        {
-          "method": "POST",
-          "path": "/api/build-graphs/resolve",
-          "startedMs": 68,
-          "endedMs": 71,
-          "status": 200
-        },
-        {
-          "method": "POST",
-          "path": "/api/recommendation-events",
-          "startedMs": 246,
-          "endedMs": 252,
-          "status": 201
-        },
-        {
-          "method": "POST",
-          "path": "/api/recommendation-events",
-          "startedMs": 246,
-          "endedMs": 252,
-          "status": 201
-        },
-        {
-          "method": "POST",
-          "path": "/api/recommendation-events",
-          "startedMs": 246,
-          "endedMs": 252,
-          "status": 201
-        },
-        {
-          "method": "POST",
-          "path": "/api/recommendation-events",
-          "startedMs": 246,
-          "endedMs": 251,
-          "status": 201
-        }
-      ],
-      "errors": []
-    },
-    {
-      "id": "llm-complex-002",
-      "group": "LLM_FULL_COMPLEX",
-      "prompt": "예산은 300인데 5090은 꼭 들어가야 해",
-      "ok": true,
-      "totalMs": 421,
-      "submitStart": "2026-07-03T14:40:29.148Z",
-      "assistantRenderedMs": 161,
-      "actionStartedMs": 48,
-      "actionSettledMs": 48,
-      "buildChatMs": 10,
-      "answerType": "BUDGET",
-      "actionTypes": [],
-      "buildCount": 3,
-      "warningCount": 8,
-      "apiCalls": [
-        {
-          "method": "POST",
-          "path": "/api/ai/build-chat",
-          "startedMs": 48,
-          "endedMs": 58,
-          "status": 200
-        },
-        {
-          "method": "GET",
-          "path": "/api/parts/00000000-0000-4000-8000-000000013033",
-          "startedMs": 71,
-          "endedMs": 79,
-          "status": 200
-        },
-        {
-          "method": "GET",
-          "path": "/api/parts/00000000-0000-4000-8000-000000013033",
-          "startedMs": 71,
-          "endedMs": 80,
-          "status": 200
-        },
-        {
-          "method": "GET",
-          "path": "/api/parts/00000000-0000-4000-8000-000000013033",
-          "startedMs": 71,
-          "endedMs": 80,
-          "status": 200
-        },
-        {
-          "method": "POST",
-          "path": "/api/build-graphs/resolve",
-          "startedMs": 71,
-          "endedMs": 79,
-          "status": 200
-        },
-        {
-          "method": "POST",
-          "path": "/api/recommendation-events",
-          "startedMs": 203,
-          "endedMs": 207,
-          "status": 201
-        },
-        {
-          "method": "POST",
-          "path": "/api/recommendation-events",
-          "startedMs": 203,
-          "endedMs": 209,
-          "status": 201
-        },
-        {
-          "method": "POST",
-          "path": "/api/recommendation-events",
-          "startedMs": 203,
-          "endedMs": 209,
-          "status": 201
-        },
-        {
-          "method": "POST",
-          "path": "/api/recommendation-events",
-          "startedMs": 203,
-          "endedMs": 209,
-          "status": 201
-        }
-      ],
-      "errors": []
-    },
-    {
-      "id": "llm-complex-003",
-      "group": "LLM_FULL_COMPLEX",
-      "prompt": "컴팩트 케이스 대신 통풍 좋은 케이스로 고성능 PC 추천해줘",
-      "ok": true,
-      "totalMs": 423,
-      "submitStart": "2026-07-03T14:40:29.700Z",
-      "assistantRenderedMs": 163,
-      "actionStartedMs": 46,
-      "actionSettledMs": 46,
-      "buildChatMs": 9,
-      "answerType": "BUDGET",
-      "actionTypes": [],
-      "buildCount": 3,
-      "warningCount": 1,
-      "apiCalls": [
-        {
-          "method": "POST",
-          "path": "/api/ai/build-chat",
-          "startedMs": 46,
-          "endedMs": 55,
-          "status": 200
-        },
-        {
-          "method": "GET",
-          "path": "/api/parts/92edda29-cd3e-4860-83d6-053b6f56610c",
-          "startedMs": 67,
-          "endedMs": 71,
-          "status": 200
-        },
-        {
-          "method": "GET",
-          "path": "/api/parts/9df1082c-a2e5-410a-a678-78e9cfc1ae19",
-          "startedMs": 67,
-          "endedMs": 71,
-          "status": 200
-        },
-        {
-          "method": "GET",
-          "path": "/api/parts/5b8a4881-0828-4d7e-93dc-71defababc17",
-          "startedMs": 67,
-          "endedMs": 71,
-          "status": 200
-        },
-        {
-          "method": "POST",
-          "path": "/api/build-graphs/resolve",
-          "startedMs": 67,
-          "endedMs": 71,
-          "status": 200
-        },
-        {
-          "method": "POST",
-          "path": "/api/recommendation-events",
-          "startedMs": 264,
-          "endedMs": 269,
-          "status": 201
-        },
-        {
-          "method": "POST",
-          "path": "/api/recommendation-events",
-          "startedMs": 264,
-          "endedMs": 269,
-          "status": 201
-        },
-        {
-          "method": "POST",
-          "path": "/api/recommendation-events",
-          "startedMs": 265,
-          "endedMs": 270,
-          "status": 201
-        },
-        {
-          "method": "POST",
-          "path": "/api/recommendation-events",
-          "startedMs": 265,
-          "endedMs": 270,
-          "status": 201
-        }
-      ],
-      "errors": []
-    },
-    {
-      "id": "llm-complex-004",
-      "group": "LLM_FULL_COMPLEX",
-      "prompt": "QHD 배그 144Hz인데 소음도 낮은 PC 추천해줘",
-      "ok": true,
-      "totalMs": 428,
-      "submitStart": "2026-07-03T14:40:30.251Z",
-      "assistantRenderedMs": 165,
+      "totalMs": 702,
+      "submitStart": "2026-07-03T19:20:51.765Z",
       "actionStartedMs": 47,
       "actionSettledMs": 47,
       "buildChatMs": 7,
       "answerType": "BUDGET",
       "actionTypes": [],
       "buildCount": 3,
-      "warningCount": 1,
+      "warningCount": 12,
       "apiCalls": [
         {
           "method": "POST",
@@ -3912,58 +3371,301 @@
         },
         {
           "method": "GET",
-          "path": "/api/parts/92edda29-cd3e-4860-83d6-053b6f56610c",
-          "startedMs": 65,
-          "endedMs": 69,
+          "path": "/api/parts/00000000-0000-4000-8000-000000013036",
+          "startedMs": 68,
+          "endedMs": 78,
           "status": 200
         },
         {
           "method": "GET",
-          "path": "/api/parts/9df1082c-a2e5-410a-a678-78e9cfc1ae19",
-          "startedMs": 65,
-          "endedMs": 69,
+          "path": "/api/parts/00000000-0000-4000-8000-000000013037",
+          "startedMs": 68,
+          "endedMs": 77,
           "status": 200
         },
         {
           "method": "GET",
-          "path": "/api/parts/5b8a4881-0828-4d7e-93dc-71defababc17",
-          "startedMs": 65,
-          "endedMs": 69,
+          "path": "/api/parts/00000000-0000-4000-8000-000000013037",
+          "startedMs": 68,
+          "endedMs": 78,
           "status": 200
         },
         {
           "method": "POST",
           "path": "/api/build-graphs/resolve",
-          "startedMs": 65,
-          "endedMs": 69,
+          "startedMs": 68,
+          "endedMs": 78,
           "status": 200
         },
         {
           "method": "POST",
           "path": "/api/recommendation-events",
-          "startedMs": 232,
-          "endedMs": 239,
+          "startedMs": 353,
+          "endedMs": 395,
           "status": 201
         },
         {
           "method": "POST",
           "path": "/api/recommendation-events",
-          "startedMs": 232,
-          "endedMs": 239,
+          "startedMs": 353,
+          "endedMs": 396,
           "status": 201
         },
         {
           "method": "POST",
           "path": "/api/recommendation-events",
-          "startedMs": 232,
-          "endedMs": 236,
+          "startedMs": 353,
+          "endedMs": 369,
           "status": 201
         },
         {
           "method": "POST",
           "path": "/api/recommendation-events",
-          "startedMs": 232,
-          "endedMs": 239,
+          "startedMs": 353,
+          "endedMs": 396,
+          "status": 201
+        }
+      ],
+      "errors": []
+    },
+    {
+      "id": "llm-complex-002",
+      "group": "LLM_FULL_COMPLEX",
+      "prompt": "예산은 300인데 5090은 꼭 들어가야 해",
+      "ok": true,
+      "totalMs": 705,
+      "submitStart": "2026-07-03T19:20:52.714Z",
+      "actionStartedMs": 50,
+      "actionSettledMs": 50,
+      "buildChatMs": 3,
+      "answerType": "BUDGET",
+      "actionTypes": [],
+      "buildCount": 3,
+      "warningCount": 8,
+      "apiCalls": [
+        {
+          "method": "POST",
+          "path": "/api/ai/build-chat",
+          "startedMs": 50,
+          "endedMs": 53,
+          "status": 200
+        },
+        {
+          "method": "GET",
+          "path": "/api/parts/00000000-0000-4000-8000-000000013033",
+          "startedMs": 71,
+          "endedMs": 86,
+          "status": 200
+        },
+        {
+          "method": "GET",
+          "path": "/api/parts/00000000-0000-4000-8000-000000013033",
+          "startedMs": 71,
+          "endedMs": 86,
+          "status": 200
+        },
+        {
+          "method": "GET",
+          "path": "/api/parts/00000000-0000-4000-8000-000000013033",
+          "startedMs": 71,
+          "endedMs": 86,
+          "status": 200
+        },
+        {
+          "method": "POST",
+          "path": "/api/build-graphs/resolve",
+          "startedMs": 71,
+          "endedMs": 86,
+          "status": 200
+        },
+        {
+          "method": "POST",
+          "path": "/api/recommendation-events",
+          "startedMs": 258,
+          "endedMs": 265,
+          "status": 201
+        },
+        {
+          "method": "POST",
+          "path": "/api/recommendation-events",
+          "startedMs": 258,
+          "endedMs": 266,
+          "status": 201
+        },
+        {
+          "method": "POST",
+          "path": "/api/recommendation-events",
+          "startedMs": 258,
+          "endedMs": 265,
+          "status": 201
+        },
+        {
+          "method": "POST",
+          "path": "/api/recommendation-events",
+          "startedMs": 258,
+          "endedMs": 267,
+          "status": 201
+        }
+      ],
+      "errors": []
+    },
+    {
+      "id": "llm-complex-003",
+      "group": "LLM_FULL_COMPLEX",
+      "prompt": "컴팩트 케이스 대신 통풍 좋은 케이스로 고성능 PC 추천해줘",
+      "ok": true,
+      "totalMs": 692,
+      "submitStart": "2026-07-03T19:20:53.632Z",
+      "actionStartedMs": 48,
+      "actionSettledMs": 48,
+      "buildChatMs": 4,
+      "answerType": "BUDGET",
+      "actionTypes": [],
+      "buildCount": 3,
+      "warningCount": 1,
+      "apiCalls": [
+        {
+          "method": "POST",
+          "path": "/api/ai/build-chat",
+          "startedMs": 48,
+          "endedMs": 52,
+          "status": 200
+        },
+        {
+          "method": "GET",
+          "path": "/api/parts/92edda29-cd3e-4860-83d6-053b6f56610c",
+          "startedMs": 70,
+          "endedMs": 82,
+          "status": 200
+        },
+        {
+          "method": "GET",
+          "path": "/api/parts/9df1082c-a2e5-410a-a678-78e9cfc1ae19",
+          "startedMs": 70,
+          "endedMs": 82,
+          "status": 200
+        },
+        {
+          "method": "GET",
+          "path": "/api/parts/5b8a4881-0828-4d7e-93dc-71defababc17",
+          "startedMs": 70,
+          "endedMs": 82,
+          "status": 200
+        },
+        {
+          "method": "POST",
+          "path": "/api/build-graphs/resolve",
+          "startedMs": 70,
+          "endedMs": 82,
+          "status": 200
+        },
+        {
+          "method": "POST",
+          "path": "/api/recommendation-events",
+          "startedMs": 220,
+          "endedMs": 231,
+          "status": 201
+        },
+        {
+          "method": "POST",
+          "path": "/api/recommendation-events",
+          "startedMs": 221,
+          "endedMs": 231,
+          "status": 201
+        },
+        {
+          "method": "POST",
+          "path": "/api/recommendation-events",
+          "startedMs": 221,
+          "endedMs": 231,
+          "status": 201
+        },
+        {
+          "method": "POST",
+          "path": "/api/recommendation-events",
+          "startedMs": 221,
+          "endedMs": 231,
+          "status": 201
+        }
+      ],
+      "errors": []
+    },
+    {
+      "id": "llm-complex-004",
+      "group": "LLM_FULL_COMPLEX",
+      "prompt": "QHD 배그 144Hz인데 소음도 낮은 PC 추천해줘",
+      "ok": true,
+      "totalMs": 697,
+      "submitStart": "2026-07-03T19:20:54.513Z",
+      "actionStartedMs": 50,
+      "actionSettledMs": 50,
+      "buildChatMs": 4,
+      "answerType": "BUDGET",
+      "actionTypes": [],
+      "buildCount": 3,
+      "warningCount": 1,
+      "apiCalls": [
+        {
+          "method": "POST",
+          "path": "/api/ai/build-chat",
+          "startedMs": 50,
+          "endedMs": 54,
+          "status": 200
+        },
+        {
+          "method": "GET",
+          "path": "/api/parts/92edda29-cd3e-4860-83d6-053b6f56610c",
+          "startedMs": 70,
+          "endedMs": 80,
+          "status": 200
+        },
+        {
+          "method": "GET",
+          "path": "/api/parts/9df1082c-a2e5-410a-a678-78e9cfc1ae19",
+          "startedMs": 70,
+          "endedMs": 81,
+          "status": 200
+        },
+        {
+          "method": "GET",
+          "path": "/api/parts/5b8a4881-0828-4d7e-93dc-71defababc17",
+          "startedMs": 71,
+          "endedMs": 81,
+          "status": 200
+        },
+        {
+          "method": "POST",
+          "path": "/api/build-graphs/resolve",
+          "startedMs": 71,
+          "endedMs": 81,
+          "status": 200
+        },
+        {
+          "method": "POST",
+          "path": "/api/recommendation-events",
+          "startedMs": 246,
+          "endedMs": 255,
+          "status": 201
+        },
+        {
+          "method": "POST",
+          "path": "/api/recommendation-events",
+          "startedMs": 246,
+          "endedMs": 255,
+          "status": 201
+        },
+        {
+          "method": "POST",
+          "path": "/api/recommendation-events",
+          "startedMs": 246,
+          "endedMs": 251,
+          "status": 201
+        },
+        {
+          "method": "POST",
+          "path": "/api/recommendation-events",
+          "startedMs": 246,
+          "endedMs": 255,
           "status": 201
         }
       ],
@@ -3974,12 +3676,11 @@
       "group": "LLM_FULL_COMPLEX",
       "prompt": "저소음 개발용인데 CUDA 실험도 해야 하는 PC 추천해줘",
       "ok": true,
-      "totalMs": 422,
-      "submitStart": "2026-07-03T14:40:30.815Z",
-      "assistantRenderedMs": 160,
-      "actionStartedMs": 47,
-      "actionSettledMs": 47,
-      "buildChatMs": 10,
+      "totalMs": 700,
+      "submitStart": "2026-07-03T19:20:55.397Z",
+      "actionStartedMs": 50,
+      "actionSettledMs": 50,
+      "buildChatMs": 3,
       "answerType": "BUDGET",
       "actionTypes": [],
       "buildCount": 3,
@@ -3988,64 +3689,64 @@
         {
           "method": "POST",
           "path": "/api/ai/build-chat",
-          "startedMs": 47,
-          "endedMs": 57,
+          "startedMs": 50,
+          "endedMs": 53,
           "status": 200
         },
         {
           "method": "GET",
           "path": "/api/parts/92edda29-cd3e-4860-83d6-053b6f56610c",
-          "startedMs": 67,
-          "endedMs": 70,
+          "startedMs": 70,
+          "endedMs": 80,
           "status": 200
         },
         {
           "method": "GET",
           "path": "/api/parts/9df1082c-a2e5-410a-a678-78e9cfc1ae19",
-          "startedMs": 67,
-          "endedMs": 70,
+          "startedMs": 70,
+          "endedMs": 80,
           "status": 200
         },
         {
           "method": "GET",
           "path": "/api/parts/5b8a4881-0828-4d7e-93dc-71defababc17",
-          "startedMs": 67,
-          "endedMs": 70,
+          "startedMs": 70,
+          "endedMs": 80,
           "status": 200
         },
         {
           "method": "POST",
           "path": "/api/build-graphs/resolve",
-          "startedMs": 67,
-          "endedMs": 71,
+          "startedMs": 70,
+          "endedMs": 80,
           "status": 200
         },
         {
           "method": "POST",
           "path": "/api/recommendation-events",
-          "startedMs": 196,
-          "endedMs": 201,
+          "startedMs": 231,
+          "endedMs": 238,
           "status": 201
         },
         {
           "method": "POST",
           "path": "/api/recommendation-events",
-          "startedMs": 196,
-          "endedMs": 200,
+          "startedMs": 231,
+          "endedMs": 238,
           "status": 201
         },
         {
           "method": "POST",
           "path": "/api/recommendation-events",
-          "startedMs": 196,
-          "endedMs": 201,
+          "startedMs": 231,
+          "endedMs": 238,
           "status": 201
         },
         {
           "method": "POST",
           "path": "/api/recommendation-events",
-          "startedMs": 196,
-          "endedMs": 201,
+          "startedMs": 231,
+          "endedMs": 238,
           "status": 201
         }
       ],
@@ -4056,71 +3757,77 @@
       "group": "LLM_FULL_COMPLEX",
       "prompt": "영상편집 + Docker + IDE 병행용으로 400만원 안쪽",
       "ok": true,
-      "totalMs": 426,
-      "submitStart": "2026-07-03T14:40:31.383Z",
-      "assistantRenderedMs": 167,
-      "actionStartedMs": 46,
-      "actionSettledMs": 46,
-      "buildChatMs": 9,
+      "totalMs": 688,
+      "submitStart": "2026-07-03T19:20:56.279Z",
+      "actionStartedMs": 50,
+      "actionSettledMs": 50,
+      "buildChatMs": 4,
       "answerType": "BUDGET",
       "actionTypes": [],
-      "buildCount": 2,
-      "warningCount": 2,
+      "buildCount": 3,
+      "warningCount": 7,
       "apiCalls": [
         {
           "method": "POST",
           "path": "/api/ai/build-chat",
-          "startedMs": 46,
-          "endedMs": 55,
+          "startedMs": 50,
+          "endedMs": 54,
           "status": 200
         },
         {
           "method": "GET",
-          "path": "/api/parts/a71d093f-8a9f-4f00-b18b-a586ff1b50b2",
-          "startedMs": 64,
-          "endedMs": 69,
+          "path": "/api/parts/00000000-0000-4000-8000-000000013033",
+          "startedMs": 69,
+          "endedMs": 78,
           "status": 200
         },
         {
           "method": "GET",
-          "path": "/api/parts/09f39d2a-de00-4cbc-bd1a-241e9790111d",
-          "startedMs": 64,
-          "endedMs": 69,
+          "path": "/api/parts/00000000-0000-4000-8000-000000013033",
+          "startedMs": 69,
+          "endedMs": 79,
+          "status": 200
+        },
+        {
+          "method": "GET",
+          "path": "/api/parts/00000000-0000-4000-8000-000000013033",
+          "startedMs": 69,
+          "endedMs": 79,
           "status": 200
         },
         {
           "method": "POST",
           "path": "/api/build-graphs/resolve",
-          "startedMs": 64,
-          "endedMs": 75,
+          "startedMs": 69,
+          "endedMs": 79,
           "status": 200
         },
         {
           "method": "POST",
           "path": "/api/recommendation-events",
-          "startedMs": 200,
-          "endedMs": 205,
+          "startedMs": 226,
+          "endedMs": 230,
           "status": 201
         },
         {
           "method": "POST",
           "path": "/api/recommendation-events",
-          "startedMs": 200,
-          "endedMs": 207,
+          "startedMs": 226,
+          "endedMs": 231,
           "status": 201
         },
         {
           "method": "POST",
           "path": "/api/recommendation-events",
-          "startedMs": 200,
-          "endedMs": 207,
+          "startedMs": 226,
+          "endedMs": 231,
           "status": 201
         },
         {
           "method": "POST",
           "path": "/api/recommendation-events",
-          "startedMs": 200,
-          "endedMs": 207,
+          "startedMs": 226,
+          "endedMs": 229,
           "status": 201
         }
       ],
@@ -4131,12 +3838,11 @@
       "group": "LLM_FULL_COMPLEX",
       "prompt": "전력 여유 넉넉한 5080급 게임용 PC 추천해줘",
       "ok": true,
-      "totalMs": 421,
-      "submitStart": "2026-07-03T14:40:31.930Z",
-      "assistantRenderedMs": 159,
-      "actionStartedMs": 49,
-      "actionSettledMs": 49,
-      "buildChatMs": 9,
+      "totalMs": 729,
+      "submitStart": "2026-07-03T19:20:57.175Z",
+      "actionStartedMs": 59,
+      "actionSettledMs": 59,
+      "buildChatMs": 1,
       "answerType": "BUDGET",
       "actionTypes": [],
       "buildCount": 3,
@@ -4145,64 +3851,64 @@
         {
           "method": "POST",
           "path": "/api/ai/build-chat",
-          "startedMs": 49,
-          "endedMs": 58,
+          "startedMs": 59,
+          "endedMs": 60,
           "status": 200
         },
         {
           "method": "GET",
           "path": "/api/parts/92edda29-cd3e-4860-83d6-053b6f56610c",
-          "startedMs": 68,
-          "endedMs": 72,
+          "startedMs": 80,
+          "endedMs": 94,
           "status": 200
         },
         {
           "method": "GET",
           "path": "/api/parts/9df1082c-a2e5-410a-a678-78e9cfc1ae19",
-          "startedMs": 68,
-          "endedMs": 72,
+          "startedMs": 80,
+          "endedMs": 94,
           "status": 200
         },
         {
           "method": "GET",
           "path": "/api/parts/5b8a4881-0828-4d7e-93dc-71defababc17",
-          "startedMs": 68,
-          "endedMs": 72,
+          "startedMs": 80,
+          "endedMs": 94,
           "status": 200
         },
         {
           "method": "POST",
           "path": "/api/build-graphs/resolve",
-          "startedMs": 68,
-          "endedMs": 72,
+          "startedMs": 80,
+          "endedMs": 94,
           "status": 200
         },
         {
           "method": "POST",
           "path": "/api/recommendation-events",
-          "startedMs": 221,
-          "endedMs": 226,
+          "startedMs": 247,
+          "endedMs": 252,
           "status": 201
         },
         {
           "method": "POST",
           "path": "/api/recommendation-events",
-          "startedMs": 221,
-          "endedMs": 226,
+          "startedMs": 247,
+          "endedMs": 252,
           "status": 201
         },
         {
           "method": "POST",
           "path": "/api/recommendation-events",
-          "startedMs": 221,
-          "endedMs": 226,
+          "startedMs": 247,
+          "endedMs": 252,
           "status": 201
         },
         {
           "method": "POST",
           "path": "/api/recommendation-events",
-          "startedMs": 221,
-          "endedMs": 226,
+          "startedMs": 247,
+          "endedMs": 253,
           "status": 201
         }
       ],
@@ -4213,12 +3919,11 @@
       "group": "LLM_FULL_COMPLEX",
       "prompt": "수랭 쿨러 누수 보증 확실한 고성능 PC 추천해줘",
       "ok": true,
-      "totalMs": 407,
-      "submitStart": "2026-07-03T14:40:32.480Z",
-      "assistantRenderedMs": 151,
-      "actionStartedMs": 31,
-      "actionSettledMs": 31,
-      "buildChatMs": 11,
+      "totalMs": 697,
+      "submitStart": "2026-07-03T19:20:58.079Z",
+      "actionStartedMs": 52,
+      "actionSettledMs": 52,
+      "buildChatMs": 2,
       "answerType": "BUDGET",
       "actionTypes": [],
       "buildCount": 3,
@@ -4227,64 +3932,64 @@
         {
           "method": "POST",
           "path": "/api/ai/build-chat",
-          "startedMs": 31,
-          "endedMs": 42,
+          "startedMs": 52,
+          "endedMs": 54,
           "status": 200
         },
         {
           "method": "GET",
           "path": "/api/parts/92edda29-cd3e-4860-83d6-053b6f56610c",
-          "startedMs": 52,
-          "endedMs": 57,
+          "startedMs": 70,
+          "endedMs": 79,
           "status": 200
         },
         {
           "method": "GET",
           "path": "/api/parts/9df1082c-a2e5-410a-a678-78e9cfc1ae19",
-          "startedMs": 52,
-          "endedMs": 57,
+          "startedMs": 70,
+          "endedMs": 79,
           "status": 200
         },
         {
           "method": "GET",
           "path": "/api/parts/5b8a4881-0828-4d7e-93dc-71defababc17",
-          "startedMs": 52,
-          "endedMs": 57,
+          "startedMs": 70,
+          "endedMs": 79,
           "status": 200
         },
         {
           "method": "POST",
           "path": "/api/build-graphs/resolve",
-          "startedMs": 52,
-          "endedMs": 57,
+          "startedMs": 70,
+          "endedMs": 79,
           "status": 200
         },
         {
           "method": "POST",
           "path": "/api/recommendation-events",
-          "startedMs": 190,
-          "endedMs": 211,
+          "startedMs": 254,
+          "endedMs": 266,
           "status": 201
         },
         {
           "method": "POST",
           "path": "/api/recommendation-events",
-          "startedMs": 190,
-          "endedMs": 211,
+          "startedMs": 254,
+          "endedMs": 264,
           "status": 201
         },
         {
           "method": "POST",
           "path": "/api/recommendation-events",
-          "startedMs": 190,
-          "endedMs": 212,
+          "startedMs": 254,
+          "endedMs": 264,
           "status": 201
         },
         {
           "method": "POST",
           "path": "/api/recommendation-events",
-          "startedMs": 190,
-          "endedMs": 212,
+          "startedMs": 254,
+          "endedMs": 265,
           "status": 201
         }
       ],
@@ -4295,12 +4000,11 @@
       "group": "LLM_FULL_COMPLEX",
       "prompt": "맥스엘리트 파워 이슈 걱정되니 안정적인 파워 위주 PC 추천해줘",
       "ok": true,
-      "totalMs": 427,
-      "submitStart": "2026-07-03T14:40:33.031Z",
-      "assistantRenderedMs": 168,
-      "actionStartedMs": 49,
-      "actionSettledMs": 49,
-      "buildChatMs": 9,
+      "totalMs": 698,
+      "submitStart": "2026-07-03T19:20:58.966Z",
+      "actionStartedMs": 47,
+      "actionSettledMs": 47,
+      "buildChatMs": 4,
       "answerType": "BUDGET",
       "actionTypes": [],
       "buildCount": 3,
@@ -4309,64 +4013,64 @@
         {
           "method": "POST",
           "path": "/api/ai/build-chat",
-          "startedMs": 49,
-          "endedMs": 58,
-          "status": 200
-        },
-        {
-          "method": "GET",
-          "path": "/api/parts/a71d093f-8a9f-4f00-b18b-a586ff1b50b2",
-          "startedMs": 67,
-          "endedMs": 71,
+          "startedMs": 47,
+          "endedMs": 51,
           "status": 200
         },
         {
           "method": "GET",
           "path": "/api/parts/00000000-0000-4000-8000-000000013037",
-          "startedMs": 67,
-          "endedMs": 71,
+          "startedMs": 69,
+          "endedMs": 80,
+          "status": 200
+        },
+        {
+          "method": "GET",
+          "path": "/api/parts/a71d093f-8a9f-4f00-b18b-a586ff1b50b2",
+          "startedMs": 70,
+          "endedMs": 80,
           "status": 200
         },
         {
           "method": "GET",
           "path": "/api/parts/09f39d2a-de00-4cbc-bd1a-241e9790111d",
-          "startedMs": 67,
-          "endedMs": 71,
+          "startedMs": 70,
+          "endedMs": 80,
           "status": 200
         },
         {
           "method": "POST",
           "path": "/api/build-graphs/resolve",
-          "startedMs": 67,
-          "endedMs": 71,
+          "startedMs": 70,
+          "endedMs": 80,
           "status": 200
         },
         {
           "method": "POST",
           "path": "/api/recommendation-events",
-          "startedMs": 196,
-          "endedMs": 202,
+          "startedMs": 251,
+          "endedMs": 258,
           "status": 201
         },
         {
           "method": "POST",
           "path": "/api/recommendation-events",
-          "startedMs": 196,
-          "endedMs": 202,
+          "startedMs": 251,
+          "endedMs": 260,
           "status": 201
         },
         {
           "method": "POST",
           "path": "/api/recommendation-events",
-          "startedMs": 196,
-          "endedMs": 201,
+          "startedMs": 252,
+          "endedMs": 261,
           "status": 201
         },
         {
           "method": "POST",
           "path": "/api/recommendation-events",
-          "startedMs": 196,
-          "endedMs": 202,
+          "startedMs": 252,
+          "endedMs": 262,
           "status": 201
         }
       ],
@@ -4377,12 +4081,11 @@
       "group": "LLM_FULL_COMPLEX",
       "prompt": "리안리 케이스 중심으로 고성능 게임용 PC 추천해줘",
       "ok": true,
-      "totalMs": 418,
-      "submitStart": "2026-07-03T14:40:33.580Z",
-      "assistantRenderedMs": 159,
-      "actionStartedMs": 49,
-      "actionSettledMs": 49,
-      "buildChatMs": 9,
+      "totalMs": 687,
+      "submitStart": "2026-07-03T19:20:59.834Z",
+      "actionStartedMs": 45,
+      "actionSettledMs": 45,
+      "buildChatMs": 5,
       "answerType": "BUDGET",
       "actionTypes": [],
       "buildCount": 3,
@@ -4391,64 +4094,64 @@
         {
           "method": "POST",
           "path": "/api/ai/build-chat",
-          "startedMs": 49,
-          "endedMs": 58,
+          "startedMs": 45,
+          "endedMs": 50,
           "status": 200
         },
         {
           "method": "GET",
           "path": "/api/parts/92edda29-cd3e-4860-83d6-053b6f56610c",
-          "startedMs": 67,
-          "endedMs": 71,
+          "startedMs": 74,
+          "endedMs": 84,
           "status": 200
         },
         {
           "method": "GET",
           "path": "/api/parts/9df1082c-a2e5-410a-a678-78e9cfc1ae19",
-          "startedMs": 67,
-          "endedMs": 71,
+          "startedMs": 74,
+          "endedMs": 84,
           "status": 200
         },
         {
           "method": "GET",
           "path": "/api/parts/5b8a4881-0828-4d7e-93dc-71defababc17",
-          "startedMs": 67,
-          "endedMs": 71,
+          "startedMs": 74,
+          "endedMs": 84,
           "status": 200
         },
         {
           "method": "POST",
           "path": "/api/build-graphs/resolve",
-          "startedMs": 68,
-          "endedMs": 71,
+          "startedMs": 74,
+          "endedMs": 84,
           "status": 200
         },
         {
           "method": "POST",
           "path": "/api/recommendation-events",
-          "startedMs": 202,
-          "endedMs": 207,
+          "startedMs": 278,
+          "endedMs": 284,
           "status": 201
         },
         {
           "method": "POST",
           "path": "/api/recommendation-events",
-          "startedMs": 202,
-          "endedMs": 207,
+          "startedMs": 278,
+          "endedMs": 284,
           "status": 201
         },
         {
           "method": "POST",
           "path": "/api/recommendation-events",
-          "startedMs": 202,
-          "endedMs": 206,
+          "startedMs": 278,
+          "endedMs": 284,
           "status": 201
         },
         {
           "method": "POST",
           "path": "/api/recommendation-events",
-          "startedMs": 202,
-          "endedMs": 206,
+          "startedMs": 278,
+          "endedMs": 285,
           "status": 201
         }
       ],
@@ -4459,12 +4162,11 @@
       "group": "LLM_FULL_COMPLEX",
       "prompt": "AI 학습용 800만원 이하인데 소음 낮은 PC 추천해줘",
       "ok": true,
-      "totalMs": 421,
-      "submitStart": "2026-07-03T14:40:34.132Z",
-      "assistantRenderedMs": 160,
-      "actionStartedMs": 47,
-      "actionSettledMs": 47,
-      "buildChatMs": 9,
+      "totalMs": 687,
+      "submitStart": "2026-07-03T19:21:00.735Z",
+      "actionStartedMs": 44,
+      "actionSettledMs": 44,
+      "buildChatMs": 4,
       "answerType": "BUDGET",
       "actionTypes": [],
       "buildCount": 3,
@@ -4473,64 +4175,64 @@
         {
           "method": "POST",
           "path": "/api/ai/build-chat",
-          "startedMs": 47,
-          "endedMs": 56,
+          "startedMs": 44,
+          "endedMs": 48,
           "status": 200
         },
         {
           "method": "GET",
           "path": "/api/parts/00000000-0000-4000-8000-000000013033",
-          "startedMs": 65,
-          "endedMs": 71,
+          "startedMs": 63,
+          "endedMs": 72,
           "status": 200
         },
         {
           "method": "GET",
           "path": "/api/parts/00000000-0000-4000-8000-000000013033",
-          "startedMs": 65,
-          "endedMs": 71,
+          "startedMs": 63,
+          "endedMs": 72,
           "status": 200
         },
         {
           "method": "GET",
           "path": "/api/parts/00000000-0000-4000-8000-000000013033",
-          "startedMs": 65,
-          "endedMs": 97,
+          "startedMs": 63,
+          "endedMs": 106,
           "status": 200
         },
         {
           "method": "POST",
           "path": "/api/build-graphs/resolve",
-          "startedMs": 65,
-          "endedMs": 71,
+          "startedMs": 63,
+          "endedMs": 72,
           "status": 200
         },
         {
           "method": "POST",
           "path": "/api/recommendation-events",
-          "startedMs": 211,
-          "endedMs": 216,
+          "startedMs": 311,
+          "endedMs": 319,
           "status": 201
         },
         {
           "method": "POST",
           "path": "/api/recommendation-events",
-          "startedMs": 211,
-          "endedMs": 216,
+          "startedMs": 311,
+          "endedMs": 319,
           "status": 201
         },
         {
           "method": "POST",
           "path": "/api/recommendation-events",
-          "startedMs": 211,
-          "endedMs": 217,
+          "startedMs": 311,
+          "endedMs": 319,
           "status": 201
         },
         {
           "method": "POST",
           "path": "/api/recommendation-events",
-          "startedMs": 211,
-          "endedMs": 217,
+          "startedMs": 311,
+          "endedMs": 319,
           "status": 201
         }
       ],
@@ -4541,12 +4243,11 @@
       "group": "LLM_FULL_COMPLEX",
       "prompt": "200만원으로 최고사양 느낌 나는 PC 추천해줘",
       "ok": true,
-      "totalMs": 427,
-      "submitStart": "2026-07-03T14:40:34.682Z",
-      "assistantRenderedMs": 168,
-      "actionStartedMs": 48,
-      "actionSettledMs": 48,
-      "buildChatMs": 8,
+      "totalMs": 705,
+      "submitStart": "2026-07-03T19:21:01.622Z",
+      "actionStartedMs": 58,
+      "actionSettledMs": 58,
+      "buildChatMs": 3,
       "answerType": "BUDGET",
       "actionTypes": [],
       "buildCount": 3,
@@ -4555,64 +4256,64 @@
         {
           "method": "POST",
           "path": "/api/ai/build-chat",
-          "startedMs": 48,
-          "endedMs": 56,
+          "startedMs": 58,
+          "endedMs": 61,
           "status": 200
         },
         {
           "method": "GET",
           "path": "/api/parts/00000000-0000-4000-8000-000000013033",
-          "startedMs": 65,
-          "endedMs": 68,
+          "startedMs": 77,
+          "endedMs": 87,
           "status": 200
         },
         {
           "method": "GET",
           "path": "/api/parts/00000000-0000-4000-8000-000000013033",
-          "startedMs": 65,
-          "endedMs": 72,
+          "startedMs": 77,
+          "endedMs": 87,
           "status": 200
         },
         {
           "method": "GET",
           "path": "/api/parts/00000000-0000-4000-8000-000000013033",
-          "startedMs": 65,
-          "endedMs": 74,
+          "startedMs": 77,
+          "endedMs": 121,
           "status": 200
         },
         {
           "method": "POST",
           "path": "/api/build-graphs/resolve",
-          "startedMs": 65,
-          "endedMs": 72,
+          "startedMs": 77,
+          "endedMs": 87,
           "status": 200
         },
         {
           "method": "POST",
           "path": "/api/recommendation-events",
-          "startedMs": 209,
-          "endedMs": 215,
+          "startedMs": 241,
+          "endedMs": 249,
           "status": 201
         },
         {
           "method": "POST",
           "path": "/api/recommendation-events",
-          "startedMs": 209,
-          "endedMs": 214,
+          "startedMs": 241,
+          "endedMs": 248,
           "status": 201
         },
         {
           "method": "POST",
           "path": "/api/recommendation-events",
-          "startedMs": 209,
-          "endedMs": 214,
+          "startedMs": 242,
+          "endedMs": 248,
           "status": 201
         },
         {
           "method": "POST",
           "path": "/api/recommendation-events",
-          "startedMs": 209,
-          "endedMs": 215,
+          "startedMs": 242,
+          "endedMs": 249,
           "status": 201
         }
       ],

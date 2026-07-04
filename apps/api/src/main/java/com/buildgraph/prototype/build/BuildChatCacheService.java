@@ -12,6 +12,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.concurrent.CompletableFuture;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -135,6 +136,21 @@ public class BuildChatCacheService {
         }
     }
 
+    public void storeAsync(Map<String, Object> request, String requestedAiProfile, Long userId, Map<String, Object> response) {
+        storeAsync(request, requestedAiProfile, userId, response, ttl);
+    }
+
+    public void storeAsync(Map<String, Object> request, String requestedAiProfile, Long userId, Map<String, Object> response, Duration ttlOverride) {
+        if (!enabled || response == null || response.isEmpty()) {
+            return;
+        }
+        CompletableFuture.runAsync(() -> store(request, requestedAiProfile, userId, response, ttlOverride))
+                .exceptionally(error -> {
+                    log.warn("Build Chat cache async store failed; response already returned: {}", error.getMessage());
+                    return null;
+                });
+    }
+
     private String cacheKey(Map<String, Object> request, String requestedAiProfile, Long userId, CacheScope scope) throws Exception {
         Map<String, Object> body = request == null ? Map.of() : request;
         boolean sharedRecommendation = scope == CacheScope.RECOMMENDATION && isStandaloneRecommendation(body);
@@ -152,7 +168,7 @@ public class BuildChatCacheService {
         }
         fingerprint.put("versions", dataVersions());
         String json = OBJECT_MAPPER.writeValueAsString(fingerprint);
-        return "buildgraph:build-chat:v16:" + sha256(json);
+        return "buildgraph:build-chat:v19:" + sha256(json);
     }
 
     private static CacheScope scopeFor(Map<String, Object> request) {

@@ -4,7 +4,12 @@ import com.buildgraph.prototype.common.DbValueMapper;
 import com.buildgraph.prototype.common.MockData;
 import com.buildgraph.prototype.config.security.AgentPrincipal;
 import com.buildgraph.prototype.config.security.AgentTokenHasher;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.security.SecureRandom;
+import java.sql.Timestamp;
 import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
@@ -13,6 +18,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.function.Supplier;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
@@ -24,15 +30,30 @@ import org.springframework.web.server.ResponseStatusException;
 public class PcAgentAsService {
     private static final String DEMO_ACTIVATION_TOKEN = "demo-agent-activation-token";
     private static final SecureRandom SECURE_RANDOM = new SecureRandom();
+    private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
 
     private final JdbcTemplate jdbcTemplate;
     private final AgentTokenHasher tokenHasher;
+    private final PcAgentLogSummaryService logSummaryService;
+    private final Path logStorageRoot;
     private final Clock clock;
     private final Supplier<String> tokenGenerator;
 
     @Autowired
-    public PcAgentAsService(JdbcTemplate jdbcTemplate, AgentTokenHasher tokenHasher) {
-        this(jdbcTemplate, tokenHasher, Clock.systemUTC(), PcAgentAsService::newAgentToken);
+    public PcAgentAsService(
+            JdbcTemplate jdbcTemplate,
+            AgentTokenHasher tokenHasher,
+            PcAgentLogSummaryService logSummaryService,
+            @Value("${agent.log-storage-root:data/agent-logs}") String logStorageRoot
+    ) {
+        this(
+                jdbcTemplate,
+                tokenHasher,
+                Clock.systemUTC(),
+                PcAgentAsService::newAgentToken,
+                logSummaryService,
+                Path.of(logStorageRoot)
+        );
     }
 
     PcAgentAsService(
@@ -41,10 +62,30 @@ public class PcAgentAsService {
             Clock clock,
             Supplier<String> tokenGenerator
     ) {
+        this(
+                jdbcTemplate,
+                tokenHasher,
+                clock,
+                tokenGenerator,
+                new PcAgentLogSummaryService(),
+                Path.of("build", "agent-log-test-storage")
+        );
+    }
+
+    PcAgentAsService(
+            JdbcTemplate jdbcTemplate,
+            AgentTokenHasher tokenHasher,
+            Clock clock,
+            Supplier<String> tokenGenerator,
+            PcAgentLogSummaryService logSummaryService,
+            Path logStorageRoot
+    ) {
         this.jdbcTemplate = jdbcTemplate;
         this.tokenHasher = tokenHasher;
         this.clock = clock;
         this.tokenGenerator = tokenGenerator;
+        this.logSummaryService = logSummaryService;
+        this.logStorageRoot = logStorageRoot;
     }
 
     @Transactional
@@ -236,10 +277,6 @@ public class PcAgentAsService {
         if (file == null || file.isEmpty()) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Agent log gzip file is required.");
         }
-        String fileName = fileName(file);
-        if (!fileName.endsWith(".gz")) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Agent log upload must be gzip.");
-        }
         Integer consentCount = jdbcTemplate.queryForObject("""
                 SELECT count(*)
                 FROM agent_consents
@@ -251,6 +288,7 @@ public class PcAgentAsService {
         if (consentCount == null || consentCount == 0) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Server upload consent is required.");
         }
+        PcAgentLogSummaryService.ValidatedAgentLog validated = logSummaryService.validate(file);
 
         int rangeMinutes = integer(metadata, "rangeMinutes", 30);
         Instant rangeEndedAt = instant(metadata, "rangeEndedAt", Instant.now(clock));
@@ -269,12 +307,18 @@ public class PcAgentAsService {
                 """,
                 principal.deviceInternalId(),
                 idempotencyKey,
-                rangeStartedAt,
-                rangeEndedAt
+                Timestamp.from(rangeStartedAt),
+                Timestamp.from(rangeEndedAt)
         );
 
         Long uploadJobInternalId = longValue(uploadJob, "upload_job_internal_id");
-        String storagePath = "agent-logs/" + principal.deviceId() + "/" + fileName;
+        String storagePath = "agent-logs/"
+                + principal.deviceId()
+                + "/"
+                + DbValueMapper.string(uploadJob, "upload_job_id")
+                + "-"
+                + validated.fileName();
+        writeStoredGzip(storagePath, validated.gzipBytes());
         Map<String, Object> logUpload = jdbcTemplate.queryForMap("""
                 INSERT INTO agent_log_uploads (
                   user_id,
@@ -289,7 +333,7 @@ public class PcAgentAsService {
                   consent_accepted_at,
                   delete_after
                 )
-                VALUES (?, ?, ?, ?, 'UPLOADED', ?, ?, ?, 'Rule demo upload accepted.', now(), now() + interval '30 days')
+                VALUES (?, ?, ?, ?, 'UPLOADED', ?, ?, ?, ?, now(), now() + interval '30 days')
                 RETURNING id AS log_upload_internal_id,
                           public_id::text AS log_upload_id,
                           status,
@@ -301,12 +345,35 @@ public class PcAgentAsService {
                 principal.deviceInternalId(),
                 uploadJobInternalId,
                 rangeMinutes,
-                fileName,
-                file.getSize(),
-                storagePath
+                validated.fileName(),
+                validated.fileSize(),
+                storagePath,
+                validated.summaryText()
         );
 
         Long logUploadInternalId = longValue(logUpload, "log_upload_internal_id");
+        jdbcTemplate.queryForMap("""
+                INSERT INTO agent_log_bundles (
+                  upload_job_id,
+                  log_upload_id,
+                  schema_version,
+                  storage_path,
+                  sha256,
+                  size_bytes,
+                  delete_after
+                )
+                VALUES (?, ?, ?, ?, ?, ?, now() + interval '30 days')
+                ON CONFLICT (sha256) DO UPDATE
+                SET delete_after = GREATEST(agent_log_bundles.delete_after, EXCLUDED.delete_after)
+                RETURNING id AS bundle_internal_id, public_id::text AS bundle_id
+                """,
+                uploadJobInternalId,
+                logUploadInternalId,
+                validated.schemaVersion(),
+                storagePath,
+                validated.sha256(),
+                validated.fileSize()
+        );
         String symptom = string(metadata, "symptom", "Agent uploaded recent 30 minute diagnostic log.");
         Map<String, Object> ticket = jdbcTemplate.queryForMap("""
                 INSERT INTO as_tickets (
@@ -340,6 +407,7 @@ public class PcAgentAsService {
                   now()
                 )
                 RETURNING public_id::text AS ticket_id,
+                          id AS ticket_internal_id,
                           status,
                           analysis_status,
                           review_status,
@@ -349,17 +417,61 @@ public class PcAgentAsService {
                 logUploadInternalId,
                 symptom
         );
+        Map<String, Object> summaryRow = jdbcTemplate.queryForMap("""
+                INSERT INTO agent_log_summaries (
+                  log_upload_id,
+                  as_ticket_id,
+                  summary_payload,
+                  feature_payload,
+                  event_counts,
+                  risk_flags,
+                  privacy_summary
+                )
+                VALUES (?, ?, ?::jsonb, ?::jsonb, ?::jsonb, ?::jsonb, ?::jsonb)
+                ON CONFLICT (log_upload_id) DO UPDATE
+                SET as_ticket_id = EXCLUDED.as_ticket_id,
+                    summary_payload = EXCLUDED.summary_payload,
+                    feature_payload = EXCLUDED.feature_payload,
+                    event_counts = EXCLUDED.event_counts,
+                    risk_flags = EXCLUDED.risk_flags,
+                    privacy_summary = EXCLUDED.privacy_summary
+                RETURNING public_id::text AS summary_id
+                """,
+                logUploadInternalId,
+                longValue(ticket, "ticket_internal_id"),
+                json(validated.summaryPayload()),
+                json(validated.featurePayload()),
+                json(validated.eventCounts()),
+                json(validated.riskFlags()),
+                json(validated.privacySummary())
+        );
 
         return MockData.map(
                 "uploadJobId", DbValueMapper.string(uploadJob, "upload_job_id"),
                 "logUploadId", DbValueMapper.string(logUpload, "log_upload_id"),
                 "ticketId", DbValueMapper.string(ticket, "ticket_id"),
+                "logSummaryId", DbValueMapper.string(summaryRow, "summary_id"),
                 "status", DbValueMapper.string(ticket, "status"),
                 "analysisStatus", DbValueMapper.string(ticket, "analysis_status"),
                 "reviewStatus", DbValueMapper.string(ticket, "review_status"),
                 "supportDecision", DbValueMapper.string(ticket, "support_decision"),
                 "rangeMinutes", rangeMinutes
         );
+    }
+
+    private void writeStoredGzip(String storagePath, byte[] gzipBytes) {
+        Path relative = Path.of(storagePath.replace("\\", "/"));
+        Path normalizedRoot = logStorageRoot.toAbsolutePath().normalize();
+        Path target = logStorageRoot.resolve(relative).toAbsolutePath().normalize();
+        if (!target.startsWith(normalizedRoot)) {
+            throw new IllegalStateException("Agent log storage path escaped storage root.");
+        }
+        try {
+            Files.createDirectories(target.getParent());
+            Files.write(target, gzipBytes);
+        } catch (IOException error) {
+            throw new IllegalStateException("Agent log gzip storage failed.", error);
+        }
     }
 
     private static String newAgentToken() {
@@ -374,6 +486,14 @@ public class PcAgentAsService {
             return "agent-log.jsonl.gz";
         }
         return original.replace("\\", "/").substring(original.replace("\\", "/").lastIndexOf('/') + 1);
+    }
+
+    private static String json(Object value) {
+        try {
+            return OBJECT_MAPPER.writeValueAsString(value);
+        } catch (Exception error) {
+            throw new IllegalArgumentException("JSON serialization failed.", error);
+        }
     }
 
     private static String string(Map<String, Object> request, String key, String fallback) {

@@ -2,13 +2,16 @@ import { FormEvent, useEffect, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { AdminShell, DataTable, Panel, StateMessage, StatusBadge } from '../../../components/ui';
-import { getAdminTicket, updateAdminTicket } from '../adminApi';
+import { createAsRecommendationFeedback, getAdminTicket, updateAdminTicket } from '../adminApi';
 import type { AdminAsTicket, AsTicketStatus } from '../adminApi';
 
 const STATUS_OPTIONS: AsTicketStatus[] = ['OPEN', 'ASSIGNED', 'IN_PROGRESS', 'RESOLVED', 'CLOSED', 'CANCELLED'];
 const REVIEW_OPTIONS = ['', 'NOT_REQUIRED', 'REQUIRED', 'IN_REVIEW', 'APPROVED', 'REJECTED'];
 const SUPPORT_DECISION_OPTIONS = ['', 'SELF_SOLVABLE', 'REMOTE_POSSIBLE', 'VISIT_REQUIRED', 'NEEDS_MORE_INFO'];
 const RISK_OPTIONS = ['', 'LOW', 'MEDIUM', 'HIGH', 'CRITICAL'];
+const FAILURE_CATEGORY_OPTIONS = ['RECOMMENDATION_BUILD', 'PART_SELECTION', 'COMPATIBILITY', 'PERFORMANCE', 'USER_ENVIRONMENT', 'AGENT_LOG_ONLY', 'OTHER'];
+const SEVERITY_OPTIONS = ['LOW', 'MEDIUM', 'HIGH', 'CRITICAL'];
+const CATEGORY_OPTIONS = ['', 'CPU', 'GPU', 'RAM', 'MOTHERBOARD', 'STORAGE', 'PSU', 'CASE', 'COOLER'];
 
 export function AdminTicketDetailPage() {
   const { ticketId = '' } = useParams();
@@ -20,6 +23,14 @@ export function AdminTicketDetailPage() {
   const [supportDecision, setSupportDecision] = useState('');
   const [riskLevel, setRiskLevel] = useState('');
   const [autoResponseAllowed, setAutoResponseAllowed] = useState(false);
+  const [failureCategory, setFailureCategory] = useState('RECOMMENDATION_BUILD');
+  const [severity, setSeverity] = useState('MEDIUM');
+  const [relatedPartId, setRelatedPartId] = useState('');
+  const [relatedBuildId, setRelatedBuildId] = useState('');
+  const [recommendationId, setRecommendationId] = useState('');
+  const [feedbackCategory, setFeedbackCategory] = useState('');
+  const [useForRecommendationTraining, setUseForRecommendationTraining] = useState(true);
+  const [labelNote, setLabelNote] = useState('');
 
   const ticketQuery = useQuery({
     queryKey: ['admin-as-ticket', ticketId],
@@ -37,6 +48,12 @@ export function AdminTicketDetailPage() {
       setSupportDecision(ticket.supportDecision ?? '');
       setRiskLevel(ticket.riskLevel ?? '');
       setAutoResponseAllowed(Boolean(ticket.autoResponseAllowed));
+      setFailureCategory(ticket.asTrainingLabel?.failureCategory ?? 'RECOMMENDATION_BUILD');
+      setSeverity(ticket.asTrainingLabel?.severity ?? 'MEDIUM');
+      setRelatedPartId(ticket.asTrainingLabel?.relatedPartId ?? '');
+      setRecommendationId(ticket.asTrainingLabel?.recommendationId ?? '');
+      setUseForRecommendationTraining(ticket.asTrainingLabel?.useForRecommendationTraining ?? true);
+      setLabelNote(ticket.asTrainingLabel?.note ?? '');
     }
   }, [ticketQuery.data]);
 
@@ -57,9 +74,32 @@ export function AdminTicketDetailPage() {
     }
   });
 
+  const feedbackMutation = useMutation({
+    mutationFn: () => createAsRecommendationFeedback(ticketId, {
+      failureCategory,
+      severity,
+      relatedPartId: relatedPartId.trim() || undefined,
+      relatedBuildId: relatedBuildId.trim() || undefined,
+      recommendationId: recommendationId.trim() || undefined,
+      category: feedbackCategory || undefined,
+      useForRecommendationTraining,
+      note: labelNote.trim() || undefined,
+      reason: labelNote.trim() || '관리자가 AS 티켓을 추천 학습 피드백으로 확정'
+    }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['admin-as-ticket', ticketId] });
+      queryClient.invalidateQueries({ queryKey: ['admin-recommendation-training-overview'] });
+    }
+  });
+
   function submit(event: FormEvent) {
     event.preventDefault();
     updateMutation.mutate();
+  }
+
+  function submitFeedback(event: FormEvent) {
+    event.preventDefault();
+    feedbackMutation.mutate();
   }
 
   const ticket = ticketQuery.data;
@@ -181,6 +221,103 @@ export function AdminTicketDetailPage() {
             {updateMutation.isError ? <StateMessage type="warn" title="저장 실패" body="허용되지 않는 상태 전이이거나 담당자 ID가 유효하지 않습니다." /> : null}
           </form>
         </Panel>
+
+        <Panel title="로그 요약" subtitle="raw 로그가 아니라 서버가 만든 학습용 요약 피처입니다.">
+          <DataTable columns={['항목', '내용']} rows={logSummaryRows(ticket)} />
+        </Panel>
+
+        <Panel title="추천 학습 피드백" subtitle="관리자 확정 라벨입니다. 티켓 상태나 원인 후보를 자동 변경하지 않습니다.">
+          <form onSubmit={submitFeedback} className="space-y-4">
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label htmlFor="as-feedback-failure" className="mb-1 block text-xs font-bold text-slate-600">문제 분류</label>
+                <select
+                  id="as-feedback-failure"
+                  className="h-11 w-full rounded border border-slate-300 px-3 text-sm"
+                  value={failureCategory}
+                  onChange={(event) => setFailureCategory(event.target.value)}
+                >
+                  {FAILURE_CATEGORY_OPTIONS.map((option) => <option key={option} value={option}>{option}</option>)}
+                </select>
+              </div>
+              <div>
+                <label htmlFor="as-feedback-severity" className="mb-1 block text-xs font-bold text-slate-600">심각도</label>
+                <select
+                  id="as-feedback-severity"
+                  className="h-11 w-full rounded border border-slate-300 px-3 text-sm"
+                  value={severity}
+                  onChange={(event) => setSeverity(event.target.value)}
+                >
+                  {SEVERITY_OPTIONS.map((option) => <option key={option} value={option}>{option}</option>)}
+                </select>
+              </div>
+            </div>
+            <div>
+              <label htmlFor="as-feedback-part" className="mb-1 block text-xs font-bold text-slate-600">연결 부품 public id</label>
+              <input
+                id="as-feedback-part"
+                className="h-11 w-full rounded border border-slate-300 px-3 text-sm"
+                placeholder="추천 실패와 직접 관련된 부품이 있을 때만 입력"
+                value={relatedPartId}
+                onChange={(event) => setRelatedPartId(event.target.value)}
+              />
+            </div>
+            <div>
+              <label htmlFor="as-feedback-build" className="mb-1 block text-xs font-bold text-slate-600">연결 견적 public id</label>
+              <input
+                id="as-feedback-build"
+                className="h-11 w-full rounded border border-slate-300 px-3 text-sm"
+                placeholder="추천 견적 전체 문제일 때 입력"
+                value={relatedBuildId}
+                onChange={(event) => setRelatedBuildId(event.target.value)}
+              />
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label htmlFor="as-feedback-rec" className="mb-1 block text-xs font-bold text-slate-600">recommendationId</label>
+                <input
+                  id="as-feedback-rec"
+                  className="h-11 w-full rounded border border-slate-300 px-3 text-sm"
+                  value={recommendationId}
+                  onChange={(event) => setRecommendationId(event.target.value)}
+                />
+              </div>
+              <div>
+                <label htmlFor="as-feedback-category" className="mb-1 block text-xs font-bold text-slate-600">카테고리</label>
+                <select
+                  id="as-feedback-category"
+                  className="h-11 w-full rounded border border-slate-300 px-3 text-sm"
+                  value={feedbackCategory}
+                  onChange={(event) => setFeedbackCategory(event.target.value)}
+                >
+                  {CATEGORY_OPTIONS.map((option) => <option key={option || 'none'} value={option}>{option || '미지정'}</option>)}
+                </select>
+              </div>
+            </div>
+            <label className="flex items-center gap-2 text-sm font-semibold text-slate-700">
+              <input
+                type="checkbox"
+                checked={useForRecommendationTraining}
+                onChange={(event) => setUseForRecommendationTraining(event.target.checked)}
+              />
+              추천 XGBoost 학습 후보로 사용
+            </label>
+            <div>
+              <label htmlFor="as-feedback-note" className="mb-1 block text-xs font-bold text-slate-600">라벨 메모</label>
+              <textarea
+                id="as-feedback-note"
+                className="h-24 w-full rounded border border-slate-300 p-3 text-sm"
+                value={labelNote}
+                onChange={(event) => setLabelNote(event.target.value)}
+              />
+            </div>
+            <button disabled={feedbackMutation.isPending} className="w-full rounded bg-slate-950 px-4 py-3 text-sm font-bold text-white disabled:bg-slate-400">
+              {feedbackMutation.isPending ? '피드백 저장 중' : 'AS 학습 피드백 저장'}
+            </button>
+            {feedbackMutation.isSuccess ? <StateMessage type="success" title="피드백 저장 완료" body="AS 라벨과 추천 학습 bridge 상태를 저장했습니다." /> : null}
+            {feedbackMutation.isError ? <StateMessage type="warn" title="피드백 저장 실패" body="연결 부품/견적 ID 또는 라벨 값이 올바른지 확인해 주세요." /> : null}
+          </form>
+        </Panel>
       </div>
     </AdminShell>
   );
@@ -214,6 +351,17 @@ function logSummary(ticket: AdminAsTicket) {
   return ticket.logUploadId ? `업로드된 로그 있음: ${shortId(ticket.logUploadId)}` : '연결된 로그 없음';
 }
 
+function logSummaryRows(ticket: AdminAsTicket) {
+  return [
+    { '항목': '요약 ID', '내용': ticket.logSummaryId ?? '-' },
+    { '항목': '요약', '내용': ticket.logSummary ?? '-' },
+    { '항목': '핵심 요약', '내용': compactJson(ticket.logSummaryPayload) },
+    { '항목': '학습 피처', '내용': compactJson(ticket.logFeaturePayload) },
+    { '항목': '위험 플래그', '내용': compactJson(ticket.logRiskFlags) },
+    { '항목': '현재 라벨', '내용': ticket.asTrainingLabel ? compactJson(ticket.asTrainingLabel) : '-' }
+  ];
+}
+
 function formatCandidates(candidates: Record<string, unknown>[]) {
   if (!candidates.length) {
     return '-';
@@ -234,4 +382,11 @@ function shortId(id: string) {
 
 function formatDateTime(value?: string | null) {
   return value ? value.replace('T', ' ').slice(0, 19) : '-';
+}
+
+function compactJson(value?: Record<string, unknown> | null) {
+  if (!value || Object.keys(value).length === 0) {
+    return '-';
+  }
+  return JSON.stringify(value);
 }

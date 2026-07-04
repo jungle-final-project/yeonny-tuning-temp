@@ -664,7 +664,11 @@ function isApplyLatestBuildIntent(prompt: string) {
 }
 
 function shouldAutoExecuteAction(action: AiDraftAction) {
-  return action.type !== 'ASK_FOLLOW_UP';
+  if (action.type === 'OPEN_ROUTE') return true;
+  if (action.type === 'ASK_FOLLOW_UP') return false;
+  return action.requiresConfirmation === false
+    && action.payload.intentConfidence === 'HIGH'
+    && action.payload.sideEffectRisk === 'LOW';
 }
 
 function isAllowedUserRoute(route: string) {

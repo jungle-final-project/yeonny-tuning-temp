@@ -901,7 +901,7 @@ test('updates quote dependency graph after self quote cart changes', async ({ pa
   await page.goto('/self-quote?category=GPU');
 
   await expect(page.getByTestId('build-dependency-graph')).toContainText('견적 관계도');
-  await expect(page.getByTestId('build-dependency-graph')).not.toContainText('파워 여유 확인');
+  await expect(page.getByTestId('graph-flow-canvas').getByTestId('graph-issue-card')).toContainText('파워 여유 확인');
   await expect(page.getByTestId('graph-summary-panel')).toHaveCount(0);
   const initialGraphCalls = graphRequests.length;
 
@@ -1272,7 +1272,13 @@ test('self quote chatbot sends current draft and automatically applies a remove 
             type: 'REMOVE_DRAFT_PART',
             label: 'GPU 빼기',
             description: 'RTX 5070 챗봇 테스트를 견적에서 제거합니다.',
-            payload: { partId: 'part-gpu-chat', category: 'GPU', source: 'AI_BUILD_CHAT' },
+            payload: {
+              partId: 'part-gpu-chat',
+              category: 'GPU',
+              source: 'AI_BUILD_CHAT',
+              intentConfidence: 'HIGH',
+              sideEffectRisk: 'LOW'
+            },
             requiresConfirmation: false
           }
         ],

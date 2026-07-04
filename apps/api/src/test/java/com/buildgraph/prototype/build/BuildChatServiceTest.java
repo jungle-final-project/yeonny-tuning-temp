@@ -40,6 +40,7 @@ class BuildChatServiceTest {
     @Test
     void parsesBudgetWonFromCommonKoreanInputs() {
         assertThat(BuildChatService.parseBudgetWon("200만원 PC 추천")).isEqualTo(200 * 10_000);
+        assertThat(BuildChatService.parseBudgetWon("3백만원 PC 추천")).isEqualTo(300 * 10_000);
         assertThat(BuildChatService.parseBudgetWon("300만원대로 맞춰줘")).isEqualTo(3_000_000);
         assertThat(BuildChatService.parseBudgetWon("2,000,000원 안에서")).isEqualTo(200 * 10_000);
         assertThat(BuildChatService.budgetIntent("800만원으로 최고급 PC 추천해줘").mode()).isEqualTo("TARGET");
@@ -334,7 +335,7 @@ class BuildChatServiceTest {
     }
 
     @Test
-    void buildChatFastRoutesUniqueModelTokenOnlyWhenSingleActivePartMatches() {
+    void buildChatFallsBackToCategoryForShortModelTokenEvenWhenSingleActivePartMatches() {
         JdbcTemplate jdbcTemplate = mock(JdbcTemplate.class);
         ToolCheckService toolCheckService = mock(ToolCheckService.class);
         AiChatEngine aiChatEngine = mock(AiChatEngine.class);
@@ -359,7 +360,7 @@ class BuildChatServiceTest {
         List<Map<String, Object>> actions = (List<Map<String, Object>>) response.get("actions");
         assertThat(actions).singleElement()
                 .satisfies(action -> assertThat(action.get("payload")).asInstanceOf(org.assertj.core.api.InstanceOfAssertFactories.MAP)
-                        .containsEntry("route", "/parts/a75d6544-2296-4c4c-a7cd-64596e66f6d7"));
+                        .containsEntry("route", "/self-quote?category=CPU&q=9950X3D"));
         verifyNoInteractions(aiChatEngine, cacheService);
     }
 
@@ -398,6 +399,37 @@ class BuildChatServiceTest {
         assertThat(actions).singleElement()
                 .satisfies(action -> assertThat(action.get("payload")).asInstanceOf(org.assertj.core.api.InstanceOfAssertFactories.MAP)
                         .containsEntry("route", "/self-quote?category=GPU&q=5090"));
+        verifyNoInteractions(aiChatEngine, cacheService);
+    }
+
+    @Test
+    void buildChatReturnsNoDraftPartCandidateFastPathWithoutRoutingOrCallingLlm() {
+        JdbcTemplate jdbcTemplate = mock(JdbcTemplate.class);
+        ToolCheckService toolCheckService = mock(ToolCheckService.class);
+        AiChatEngine aiChatEngine = mock(AiChatEngine.class);
+        BuildChatCacheService cacheService = mock(BuildChatCacheService.class);
+        BuildChatService service = new BuildChatService(jdbcTemplate, toolCheckService, aiChatEngine, cacheService);
+        when(jdbcTemplate.queryForList(anyString(), eq("MOTHERBOARD"), eq("msi"), eq("msi"), eq(80))).thenReturn(List.of(
+                partRow("board-msi-x870", "MOTHERBOARD", "MSI MAG X870E TOMAHAWK WIFI", 540_000,
+                        Map.of("chipset", "X870E", "socket", "AM5", "toolReady", true), 92)
+        ));
+
+        Map<String, Object> response = service.chat(Map.of("message", "메인보드 MSI 걸로 맞춰줘"));
+
+        assertThat(response).containsEntry("answerType", "PART");
+        @SuppressWarnings("unchecked")
+        Map<String, Object> partRecommendation = (Map<String, Object>) response.get("partRecommendation");
+        assertThat(partRecommendation).containsEntry("category", "MOTHERBOARD");
+        @SuppressWarnings("unchecked")
+        List<Map<String, Object>> actions = (List<Map<String, Object>>) response.get("actions");
+        assertThat(actions).singleElement().satisfies(action -> {
+            assertThat(action).containsEntry("type", "ADD_PART_TO_DRAFT");
+            assertThat(action.get("payload")).asInstanceOf(org.assertj.core.api.InstanceOfAssertFactories.MAP)
+                    .containsEntry("partId", "board-msi-x870")
+                    .containsEntry("category", "MOTHERBOARD")
+                    .containsEntry("intentConfidence", "MEDIUM")
+                    .containsEntry("sideEffectRisk", "MEDIUM");
+        });
         verifyNoInteractions(aiChatEngine, cacheService);
     }
 

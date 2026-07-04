@@ -27,6 +27,7 @@ type Scenario = {
   expectBuilds?: boolean;
   expectPartRecommendation?: boolean;
   expectDraftApplied?: boolean;
+  expectDraftActionCard?: boolean;
   expectRoute?: RouteExpectation;
   forbidPartDetailRoute?: boolean;
 };
@@ -262,6 +263,9 @@ async function runScenario(
       draftSettledMs = Date.now() - submitStartMs;
       actionSettledMs = draftSettledMs;
     }
+    if (scenario.expectDraftActionCard) {
+      await expect(page.getByText('견적 장바구니 자동 실행').last()).toBeVisible({ timeout: scenarioTimeout });
+    }
     if (scenario.expectBuilds) {
       await expect(page.getByRole('button', { name: '이 조합으로 셀프 견적 보기' }).first()).toBeVisible({ timeout: scenarioTimeout });
     }
@@ -355,26 +359,27 @@ function buildScenarios(parts: Record<PartCategory, PartRow>): Scenario[] {
       expectRoute: { kind: 'filter' as const, category: category as PartCategory, queryIncludes: query }
     })),
     ...[
-      'GPU 빼줘',
-      'RAM 64GB로 바꿔줘',
-      '파워 1000W 이상으로 바꿔줘',
-      '그래픽카드 더 싼데 성능 너무 떨어지지 않게 추천해줘',
-      'CPU 더 좋은 걸로 바꿔줘',
-      '메인보드 MSI 걸로 맞춰줘',
-      'SSD 더 빠른 걸로 바꿔줘',
-      '케이스 리안리 216 모델꺼로 맞춰줘',
-      '쿨러 더 잘 식히는 걸로 바꿔줘',
-      'RAM 수량 2개로 변경해줘',
-      '그래픽카드 더 좋은 걸로 바꿔줘',
-      '파워 1200W 이상으로 바꿔줘'
-    ].map((prompt, index) => ({
+      ['GPU 빼줘', true],
+      ['RAM 64GB로 바꿔줘', true],
+      ['파워 1000W 이상으로 바꿔줘', false],
+      ['그래픽카드 더 싼데 성능 너무 떨어지지 않게 추천해줘', false],
+      ['CPU 더 좋은 걸로 바꿔줘', false],
+      ['메인보드 MSI 걸로 맞춰줘', false],
+      ['SSD 더 빠른 걸로 바꿔줘', false],
+      ['케이스 리안리 216 모델꺼로 맞춰줘', false],
+      ['쿨러 더 잘 식히는 걸로 바꿔줘', false],
+      ['RAM 수량 2개로 변경해줘', true],
+      ['그래픽카드 더 좋은 걸로 바꿔줘', false],
+      ['파워 1200W 이상으로 바꿔줘', false]
+    ].map(([prompt, autoApplied], index) => ({
       id: `draft-${String(index + 1).padStart(3, '0')}`,
       group: 'DRAFT_ACTION' as const,
-      prompt,
+      prompt: prompt as string,
       startPath: '/self-quote',
       prepareDraft: true,
       expectBuildChat: true,
-      expectDraftApplied: true
+      expectDraftApplied: Boolean(autoApplied),
+      expectDraftActionCard: true
     })),
     ...[
       '800만원으로 최고급 PC 추천해줘',
@@ -570,6 +575,9 @@ function validateBuildChatBody(scenario: Scenario, body: BuildChatBody | null) {
   const route = body.actions?.find((action) => action.type === 'OPEN_ROUTE')?.payload?.route;
   if (scenario.forbidPartDetailRoute && route?.startsWith('/parts/')) {
     errors.push(`ambiguous route returned product detail route: ${route}`);
+  }
+  if (scenario.expectDraftActionCard && !body.actions?.some((action) => action.type && action.type !== 'OPEN_ROUTE')) {
+    errors.push('expected draft action card, but response.actions has no visible draft action');
   }
   return errors;
 }

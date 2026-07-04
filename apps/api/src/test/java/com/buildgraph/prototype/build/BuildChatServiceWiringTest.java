@@ -32,6 +32,8 @@ class BuildChatServiceWiringTest {
             .withBean(CandidateReranker.class, () -> mock(CandidateReranker.class))
             .withBean(StringRedisTemplate.class, () -> mock(StringRedisTemplate.class))
             .withBean(BuildChatCacheService.class)
+            .withBean(BuildChatIntentRouter.class)
+            .withBean(BuildChatSemanticCacheService.class, BuildChatSemanticCacheService::disabled)
             .withBean(BuildChatService.class);
 
     @Test

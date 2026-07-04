@@ -1139,7 +1139,7 @@ test('renders admin dashboard with ADMIN role and dashboard API response', async
   await expect(page.locator('main')).toContainText('untrained eligible events');
   await page.getByRole('button', { name: '데이터셋' }).click();
   await expect(page.locator('main')).toContainText('홈 추천부품 학습 데이터셋');
-  await expect(page.getByRole('button', { name: '현재 HOME 이벤트로 데이터셋 생성' })).toBeVisible();
+  await expect(page.getByRole('button', { name: '현재 HOME/AS 피드백으로 데이터셋 생성' })).toBeVisible();
   await page.getByRole('button', { name: '학습 Job' }).click();
   await expect(page.locator('main')).toContainText('학습 데이터 부족');
   await page.getByRole('button', { name: '모델 버전' }).click();
