@@ -424,7 +424,7 @@ test('calls logout API and clears stored auth tokens', async ({ page }) => {
 
   await page.goto('/login');
   await expect(page.getByText('Logout User')).toBeVisible();
-  await page.locator('header button').last().click();
+  await page.getByRole('button', { name: '로그아웃' }).click();
 
   expect(logoutCalled).toBe(true);
   await page.waitForFunction(() =>
@@ -477,7 +477,7 @@ test('clears stored auth tokens even when logout API fails', async ({ page }) =>
 
   await page.goto('/login');
   await expect(page.getByText('Logout Fail User')).toBeVisible();
-  await page.locator('header button').last().click();
+  await page.getByRole('button', { name: '로그아웃' }).click();
 
   expect(logoutCalled).toBe(true);
   await page.waitForFunction(() =>
