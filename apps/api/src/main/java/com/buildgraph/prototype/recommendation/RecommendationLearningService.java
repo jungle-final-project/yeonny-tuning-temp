@@ -92,25 +92,39 @@ public class RecommendationLearningService {
                 .stream()
                 .findFirst()
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "AS 티켓을 찾을 수 없습니다."));
+        Long partId = resolvePartId(text(request.get("relatedPartId")));
+        Long buildId = resolveOwnedBuildId(text(request.get("relatedBuildId")), longValue(ticket, "user_id"));
+        String recommendationId = text(request.get("recommendationId"));
+        boolean useForTraining = booleanValue(request.get("useForRecommendationTraining"), true);
+        Map<String, Object> label = upsertAsTicketLabel(ticket, request, admin, partId, buildId, recommendationId, useForTraining);
+        boolean hasTrainingLink = partId != null || buildId != null || recommendationId != null;
+        if (!useForTraining || !hasTrainingLink) {
+            Map<String, Object> response = new LinkedHashMap<>(label);
+            response.put("event", null);
+            response.put("trainingEventCreated", false);
+            return response;
+        }
         String idempotencyKey = "AS_CONFIRMED_NEGATIVE:" + ticket.get("id");
         Map<String, Object> existing = findEventByIdempotency(longValue(ticket, "user_id"), idempotencyKey);
         if (!existing.isEmpty()) {
+            existing.put("label", label);
+            existing.put("trainingEventCreated", false);
             return existing;
         }
-        Long partId = resolvePartId(text(request.get("relatedPartId")));
         Map<String, Object> payload = new LinkedHashMap<>(eventPayload(request));
         payload.put("ticketId", ticketPublicId);
         payload.put("ticketStatus", ticket.get("status"));
         payload.put("ticketSymptom", ticket.get("symptom"));
         payload.put("confirmedByAdminId", admin.id());
-        return insertEvent(
+        payload.put("asTicketLabelId", label.get("id"));
+        Map<String, Object> event = insertEvent(
                 longValue(ticket, "user_id"),
                 admin.internalId(),
                 "AS_CONFIRMED_NEGATIVE",
                 label("AS_CONFIRMED_NEGATIVE"),
                 "ADMIN_AS_FEEDBACK",
-                text(request.get("recommendationId")),
-                null,
+                recommendationId,
+                buildId,
                 partId,
                 longValue(ticket, "id"),
                 text(request.get("category")),
@@ -118,6 +132,9 @@ public class RecommendationLearningService {
                 idempotencyKey,
                 payload
         );
+        event.put("label", label);
+        event.put("trainingEventCreated", true);
+        return event;
     }
 
     public Map<String, Object> recordHomePartAdminFeedback(
@@ -164,6 +181,91 @@ public class RecommendationLearningService {
                 integer(request.get("rankPosition")),
                 text(request.get("idempotencyKey")),
                 payload
+        );
+    }
+
+    private Map<String, Object> upsertAsTicketLabel(
+            Map<String, Object> ticket,
+            Map<String, Object> request,
+            CurrentUserService.CurrentUser admin,
+            Long partId,
+            Long buildId,
+            String recommendationId,
+            boolean useForTraining
+    ) {
+        String failureCategory = normalizeFailureCategory(firstText(
+                text(request.get("failureCategory")),
+                partId != null ? "PART_SELECTION" : "RECOMMENDATION_BUILD"
+        ));
+        String severity = normalizeSeverity(firstText(text(request.get("severity")), "MEDIUM"));
+        String note = text(request.get("note"));
+        Map<String, Object> row = jdbcTemplate.queryForMap("""
+                INSERT INTO as_ticket_labels (
+                  as_ticket_id,
+                  log_summary_id,
+                  failure_category,
+                  severity,
+                  related_part_id,
+                  related_build_id,
+                  recommendation_id,
+                  use_for_recommendation_training,
+                  note,
+                  labeled_by_admin_id,
+                  updated_at
+                )
+                VALUES (
+                  ?,
+                  (SELECT id FROM agent_log_summaries WHERE as_ticket_id = ? LIMIT 1),
+                  ?,
+                  ?,
+                  ?,
+                  ?,
+                  ?,
+                  ?,
+                  ?,
+                  ?,
+                  now()
+                )
+                ON CONFLICT (as_ticket_id) DO UPDATE
+                SET log_summary_id = EXCLUDED.log_summary_id,
+                    failure_category = EXCLUDED.failure_category,
+                    severity = EXCLUDED.severity,
+                    related_part_id = EXCLUDED.related_part_id,
+                    related_build_id = EXCLUDED.related_build_id,
+                    recommendation_id = EXCLUDED.recommendation_id,
+                    use_for_recommendation_training = EXCLUDED.use_for_recommendation_training,
+                    note = EXCLUDED.note,
+                    labeled_by_admin_id = EXCLUDED.labeled_by_admin_id,
+                    updated_at = now()
+                RETURNING public_id::text AS id,
+                          failure_category,
+                          severity,
+                          recommendation_id,
+                          use_for_recommendation_training,
+                          note,
+                          created_at,
+                          updated_at
+                """,
+                longValue(ticket, "id"),
+                longValue(ticket, "id"),
+                failureCategory,
+                severity,
+                partId,
+                buildId,
+                recommendationId,
+                useForTraining,
+                note,
+                admin.internalId()
+        );
+        return MockData.map(
+                "id", DbValueMapper.string(row, "id"),
+                "failureCategory", DbValueMapper.string(row, "failure_category"),
+                "severity", DbValueMapper.string(row, "severity"),
+                "recommendationId", DbValueMapper.string(row, "recommendation_id"),
+                "useForRecommendationTraining", row.get("use_for_recommendation_training"),
+                "note", DbValueMapper.string(row, "note"),
+                "createdAt", DbValueMapper.timestamp(row, "created_at"),
+                "updatedAt", DbValueMapper.timestamp(row, "updated_at")
         );
     }
 
@@ -515,6 +617,30 @@ public class RecommendationLearningService {
         return category.trim().toUpperCase(Locale.ROOT);
     }
 
+    private String normalizeFailureCategory(String value) {
+        String normalized = text(value) == null ? "OTHER" : value.trim().toUpperCase(Locale.ROOT);
+        if (!List.of(
+                "RECOMMENDATION_BUILD",
+                "PART_SELECTION",
+                "COMPATIBILITY",
+                "PERFORMANCE",
+                "USER_ENVIRONMENT",
+                "AGENT_LOG_ONLY",
+                "OTHER"
+        ).contains(normalized)) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "지원하지 않는 AS failureCategory입니다.");
+        }
+        return normalized;
+    }
+
+    private String normalizeSeverity(String value) {
+        String normalized = text(value) == null ? "MEDIUM" : value.trim().toUpperCase(Locale.ROOT);
+        if (!List.of("LOW", "MEDIUM", "HIGH", "CRITICAL").contains(normalized)) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "지원하지 않는 AS severity입니다.");
+        }
+        return normalized;
+    }
+
     private String toJson(Object value) {
         try {
             return OBJECT_MAPPER.writeValueAsString(value == null ? Map.of() : value);
@@ -533,6 +659,13 @@ public class RecommendationLearningService {
         }
         String text = value.toString().trim();
         return text.isBlank() ? null : text;
+    }
+
+    private static boolean booleanValue(Object value, boolean fallback) {
+        if (value == null) {
+            return fallback;
+        }
+        return value instanceof Boolean booleanValue ? booleanValue : Boolean.parseBoolean(value.toString());
     }
 
     private static Integer integer(Object value) {

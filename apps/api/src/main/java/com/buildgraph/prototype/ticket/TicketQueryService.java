@@ -189,6 +189,18 @@ public class TicketQueryService {
                        t.auto_response_allowed,
                        t.symptom,
                        lu.public_id::text AS log_upload_id,
+                       lu.summary AS log_summary,
+                       als.public_id::text AS log_summary_id,
+                       als.summary_payload AS log_summary_payload,
+                       als.feature_payload AS log_feature_payload,
+                       als.risk_flags AS log_risk_flags,
+                       atl.public_id::text AS as_label_id,
+                       atl.failure_category AS as_label_failure_category,
+                       atl.severity AS as_label_severity,
+                       related_part.public_id::text AS as_label_related_part_id,
+                       atl.recommendation_id AS as_label_recommendation_id,
+                       atl.use_for_recommendation_training AS as_label_use_for_recommendation_training,
+                       atl.note AS as_label_note,
                        admin.public_id::text AS assigned_admin_id,
                        t.cause_candidates,
                        t.upgrade_candidates,
@@ -199,6 +211,9 @@ public class TicketQueryService {
                 FROM as_tickets t
                 JOIN users user_owner ON user_owner.id = t.user_id
                 LEFT JOIN agent_log_uploads lu ON lu.id = t.log_upload_id
+                LEFT JOIN agent_log_summaries als ON als.as_ticket_id = t.id
+                LEFT JOIN as_ticket_labels atl ON atl.as_ticket_id = t.id
+                LEFT JOIN parts related_part ON related_part.id = atl.related_part_id
                 LEFT JOIN users admin ON admin.id = t.assigned_admin_id
                 """;
     }
@@ -215,6 +230,12 @@ public class TicketQueryService {
                 "autoResponseAllowed", row.get("auto_response_allowed"),
                 "symptom", DbValueMapper.string(row, "symptom"),
                 "logUploadId", DbValueMapper.string(row, "log_upload_id"),
+                "logSummary", DbValueMapper.string(row, "log_summary"),
+                "logSummaryId", DbValueMapper.string(row, "log_summary_id"),
+                "logSummaryPayload", DbValueMapper.json(row, "log_summary_payload", Map.of()),
+                "logFeaturePayload", DbValueMapper.json(row, "log_feature_payload", Map.of()),
+                "logRiskFlags", DbValueMapper.json(row, "log_risk_flags", Map.of()),
+                "asTrainingLabel", asTrainingLabel(row),
                 "assignedAdminId", DbValueMapper.string(row, "assigned_admin_id"),
                 "causeCandidates", DbValueMapper.json(row, "cause_candidates", List.of()),
                 "upgradeCandidates", DbValueMapper.json(row, "upgrade_candidates", List.of()),
@@ -222,6 +243,22 @@ public class TicketQueryService {
                 "resolvedAt", DbValueMapper.timestamp(row, "resolved_at"),
                 "createdAt", DbValueMapper.timestamp(row, "created_at"),
                 "updatedAt", DbValueMapper.timestamp(row, "updated_at")
+        );
+    }
+
+    private Map<String, Object> asTrainingLabel(Map<String, Object> row) {
+        String labelId = DbValueMapper.string(row, "as_label_id");
+        if (labelId == null) {
+            return null;
+        }
+        return MockData.map(
+                "id", labelId,
+                "failureCategory", DbValueMapper.string(row, "as_label_failure_category"),
+                "severity", DbValueMapper.string(row, "as_label_severity"),
+                "relatedPartId", DbValueMapper.string(row, "as_label_related_part_id"),
+                "recommendationId", DbValueMapper.string(row, "as_label_recommendation_id"),
+                "useForRecommendationTraining", row.get("as_label_use_for_recommendation_training"),
+                "note", DbValueMapper.string(row, "as_label_note")
         );
     }
 

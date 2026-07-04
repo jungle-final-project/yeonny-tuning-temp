@@ -24,7 +24,11 @@ public class RecommendationTrainingService {
     private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
     private static final TypeReference<Map<String, Object>> MAP_TYPE = new TypeReference<>() {
     };
-    private static final Set<String> ELIGIBLE_SURFACES = Set.of("HOME_RECOMMENDED_PARTS", "ADMIN_HOME_PART_FEEDBACK");
+    private static final Set<String> ELIGIBLE_SURFACES = Set.of(
+            "HOME_RECOMMENDED_PARTS",
+            "ADMIN_HOME_PART_FEEDBACK",
+            "ADMIN_AS_FEEDBACK"
+    );
 
     private final JdbcTemplate jdbcTemplate;
     private final RecommendationScoringClient scoringClient;
@@ -38,7 +42,7 @@ public class RecommendationTrainingService {
         long eligibleEvents = count("""
                 SELECT count(*)
                 FROM recommendation_events
-                WHERE source_surface IN ('HOME_RECOMMENDED_PARTS', 'ADMIN_HOME_PART_FEEDBACK')
+                WHERE source_surface IN ('HOME_RECOMMENDED_PARTS', 'ADMIN_HOME_PART_FEEDBACK', 'ADMIN_AS_FEEDBACK')
                 """);
         long trainedDistinctEvents = count("""
                 SELECT count(DISTINCT item.event_id)
@@ -55,8 +59,22 @@ public class RecommendationTrainingService {
         long recentSevenDays = count("""
                 SELECT count(*)
                 FROM recommendation_events
-                WHERE source_surface IN ('HOME_RECOMMENDED_PARTS', 'ADMIN_HOME_PART_FEEDBACK')
+                WHERE source_surface IN ('HOME_RECOMMENDED_PARTS', 'ADMIN_HOME_PART_FEEDBACK', 'ADMIN_AS_FEEDBACK')
                   AND created_at >= now() - interval '7 days'
+                """);
+        long asFeedbackEvents = count("""
+                SELECT count(*)
+                FROM recommendation_events
+                WHERE source_surface = 'ADMIN_AS_FEEDBACK'
+                """);
+        long asFeedbackTrainedEvents = count("""
+                SELECT count(DISTINCT item.event_id)
+                FROM recommendation_training_dataset_items item
+                JOIN recommendation_training_jobs job ON job.dataset_id = item.dataset_id
+                JOIN recommendation_events event ON event.id = item.event_id
+                WHERE item.included = true
+                  AND job.status = 'SUCCEEDED'
+                  AND event.source_surface = 'ADMIN_AS_FEEDBACK'
                 """);
         Map<String, Object> activeModel = jdbcTemplate.queryForList("""
                         SELECT public_id::text AS id,
@@ -104,6 +122,8 @@ public class RecommendationTrainingService {
                 "untrainedEligibleEvents", Math.max(0, eligibleEvents - trainedDistinctEvents),
                 "excludedDatasetItems", excludedItems,
                 "recentSevenDayEvents", recentSevenDays,
+                "asFeedbackEvents", asFeedbackEvents,
+                "untrainedAsFeedbackEvents", Math.max(0, asFeedbackEvents - asFeedbackTrainedEvents),
                 "activeModel", activeModel,
                 "latestJob", latestJob,
                 "generatedAt", Instant.now().toString()
@@ -146,7 +166,7 @@ public class RecommendationTrainingService {
                   status,
                   created_by
                 )
-                VALUES (?, 'HOME_PARTS', ?::jsonb, 'DRAFT', ?)
+                VALUES (?, 'HOME_PARTS_WITH_AS_FEEDBACK', ?::jsonb, 'DRAFT', ?)
                 RETURNING id, public_id::text AS public_id
                 """,
                 name,
@@ -424,6 +444,7 @@ public class RecommendationTrainingService {
         String to = text(filters.get("to"));
         Set<String> eventTypes = upperSet(filters.get("eventTypes"));
         Set<String> categories = upperSet(filters.get("categories"));
+        Set<String> sourceSurfaces = upperSet(filters.get("sourceSurfaces"));
         StringBuilder sql = new StringBuilder("""
                         SELECT e.id AS event_id,
                                e.public_id::text AS event_public_id,
@@ -454,9 +475,15 @@ public class RecommendationTrainingService {
                                  SELECT 1
                                  FROM game_fps_benchmarks fps
                                  WHERE fps.cpu_part_id = p.id OR fps.gpu_part_id = p.id
-                               ) AS has_fps_coverage
+                               ) AS has_fps_coverage,
+                               als.feature_payload AS as_feature_payload,
+                               als.risk_flags AS as_risk_flags,
+                               atl.failure_category AS as_failure_category,
+                               atl.severity AS as_severity
                         FROM recommendation_events e
                         LEFT JOIN parts p ON p.id = e.part_id
+                        LEFT JOIN agent_log_summaries als ON als.as_ticket_id = e.as_ticket_id
+                        LEFT JOIN as_ticket_labels atl ON atl.as_ticket_id = e.as_ticket_id
                         LEFT JOIN LATERAL (
                           SELECT b.score
                           FROM benchmark_summaries b
@@ -481,7 +508,7 @@ public class RecommendationTrainingService {
                           ORDER BY snapshot.collected_at DESC, snapshot.id DESC
                           LIMIT 1
                         ) ps ON true
-                        WHERE e.source_surface IN ('HOME_RECOMMENDED_PARTS', 'ADMIN_HOME_PART_FEEDBACK')
+                        WHERE e.source_surface IN ('HOME_RECOMMENDED_PARTS', 'ADMIN_HOME_PART_FEEDBACK', 'ADMIN_AS_FEEDBACK')
                         """);
         List<Object> args = new ArrayList<>();
         if (from != null) {
@@ -495,6 +522,7 @@ public class RecommendationTrainingService {
         sql.append(" ORDER BY e.created_at DESC, e.id DESC");
         return jdbcTemplate.queryForList(sql.toString(), args.toArray())
                 .stream()
+                .filter(row -> sourceSurfaces.isEmpty() || sourceSurfaces.contains(text(row.get("source_surface"))))
                 .filter(row -> eventTypes.isEmpty() || eventTypes.contains(text(row.get("event_type"))))
                 .filter(row -> categories.isEmpty() || categories.contains(firstText(text(row.get("category")), text(row.get("part_category")))))
                 .toList();
@@ -502,6 +530,8 @@ public class RecommendationTrainingService {
 
     private Map<String, Object> featureSnapshot(Map<String, Object> row) {
         String category = firstText(text(row.get("category")), text(row.get("part_category")));
+        Map<String, Object> asFeatures = json(row.get("as_feature_payload"));
+        Map<String, Object> asRisks = json(row.get("as_risk_flags"));
         Map<String, Object> features = new LinkedHashMap<>();
         features.put("rank_position", integer(row.get("rank_position"), 0));
         features.put("part_price", integer(row.get("part_price"), 0));
@@ -515,6 +545,21 @@ public class RecommendationTrainingService {
         for (String partCategory : List.of("CPU", "GPU", "RAM", "MOTHERBOARD", "STORAGE", "PSU", "CASE", "COOLER")) {
             features.put("category_" + partCategory, partCategory.equals(category) ? 1 : 0);
         }
+        features.put("as_line_count", integer(asFeatures.get("lineCount"), 0));
+        features.put("as_unknown_kind_count", integer(asFeatures.get("unknownKindCount"), 0));
+        features.put("as_max_disk_usage", number(asFeatures.get("maxDiskUsage"), 0.0));
+        features.put("as_avg_memory_usage", number(asFeatures.get("avgMemoryUsage"), 0.0));
+        features.put("as_max_gpu_temp", number(asFeatures.get("maxGpuTemp"), 0.0));
+        features.put("as_gpu_metric_available", booleanValue(asFeatures.get("gpuMetricAvailable")) ? 1 : 0);
+        features.put("as_thermal_risk", booleanValue(asRisks.get("thermalRisk")) ? 1 : 0);
+        features.put("as_storage_pressure_risk", booleanValue(asRisks.get("storagePressureRisk")) ? 1 : 0);
+        features.put("as_memory_pressure_risk", booleanValue(asRisks.get("memoryPressureRisk")) ? 1 : 0);
+        for (String severity : List.of("LOW", "MEDIUM", "HIGH", "CRITICAL")) {
+            features.put("as_severity_" + severity, severity.equals(text(row.get("as_severity"))) ? 1 : 0);
+        }
+        for (String failureCategory : List.of("RECOMMENDATION_BUILD", "PART_SELECTION", "COMPATIBILITY", "PERFORMANCE", "USER_ENVIRONMENT", "AGENT_LOG_ONLY", "OTHER")) {
+            features.put("as_failure_" + failureCategory, failureCategory.equals(text(row.get("as_failure_category"))) ? 1 : 0);
+        }
         return features;
     }
 
@@ -527,6 +572,8 @@ public class RecommendationTrainingService {
                 "category", firstText(text(row.get("category")), text(row.get("part_category"))),
                 "partId", text(row.get("part_id")),
                 "partName", text(row.get("part_name")),
+                "asFailureCategory", text(row.get("as_failure_category")),
+                "asSeverity", text(row.get("as_severity")),
                 "createdAt", DbValueMapper.timestamp(row, "created_at")
         );
     }
@@ -535,6 +582,7 @@ public class RecommendationTrainingService {
         return MockData.map(
                 "from", text(request.get("from")),
                 "to", text(request.get("to")),
+                "sourceSurfaces", stringList(request.get("sourceSurfaces")),
                 "eventTypes", stringList(request.get("eventTypes")),
                 "categories", stringList(request.get("categories"))
         );

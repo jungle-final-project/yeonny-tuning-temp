@@ -500,6 +500,8 @@ export function AdminDashboardPage() {
                       { metric: 'untrained eligible events', value: countLabel(trainingOverview.untrainedEligibleEvents) },
                       { metric: 'excluded dataset items', value: countLabel(trainingOverview.excludedDatasetItems) },
                       { metric: 'recent 7d events', value: countLabel(trainingOverview.recentSevenDayEvents) },
+                      { metric: 'AS confirmed feedback', value: countLabel(trainingOverview.asFeedbackEvents ?? 0) },
+                      { metric: 'untrained AS feedback', value: countLabel(trainingOverview.untrainedAsFeedbackEvents ?? 0) },
                       { metric: 'active model', value: trainingOverview.activeModel?.modelVersion ?? '활성 모델 없음' },
                       { metric: 'latest job', value: trainingOverview.latestJob ? <StatusBadge status={trainingOverview.latestJob.status} /> : 'Job 없음' }
                     ]}
@@ -510,9 +512,9 @@ export function AdminDashboardPage() {
                       type="button"
                       className="rounded bg-brand-blue px-3 py-2 text-xs font-black text-white disabled:opacity-50"
                       disabled={createDatasetMutation.isPending}
-                      onClick={() => createDatasetMutation.mutate({ name: `홈 추천부품 학습 데이터셋 ${new Date().toISOString().slice(0, 10)}` })}
+                      onClick={() => createDatasetMutation.mutate({ name: `홈 추천부품+AS 피드백 학습 데이터셋 ${new Date().toISOString().slice(0, 10)}` })}
                     >
-                      현재 HOME 이벤트로 데이터셋 생성
+                      현재 HOME/AS 피드백으로 데이터셋 생성
                     </button>
                     {trainingDatasetRows.length > 0 ? (
                       <DataTable columns={['name', 'status', 'counts', 'createdAt', 'action']} rows={trainingDatasetRows} />

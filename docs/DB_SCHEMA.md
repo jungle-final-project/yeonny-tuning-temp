@@ -41,6 +41,8 @@
 - `tool_invocations`
 - `rag_evidence`
 - `agent_log_uploads`
+- `agent_log_summaries`
+- `as_ticket_labels`
 - `as_tickets`
 - `as_chat_sessions`
 - `as_chat_messages`
@@ -1131,8 +1133,8 @@ MVP 로그 업로드 보안 정책:
 | 항목 | MVP 기준 결정값 |
 |---|---|
 | 최대 파일 크기 | 10 MiB. 초과 시 API는 `400 FILE_VALIDATION_ERROR`를 반환하고 row를 만들지 않는다. |
-| 허용 MIME | `application/json`, `application/x-ndjson`, `text/plain`, `application/octet-stream` 중 확장자가 허용된 경우만 허용한다. |
-| 허용 확장자 | `.jsonl`, `.ndjson`만 허용한다. `.json`, `.log`, 압축 파일은 V1에서 제외한다. |
+| 허용 MIME | 사용자 웹 업로드는 `application/json`, `application/x-ndjson`, `text/plain`, `application/octet-stream` 중 확장자가 허용된 경우만 허용한다. PC Agent 직접 업로드는 gzip multipart를 허용한다. |
+| 허용 확장자 | 사용자 웹 업로드는 `.jsonl`, `.ndjson`만 허용한다. PC Agent 직접 업로드 `/api/agent/log-uploads`는 `.gz` gzip JSONL incident window를 허용한다. |
 | JSONL 검증 | 빈 파일 금지, 각 line은 UTF-8 JSON object여야 한다. line array, primitive, trailing comma, 파싱 실패 line이 있으면 전체 업로드 실패다. |
 | line 수 제한 | 최대 20000 line. 초과 시 `400 FILE_VALIDATION_ERROR`다. |
 | PII 마스킹 | 저장 전에 email, 전화번호, access token, refresh token, Authorization header 형태 문자열을 마스킹한다. 마스킹 실패가 감지되면 저장하지 않고 `400 FILE_VALIDATION_ERROR`를 반환한다. |
@@ -1140,6 +1142,76 @@ MVP 로그 업로드 보안 정책:
 | 삭제 배치 책임 | 4번 owner가 삭제 대상 선정 query를 관리하고, 5번 owner가 scheduler/infra 실행을 승인한다. |
 | 관리자 접근 기록 | 관리자가 업로드 상세 또는 연결 AS ticket 상세에서 로그 요약/원문 위치를 조회하면 `admin_audit_logs`에 `AGENT_LOG_VIEWED` action을 기록한다. |
 | 원문 노출 범위 | public API는 원문 로그를 반환하지 않고 `summary`, `status`, `fileName`, `createdAt`, `deleteAfter`만 반환한다. admin API도 V1에서는 원문 다운로드 API를 만들지 않는다. |
+
+PC Agent 직접 업로드 정책:
+
+- `POST /api/agent/log-uploads`는 agent token Bearer 인증과 `Idempotency-Key`를 사용한다.
+- gzip 내부 JSONL row는 `schemaVersion`, `collectedAt`, `agentId`, `sequence`, `kind`, `payload`, `privacyFlags`를 가져야 한다.
+- `privacyFlags.containsRawPath=true`인데 `masked=true`가 아니면 `FILE_VALIDATION_ERROR`로 전체 업로드를 거부한다.
+- raw gzip은 `storage_path` 기준 로컬/볼륨 저장소에 보존하되, 학습 dataset row에는 전체 raw line을 복사하지 않는다.
+- `SYSTEM_METRIC`만 있어도 CPU/RAM/Disk/GPU/VRAM/GPU 온도, unavailableReason, sequence range, event count를 요약한다. 알 수 없는 `kind`는 실패가 아니라 `unknownKindCount`로 집계한다.
+
+### agent_log_summaries
+
+목적: PC Agent 업로드 1건을 AS/학습에서 사용할 수 있는 비민감 요약과 정량 피처로 저장한다.
+
+Owner: 4번, 추천 학습 bridge 협업 3번
+
+| 컬럼명 | 타입 | nullable | FK | 설명 |
+|---|---|---:|---|---|
+| `id` | `BIGINT` | no | - | 내부 PK |
+| `public_id` | `UUID` | no | - | 외부 ID |
+| `log_upload_id` | `BIGINT` | no | `agent_log_uploads.id` | 기준 업로드 |
+| `as_ticket_id` | `BIGINT` | yes | `as_tickets.id` | 연결 AS 티켓 |
+| `summary_payload` | `JSONB` | no | - | line count, sequence range, known signals 등 |
+| `feature_payload` | `JSONB` | no | - | XGBoost 학습 가능 정량 피처 |
+| `event_counts` | `JSONB` | no | - | kind별 이벤트 수 |
+| `risk_flags` | `JSONB` | no | - | thermal/storage/memory 등 위험 flag |
+| `privacy_summary` | `JSONB` | no | - | raw path row 수, raw 보존 정책 요약 |
+| `created_at` | `TIMESTAMPTZ` | no | - | 생성 시각 |
+
+Index:
+
+- unique: `agent_log_summaries.public_id`
+- unique: `agent_log_summaries.log_upload_id`
+- index: `agent_log_summaries.as_ticket_id`
+- index: `agent_log_summaries.created_at`
+
+정책:
+
+- `feature_payload`에는 `maxDiskUsage`, `avgMemoryUsage`, `maxGpuTemp`, `gpuMetricAvailable`, `unavailableReasonCounts`, `unknownKindCount` 같은 정량 피처만 저장한다.
+- raw gzip과 전체 JSONL은 재처리/감사용 보존 대상이며 추천 학습 dataset item의 `featuresSnapshot`에는 복사하지 않는다.
+- AS 티켓 상세 관리자 화면은 summary/feature/risk만 표시하고 원본 다운로드 API는 만들지 않는다.
+
+### as_ticket_labels
+
+목적: 관리자가 AS 티켓을 추천/부품 문제 학습 신호로 쓸지 확정한 라벨을 저장한다.
+
+Owner: 4번, 추천 학습 bridge 협업 3번
+
+| 컬럼명 | 타입 | nullable | FK | 설명 |
+|---|---|---:|---|---|
+| `id` | `BIGINT` | no | - | 내부 PK |
+| `public_id` | `UUID` | no | - | 외부 ID |
+| `as_ticket_id` | `BIGINT` | no | `as_tickets.id` | 기준 AS 티켓 |
+| `log_summary_id` | `BIGINT` | yes | `agent_log_summaries.id` | 연결 로그 요약 |
+| `failure_category` | `VARCHAR(80)` | no | - | `RECOMMENDATION_BUILD`, `PART_SELECTION`, `COMPATIBILITY`, `PERFORMANCE`, `USER_ENVIRONMENT`, `AGENT_LOG_ONLY`, `OTHER` |
+| `severity` | `VARCHAR(30)` | no | - | `LOW`, `MEDIUM`, `HIGH`, `CRITICAL` |
+| `related_part_id` | `BIGINT` | yes | `parts.id` | 관련 부품 |
+| `related_build_id` | `BIGINT` | yes | `builds.id` | 관련 견적 |
+| `recommendation_id` | `VARCHAR(160)` | yes | - | 추천 stable id |
+| `use_for_recommendation_training` | `BOOLEAN` | no | - | 추천 학습 후보 여부 |
+| `note` | `TEXT` | yes | - | 관리자 메모 |
+| `labeled_by_admin_id` | `BIGINT` | no | `users.id` | 라벨 확정 관리자 |
+| `created_at` | `TIMESTAMPTZ` | no | - | 생성 시각 |
+| `updated_at` | `TIMESTAMPTZ` | yes | - | 수정 시각 |
+
+정책:
+
+- AS 접수 자체는 자동 negative label이 아니다.
+- 같은 티켓에는 라벨 1개만 유지하고 반복 저장은 update로 처리한다.
+- `use_for_recommendation_training=true`이고 관련 part/build/recommendationId가 있는 경우에만 `recommendation_events.event_type=AS_CONFIRMED_NEGATIVE`, `source_surface=ADMIN_AS_FEEDBACK` 이벤트가 생성된다.
+- 라벨 저장은 `as_tickets.status`, `cause_candidates`, `upgrade_candidates`를 수정하지 않는다.
 
 ### as_tickets
 
@@ -1313,6 +1385,7 @@ MVP 기준 결정값:
 
 - AS 접수는 자동 negative label이 아니다.
 - `AS_CONFIRMED_NEGATIVE`는 관리자 확정 API로만 생성한다.
+- `AS_CONFIRMED_NEGATIVE`는 `as_ticket_labels.use_for_recommendation_training=true`이고 관련 part/build/recommendationId가 있는 경우에만 생성한다.
 - AS feedback 저장은 `as_tickets.status`, `cause_candidates`, `upgrade_candidates`를 수정하지 않는다.
 - 홈 하단 추천부품 노출/클릭/상세 이동 이벤트는 `source_surface=HOME_RECOMMENDED_PARTS`로 저장한다.
 - 홈 추천부품 관리자 라벨은 `source_surface=ADMIN_HOME_PART_FEEDBACK`, `event_type=ADMIN_PROMOTE | ADMIN_DEMOTE`로 저장한다. `user_id`와 `created_by_admin_id`는 둘 다 관리자 사용자 id다.
@@ -1385,7 +1458,7 @@ Owner: 3번
 | `id` | `BIGINT` | no | - | 내부 PK |
 | `public_id` | `UUID` | no | - | 외부 ID |
 | `name` | `VARCHAR(180)` | no | - | 관리자 지정 dataset 이름 |
-| `source_surface` | `VARCHAR(80)` | no | - | v1은 `HOME_PARTS` |
+| `source_surface` | `VARCHAR(80)` | no | - | v1 기본값은 `HOME_PARTS_WITH_AS_FEEDBACK` |
 | `filters` | `JSONB` | no | - | 생성 시 사용한 기간, event type, category 필터 |
 | `status` | `VARCHAR(30)` | no | - | `DRAFT`, `LOCKED`, `TRAINED`, `ARCHIVED` |
 | `eligible_count` | `INTEGER` | no | - | 생성 시점 eligible item 수 |
@@ -1399,7 +1472,7 @@ Owner: 3번
 
 운영 규칙:
 
-- dataset 생성은 `recommendation_events.source_surface IN ('HOME_RECOMMENDED_PARTS', 'ADMIN_HOME_PART_FEEDBACK')`만 snapshot으로 편입한다.
+- dataset 생성은 기본적으로 `recommendation_events.source_surface IN ('HOME_RECOMMENDED_PARTS', 'ADMIN_HOME_PART_FEEDBACK', 'ADMIN_AS_FEEDBACK')`를 snapshot으로 편입한다. request의 `sourceSurfaces`로 subset을 지정할 수 있다.
 - `DRAFT` dataset만 include/exclude 수정이 가능하다.
 - `LOCKED` dataset만 학습 Job을 만들 수 있다.
 - `TRAINED`와 `ARCHIVED` dataset은 학습 재현성을 위해 item snapshot을 수정하지 않는다.
@@ -1430,7 +1503,7 @@ Index:
 - index: `recommendation_training_dataset_items.event_id`
 - index: `(dataset_id, included)`
 
-“훈련에 투입 안 한 자료”는 `recommendation_events` 중 eligible surface이면서, `status='SUCCEEDED'`인 `recommendation_training_jobs`의 dataset item에 `included=true`로 포함된 적 없는 distinct event로 계산한다.
+“훈련에 투입 안 한 자료”는 `recommendation_events` 중 eligible surface이면서, `status='SUCCEEDED'`인 `recommendation_training_jobs`의 dataset item에 `included=true`로 포함된 적 없는 distinct event로 계산한다. `ADMIN_AS_FEEDBACK` item의 `features_snapshot`에는 `agent_log_summaries.feature_payload`, `risk_flags`, `as_ticket_labels.failure_category`, `severity`만 포함하고 raw gzip과 전체 JSONL line은 포함하지 않는다.
 
 ### recommendation_training_jobs
 

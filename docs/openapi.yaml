@@ -333,7 +333,7 @@ paths:
   /api/admin/recommendation-feedback/as-tickets/{id}:
     post:
       summary: AS 티켓 기반 추천 negative label 확정
-      description: 관리자가 AS 원인이 추천 조합/부품 선택과 관련 있다고 확정한 경우에만 학습 이벤트를 남긴다. as_tickets 상태와 cause_candidates, upgrade_candidates는 수정하지 않는다.
+      description: 관리자가 AS 원인이 추천 조합/부품 선택과 관련 있다고 확정한 경우에만 학습 라벨과 선택적 AS_CONFIRMED_NEGATIVE 이벤트를 남긴다. as_tickets 상태와 cause_candidates, upgrade_candidates는 수정하지 않는다. 연결 부품/견적/recommendationId가 없거나 useForRecommendationTraining=false면 라벨만 저장하고 이벤트는 만들지 않는다.
       security:
         - bearerAuth: []
       parameters:
@@ -351,11 +351,11 @@ paths:
               $ref: "#/components/schemas/AdminAsRecommendationFeedbackRequest"
       responses:
         "201":
-          description: 저장된 AS 확정 negative 이벤트
+          description: 저장된 AS 확정 라벨과 선택적 negative 이벤트
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/RecommendationEventDto"
+                $ref: "#/components/schemas/AdminAsRecommendationFeedbackResponse"
   /api/admin/recommendation-feedback/home-parts:
     post:
       summary: 홈 추천부품 관리자 라벨 저장
@@ -2081,6 +2081,37 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/AgentLogUploadDto"
+  /api/agent/log-uploads:
+    post:
+      summary: PC Agent gzip JSONL 로그 업로드와 AS 티켓 생성
+      description: PC Agent가 agent token으로 gzip JSONL incident window를 업로드한다. 서버는 envelope, privacy flag, gzip/JSONL을 검증하고 raw gzip을 보존한 뒤 요약 피처와 AS 티켓을 생성한다. raw line은 학습 row에 직접 복사하지 않는다.
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: header
+          name: Idempotency-Key
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              $ref: "#/components/schemas/PcAgentLogUploadRequest"
+      responses:
+        "201":
+          description: 생성된 업로드 Job, 로그 업로드, 요약, AS 티켓 id
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PcAgentLogUploadResponse"
+        "400":
+          description: consent 누락, gzip/JSONL/envelope/privacy validation 실패
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
   /api/agent-logs/{id}:
     get:
       summary: Agent 로그 업로드 상세
@@ -3097,13 +3128,29 @@ components:
     AdminAsRecommendationFeedbackRequest:
       type: object
       properties:
+        failureCategory:
+          type: string
+          enum: [RECOMMENDATION_BUILD, PART_SELECTION, COMPATIBILITY, PERFORMANCE, USER_ENVIRONMENT, AGENT_LOG_ONLY, OTHER]
+        severity:
+          type: string
+          enum: [LOW, MEDIUM, HIGH, CRITICAL]
         reason:
           type: string
         relatedPartId:
           type: string
           format: uuid
           nullable: true
+        relatedBuildId:
+          type: string
+          format: uuid
+          nullable: true
         recommendationId:
+          type: string
+          nullable: true
+        useForRecommendationTraining:
+          type: boolean
+          default: true
+        note:
           type: string
           nullable: true
         category:
@@ -3111,6 +3158,50 @@ components:
         metadata:
           type: object
           additionalProperties: true
+    AsTrainingLabelDto:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        failureCategory:
+          type: string
+        severity:
+          type: string
+        relatedPartId:
+          type: string
+          format: uuid
+          nullable: true
+        relatedPartName:
+          type: string
+          nullable: true
+        recommendationId:
+          type: string
+          nullable: true
+        useForRecommendationTraining:
+          type: boolean
+        note:
+          type: string
+          nullable: true
+        createdAt:
+          type: string
+          format: date-time
+          nullable: true
+        updatedAt:
+          type: string
+          format: date-time
+          nullable: true
+    AdminAsRecommendationFeedbackResponse:
+      type: object
+      properties:
+        label:
+          $ref: "#/components/schemas/AsTrainingLabelDto"
+        event:
+          nullable: true
+          allOf:
+            - $ref: "#/components/schemas/RecommendationEventDto"
+        trainingEventCreated:
+          type: boolean
     AdminHomePartRecommendationFeedbackRequest:
       type: object
       required: [partId, label]
@@ -3338,6 +3429,14 @@ components:
         recentSevenDayEvents:
           type: integer
           format: int64
+        asFeedbackEvents:
+          type: integer
+          format: int64
+          description: 관리자 확정 AS feedback 이벤트 수
+        untrainedAsFeedbackEvents:
+          type: integer
+          format: int64
+          description: 성공한 학습 Job dataset에 포함된 적 없는 AS feedback 이벤트 수
         activeModel:
           nullable: true
           allOf:
@@ -3368,6 +3467,11 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/PartCategory"
+        sourceSurfaces:
+          type: array
+          items:
+            type: string
+          description: "예: HOME_RECOMMENDED_PARTS, ADMIN_HOME_PART_FEEDBACK, ADMIN_AS_FEEDBACK"
     RecommendationTrainingDatasetBulkUpdateRequest:
       type: object
       properties:
@@ -5618,6 +5722,57 @@ components:
         deleteAfter:
           type: string
           format: date-time
+    PcAgentLogUploadRequest:
+      type: object
+      required: [file]
+      properties:
+        file:
+          type: string
+          format: binary
+          description: gzip 압축 JSONL incident window
+        rangeMinutes:
+          type: integer
+          default: 30
+        rangeStartedAt:
+          type: string
+          format: date-time
+          nullable: true
+        rangeEndedAt:
+          type: string
+          format: date-time
+          nullable: true
+        schemaVersion:
+          type: integer
+          nullable: true
+        symptom:
+          type: string
+          nullable: true
+    PcAgentLogUploadResponse:
+      type: object
+      required: [uploadJobId, logUploadId, ticketId, logSummaryId, status, analysisStatus, reviewStatus, supportDecision, rangeMinutes]
+      properties:
+        uploadJobId:
+          type: string
+          format: uuid
+        logUploadId:
+          type: string
+          format: uuid
+        ticketId:
+          type: string
+          format: uuid
+        logSummaryId:
+          type: string
+          format: uuid
+        status:
+          $ref: "#/components/schemas/AsTicketStatus"
+        analysisStatus:
+          $ref: "#/components/schemas/AsTicketAnalysisStatus"
+        reviewStatus:
+          $ref: "#/components/schemas/AsTicketReviewStatus"
+        supportDecision:
+          $ref: "#/components/schemas/AsTicketSupportDecision"
+        rangeMinutes:
+          type: integer
     AsTicketCreateRequest:
       type: object
       required: [symptom]
@@ -5656,6 +5811,26 @@ components:
         logUploadId:
           type: string
           format: uuid
+        logSummaryId:
+          type: string
+          format: uuid
+          nullable: true
+        logSummaryPayload:
+          type: object
+          additionalProperties: true
+          nullable: true
+        logFeaturePayload:
+          type: object
+          additionalProperties: true
+          nullable: true
+        logRiskFlags:
+          type: object
+          additionalProperties: true
+          nullable: true
+        asTrainingLabel:
+          nullable: true
+          allOf:
+            - $ref: "#/components/schemas/AsTrainingLabelDto"
         assignedAdminId:
           type: string
           format: uuid

@@ -2,12 +2,14 @@ package com.buildgraph.prototype.config.security;
 
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
+import jakarta.servlet.http.Part;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
+import java.util.Comparator;
 import java.util.Set;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
@@ -62,8 +64,16 @@ class AgentIdempotencyFilter extends OncePerRequestFilter {
             return;
         }
 
-        CachedBodyHttpServletRequest cachedRequest = new CachedBodyHttpServletRequest(request);
-        String requestHash = sha256Hex(cachedRequest.body());
+        boolean multipart = isMultipart(request);
+        HttpServletRequest downstreamRequest = request;
+        String requestHash;
+        if (multipart) {
+            requestHash = multipartRequestHash(request);
+        } else {
+            CachedBodyHttpServletRequest cachedRequest = new CachedBodyHttpServletRequest(request);
+            downstreamRequest = cachedRequest;
+            requestHash = sha256Hex(cachedRequest.body());
+        }
         AgentIdempotencyDecision decision = idempotencyService.reserve(
                 principal,
                 request.getMethod(),
@@ -86,7 +96,7 @@ class AgentIdempotencyFilter extends OncePerRequestFilter {
         }
 
         ContentCachingResponseWrapper responseWrapper = new ContentCachingResponseWrapper(response);
-        filterChain.doFilter(cachedRequest, responseWrapper);
+        filterChain.doFilter(downstreamRequest, responseWrapper);
         String responseBody = new String(responseWrapper.getContentAsByteArray(), StandardCharsets.UTF_8);
         idempotencyService.complete(
                 decision.recordId(),
@@ -129,16 +139,55 @@ class AgentIdempotencyFilter extends OncePerRequestFilter {
         return path == null ? request.getRequestURI() : path;
     }
 
-    private static String sha256Hex(byte[] body) {
+    private static boolean isMultipart(HttpServletRequest request) {
+        String contentType = request.getContentType();
+        return contentType != null && contentType.toLowerCase().startsWith(MediaType.MULTIPART_FORM_DATA_VALUE);
+    }
+
+    private static String multipartRequestHash(HttpServletRequest request) throws IOException, ServletException {
         try {
-            byte[] digest = MessageDigest.getInstance("SHA-256").digest(body);
-            StringBuilder builder = new StringBuilder(digest.length * 2);
-            for (byte value : digest) {
-                builder.append(String.format("%02x", value));
-            }
-            return builder.toString();
+            MessageDigest digest = MessageDigest.getInstance("SHA-256");
+            update(digest, request.getMethod());
+            update(digest, path(request));
+            update(digest, request.getContentType());
+            request.getParts().stream()
+                    .sorted(Comparator
+                            .comparing(Part::getName)
+                            .thenComparing(part -> part.getSubmittedFileName() == null ? "" : part.getSubmittedFileName()))
+                    .forEach(part -> {
+                        update(digest, part.getName());
+                        update(digest, part.getSubmittedFileName());
+                        update(digest, part.getContentType());
+                        update(digest, Long.toString(part.getSize()));
+                    });
+            return hex(digest.digest());
         } catch (NoSuchAlgorithmException exception) {
             throw new IllegalStateException("SHA-256 is not available.", exception);
         }
+    }
+
+    private static String sha256Hex(byte[] body) {
+        try {
+            return hex(MessageDigest.getInstance("SHA-256").digest(body));
+        } catch (NoSuchAlgorithmException exception) {
+            throw new IllegalStateException("SHA-256 is not available.", exception);
+        }
+    }
+
+    private static void update(MessageDigest digest, String value) {
+        if (value == null) {
+            digest.update((byte) 0);
+            return;
+        }
+        digest.update(value.getBytes(StandardCharsets.UTF_8));
+        digest.update((byte) 0);
+    }
+
+    private static String hex(byte[] digest) {
+        StringBuilder builder = new StringBuilder(digest.length * 2);
+        for (byte value : digest) {
+            builder.append(String.format("%02x", value));
+        }
+        return builder.toString();
     }
 }
