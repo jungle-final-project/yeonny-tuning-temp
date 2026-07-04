@@ -57,6 +57,70 @@ background:
   box-shadow: 0 10px 26px rgba(17, 24, 39, 0.05);
 }
 
+.home-fullpage-shell {
+  position: relative;
+  height: calc(100vh - 230px);
+  min-height: 540px;
+  overflow: hidden;
+}
+
+.home-fullpage-shell .fullpage-wrapper,
+.home-fullpage-shell .fp-section,
+.home-fullpage-shell .section {
+  height: 100% !important;
+}
+
+.home-fullpage-shell .fp-overflow {
+  max-height: 100%;
+  overflow-x: hidden !important;
+  overflow-y: auto !important;
+}
+
+.home-fullpage-section {
+  display: flex;
+  min-height: 540px;
+  flex-direction: column;
+  padding: 1.5rem 0 2rem;
+}
+
+.home-fullpage-section--hero {
+  justify-content: flex-start;
+}
+
+.home-fullpage-section--center {
+  justify-content: center;
+}
+
+@media (min-width: 640px) {
+  .home-fullpage-shell {
+    height: calc(100vh - 214px);
+  }
+}
+
+@media (min-width: 1280px) {
+  .home-fullpage-shell {
+    height: calc(100vh - 208px);
+  }
+}
+
+@media (max-width: 767px) {
+  .home-fullpage-shell {
+    height: auto;
+    min-height: 0;
+    overflow: visible;
+  }
+
+  .home-fullpage-shell .fullpage-wrapper,
+  .home-fullpage-shell .fp-section,
+  .home-fullpage-shell .section {
+    height: auto !important;
+  }
+
+  .home-fullpage-section {
+    min-height: 0;
+  }
+}
+
 .buildgraph-flow-node {
   box-sizing: border-box;
   overflow: hidden;

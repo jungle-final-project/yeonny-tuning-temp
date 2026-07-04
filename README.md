@@ -94,7 +94,7 @@ docker compose up --build
 
 | 화면 | 주소 | 확인할 내용 |
 | --- | --- | --- |
-| 홈 | http://localhost:5173 | 로그인 진입, 주요 쇼핑몰 메뉴 |
+| 홈 | http://localhost:5173 | fullPage 배너, 주요 이동 버튼, 추천상품, 인기 부품 랭킹 |
 | 셀프 견적 | http://localhost:5173/self-quote | 내부 자산 부품 목록, 카테고리 선택, 견적 담기 |
 | AS Chat | http://localhost:5173/support/ai-chat | 로그인 후 AS AI 챗봇 화면. 실제 답변 생성은 `OPENAI_API_KEY` 필요 |
 | API health | http://localhost:8080/api/health | API와 DB 연결 상태 |
@@ -304,7 +304,7 @@ python tools/benchmark_build_chat_profiles.py --variant-label vector-on
 
 ## 홈 추천부품 XGBoost scorer
 
-홈 하단 추천부품 4장은 `GET /api/recommendations/home-parts`가 반환합니다. Docker Compose는 `xgb-reranker` 서비스를 함께 실행하며, trained model scorer가 정상 응답하면 XGBoost score를 홈 추천부품 순서에 반영합니다. 모델 파일이 없거나 scorer가 baseline-shadow/오류를 반환하면 API는 deterministic fallback으로 4장을 반환해 사용자 화면을 유지합니다.
+홈 인기 부품 랭킹은 `GET /api/recommendations/home-parts`가 반환합니다. 현재 홈 화면은 `limit=8`로 2줄 랭킹을 표시하며, API의 기본값은 파라미터를 생략했을 때 4개입니다. Docker Compose는 `xgb-reranker` 서비스를 함께 실행하며, trained model scorer가 정상 응답하면 XGBoost score를 홈 추천부품 순서에 반영합니다. 모델 파일이 없거나 scorer가 baseline-shadow/오류를 반환하면 API는 deterministic fallback으로 사용자 화면을 유지합니다.
 
 권장 운영 순서:
 

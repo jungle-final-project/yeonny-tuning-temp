@@ -1325,7 +1325,9 @@ test('opens cooler internal assets from home category link', async ({ page }) =>
   });
 
   await page.goto('/');
-  await page.getByRole('link', { name: '쿨러' }).click();
+  await page.getByRole('link', { name: /전체 부품/ }).first().click();
+  await expect(page).toHaveURL('/self-quote');
+  await page.getByRole('button', { name: '쿨러' }).click();
 
   await expect(page).toHaveURL('/self-quote?category=COOLER');
   await expect(page.getByText('쿨러 부품 목록')).toBeVisible();
@@ -1377,7 +1379,9 @@ test('opens GPU internal assets from home category link', async ({ page }) => {
   });
 
   await page.goto('/');
-  await page.getByRole('link', { name: 'GPU', exact: true }).click();
+  await page.getByRole('link', { name: /전체 부품/ }).first().click();
+  await expect(page).toHaveURL('/self-quote');
+  await page.getByRole('button', { name: 'GPU', exact: true }).click();
 
   await expect(page).toHaveURL('/self-quote?category=GPU');
   await expect(page.getByText('GPU 부품 목록')).toBeVisible();

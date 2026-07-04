@@ -311,7 +311,7 @@ paths:
   /api/recommendations/home-parts:
     get:
       summary: 홈 추천 부품 랭킹
-      description: 홈 하단 인기 부품 랭킹 카드에 표시할 ACTIVE 내부 자산 4개를 반환한다. XGBoost scorer가 실패하면 deterministic fallback 랭킹을 반환한다.
+      description: 홈 하단 인기 부품 랭킹 카드에 표시할 ACTIVE 내부 자산을 limit 기준으로 반환한다. 현재 홈 화면은 limit=8로 2줄 랭킹을 표시하고, limit을 생략하면 기본 4개를 반환한다. XGBoost scorer가 실패하면 deterministic fallback 랭킹을 반환한다.
       security:
         - bearerAuth: []
       parameters:

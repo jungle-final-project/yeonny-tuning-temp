@@ -12,6 +12,7 @@
     "test:e2e:ai-latency": "playwright test -c playwright.ai-latency.config.ts"
   },
   "dependencies": {
+    "@fullpage/react-fullpage": "^0.1.49",
     "@tanstack/react-query": "^5.66.0",
     "@xyflow/react": "^12.11.1",
     "lucide-react": "^0.468.0",
