@@ -1870,3 +1870,34 @@ test('keeps the unified home usable on mobile width', async ({ page }) => {
   const hasBodyOverflow = await page.evaluate(() => document.documentElement.scrollWidth > window.innerWidth + 1);
   expect(hasBodyOverflow).toBe(false);
 });
+
+test('does not fetch the quote draft until the assistant panel is opened', async ({ page }) => {
+  let draftGetCount = 0;
+  await page.route('**/api/quote-drafts/current', async (route) => {
+    if (route.request().method() === 'GET') {
+      draftGetCount += 1;
+    }
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        id: 'draft-home-empty',
+        status: 'ACTIVE',
+        name: '셀프 견적',
+        items: [],
+        totalPrice: 0,
+        itemCount: 0
+      })
+    });
+  });
+
+  await openHomeAsUser(page);
+
+  // 패널을 열기 전에는 현재 견적(드래프트)을 선행 조회하지 않는다
+  await page.waitForTimeout(1000);
+  expect(draftGetCount).toBe(0);
+
+  // 패널을 열면 그때 draft를 미리 받는다
+  await openDesktopAiAssistant(page);
+  await expect.poll(() => draftGetCount).toBeGreaterThan(0);
+});

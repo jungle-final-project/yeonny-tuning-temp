@@ -57,10 +57,13 @@ export function AiBuildAssistant({ surface = 'home' }: AiBuildAssistantProps) {
   const [applyingBuildId, setApplyingBuildId] = useState<string | null>(null);
   const [pendingSubmit, setPendingSubmit] = useState<string | null>(null);
   const hasToken = Boolean(getToken());
+  // 패널을 실제로 연 뒤에만 현재 견적(드래프트)을 미리 받는다. 전역 렌더라 로그인만으로
+  // 모든 페이지에서 draft API가 선행되던 것을 없앤다. 완성/시뮬레이션 요청은 패널 open 시점에
+  // 이미 prefetch돼 있어 체감 저하가 없고, 예산/미지원/명확화는 draft 없이 즉시 전송된다.
   const quoteDraftQuery = useQuery({
     queryKey: ['quote-draft', 'current'],
     queryFn: getCurrentQuoteDraft,
-    enabled: hasToken
+    enabled: hasToken && open
   });
 
   useEffect(() => {
