@@ -150,6 +150,34 @@ class ToolCheckServiceBenchmarkTest {
         assertThat(details.get("coolerHeadroomMm")).isEqualTo(-10);
     }
 
+    @Test
+    void powerToolWarnsInsteadOfFailingWhenPsuMeetsVendorRecommendation() {
+        JdbcTemplate jdbcTemplate = mock(JdbcTemplate.class);
+        ToolCheckService service = new ToolCheckService(jdbcTemplate);
+
+        // GPU 노드에 "권장 파워 750W"로 표시되는 값과 정확히 같은 750W PSU를 담은 구성.
+        // 내부 추정 부하(690W)+120=810W에는 못 미치고 headroom(60W)<80이라 예전에는 FAIL(빨강)이 떴다.
+        // 표시된 권장 파워를 충족했으므로 이제 FAIL이 아니라 WARN이어야 한다.
+        List<Map<String, Object>> results = service.checkBuild(List.of(
+                new ToolBuildPart(1L, "cpu-public-id", "CPU", "Ryzen 7", "AMD", 400_000, Map.of("socket", "AM5", "wattage", 200)),
+                new ToolBuildPart(2L, "gpu-public-id", "GPU", "RTX 5070", "NVIDIA", 900_000, Map.of("wattage", 480, "requiredSystemPowerW", 750, "lengthMm", 300)),
+                new ToolBuildPart(3L, "psu-public-id", "PSU", "750W Gold", "FSP", 150_000, Map.of("capacityW", 750)),
+                new ToolBuildPart(4L, "case-public-id", "CASE", "Airflow Case", "Fractal", 160_000, Map.of("maxGpuLengthMm", 360, "maxCpuCoolerHeightMm", 180))
+        ), 3_000_000);
+
+        Map<String, Object> power = results.stream()
+                .filter(result -> "power".equals(result.get("tool")))
+                .findFirst()
+                .orElseThrow();
+        @SuppressWarnings("unchecked")
+        Map<String, Object> details = (Map<String, Object>) power.get("details");
+
+        // 표시된 권장 파워(750W)와 담은 PSU 정격(750W)이 같은 상황: 예전에는 FAIL(빨강)이었으나 이제 WARN이어야 한다.
+        assertThat(power.get("status")).isEqualTo("WARN");
+        assertThat(details.get("vendorRecommendedPsuW")).isEqualTo(750);
+        assertThat(details.get("psuRatedCapacityW")).isEqualTo(750);
+    }
+
     private static Entry<String, Object> entry(String key, Object value) {
         return Map.entry(key, value);
     }

@@ -102,12 +102,20 @@ public class ToolCheckService {
         int requiredRatedCapacity = Math.max(vendorRecommendedPsu, estimatedWattage + 120);
         int headroom = psuCapacity - estimatedWattage;
         int loadPercent = psuCapacity <= 0 ? 100 : (int) Math.round((estimatedWattage * 100.0) / psuCapacity);
+        // 그래프 GPU 노드에 "권장 파워"로 표시되는 값(requiredSystemPowerW)을 담은 PSU가 충족하면,
+        // 내부 추정 기준(estimatedWattage+120)에 못 미쳐도 빨간 FAIL이 아니라 WARN으로 둔다.
+        // 화면엔 "권장 750W"라 해놓고 750W PSU를 담았을 때 FAIL이 뜨는 모순을 막기 위함이다.
+        boolean meetsVendorRecommendation = vendorRecommendedPsu > 0 && psuCapacity >= vendorRecommendedPsu;
         boolean pass = psuCapacity >= requiredRatedCapacity && loadPercent <= 85;
-        boolean warn = psuCapacity >= estimatedWattage && headroom >= 80;
+        boolean warn = psuCapacity >= estimatedWattage && (headroom >= 80 || meetsVendorRecommendation);
         return tool("power",
                 pass ? "PASS" : warn ? "WARN" : "FAIL",
                 headroom >= 180 && loadPercent <= 80 ? "HIGH" : "MEDIUM",
-                pass ? "PSU 정격 출력이 예상 지속 부하와 GPU 권장 정격 파워를 충족합니다." : "PSU 정격 출력 여유가 낮아 상위 용량을 검토해야 합니다.",
+                pass
+                        ? "PSU 정격 출력이 예상 지속 부하와 GPU 권장 정격 파워를 충족합니다."
+                        : warn
+                                ? "PSU 정격 출력이 GPU 권장 파워는 충족하지만 지속 부하 대비 여유가 넉넉하지 않아 상위 용량을 검토하면 좋습니다."
+                                : "PSU 정격 출력이 예상 부하와 GPU 권장 파워에 못 미쳐 상위 용량이 필요합니다.",
                 MockData.map(
                         "estimatedContinuousLoadW", estimatedWattage,
                         "psuRatedCapacityW", psuCapacity,
