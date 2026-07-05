@@ -883,7 +883,9 @@ function toFlowElements(
     source: firstFlowNodeIdByGraphNodeId.get(String(edge.source)) ?? edge.source,
     target: firstFlowNodeIdByGraphNodeId.get(String(edge.target)) ?? edge.target,
     label: edge.label,
-    type: 'bezier',
+    // React Flow 내장 엣지 타입에 'bezier'는 없다. 'default'가 곧 bezier 곡선이다.
+    // ('bezier' 지정 시 매 엣지마다 "Edge type bezier not found" 경고 후 default로 폴백)
+    type: 'default',
     animated: false,
     className: `buildgraph-flow-edge buildgraph-flow-edge--${edge.status.toLowerCase()}`,
     interactionWidth: 20,

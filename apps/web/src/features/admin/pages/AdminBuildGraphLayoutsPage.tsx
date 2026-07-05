@@ -258,7 +258,8 @@ function edge(id: string, source: string, target: string, label: string, status:
     source,
     target,
     label,
-    type: 'bezier',
+    // 'bezier'는 React Flow 내장 타입이 아니다. 'default'가 bezier 곡선을 렌더한다.
+    type: 'default',
     markerEnd: {
       type: MarkerType.ArrowClosed,
       color: edgeColor(status),
