@@ -336,19 +336,26 @@ public class BuildChatService {
                 && (cheonManWonMatcher.group(1) != null || cheonManWonMatcher.group(2) != null || cheonManWonMatcher.group(3) != null)) {
             double thousands = cheonManWonMatcher.group(1) == null ? 1 : Double.parseDouble(cheonManWonMatcher.group(1));
             double hundreds = cheonManWonMatcher.group(2) == null ? 0 : Double.parseDouble(cheonManWonMatcher.group(2));
-            return (int) Math.round(thousands * 10_000_000 + hundreds * 1_000_000);
+            return clampWon(thousands * 10_000_000 + hundreds * 1_000_000);
         }
         Matcher baekManWonMatcher = BUDGET_BAEKMANWON.matcher(normalized);
         if (baekManWonMatcher.find()) {
-            return (int) Math.round(Double.parseDouble(baekManWonMatcher.group(1)) * 1_000_000);
+            return clampWon(Double.parseDouble(baekManWonMatcher.group(1)) * 1_000_000);
         }
         Matcher manWonMatcher = BUDGET_MANWON.matcher(normalized);
         if (manWonMatcher.find()) {
-            return (int) Math.round(Double.parseDouble(manWonMatcher.group(1)) * 10_000);
+            return clampWon(Double.parseDouble(manWonMatcher.group(1)) * 10_000);
         }
         Matcher wonMatcher = BUDGET_WON.matcher(normalized);
         if (wonMatcher.find()) {
-            return Integer.parseInt(wonMatcher.group(1));
+            // 원 단위 숫자는 상한이 없으므로 Integer 범위를 넘으면 NumberFormatException으로 500이 났다.
+            // 다른 예산 파서(만원/백만원/천만원)와 동일하게 포화 캐스팅한다.
+            try {
+                long won = Long.parseLong(wonMatcher.group(1));
+                return (int) Math.min(won, Integer.MAX_VALUE);
+            } catch (NumberFormatException ignored) {
+                return null;
+            }
         }
         return null;
     }
@@ -361,6 +368,12 @@ public class BuildChatService {
             result = result.replace(String.valueOf(digits.charAt(index)), String.valueOf(index + 1));
         }
         return result;
+    }
+
+    // 곱셈 결과가 Integer 범위를 넘으면 (int) 캐스팅이 조용히 랩어라운드해 음수/잘못된 예산이
+    // 그리디 엔진에 유입됐다. Integer.MAX_VALUE로 포화시켜 방지한다.
+    private static int clampWon(double won) {
+        return (int) Math.min(Math.round(won), (long) Integer.MAX_VALUE);
     }
 
     static BudgetIntent budgetIntent(String message) {

@@ -298,6 +298,9 @@ export function HomePage() {
           })
           .filter((item): item is FeaturedBuildResolvedPart => Boolean(item));
       },
+      // 인기상품 탭이 활성일 때만 발사한다. 게이트가 없으면 마운트 시 6빌드×8부품=48개 요청이
+      // 무조건 나가, 인기상품 탭을 보지 않는 AI-탭 사용자에게도 불필요한 fan-out이 발생한다.
+      enabled: recommendationTab === 'popular',
       staleTime: 60_000
     }))
   });

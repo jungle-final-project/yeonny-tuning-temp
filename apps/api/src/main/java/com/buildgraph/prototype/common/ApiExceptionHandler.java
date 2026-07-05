@@ -1,8 +1,10 @@
 package com.buildgraph.prototype.common;
 
 import jakarta.validation.ConstraintViolationException;
+import java.sql.SQLException;
 import java.util.List;
 import java.util.Map;
+import org.springframework.dao.DataAccessException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.HttpStatusCode;
 import org.springframework.http.ResponseEntity;
@@ -46,6 +48,36 @@ public class ApiExceptionHandler {
     ResponseEntity<ApiErrorResponse> handleValidationException(Exception exception) {
         return ResponseEntity.badRequest()
                 .body(new ApiErrorResponse("VALIDATION_ERROR", VALIDATION_ERROR_MESSAGE, detailsFor(exception)));
+    }
+
+    @ExceptionHandler(DataAccessException.class)
+    ResponseEntity<ApiErrorResponse> handleDataAccess(DataAccessException exception) {
+        // 잘못된 public_id 등이 'WHERE ...::uuid' 캐스팅에서 실패하면 Postgres가 SQLState 22P02
+        // (invalid_text_representation)를 던진다. 존재하지 않는 리소스 요청이므로 500이 아니라 404다.
+        if ("22P02".equals(sqlStateOf(exception))) {
+            return ResponseEntity.status(HttpStatus.NOT_FOUND)
+                    .body(new ApiErrorResponse("NOT_FOUND", "요청한 리소스를 찾을 수 없습니다."));
+        }
+        // 그 밖의 DB 오류는 실제 서버 장애이므로 500을 유지한다.
+        return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                .body(new ApiErrorResponse("INTERNAL_ERROR", DEFAULT_ERROR_MESSAGE));
+    }
+
+    private static String sqlStateOf(Throwable throwable) {
+        for (Throwable cause = throwable; cause != null; cause = cause.getCause()) {
+            if (cause instanceof SQLException sqlException) {
+                return sqlException.getSQLState();
+            }
+        }
+        return null;
+    }
+
+    @ExceptionHandler(NumberFormatException.class)
+    ResponseEntity<ApiErrorResponse> handleNumberFormat(NumberFormatException exception) {
+        // 사용자 입력을 파싱하는 여러 지점(예산/수량 문자열 등)에서 비숫자·범위 초과 값이 오면
+        // NumberFormatException으로 500이 났다. 입력 오류이므로 400으로 돌린다.
+        return ResponseEntity.badRequest()
+                .body(new ApiErrorResponse("VALIDATION_ERROR", VALIDATION_ERROR_MESSAGE, Map.of("reason", "INVALID_NUMBER")));
     }
 
     private Map<String, Object> detailsFor(Exception exception) {
