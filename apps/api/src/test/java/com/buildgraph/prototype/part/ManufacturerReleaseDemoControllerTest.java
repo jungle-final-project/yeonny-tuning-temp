@@ -11,7 +11,9 @@ import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
 import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MockMvc;
 
+// 데모 피드는 안전-기본으로 꺼져 있으므로(프로덕션 비노출) 테스트에서 명시적으로 켠다.
 @WebMvcTest(ManufacturerReleaseDemoController.class)
+@org.springframework.test.context.TestPropertySource(properties = "part.manufacturer-release-intake.demo-feed-enabled=true")
 class ManufacturerReleaseDemoControllerTest {
     @Autowired
     private MockMvc mockMvc;

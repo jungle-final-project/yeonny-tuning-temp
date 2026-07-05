@@ -32,10 +32,16 @@ public class RecommendationTrainingService {
 
     private final JdbcTemplate jdbcTemplate;
     private final RecommendationScoringClient scoringClient;
+    private final HomePartRecommendationService homePartRecommendationService;
 
-    public RecommendationTrainingService(JdbcTemplate jdbcTemplate, RecommendationScoringClient scoringClient) {
+    public RecommendationTrainingService(
+            JdbcTemplate jdbcTemplate,
+            RecommendationScoringClient scoringClient,
+            HomePartRecommendationService homePartRecommendationService
+    ) {
         this.jdbcTemplate = jdbcTemplate;
         this.scoringClient = scoringClient;
+        this.homePartRecommendationService = homePartRecommendationService;
     }
 
     public Map<String, Object> overview() {
@@ -378,6 +384,8 @@ public class RecommendationTrainingService {
                     activated_at = now()
                 WHERE id = ?
                 """, longValue(model, "id"));
+        // 홈 서빙 경로가 다음 요청부터 즉시 동기 스코어링(실모델 순위 반영)으로 전환하도록 알린다.
+        homePartRecommendationService.notifyScorerModelChanged(true);
         return modelById(longValue(model, "id"));
     }
 
@@ -395,6 +403,8 @@ public class RecommendationTrainingService {
             } catch (Exception ignored) {
                 // Retiring the DB model must not fail only because the optional scorer is unavailable.
             }
+            // 실모델이 내려갔으므로 홈 서빙은 baseline 모드(비동기 shadow)로 되돌린다.
+            homePartRecommendationService.notifyScorerModelChanged(false);
         }
         return modelById(longValue(model, "id"));
     }

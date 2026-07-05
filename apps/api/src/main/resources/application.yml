@@ -193,3 +193,10 @@ part:
     cron: "${PART_MANUFACTURER_RELEASE_INTAKE_CRON:0 0 6 * * *}"
     zone: "${PART_MANUFACTURER_RELEASE_INTAKE_ZONE:Asia/Seoul}"
     user-agent: ${PART_MANUFACTURER_RELEASE_INTAKE_USER_AGENT:BuildGraphBot/0.1}
+    # 인증 없는 데모 RSS 피드(/api/demo/...) 노출 여부. 기본 false(프로덕션 안전 기본),
+    # 로컬/데모 스택에서만 compose env로 켠다.
+    demo-feed-enabled: ${PART_MANUFACTURER_RELEASE_DEMO_FEED_ENABLED:false}
+
+demo:
+  # 데모 시연 중 가격/자산 mutating 수집(스케줄러 4종 + 관리자 가격 Job)을 일괄 동결하는 단일 스위치.
+  freeze-mutations: ${DEMO_FREEZE_MUTATIONS:false}

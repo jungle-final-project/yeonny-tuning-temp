@@ -14,8 +14,12 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.Executor;
+import java.util.concurrent.Executors;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
@@ -28,17 +32,64 @@ public class HomePartRecommendationService {
     private final RecommendationScoringClient scoringClient;
     private final RecommendationModelRegistry modelRegistry;
     private final boolean shadowEnabled;
+    private final Executor shadowExecutor;
+    private final long shadowThrottleMs;
+    // 스코어러가 실모델을 서빙 중인지에 대한 마지막 관측. null=미확인(동기 1회 탐지),
+    // FALSE=baseline(홈 응답을 블로킹하지 않고 비동기 shadow만), TRUE=실모델(순위 반영 위해 동기).
+    private volatile Boolean scorerServingRealModel;
+    // request_hash별 최근 shadow 기록 시각 — 같은 후보 집합의 연속 새로고침이 scorer 호출과
+    // shadow 테이블 행을 무한 증식시키지 않도록 스로틀한다.
+    private final Map<String, Long> recentShadowRequests = new ConcurrentHashMap<>();
 
+    @Autowired
     public HomePartRecommendationService(
             JdbcTemplate jdbcTemplate,
             RecommendationScoringClient scoringClient,
             RecommendationModelRegistry modelRegistry,
-            @Value("${recommendation.reranker.shadow-enabled:true}") boolean shadowEnabled
+            @Value("${recommendation.reranker.shadow-enabled:true}") boolean shadowEnabled,
+            @Value("${recommendation.reranker.shadow-throttle-ms:300000}") long shadowThrottleMs
+    ) {
+        this(jdbcTemplate, scoringClient, modelRegistry, shadowEnabled,
+                Executors.newSingleThreadExecutor(runnable -> {
+                    Thread thread = new Thread(runnable, "home-shadow-recorder");
+                    thread.setDaemon(true);
+                    return thread;
+                }),
+                shadowThrottleMs);
+    }
+
+    HomePartRecommendationService(
+            JdbcTemplate jdbcTemplate,
+            RecommendationScoringClient scoringClient,
+            RecommendationModelRegistry modelRegistry,
+            boolean shadowEnabled
+    ) {
+        // 테스트용: 비동기 경로를 같은 스레드에서 실행하고 스로틀을 끈다.
+        this(jdbcTemplate, scoringClient, modelRegistry, shadowEnabled, Runnable::run, 0L);
+    }
+
+    HomePartRecommendationService(
+            JdbcTemplate jdbcTemplate,
+            RecommendationScoringClient scoringClient,
+            RecommendationModelRegistry modelRegistry,
+            boolean shadowEnabled,
+            Executor shadowExecutor,
+            long shadowThrottleMs
     ) {
         this.jdbcTemplate = jdbcTemplate;
         this.scoringClient = scoringClient;
         this.modelRegistry = modelRegistry;
         this.shadowEnabled = shadowEnabled;
+        this.shadowExecutor = shadowExecutor;
+        this.shadowThrottleMs = shadowThrottleMs;
+    }
+
+    /**
+     * 모델 activate/retire 시 훈련 서비스가 호출해 서빙 모드를 즉시 갱신한다.
+     * (미호출이어도 다음 스코어러 응답에서 자동 보정되지만, 승급 직후 반영 지연을 없앤다)
+     */
+    public void notifyScorerModelChanged(Boolean realModelActive) {
+        this.scorerServingRealModel = realModelActive;
     }
 
     public Map<String, Object> homeParts(CurrentUserService.CurrentUser user, Integer limit) {
@@ -177,6 +228,12 @@ public class HomePartRecommendationService {
                         "features", candidate.features(index)
                 ));
             }
+            if (Boolean.FALSE.equals(scorerServingRealModel)) {
+                // 스코어러가 baseline임이 확인된 상태: 점수가 순위에 쓰이지 않으므로 홈 응답을
+                // 스코어러 호출(≤1.2s)로 블로킹하지 않는다. shadow 수집은 백그라운드로 계속한다.
+                recordShadowAsync(user, requestHash, payloadCandidates, shadowSnapshot(candidates));
+                return new ScoringOutcome("FALLBACK", null, true);
+            }
             Map<String, Object> scorerResponse = scoringClient.score(scoringClient.payload(
                     requestHash,
                     "HOME_PARTS",
@@ -237,14 +294,112 @@ public class HomePartRecommendationService {
             String modelVersion = text(scorerResponse.get("modelVersion"));
             if ("baseline-shadow".equals(modelVersion)) {
                 // 후보 점수를 건드리지 않았으므로 FALLBACK 표시와 실제 순위(Java deterministicScore)가 일치한다.
+                // baseline임을 기억해 다음 요청부터는 스코어러 호출로 홈 응답을 블로킹하지 않는다.
+                scorerServingRealModel = false;
                 return new ScoringOutcome("FALLBACK", null, true);
             }
+            scorerServingRealModel = true;
             pendingScores.forEach(HomePartCandidate::score);
             return new ScoringOutcome("XGBOOST", modelVersion, false);
         } catch (Exception error) {
             log.warn("Home part XGBoost scoring skipped: {}", error.getMessage());
             return new ScoringOutcome("FALLBACK", null, true);
         }
+    }
+
+    // 비동기 shadow 기록용 불변 스냅샷 — 요청 스레드의 후보 객체(rankPosition이 이후 변이됨)를
+    // 백그라운드 스레드와 공유하지 않기 위해 필요한 값만 미리 직렬화해 둔다.
+    private record ShadowCandidateSnapshot(String publicId, Long internalId, int rankPosition, String featuresJson) {}
+
+    private List<ShadowCandidateSnapshot> shadowSnapshot(List<HomePartCandidate> candidates) throws Exception {
+        List<ShadowCandidateSnapshot> snapshot = new ArrayList<>(candidates.size());
+        for (int index = 0; index < candidates.size(); index += 1) {
+            HomePartCandidate candidate = candidates.get(index);
+            snapshot.add(new ShadowCandidateSnapshot(
+                    candidate.publicId(),
+                    candidate.internalId(),
+                    index,
+                    OBJECT_MAPPER.writeValueAsString(candidate.features(index))
+            ));
+        }
+        return snapshot;
+    }
+
+    private void recordShadowAsync(
+            CurrentUserService.CurrentUser user,
+            String requestHash,
+            List<Map<String, Object>> payloadCandidates,
+            List<ShadowCandidateSnapshot> snapshot
+    ) {
+        long now = System.currentTimeMillis();
+        Long lastRecorded = recentShadowRequests.get(requestHash);
+        if (lastRecorded != null && now - lastRecorded < shadowThrottleMs) {
+            return; // 같은 후보 집합을 최근에 기록했으면 scorer 호출·INSERT 모두 생략
+        }
+        recentShadowRequests.put(requestHash, now);
+        if (recentShadowRequests.size() > 512) {
+            recentShadowRequests.entrySet().removeIf(entry -> now - entry.getValue() >= shadowThrottleMs);
+        }
+        Long userInternalId = user.internalId();
+        shadowExecutor.execute(() -> {
+            try {
+                Map<String, Object> scorerResponse = scoringClient.score(scoringClient.payload(
+                        requestHash,
+                        "HOME_PARTS",
+                        false,
+                        payloadCandidates
+                ));
+                List<Map<String, Object>> scores = objectMaps(scorerResponse.get("scores"));
+                if (scores.isEmpty()) {
+                    return;
+                }
+                Long modelVersionId = modelRegistry.upsertShadowModelVersion(scorerResponse);
+                Map<String, ShadowCandidateSnapshot> byPartId = new LinkedHashMap<>();
+                for (ShadowCandidateSnapshot row : snapshot) {
+                    byPartId.put(row.publicId(), row);
+                }
+                for (Map<String, Object> scoreRow : scores) {
+                    ShadowCandidateSnapshot row = byPartId.get(firstText(text(scoreRow.get("partId")), text(scoreRow.get("candidateId"))));
+                    Double score = decimal(scoreRow.get("score"));
+                    if (row == null || score == null) {
+                        continue;
+                    }
+                    jdbcTemplate.update("""
+                            INSERT INTO recommendation_shadow_scores (
+                              user_id,
+                              model_version_id,
+                              source_surface,
+                              request_hash,
+                              candidate_type,
+                              candidate_id,
+                              part_id,
+                              score,
+                              rank_position,
+                              features,
+                              raw_response
+                            )
+                            VALUES (?, ?, 'HOME_RECOMMENDED_PARTS', ?, 'PART', ?, ?, ?, ?, ?::jsonb, ?::jsonb)
+                            """,
+                            userInternalId,
+                            modelVersionId,
+                            requestHash,
+                            row.publicId(),
+                            row.internalId(),
+                            score,
+                            row.rankPosition(),
+                            row.featuresJson(),
+                            OBJECT_MAPPER.writeValueAsString(scoreRow)
+                    );
+                }
+                // 백그라운드 관측으로도 서빙 모드를 자동 보정한다(예: 별도 경로로 모델이 activate된 경우).
+                String modelVersion = text(scorerResponse.get("modelVersion"));
+                if (modelVersion != null && !"baseline-shadow".equals(modelVersion)) {
+                    scorerServingRealModel = true;
+                }
+            } catch (Exception error) {
+                log.warn("Home part shadow recording skipped: {}", error.getMessage());
+            }
+        });
     }
 
     private static List<HomePartCandidate> diverseTop(List<HomePartCandidate> ranked, int limit) {

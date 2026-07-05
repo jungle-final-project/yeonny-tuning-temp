@@ -90,6 +90,10 @@ services:
       AGENT_LOG_STORAGE_ROOT: ${AGENT_LOG_STORAGE_ROOT:-/data/agent-logs}
       # 로컬/데모 편의를 위해 데모 등록 토큰을 켜 둔다. 프로덕션 배포에서는 이 값을 비우거나 DB 발급 토큰으로 대체.
       AGENT_DEMO_ACTIVATION_TOKEN: ${AGENT_DEMO_ACTIVATION_TOKEN:-demo-agent-activation-token}
+      # 로컬 데모 스택에서만 데모 RSS 피드를 노출한다(프로덕션 기본 off).
+      PART_MANUFACTURER_RELEASE_DEMO_FEED_ENABLED: ${PART_MANUFACTURER_RELEASE_DEMO_FEED_ENABLED:-true}
+      # 데모 시연 직전 true로 켜면 가격/자산 수집이 일괄 동결된다.
+      DEMO_FREEZE_MUTATIONS: ${DEMO_FREEZE_MUTATIONS:-false}
       OPENAI_BASE_URL: ${OPENAI_BASE_URL:-https://api.openai.com/v1}
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
       OPENAI_MODEL: ${OPENAI_MODEL:-gpt-5.5}

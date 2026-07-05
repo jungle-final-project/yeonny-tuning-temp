@@ -63,6 +63,40 @@ class HomePartRecommendationServiceTest {
     }
 
     @Test
+    void homePartsStopsBlockingOnScorerAfterBaselineDetected() throws Exception {
+        // 첫 호출은 동기 1회 탐지(baseline 확인), 이후 호출은 스코어러로 홈 응답을 블로킹하지 않는다(감사 B9).
+        // directExecutor로 비동기 기록이 인라인 실행되고, 스로틀(60s) 안의 같은 후보 집합 재호출은
+        // scorer 호출·shadow 기록 모두 생략된다.
+        when(jdbcTemplate.queryForList(anyString())).thenReturn(List.of(
+                part("gpu-1", "GPU", 900000, 60),
+                part("cpu-1", "CPU", 600000, 50)
+        ));
+        when(scoringClient.payload(org.mockito.ArgumentMatchers.anyString(), org.mockito.ArgumentMatchers.eq("HOME_PARTS"), org.mockito.ArgumentMatchers.eq(false), org.mockito.ArgumentMatchers.anyList()))
+                .thenReturn(Map.of("candidates", List.of()));
+        when(scoringClient.score(org.mockito.ArgumentMatchers.anyMap())).thenReturn(Map.of(
+                "modelName", "baseline",
+                "modelVersion", "baseline-shadow",
+                "scores", List.of(
+                        Map.of("partId", "gpu-1", "score", 1.0),
+                        Map.of("partId", "cpu-1", "score", 2.0)
+                )
+        ));
+        when(modelRegistry.upsertShadowModelVersion(any())).thenReturn(100L);
+        HomePartRecommendationService service = new HomePartRecommendationService(
+                jdbcTemplate, scoringClient, modelRegistry, true, Runnable::run, 60_000L);
+
+        Map<String, Object> first = service.homeParts(USER, 4);   // 동기 탐지 → baseline 확정
+        Map<String, Object> second = service.homeParts(USER, 4);  // 비동기 기록 경로(인라인 실행)
+        Map<String, Object> third = service.homeParts(USER, 4);   // 스로틀로 scorer 호출 생략
+
+        assertThat(first.get("fallbackUsed")).isEqualTo(true);
+        assertThat(second.get("fallbackUsed")).isEqualTo(true);
+        assertThat(third.get("fallbackUsed")).isEqualTo(true);
+        org.mockito.Mockito.verify(scoringClient, org.mockito.Mockito.times(2))
+                .score(org.mockito.ArgumentMatchers.anyMap());
+    }
+
+    @Test
     void homePartsUsesScorerScoreWhenScorerResponds() throws Exception {
         when(jdbcTemplate.queryForList(anyString())).thenReturn(List.of(
                 part("gpu-1", "GPU", 900000, 60),

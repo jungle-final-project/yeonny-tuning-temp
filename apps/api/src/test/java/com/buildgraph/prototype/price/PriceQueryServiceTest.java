@@ -26,8 +26,25 @@ class PriceQueryServiceTest {
     private final JdbcTemplate jdbcTemplate = mock(JdbcTemplate.class);
     private final PriceQueryService service = new PriceQueryService(
             jdbcTemplate,
-            mock(PriceJobPublisher.class)
+            mock(PriceJobPublisher.class),
+            new com.buildgraph.prototype.common.DemoFreezeGuard(false)
     );
+
+    @Test
+    void runPriceJobRejectsWhenDemoFreezeIsOn() {
+        // 데모 동결 중에는 관리자 버튼으로도 가격 수집이 실행되지 않아야 한다(감사 O6).
+        PriceQueryService frozenService = new PriceQueryService(
+                jdbcTemplate,
+                mock(PriceJobPublisher.class),
+                new com.buildgraph.prototype.common.DemoFreezeGuard(true)
+        );
+
+        org.assertj.core.api.Assertions.assertThatThrownBy(() -> frozenService.runPriceJob(USER))
+                .isInstanceOf(org.springframework.web.server.ResponseStatusException.class)
+                .extracting(error -> ((org.springframework.web.server.ResponseStatusException) error).getStatusCode())
+                .isEqualTo(org.springframework.http.HttpStatus.CONFLICT);
+        org.mockito.Mockito.verifyNoInteractions(jdbcTemplate);
+    }
 
     @Test
     void createAlertRejectsMalformedPartIdBeforeQueryingPostgres() {

@@ -1,13 +1,17 @@
 package com.buildgraph.prototype.part;
 
 import java.time.OffsetDateTime;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.http.MediaType;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
+// 인증 없는 데모 피드가 프로덕션에도 무조건 배포·공개되던 것을 안전-기본으로 격리한다(감사 보안).
+// 기본 false — 로컬/데모 스택(compose)에서만 env로 켠다.
 @RestController
 @RequestMapping("/api/demo")
+@ConditionalOnProperty(prefix = "part.manufacturer-release-intake", name = "demo-feed-enabled", havingValue = "true")
 public class ManufacturerReleaseDemoController {
     @GetMapping(value = "/manufacturer-release-feed.xml", produces = MediaType.APPLICATION_XML_VALUE)
     String manufacturerReleaseFeed() {

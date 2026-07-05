@@ -1,6 +1,7 @@
 package com.buildgraph.prototype.price;
 
 import com.buildgraph.prototype.common.DbValueMapper;
+import com.buildgraph.prototype.common.DemoFreezeGuard;
 import com.buildgraph.prototype.common.MockData;
 import com.buildgraph.prototype.user.CurrentUserService;
 import java.util.List;
@@ -15,10 +16,12 @@ import org.springframework.web.server.ResponseStatusException;
 public class PriceQueryService {
     private final JdbcTemplate jdbcTemplate;
     private final PriceJobPublisher priceJobPublisher;
+    private final DemoFreezeGuard demoFreezeGuard;
 
-    public PriceQueryService(JdbcTemplate jdbcTemplate, PriceJobPublisher priceJobPublisher) {
+    public PriceQueryService(JdbcTemplate jdbcTemplate, PriceJobPublisher priceJobPublisher, DemoFreezeGuard demoFreezeGuard) {
         this.jdbcTemplate = jdbcTemplate;
         this.priceJobPublisher = priceJobPublisher;
+        this.demoFreezeGuard = demoFreezeGuard;
     }
 
     public Map<String, Object> alerts(CurrentUserService.CurrentUser user) {
@@ -68,6 +71,10 @@ public class PriceQueryService {
     }
 
     public Map<String, Object> runPriceJob(CurrentUserService.CurrentUser admin) {
+        // 데모 동결 중에는 관리자 버튼으로도 가격이 변하지 않도록 즉시 거절한다(감사 O6).
+        if (demoFreezeGuard.frozen()) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "데모 동결(DEMO_FREEZE_MUTATIONS)이 켜져 있어 가격 Job을 실행할 수 없습니다.");
+        }
         List<Map<String, Object>> active = jdbcTemplate.queryForList("""
                 SELECT pj.public_id::text AS id,
                        pj.status,
