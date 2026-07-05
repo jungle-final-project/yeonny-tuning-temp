@@ -28,7 +28,9 @@ import org.springframework.web.server.ResponseStatusException;
 
 @Service
 public class PcAgentAsService {
-    private static final String DEMO_ACTIVATION_TOKEN = "demo-agent-activation-token";
+    // 데모/개발 편의용 등록 activation token. 하드코딩 상수 대신 설정으로 주입하며,
+    // 값이 비어 있으면(프로덕션 기본) 데모 등록 자체가 비활성화된다.
+    private static final String TEST_DEMO_ACTIVATION_TOKEN = "demo-agent-activation-token";
     private static final SecureRandom SECURE_RANDOM = new SecureRandom();
     private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
 
@@ -38,13 +40,15 @@ public class PcAgentAsService {
     private final Path logStorageRoot;
     private final Clock clock;
     private final Supplier<String> tokenGenerator;
+    private final String demoActivationToken;
 
     @Autowired
     public PcAgentAsService(
             JdbcTemplate jdbcTemplate,
             AgentTokenHasher tokenHasher,
             PcAgentLogSummaryService logSummaryService,
-            @Value("${agent.log-storage-root:data/agent-logs}") String logStorageRoot
+            @Value("${agent.log-storage-root:data/agent-logs}") String logStorageRoot,
+            @Value("${agent.demo-activation-token:}") String demoActivationToken
     ) {
         this(
                 jdbcTemplate,
@@ -52,7 +56,8 @@ public class PcAgentAsService {
                 Clock.systemUTC(),
                 PcAgentAsService::newAgentToken,
                 logSummaryService,
-                Path.of(logStorageRoot)
+                Path.of(logStorageRoot),
+                demoActivationToken
         );
     }
 
@@ -68,7 +73,8 @@ public class PcAgentAsService {
                 clock,
                 tokenGenerator,
                 new PcAgentLogSummaryService(),
-                Path.of("build", "agent-log-test-storage")
+                Path.of("build", "agent-log-test-storage"),
+                TEST_DEMO_ACTIVATION_TOKEN
         );
     }
 
@@ -78,7 +84,8 @@ public class PcAgentAsService {
             Clock clock,
             Supplier<String> tokenGenerator,
             PcAgentLogSummaryService logSummaryService,
-            Path logStorageRoot
+            Path logStorageRoot,
+            String demoActivationToken
     ) {
         this.jdbcTemplate = jdbcTemplate;
         this.tokenHasher = tokenHasher;
@@ -86,12 +93,14 @@ public class PcAgentAsService {
         this.tokenGenerator = tokenGenerator;
         this.logSummaryService = logSummaryService;
         this.logStorageRoot = logStorageRoot;
+        this.demoActivationToken = demoActivationToken == null ? "" : demoActivationToken.trim();
     }
 
     @Transactional
     public Map<String, Object> register(Map<String, Object> request) {
         String activationToken = string(request, "activationToken", null);
-        if (!DEMO_ACTIVATION_TOKEN.equals(activationToken)) {
+        // 데모 토큰이 설정되지 않았으면(프로덕션 기본) 이 등록 경로는 비활성화된다.
+        if (demoActivationToken.isBlank() || !demoActivationToken.equals(activationToken)) {
             throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Agent activation token is invalid.");
         }
 

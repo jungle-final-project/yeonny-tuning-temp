@@ -8,6 +8,7 @@ import com.fasterxml.jackson.core.type.TypeReference;
 import java.net.URI;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
+import java.time.Duration;
 import java.time.OffsetDateTime;
 import java.time.format.DateTimeParseException;
 import java.util.ArrayList;
@@ -24,6 +25,7 @@ import java.util.regex.Pattern;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.http.client.SimpleClientHttpRequestFactory;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
@@ -83,12 +85,20 @@ public class ManufacturerReleaseIntakeService {
             JdbcTemplate jdbcTemplate,
             NaverShoppingOfferService naverShoppingOfferService,
             OpenAiResponsesClient openAiResponsesClient,
-            @Value("${part.manufacturer-release-intake.user-agent:BuildGraphBot/0.1}") String userAgent
+            @Value("${part.manufacturer-release-intake.user-agent:BuildGraphBot/0.1}") String userAgent,
+            @Value("${part.manufacturer-release-intake.connect-timeout-ms:10000}") long connectTimeoutMs,
+            @Value("${part.manufacturer-release-intake.read-timeout-ms:20000}") long readTimeoutMs
     ) {
         this.jdbcTemplate = jdbcTemplate;
         this.naverShoppingOfferService = naverShoppingOfferService;
         this.openAiResponsesClient = openAiResponsesClient;
+        // 타임아웃을 지정하지 않으면 응답 없는 제조사 사이트에서 fetch가 무한 대기해 스캔이 끝나지 않는다.
+        // 유한 타임아웃으로 hang을 예외로 전환하고(소스 status=ERROR로 기록됨) 스케줄러 스레드를 되돌려준다.
+        SimpleClientHttpRequestFactory requestFactory = new SimpleClientHttpRequestFactory();
+        requestFactory.setConnectTimeout(Duration.ofMillis(connectTimeoutMs));
+        requestFactory.setReadTimeout(Duration.ofMillis(readTimeoutMs));
         this.restClient = RestClient.builder()
+                .requestFactory(requestFactory)
                 .defaultHeader("User-Agent", userAgent)
                 .build();
     }

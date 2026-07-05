@@ -18,7 +18,9 @@ class ManufacturerReleaseIntakeServiceTest {
             jdbcTemplate,
             naverShoppingOfferService,
             openAiResponsesClient,
-            "BuildGraphTest/0.1"
+            "BuildGraphTest/0.1",
+            10_000L,
+            20_000L
     );
 
     @Test

@@ -5,6 +5,7 @@ import com.buildgraph.prototype.user.CurrentUserService;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.nio.charset.StandardCharsets;
+import java.time.Duration;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -15,16 +16,24 @@ import java.util.Set;
 import java.util.UUID;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.http.client.SimpleClientHttpRequestFactory;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
+import org.springframework.web.client.ResourceAccessException;
 import org.springframework.web.client.RestClient;
+import org.springframework.web.client.RestClientResponseException;
 import org.springframework.web.server.ResponseStatusException;
 
 @Service
 public class NaverShoppingOfferService {
+    private static final Logger LOGGER = LoggerFactory.getLogger(NaverShoppingOfferService.class);
+    // 연속 API 오류가 이 횟수에 도달하면 API 다운/차단으로 보고 갱신을 조기 중단해 무의미한 연타를 막는다.
+    private static final int MAX_CONSECUTIVE_API_ERRORS = 5;
     private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
     private static final Set<String> CATEGORIES = Set.of("CPU", "GPU", "RAM", "MOTHERBOARD", "STORAGE", "PSU", "CASE", "COOLER");
     private static final Set<String> MATCH_STOPWORDS = Set.of(
@@ -41,18 +50,28 @@ public class NaverShoppingOfferService {
     private final String clientSecret;
     private final RestClient restClient;
     private final JdbcTemplate jdbcTemplate;
+    private final long requestDelayMs;
 
     public NaverShoppingOfferService(
             @Value("${naver.search.client-id:}") String clientId,
             @Value("${naver.search.client-secret:}") String clientSecret,
             @Value("${naver.search.base-url:https://openapi.naver.com}") String baseUrl,
+            @Value("${naver.search.connect-timeout-ms:5000}") long connectTimeoutMs,
+            @Value("${naver.search.read-timeout-ms:10000}") long readTimeoutMs,
+            @Value("${naver.search.request-delay-ms:150}") long requestDelayMs,
             JdbcTemplate jdbcTemplate
     ) {
         this.clientId = clientId == null ? "" : clientId.trim();
         this.clientSecret = clientSecret == null ? "" : clientSecret.trim();
+        // 타임아웃 미설정 시 스케줄러 스레드가 응답 없는 API에 무한 대기할 수 있어 유한 타임아웃을 건다.
+        SimpleClientHttpRequestFactory requestFactory = new SimpleClientHttpRequestFactory();
+        requestFactory.setConnectTimeout(Duration.ofMillis(connectTimeoutMs));
+        requestFactory.setReadTimeout(Duration.ofMillis(readTimeoutMs));
         this.restClient = RestClient.builder()
                 .baseUrl(baseUrl)
+                .requestFactory(requestFactory)
                 .build();
+        this.requestDelayMs = Math.max(0, requestDelayMs);
         this.jdbcTemplate = jdbcTemplate;
     }
 
@@ -522,22 +541,45 @@ public class NaverShoppingOfferService {
         int skipped = 0;
         int failed = 0;
 
+        int errors = 0;
+        int consecutiveErrors = 0;
         for (Map<String, Object> part : parts) {
+            if (Thread.currentThread().isInterrupted()) {
+                break;
+            }
             attempted += 1;
             String name = stringValue(part.get("name"));
             String manufacturer = stringValue(part.get("manufacturer"));
             String query = searchQuery(name, manufacturer);
-            Optional<Map<String, Object>> offer = fetchOffer(normalizedCategory, name, manufacturer, query);
-            if (offer.isEmpty()) {
-                skipped += 1;
+            OfferMatch match = fetchOffer(normalizedCategory, name, manufacturer, query);
+            if (match.apiError()) {
+                // 네이버 API 오류(429/5xx/타임아웃)는 '상품 없음'과 구분해 errors로 집계한다.
+                errors += 1;
+                consecutiveErrors += 1;
+                if (consecutiveErrors >= MAX_CONSECUTIVE_API_ERRORS) {
+                    LOGGER.warn("네이버 API 연속 오류 {}회 — 가격 갱신 조기 중단 (category={})", consecutiveErrors, normalizedCategory);
+                    break;
+                }
+                sleepQuietly(requestDelayMs * consecutiveErrors); // 연속 오류에 비례한 백오프
                 continue;
             }
-            try {
-                upsertOffer(((Number) part.get("id")).longValue(), query, offer.get());
-                updated += 1;
-            } catch (RuntimeException ignored) {
-                failed += 1;
+            consecutiveErrors = 0;
+            if (match.offer() == null) {
+                skipped += 1;
+            } else {
+                try {
+                    upsertOffer(((Number) part.get("id")).longValue(), query, match.offer());
+                    updated += 1;
+                } catch (RuntimeException ignored) {
+                    failed += 1;
+                }
             }
+            sleepQuietly(requestDelayMs); // 요청 간 최소 지연으로 QPS 제한 회피
+        }
+
+        if (attempted > 0 && updated == 0) {
+            LOGGER.warn("네이버 가격 갱신 이상: category={} attempted={} updated=0 errors={} skipped={} — 가격이 갱신되지 않았습니다.",
+                    normalizedCategory, attempted, errors, skipped);
         }
 
         return MockData.map(
@@ -548,7 +590,8 @@ public class NaverShoppingOfferService {
                 "attempted", attempted,
                 "updated", updated,
                 "skipped", skipped,
-                "failed", failed
+                "failed", failed,
+                "errors", errors
         );
     }
 
@@ -569,6 +612,7 @@ public class NaverShoppingOfferService {
         int updated = 0;
         int skipped = 0;
         int failed = 0;
+        int errors = 0;
         List<Map<String, Object>> categoryResults = new ArrayList<>();
         for (String category : CATEGORIES.stream().sorted().toList()) {
             Map<String, Object> result = refreshOffers(category, 100, false);
@@ -577,6 +621,11 @@ public class NaverShoppingOfferService {
             updated += numberValue(result.get("updated"));
             skipped += numberValue(result.get("skipped"));
             failed += numberValue(result.get("failed"));
+            errors += numberValue(result.get("errors"));
+        }
+
+        if (errors > 0) {
+            LOGGER.warn("네이버 일일 가격 갱신 중 API 오류 {}건 발생 (updated={}, attempted={}) — 키/쿼터/차단 여부 확인 필요", errors, updated, attempted);
         }
 
         return MockData.map(
@@ -585,15 +634,25 @@ public class NaverShoppingOfferService {
                 "attempted", attempted,
                 "updated", updated,
                 "skipped", skipped,
-                "failed", failed
+                "failed", failed,
+                "errors", errors
         );
     }
 
-    private Optional<Map<String, Object>> fetchOffer(String category, String name, String manufacturer, String query) {
-        List<Map<String, Object>> offers = fetchOffers(query, 10);
+    // API 오류를 '상품 없음'과 구분하기 위한 후보 매칭 결과. offer==null && !apiError 이면 진짜 매칭 실패.
+    private record OfferMatch(Map<String, Object> offer, boolean apiError, Integer status) {}
+
+    // 원시 fetch 결과. apiError=true 는 API 장애(4xx/5xx/타임아웃/파싱실패), false+빈 리스트는 정상 무결과.
+    private record OfferFetchResult(List<Map<String, Object>> offers, boolean apiError, Integer status) {}
+
+    private OfferMatch fetchOffer(String category, String name, String manufacturer, String query) {
+        OfferFetchResult fetched = fetchOffersDetailed(query, 10);
+        if (fetched.apiError()) {
+            return new OfferMatch(null, true, fetched.status());
+        }
         Map<String, Object> bestOffer = null;
         int bestScore = Integer.MIN_VALUE;
-        for (Map<String, Object> offer : offers) {
+        for (Map<String, Object> offer : fetched.offers()) {
             if (!isAcceptableCatalogOffer(category, offer) || !isReasonableOfferMatch(category, name, offer)) {
                 continue;
             }
@@ -603,10 +662,15 @@ public class NaverShoppingOfferService {
                 bestScore = score;
             }
         }
-        return Optional.ofNullable(bestOffer);
+        return new OfferMatch(bestOffer, false, null);
     }
 
+    // 제조사 후보 생성 등 오류 구분이 불필요한 호출부는 기존과 동일하게 리스트만 받는다(오류 시 빈 리스트).
     private List<Map<String, Object>> fetchOffers(String query, int display) {
+        return fetchOffersDetailed(query, display).offers();
+    }
+
+    private OfferFetchResult fetchOffersDetailed(String query, int display) {
         try {
             Map<?, ?> response = restClient.get()
                     .uri(uriBuilder -> uriBuilder
@@ -623,10 +687,10 @@ public class NaverShoppingOfferService {
                     .body(Map.class);
 
             if (response == null || !(response.get("items") instanceof List<?> items) || items.isEmpty()) {
-                return List.of();
+                return new OfferFetchResult(List.of(), false, null);
             }
 
-            return items.stream()
+            List<Map<String, Object>> offers = items.stream()
                     .filter(Map.class::isInstance)
                     .map(Map.class::cast)
                     .map(item -> MockData.map(
@@ -642,8 +706,30 @@ public class NaverShoppingOfferService {
                     ))
                     .filter(offer -> StringUtils.hasText(stringValue(offer.get("title"))))
                     .toList();
-        } catch (RuntimeException ignored) {
-            return List.of();
+            return new OfferFetchResult(offers, false, null);
+        } catch (RestClientResponseException exception) {
+            // 4xx/5xx(429 쿼터 초과, 401 키 만료 포함) — '상품 없음'이 아니라 API 장애다.
+            LOGGER.warn("네이버 쇼핑 API 오류 status={} query='{}'", exception.getStatusCode().value(), query);
+            return new OfferFetchResult(List.of(), true, exception.getStatusCode().value());
+        } catch (ResourceAccessException exception) {
+            // 타임아웃/네트워크 오류.
+            LOGGER.warn("네이버 쇼핑 API 접속 실패 query='{}': {}", query, exception.getMessage());
+            return new OfferFetchResult(List.of(), true, null);
+        } catch (RuntimeException exception) {
+            // 응답 파싱 등 기타 실패도 '무결과'와 구분해 장애로 취급한다.
+            LOGGER.warn("네이버 쇼핑 응답 처리 실패 query='{}': {}", query, exception.getMessage());
+            return new OfferFetchResult(List.of(), true, null);
+        }
+    }
+
+    private static void sleepQuietly(long ms) {
+        if (ms <= 0) {
+            return;
+        }
+        try {
+            Thread.sleep(ms);
+        } catch (InterruptedException exception) {
+            Thread.currentThread().interrupt(); // 인터럽트 플래그 복원 — 루프의 isInterrupted() 체크가 중단시킨다.
         }
     }
 

@@ -28,6 +28,12 @@ spring:
   mail:
     host: ${SPRING_MAIL_HOST:localhost}
     port: ${SPRING_MAIL_PORT:1025}
+  task:
+    scheduling:
+      # 기본값 1은 모든 @Scheduled 잡이 한 스레드를 공유해, 한 잡(예: 응답 없는 제조사 fetch)이
+      # 뒤 잡(가격 갱신·프리웜·티어 스냅샷)을 전부 막는다. 파이프라인 잡을 격리하기 위해 풀을 키운다.
+      pool:
+        size: ${SCHEDULING_POOL_SIZE:4}
 
 management:
   endpoints:
@@ -39,6 +45,9 @@ agent:
   runner:
     mode: ${AGENT_RUNNER_MODE:deterministic}
   log-storage-root: ${AGENT_LOG_STORAGE_ROOT:data/agent-logs}
+  # PC Agent 데모 등록용 activation token. 기본 빈값이면 데모 등록이 비활성화된다(프로덕션 안전 기본).
+  # 데모/개발 환경에서만 env로 명시적으로 켠다. 실서비스는 DB 발급 토큰 방식으로 대체해야 한다.
+  demo-activation-token: ${AGENT_DEMO_ACTIVATION_TOKEN:}
 
 openai:
   base-url: ${OPENAI_BASE_URL:https://api.openai.com/v1}

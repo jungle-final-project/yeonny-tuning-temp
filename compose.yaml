@@ -88,6 +88,8 @@ services:
       SPRING_MAIL_PORT: 1025
       AGENT_RUNNER_MODE: ${AGENT_RUNNER_MODE:-deterministic}
       AGENT_LOG_STORAGE_ROOT: ${AGENT_LOG_STORAGE_ROOT:-/data/agent-logs}
+      # 로컬/데모 편의를 위해 데모 등록 토큰을 켜 둔다. 프로덕션 배포에서는 이 값을 비우거나 DB 발급 토큰으로 대체.
+      AGENT_DEMO_ACTIVATION_TOKEN: ${AGENT_DEMO_ACTIVATION_TOKEN:-demo-agent-activation-token}
       OPENAI_BASE_URL: ${OPENAI_BASE_URL:-https://api.openai.com/v1}
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
       OPENAI_MODEL: ${OPENAI_MODEL:-gpt-5.5}
