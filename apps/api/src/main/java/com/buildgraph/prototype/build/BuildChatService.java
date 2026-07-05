@@ -283,6 +283,22 @@ public class BuildChatService {
                 && "PART".equals(text(response.get("answerType")))) {
             response.put("answerType", "BUDGET");
         }
+        // 데모 안전망: 견적 요청인데 LLM이 빈 조합을 반환하면(용도-only 등) 내부 자산 기준
+        // 폴백 조합으로 보강해 빈 화면을 막는다. 라우터가 이미 BUILD_RECOMMEND로 판정한 경우만.
+        if (intentDecision.intent() == BuildChatIntent.BUILD_RECOMMEND
+                && objectMaps(response.get("builds")).isEmpty()) {
+            List<String> fallbackWarnings = new ArrayList<>();
+            List<Map<String, Object>> fallbackBuilds = rawBudgetIntent.hasBudget()
+                    ? nearBudgetLadderBuilds(rawBudgetIntent.budget(), List.of(), fallbackWarnings, new BuildChatGuardStats())
+                    : openBudgetFallbackBuilds(fallbackWarnings);
+            if (!fallbackBuilds.isEmpty()) {
+                response.put("answerType", "BUDGET");
+                response.put("builds", fallbackBuilds);
+                List<String> mergedWarnings = new ArrayList<>(stringList(response.get("warnings")));
+                mergedWarnings.addAll(fallbackWarnings);
+                response.put("warnings", distinct(mergedWarnings));
+            }
+        }
         candidateReranker.recordShadowScores(body, response, userId, requestedAiProfile);
         log.debug("Build Chat response generated: userId={}, requestedAiProfile={}, cacheStore=true", userId, requestedAiProfile);
         buildChatCacheService.storeAsync(body, requestedAiProfile, userId, response);
@@ -387,10 +403,13 @@ public class BuildChatService {
     private static boolean hasSpecificBuildSignal(String message, String normalized) {
         return parseBudgetWon(message) != null
                 || containsAnyNormalized(normalized,
-                "게임", "게이밍", "qhd", "4k", "144", "배그", "발로란트", "오버워치", "사이버펑크",
-                "영상", "편집", "프리미어", "블렌더", "개발", "ai", "cuda", "로컬ai", "실험용",
-                "엔비디아", "라데온", "nvidia", "고성능", "최고급", "끝판왕", "저소음", "조용",
-                "작은", "컴팩트", "저장", "로딩", "사무", "학습", "흰색", "화이트", "업그레이드",
+                "게임", "게이밍", "qhd", "fhd", "4k", "144", "hz", "배그", "발로란트", "발로", "오버워치", "옵치",
+                "사이버펑크", "로스트아크", "로아", "디아블로", "디아", "몬헌", "몬스터헌터", "배틀필드", "스타크래프트",
+                "스타2", "롤", "리그오브레전드", "메이플", "피파", "롤토체스", "레이드", "오픈월드",
+                "영상", "편집", "프리미어", "블렌더", "렌더", "개발", "도커", "docker", "ide", "코딩", "ai", "cuda", "로컬ai", "실험용",
+                "방송", "스트리밍", "송출", "유튜브", "포토샵", "디자인", "3d",
+                "엔비디아", "라데온", "nvidia", "고성능", "최고급", "끝판왕", "하이엔드", "풀스펙", "저소음", "조용",
+                "작은", "컴팩트", "저장", "로딩", "사무", "문서작업", "엑셀", "학습", "흰색", "화이트", "업그레이드",
                 "가성비", "입문", "보급", "균형");
     }
 
