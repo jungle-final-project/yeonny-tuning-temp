@@ -41,7 +41,7 @@ class BuildGraphServiceTest {
                 tool("compatibility", "PASS", "CPU, 메인보드, RAM, 쿨러 기본 호환성이 맞습니다.",
                         MockData.map("socketMatched", true, "memoryTypeMatched", true, "coolerSocketMatched", true)),
                 tool("power", "WARN", "PSU 정격 출력 여유가 낮습니다.",
-                        MockData.map("requiredRatedCapacityW", 750, "psuRatedCapacityW", 850, "ratedHeadroomW", 100)),
+                        MockData.map("requiredRatedCapacityW", 750, "psuRatedCapacityW", 850, "ratedHeadroomW", 100, "vendorRecommendedPsuW", 750)),
                 tool("size", "PASS", "GPU 길이와 쿨러 높이가 케이스 제약 안에 있습니다.",
                         MockData.map("gpuLengthMm", 304, "maxGpuLengthMm", 320, "coolerHeightMm", 155, "maxCpuCoolerHeightMm", 160)),
                 tool("performance", "PASS", "요구 작업에 무리가 적은 조합입니다.", MockData.map("gpu", "RTX 5070", "cpu", "Ryzen 7")),
@@ -113,7 +113,7 @@ class BuildGraphServiceTest {
             assertThat(edge.get("id")).isEqualTo("edge-gpu-psu-power");
             assertThat(edge.get("status")).isEqualTo("WARN");
             assertThat(edge.get("label")).isEqualTo("전력 여유 100W");
-            assertThat(edge.get("summary")).isEqualTo("권장 출력 750W / 현재 파워 850W입니다. 여유 100W로 장착은 가능하지만 권장 여유가 낮습니다.");
+            assertThat(edge.get("summary")).isEqualTo("GPU 권장 파워 750W / 현재 파워 850W입니다. 지속 부하 대비 여유 100W로 장착은 가능하지만 여유가 넉넉하지 않습니다.");
         });
         assertThat(edges).anySatisfy(edge -> {
             assertThat(edge.get("id")).isEqualTo("edge-gpu-case-length");
@@ -133,6 +133,35 @@ class BuildGraphServiceTest {
         assertThat(insights).anySatisfy(insight -> {
             assertThat(insight.get("title")).isEqualTo("파워 여유 확인");
             assertThat(insight.get("status")).isEqualTo("WARN");
+        });
+    }
+
+    @Test
+    void aiBuildGraphPowerEdgeFollowsToolStatusEvenWhenPsuBelowRequiredRatedCapacity() {
+        // 사용자 시나리오: RTX 5090(GPU 권장 1000W) + 1000W PSU. 툴은 권장 파워를 충족했으므로 WARN을 준다.
+        // 예전에는 엣지가 psuRatedCapacity - requiredRatedCapacity(=1000-1020=-20) headroom으로 별도 재계산해
+        // FAIL(빨강)이 떴다. 이제 엣지는 파워 툴 status(WARN)를 단일 소스로 그대로 따라야 한다.
+        stubPart("edge-gpu", part("edge-gpu", 401L, "GPU", "RTX 5090", 3980000, MockData.map("wattage", 575, "requiredSystemPowerW", 1000, "lengthMm", 340)));
+        stubPart("edge-psu", part("edge-psu", 402L, "PSU", "1000W Gold", 200000, MockData.map("capacityW", 1000)));
+        when(toolCheckService.checkBuild(anyList(), eq(5_000_000))).thenReturn(List.of(
+                tool("power", "WARN", "PSU 정격 출력이 GPU 권장 파워는 충족하지만 여유가 넉넉하지 않습니다.",
+                        MockData.map("requiredRatedCapacityW", 1020, "psuRatedCapacityW", 1000, "ratedHeadroomW", 100, "vendorRecommendedPsuW", 1000))
+        ));
+
+        Map<String, Object> graph = buildGraphService.resolve(USER_TOKEN, Map.of(
+                "source", "AI_BUILD",
+                "budgetWon", 5_000_000,
+                "items", List.of(
+                        requestItem("edge-gpu", "GPU"),
+                        requestItem("edge-psu", "PSU")
+                )
+        ));
+
+        List<Map<String, Object>> edges = castList(graph.get("edges"));
+        assertThat(edges).anySatisfy(edge -> {
+            assertThat(edge.get("id")).isEqualTo("edge-gpu-psu-power");
+            assertThat(edge.get("status")).isEqualTo("WARN");
+            assertThat(edge.get("summary")).isEqualTo("GPU 권장 파워 1000W / 현재 파워 1000W입니다. 지속 부하 대비 여유 100W로 장착은 가능하지만 여유가 넉넉하지 않습니다.");
         });
     }
 

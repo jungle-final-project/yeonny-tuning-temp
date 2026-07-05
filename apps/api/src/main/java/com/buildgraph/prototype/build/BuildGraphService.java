@@ -205,7 +205,10 @@ public class BuildGraphService {
         String socketStatus = socketStatus(byCategory, compatibilityDetails, toolStatus(toolByName, "compatibility"));
         String memoryStatus = booleanStatus(booleanValue(compatibilityDetails.get("memoryTypeMatched")), toolStatus(toolByName, "compatibility"));
         String coolerSocketStatus = booleanStatus(booleanValue(compatibilityDetails.get("coolerSocketMatched")), toolStatus(toolByName, "compatibility"));
-        String powerStatus = powerStatus(powerDetails, toolStatus(toolByName, "power"));
+        // 파워 판정은 ToolCheckService.power() 한 곳에서만 내리고 GPU-PSU 엣지도 그 status를 그대로 쓴다.
+        // (엣지가 requiredRatedCapacity 기준 headroom으로 별도 재계산하면, 툴은 WARN인데 엣지만 FAIL이 되어
+        //  "권장 파워를 충족한 PSU인데 엣지선만 빨강"인 불일치가 생겼다.)
+        String powerStatus = toolStatus(toolByName, "power");
         String gpuLengthStatus = lengthStatus(sizeDetails, "gpuLengthMm", "maxGpuLengthMm", toolStatus(toolByName, "size"));
         String coolerHeightStatus = lengthStatus(sizeDetails, "coolerHeightMm", "maxCpuCoolerHeightMm", toolStatus(toolByName, "size"));
 
@@ -459,18 +462,24 @@ public class BuildGraphService {
             return "GPU 소비전력과 PSU 정격 출력을 함께 확인합니다.";
         }
         Map<String, Object> details = objectMap(result.get("details"));
-        Integer required = numberValue(details.get("requiredRatedCapacityW"));
+        // GPU 노드에 "권장 파워"로 표시되는 값(vendorRecommendedPsuW)을 기준으로 안내해 노드/엣지 숫자를 일치시킨다.
+        // 벤더 권장값이 없을 때만 내부 요구 용량(requiredRatedCapacityW)으로 폴백한다.
+        Integer recommended = numberValue(details.get("vendorRecommendedPsuW"));
+        if (recommended == null || recommended <= 0) {
+            recommended = numberValue(details.get("requiredRatedCapacityW"));
+        }
         Integer capacity = numberValue(details.get("psuRatedCapacityW"));
-        if (required != null && capacity != null) {
-            Integer headroom = capacity - required;
-            String base = "권장 출력 " + required + "W / 현재 파워 " + capacity + "W입니다.";
+        Integer loadHeadroom = numberValue(details.get("ratedHeadroomW"));
+        if (recommended != null && capacity != null) {
+            String base = "GPU 권장 파워 " + recommended + "W / 현재 파워 " + capacity + "W입니다.";
+            String room = loadHeadroom == null ? "" : " 지속 부하 대비 여유 " + Math.max(loadHeadroom, 0) + "W";
             if ("FAIL".equals(status)) {
-                return base + " 권장 출력보다 파워 여유가 부족합니다.";
+                return base + " PSU 정격 출력이 예상 부하에 못 미쳐 상위 용량이 필요합니다.";
             }
             if ("WARN".equals(status)) {
-                return base + " 여유 " + Math.max(headroom, 0) + "W로 장착은 가능하지만 권장 여유가 낮습니다.";
+                return base + room + "로 장착은 가능하지만 여유가 넉넉하지 않습니다.";
             }
-            return base + " 여유 " + Math.max(headroom, 0) + "W로 안정적인 편입니다.";
+            return base + room + "로 안정적입니다.";
         }
         return toolSummary(toolByName, "power", "GPU 소비전력과 PSU 정격 출력을 함께 확인합니다.");
     }
@@ -562,20 +571,6 @@ public class BuildGraphService {
         return passed == null ? fallback : passed ? "PASS" : "FAIL";
     }
 
-    private static String powerStatus(Map<String, Object> details, String fallback) {
-        Integer headroom = powerHeadroom(details);
-        if (headroom == null) {
-            return fallback;
-        }
-        if (headroom < 50) {
-            return "FAIL";
-        }
-        if (headroom < 150) {
-            return "WARN";
-        }
-        return "PASS";
-    }
-
     private static String lengthStatus(Map<String, Object> details, String currentKey, String maxKey, String fallback) {
         Integer headroom = headroom(details, currentKey, maxKey);
         if (headroom == null) {
@@ -591,12 +586,14 @@ public class BuildGraphService {
     }
 
     private static Integer powerHeadroom(Map<String, Object> details) {
+        // 엣지 라벨의 "전력 여유"는 실제 지속 부하 대비 여유(정격 - 추정 부하)를 보여준다.
+        Integer ratedHeadroom = numberValue(details.get("ratedHeadroomW"));
+        if (ratedHeadroom != null) {
+            return ratedHeadroom;
+        }
         Integer required = numberValue(details.get("requiredRatedCapacityW"));
         Integer capacity = numberValue(details.get("psuRatedCapacityW"));
-        if (required != null && capacity != null) {
-            return capacity - required;
-        }
-        return numberValue(details.get("ratedHeadroomW"));
+        return (required != null && capacity != null) ? capacity - required : null;
     }
 
     private static Integer headroom(Map<String, Object> details, String currentKey, String maxKey) {
