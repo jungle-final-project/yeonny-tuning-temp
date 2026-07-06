@@ -801,8 +801,9 @@ test('selects a featured recommendation and applies every build part to self quo
   expect(request.items).toContainEqual({ partId: 'home-gpu-rtx5070', category: 'GPU', quantity: 1 });
   expect(request.items).toContainEqual({ partId: 'home-case-frame', category: 'CASE', quantity: 1 });
   await expect(page).toHaveURL('/self-quote');
-  await expect(page.getByTestId('slot-GPU')).toContainText('Home RTX 5070 GPU');
-  await expect(page.getByTestId('slot-CASE')).toContainText('Home FRAME 4000D Case');
+  // 보드 카드는 이미지+카테고리 요약이라 상품명은 체크리스트(품목 지도)에서 확인한다.
+  await expect(page.getByTestId('checklist-GPU')).toContainText('Home RTX 5070 GPU');
+  await expect(page.getByTestId('checklist-CASE')).toContainText('Home FRAME 4000D Case');
 });
 
 test('chatbot uses build-chat API and updates latest home AI recommendations', async ({ page }) => {
@@ -1586,7 +1587,7 @@ test('opens self quote from the drawer graph card without replacing the current 
   expect(applyRequests).toHaveLength(0);
   await expect(page).toHaveURL('/self-quote');
   await expect(page.getByTestId('ai-selected-build-panel')).toContainText(latestBuilds[0].title);
-  await expect(page.getByTestId('slot-GPU')).toContainText('기존 장바구니 GPU');
+  await expect(page.getByTestId('checklist-GPU')).toContainText('기존 장바구니 GPU');
 });
 
 test('opens self quote from the drawer graph card when the current cart is empty', async ({ page }) => {
