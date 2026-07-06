@@ -169,6 +169,14 @@ recommendation:
     shadow-enabled: ${RECOMMENDATION_RERANKER_SHADOW_ENABLED:true}
     endpoint: ${RECOMMENDATION_RERANKER_ENDPOINT:http://localhost:8091/score}
     timeout-ms: ${RECOMMENDATION_RERANKER_TIMEOUT_MS:1200}
+  # M2 자동 재훈련(주 1회). 기본 off — 자동 학습을 켤지는 운영 결정. 승급은 하지 않는다(SHADOW까지만).
+  auto-retrain:
+    enabled: ${RECOMMENDATION_AUTO_RETRAIN_ENABLED:false}
+    cron: "${RECOMMENDATION_AUTO_RETRAIN_CRON:0 0 3 * * SUN}"
+    zone: "${RECOMMENDATION_AUTO_RETRAIN_ZONE:Asia/Seoul}"
+    min-new-events: ${RECOMMENDATION_AUTO_RETRAIN_MIN_NEW_EVENTS:100}
+    min-new-positives: ${RECOMMENDATION_AUTO_RETRAIN_MIN_NEW_POSITIVES:10}
+    min-interval-days: ${RECOMMENDATION_AUTO_RETRAIN_MIN_INTERVAL_DAYS:7}
 
 part:
   price-refresh:
@@ -198,5 +206,6 @@ part:
     demo-feed-enabled: ${PART_MANUFACTURER_RELEASE_DEMO_FEED_ENABLED:false}
 
 demo:
-  # 데모 시연 중 가격/자산 mutating 수집(스케줄러 4종 + 관리자 가격 Job)을 일괄 동결하는 단일 스위치.
+  # 데모 시연 중 mutating 스케줄러(가격/자산 수집 4종 + M2 자동 재훈련) + 관리자 가격 Job을 일괄 동결하는 단일 스위치.
+  # 주의: Python 훈련 워커는 별개 프로세스라 이 스위치가 안 먹는다 — 데모 시 RECOMMENDATION_TRAINING_WORKER_ENABLED=false 병행.
   freeze-mutations: ${DEMO_FREEZE_MUTATIONS:false}
