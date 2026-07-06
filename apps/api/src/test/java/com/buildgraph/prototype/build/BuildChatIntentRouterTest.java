@@ -21,8 +21,11 @@ class BuildChatIntentRouterTest {
                 c("QHD 배그용 컴퓨터 맞춰줘", BuildChatIntent.BUILD_RECOMMEND),
                 c("FHD 발로란트 240Hz 목표로 추천해줘", BuildChatIntent.BUILD_RECOMMEND),
                 c("영상편집 + Docker + IDE 병행용으로 400만원 안쪽", BuildChatIntent.BUILD_RECOMMEND),
-                c("오래 쓸 수 있게 업그레이드 여유 있는 구성", BuildChatIntent.BUILD_RECOMMEND),
-                c("컴퓨터 하나 맞춰줘", BuildChatIntent.BUILD_RECOMMEND),
+                // 예산·용도·모델 번호가 전혀 없는 동사+명사 요청은 이제 되묻기로 보낸다 (역질문 흐름)
+                c("오래 쓸 수 있게 업그레이드 여유 있는 구성", BuildChatIntent.ASK_CLARIFICATION),
+                c("컴퓨터 하나 맞춰줘", BuildChatIntent.ASK_CLARIFICATION),
+                c("해상도 좋은 피시 맞춰줘", BuildChatIntent.ASK_CLARIFICATION),
+                c("PC 견적 짜줘", BuildChatIntent.ASK_CLARIFICATION),
                 // 그래프(드래프트) 기반 견적 완성 (유지)
                 draft("지금 견적 기준으로 나머지 부품 채워줘", BuildChatIntent.BUILD_RECOMMEND),
                 draft("이 그래프 구성 마저 완성해줘", BuildChatIntent.BUILD_RECOMMEND),

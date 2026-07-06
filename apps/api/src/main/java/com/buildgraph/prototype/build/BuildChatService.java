@@ -156,8 +156,24 @@ public class BuildChatService {
 
     public Map<String, Object> chat(Map<String, Object> request, String requestedAiProfile, CurrentUserService.CurrentUser user) {
         long startedNanos = System.nanoTime();
-        Map<String, Object> body = request == null ? Map.of() : request;
-        String message = requireText(body.get("message"), "message는 필수입니다.");
+        Map<String, Object> rawBody = request == null ? Map.of() : request;
+        String rawMessage = requireText(rawBody.get("message"), "message는 필수입니다.");
+        // 직전 되묻기(clarification)에 대한 후속 답변이면 원 요청과 합성해 한 문장처럼 라우팅한다.
+        // 서버는 상태를 저장하지 않고 프론트가 originalMessage를 에코하는 무상태 왕복이며, 되묻기는 최대 1회다.
+        String clarificationOriginal = text(objectMap(rawBody.get("clarificationContext")).get("originalMessage"));
+        boolean clarificationFollowUp = clarificationOriginal != null && !clarificationOriginal.isBlank();
+        Map<String, Object> body;
+        String message;
+        if (clarificationFollowUp) {
+            message = clarificationOriginal + " " + rawMessage;
+            Map<String, Object> merged = new LinkedHashMap<>(rawBody);
+            merged.put("message", message);
+            merged.remove("clarificationContext");
+            body = merged;
+        } else {
+            body = rawBody;
+            message = rawMessage;
+        }
         Long userId = user == null ? null : user.internalId();
         BudgetIntent rawBudgetIntent = budgetIntent(message);
         BuildChatIntentDecision intentDecision = intentRouter.decide(body, message);
@@ -183,11 +199,7 @@ public class BuildChatService {
             return response;
         }
         if (intentDecision.intent() == BuildChatIntent.ASK_CLARIFICATION) {
-            Map<String, Object> response = fastResponse(
-                    "GENERAL",
-                    "추천 기준을 조금 더 정하면 더 정확합니다. 예산, 해상도, 주 사용 게임이나 작업을 알려주세요.",
-                    intentDecision.ambiguityReasons()
-            );
+            Map<String, Object> response = clarificationResponse(message, intentDecision.ambiguityReasons(), clarificationFollowUp);
             logBuildChatPath("FAST_CLARIFICATION", startedNanos, userId, requestedAiProfile, false, BuildChatGuardStats.empty());
             return response;
         }
@@ -1052,6 +1064,51 @@ public class BuildChatService {
             }
         }
         return null;
+    }
+
+    // 되묻기 최대 1회 원칙에서 두 번째에도 정보가 없을 때 가정하는 기본 예산(가정은 응답 문구에 명시한다).
+    private static final int ASSUMED_DEFAULT_BUDGET_WON = 3_000_000;
+
+    // 모호 요청 되묻기: 견적을 같이 던지지 않고 질문 + 선택지 칩만 준다. 칩 문구는 그 자체로
+    // 완전한 프롬프트(용도+예산)라서 클릭 즉시 프리웜 티어 스냅샷에 적중해 즉답이 된다.
+    private Map<String, Object> clarificationResponse(String message, List<String> reasons, boolean followUp) {
+        if (followUp) {
+            // 이미 한 번 되물었는데도 정보가 없다 — 질문을 반복하지 않고 기본 예산 기준 3안을 가정 명시와 함께 준다.
+            if (tierSnapshotStore != null) {
+                Optional<BuildChatTierSnapshotStore.TierSnapshot> snapshot =
+                        tierSnapshotStore.bestFor(ASSUMED_DEFAULT_BUDGET_WON, "TARGET", tierSnapshotTolerancePct);
+                if (snapshot.isPresent()) {
+                    List<String> warnings = new ArrayList<>(snapshot.get().warnings());
+                    warnings.add("ASSUMED_DEFAULT_BUDGET");
+                    return fastResponse(
+                            "BUDGET",
+                            "용도와 예산을 몰라서 우선 300만원 균형 구성 기준 대표 3안을 보여드려요. "
+                                    + "예산이나 용도(게임/사무/영상편집)를 알려주시면 다시 맞춰드릴게요.",
+                            snapshot.get().builds(),
+                            warnings
+                    );
+                }
+            }
+            return fastResponse(
+                    "GENERAL",
+                    "예산(예: 200만원)이나 용도(게임/사무/영상편집)를 알려주시면 바로 견적을 추천해드릴게요.",
+                    List.of("LOW_INFORMATION")
+            );
+        }
+        boolean resolutionHint = reasons != null && reasons.contains("RESOLUTION_CONTEXT");
+        String question = resolutionHint
+                ? "어떤 해상도 기준으로 맞출까요? 해상도에 따라 필요한 그래픽카드 급이 크게 달라져요. 예산까지 알려주시면 바로 추천해드릴게요."
+                : "용도와 예산을 알려주시면 정확하게 맞춰드릴 수 있어요. 아래에서 골라도 되고, 직접 입력해도 됩니다.";
+        List<String> quickReplies = resolutionHint
+                ? List.of("FHD 게이밍 150만원", "QHD 게이밍 250만원", "4K 게이밍 400만원")
+                : List.of("사무용 100만원", "게이밍 200만원", "게이밍 300만원", "영상편집 400만원");
+        Map<String, Object> response = fastResponse("GENERAL", question, List.of("LOW_INFORMATION"));
+        response.put("quickReplies", quickReplies);
+        response.put("clarification", MockData.map(
+                "missingSlots", List.of("budget", "useCase"),
+                "originalMessage", message
+        ));
+        return response;
     }
 
     private Map<String, Object> fastResponse(String answerType, String message, List<String> warnings) {

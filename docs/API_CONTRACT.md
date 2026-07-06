@@ -213,6 +213,7 @@ Google OAuth 정책:
 `POST /api/ai/build-chat` v1 정책:
 
 - LLM/RAG 필수 API다. `OPENAI_API_KEY`가 없으면 `428 PRECONDITION_REQUIRED`를 반환하고 deterministic fallback을 만들지 않는다.
+- **모호 요청 되묻기(clarification)**: 예산·용도·구체 모델이 모두 없는 견적 요청("피시 맞춰줘", "해상도 좋은 컴퓨터")은 견적을 생성하지 않고 `GENERAL` 응답에 `quickReplies`(선택지 칩, 각 항목이 용도+예산을 포함한 완전한 프롬프트)와 `clarification.originalMessage`를 담아 되묻는다. 프론트는 다음 요청에 `clarificationContext.originalMessage`를 에코하고, 서버는 이를 message와 합성해 한 문장처럼 라우팅한다(무상태 왕복). 되묻기는 최대 1회 — 합성 후에도 정보가 부족하면 기본 예산 300만원 가정을 응답 문구에 명시하고 대표 3안을 준다(`ASSUMED_DEFAULT_BUDGET` warning). 이 경로는 LLM을 호출하지 않는 즉답이다.
 - 내부 live benchmark는 optional `X-BuildGraph-AI-Profile` header를 사용할 수 있다. 지원값은 `BUILD_CHAT_FAST`, `BUILD_CHAT_54_FAST`, `BUILD_CHAT_54_MINI_FAST`이며, 사용자 화면은 이 header를 보내지 않는다.
 - 기본 Build Chat profile은 `BUILD_CHAT_DEFAULT_PROFILE`이며 실측 결과 기준 기본값은 `BUILD_CHAT_54_MINI_FAST`다. rollback이 필요하면 env에서 `BUILD_CHAT_DEFAULT_PROFILE=BUILD_CHAT_FAST`로 되돌린다. `gpt-5.4`, `gpt-5.4-mini` 후보는 같은 응답 shape를 유지한다.
 - Build Chat 의도 분기는 내부 `BuildChatIntentRouter` 결정값을 기준으로 한다. 주요 intent는 `NAVIGATE_STATIC`, `NAVIGATE_CATEGORY`, `NAVIGATE_PART_DETAIL`, `FILTER_PART_SEARCH`, `SIMULATE_REPLACEMENT`, `MUTATE_DRAFT_*`, `PART_RECOMMEND`, `BUILD_RECOMMEND`, `EXPLAIN_CURRENT`, `ASK_CLARIFICATION`, `LLM_FULL`이다. 서버는 decision의 `confidence`, `sideEffectRisk`, `targetCategory`, `partQuery`, `preferredPath`, `cachePolicy`, `semanticConstraintSignature`, `ambiguityReasons`를 내부 로그와 테스트에서만 사용하고 공개 응답 shape에는 노출하지 않는다.

@@ -3,6 +3,7 @@ package com.buildgraph.prototype.build;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.ArgumentMatchers.anyMap;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyList;
@@ -243,10 +244,70 @@ class BuildChatServiceTest {
         Map<String, Object> response = service.chat(Map.of("message", "아무거나 사줘"));
 
         assertThat(response).containsEntry("answerType", "GENERAL");
-        assertThat(response).containsEntry("message", "추천 기준을 조금 더 정하면 더 정확합니다. 예산, 해상도, 주 사용 게임이나 작업을 알려주세요.");
+        assertThat((String) response.get("message")).contains("용도와 예산");
+        assertThat(response.get("builds")).asList().isEmpty();
         assertThat(response.get("warnings")).asList().contains("LOW_INFORMATION");
+        // 되묻기에는 그대로 보낼 수 있는 완전한 프롬프트 칩과, 다음 턴에 에코할 원 요청이 담긴다.
+        assertThat(response.get("quickReplies")).asList().contains("게이밍 200만원");
+        @SuppressWarnings("unchecked")
+        Map<String, Object> clarification = (Map<String, Object>) response.get("clarification");
+        assertThat(clarification).containsEntry("originalMessage", "아무거나 사줘");
         assertThat(response).doesNotContainKeys("actions", "partRecommendation", "simulation");
         verifyNoInteractions(aiChatEngine, cacheService);
+    }
+
+    @Test
+    void buildChatSpecializesClarificationForResolutionOnlyRequests() {
+        JdbcTemplate jdbcTemplate = mock(JdbcTemplate.class);
+        BuildChatService service = new BuildChatService(jdbcTemplate, mock(ToolCheckService.class), mock(AiChatEngine.class), mock(BuildChatCacheService.class));
+
+        Map<String, Object> response = service.chat(Map.of("message", "해상도 좋은 피시 맞춰줘"));
+
+        assertThat(response).containsEntry("answerType", "GENERAL");
+        assertThat((String) response.get("message")).contains("해상도");
+        assertThat(response.get("builds")).asList().isEmpty();
+        assertThat(response.get("quickReplies")).asList()
+                .contains("FHD 게이밍 150만원", "QHD 게이밍 250만원", "4K 게이밍 400만원");
+    }
+
+    @Test
+    void buildChatMergesClarificationContextIntoFollowUpMessage() {
+        JdbcTemplate jdbcTemplate = mock(JdbcTemplate.class);
+        ToolCheckService toolCheckService = mock(ToolCheckService.class);
+        AiChatEngine aiChatEngine = mock(AiChatEngine.class);
+        BuildChatCacheService cacheService = mock(BuildChatCacheService.class);
+        BuildChatService service = new BuildChatService(jdbcTemplate, toolCheckService, aiChatEngine, cacheService);
+
+        // 원 요청("해상도 좋은 피시 맞춰줘")+답변("QHD 게이밍 250만원")이 합성되어 견적 추천으로 라우팅돼야 한다.
+        // 여기서는 캐시 조회까지 도달했는지(=명확화/미지원에서 멈추지 않았는지)로 라우팅을 검증한다.
+        when(cacheService.lookup(any(), any(), any())).thenReturn(Optional.of(Map.of(
+                "answerType", "BUDGET", "message", "cached", "builds", List.of(), "warnings", List.of()
+        )));
+
+        Map<String, Object> response = service.chat(Map.of(
+                "message", "QHD 게이밍 250만원",
+                "clarificationContext", Map.of("originalMessage", "해상도 좋은 피시 맞춰줘")
+        ));
+
+        assertThat(response).containsEntry("answerType", "BUDGET");
+        verify(cacheService).lookup(argThat(body -> "해상도 좋은 피시 맞춰줘 QHD 게이밍 250만원".equals(body.get("message"))), any(), any());
+    }
+
+    @Test
+    void buildChatStopsReAskingAfterOneClarificationRound() {
+        JdbcTemplate jdbcTemplate = mock(JdbcTemplate.class);
+        BuildChatService service = new BuildChatService(jdbcTemplate, mock(ToolCheckService.class), mock(AiChatEngine.class), mock(BuildChatCacheService.class));
+
+        // 되묻기에 또 모호하게 답해도 재질문하지 않는다 — 티어 스냅샷이 없으면 안내 문구로 즉답.
+        Map<String, Object> response = service.chat(Map.of(
+                "message", "알아서 해줘",
+                "clarificationContext", Map.of("originalMessage", "컴퓨터 하나 맞춰줘")
+        ));
+
+        assertThat(response).containsEntry("answerType", "GENERAL");
+        assertThat(response).doesNotContainKey("quickReplies");
+        assertThat(response).doesNotContainKey("clarification");
+        assertThat((String) response.get("message")).contains("예산");
     }
 
     @Test

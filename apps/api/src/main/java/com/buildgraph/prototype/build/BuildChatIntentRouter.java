@@ -70,8 +70,13 @@ public class BuildChatIntentRouter {
                 || containsAny(normalized, "컴퓨터하나", "아무거나", "뭐사지")
                 || isMissingMonitorContext(normalized)
                 || isVaguePurchaseIntent(normalized, category)) {
+            List<String> clarificationReasons = new ArrayList<>(List.of("LOW_INFORMATION"));
+            // "해상도 좋은"처럼 해상도 언급만 있고 FHD/QHD/4K가 특정되지 않은 요청은 해상도 되묻기로 특화한다
+            if (containsAny(normalized, "해상도", "화질")) {
+                clarificationReasons.add("RESOLUTION_CONTEXT");
+            }
             return decision(BuildChatIntent.ASK_CLARIFICATION, "LOW", "NONE", category, partQuery, "FAST_CLARIFICATION", "NONE", null,
-                    List.of("LOW_INFORMATION"));
+                    clarificationReasons);
         }
 
         return unsupported(category, partQuery);
@@ -171,8 +176,11 @@ public class BuildChatIntentRouter {
             return false;
         }
         boolean recommendVerb = isRecommendationVerb(normalized);
+        // 동사+본체 명사만으로는("피시 맞춰줘") 견적을 세울 근거가 없다 — 용도/예산/구체 모델 번호 중
+        // 하나는 있어야 추천으로 보내고, 아니면 모호 분기(되묻기)로 흘린다.
+        boolean specificPartSignal = normalized.matches(".*\\d{3,5}.*");
         boolean explicitRecommend = recommendVerb
-                && (hasBuildNoun(normalized) || hasBuildUseCaseSignal(normalized) || budget != null);
+                && (hasBuildUseCaseSignal(normalized) || budget != null || specificPartSignal);
         boolean budgetWithUseCase = budget != null && hasBuildUseCaseSignal(normalized);
         boolean budgetWithBuildNoun = budget != null && hasBuildNoun(normalized);
         // "디아블로4 돌릴 사양으로 견적 좀"처럼 동사 없이 용도+본체 명사만으로도 견적 요청으로 본다

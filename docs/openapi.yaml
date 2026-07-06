@@ -256,7 +256,7 @@ paths:
   /api/ai/build-chat:
     post:
       summary: AI 챗봇 LLM/RAG 기반 Build 추천
-      description: 축소된 Build Chat. 지원 범위는 예산/현재 견적 기반 추천 조합 생성, 부품 교체 성능 시뮬레이션, 명확화 질문뿐이다. 화면 이동, 견적초안 조작, 단일 부품 추천, 일반 상담 요청은 고정 안내 메시지(GENERAL)로 응답한다. LLM은 부품 ID/가격을 만들지 않으며, OPENAI_API_KEY가 없으면 428을 반환한다.
+      description: 축소된 Build Chat. 지원 범위는 예산/현재 견적 기반 추천 조합 생성, 부품 교체 성능 시뮬레이션, 명확화 질문뿐이다. 예산·용도가 모두 없는 모호 요청은 견적 없이 되묻기(quickReplies 칩 + clarification)로 응답하고, 프론트가 clarificationContext를 에코한 후속 답변과 합성해 추천한다(되묻기 최대 1회, 그 뒤엔 기본 예산 가정을 명시하고 추천). 화면 이동, 견적초안 조작, 단일 부품 추천, 일반 상담 요청은 고정 안내 메시지(GENERAL)로 응답한다. LLM은 부품 ID/가격을 만들지 않으며, OPENAI_API_KEY가 없으면 428을 반환한다.
       security:
         - bearerAuth: []
       parameters:
@@ -3118,6 +3118,13 @@ components:
           description: 현재 견적초안(그래프 상태) 문맥. 모든 화면에서 전달하며, 서버는 견적 완성 제약과 시뮬레이션 기준으로만 사용하고 직접 저장하지 않는다.
           allOf:
             - $ref: "#/components/schemas/QuoteDraftDto"
+        clarificationContext:
+          nullable: true
+          description: 직전 되묻기(clarification) 응답의 originalMessage 에코. 서버는 이 값과 message를 합성해 한 문장처럼 라우팅한다(무상태 왕복, 되묻기 최대 1회 — 합성 후에도 정보가 부족하면 기본 예산 가정을 명시하고 추천한다).
+          type: object
+          properties:
+            originalMessage:
+              type: string
     AiBuildChatResponse:
       type: object
       required: [answerType, message, builds, warnings]
@@ -3145,6 +3152,22 @@ components:
           items:
             type: string
           description: Build chat RAG 검색에 사용된 reusable evidence public id 목록
+        quickReplies:
+          type: array
+          items:
+            type: string
+          description: 되묻기(명확화) 응답에 함께 오는 선택지 칩. 각 항목은 그 자체로 완전한 프롬프트(용도+예산)라서 그대로 다음 message로 보내면 된다.
+        clarification:
+          nullable: true
+          type: object
+          description: 모호 요청 되묻기 정보. 프론트는 다음 요청의 clarificationContext로 originalMessage를 에코한다.
+          properties:
+            missingSlots:
+              type: array
+              items:
+                type: string
+            originalMessage:
+              type: string
         agentSessionId:
           type: string
           nullable: true

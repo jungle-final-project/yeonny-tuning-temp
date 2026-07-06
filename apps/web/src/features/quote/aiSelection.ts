@@ -167,6 +167,7 @@ export type AiChatMessage = {
   builds?: AiRecommendedBuild[];
   simulation?: AiPerformanceSimulation | null;
   warnings?: string[];
+  quickReplies?: string[];
 };
 
 export type AiAssistantSession = {
@@ -182,6 +183,8 @@ export type AiBuildChatRequest = {
   message: string;
   currentBuilds?: AiRecommendedBuild[];
   currentQuoteDraft?: QuoteDraft;
+  /** 직전 되묻기(clarification)에 대한 답변임을 알리는 에코 — 서버가 원 요청과 합성한다. */
+  clarificationContext?: { originalMessage: string };
 };
 
 export type AiBuildChatResponse = {
@@ -190,6 +193,9 @@ export type AiBuildChatResponse = {
   builds: AiRecommendedBuild[];
   simulation?: AiPerformanceSimulation | null;
   warnings?: string[];
+  /** 모호 요청 되묻기 시 함께 오는 선택지 칩 — 그 자체로 완전한 프롬프트다. */
+  quickReplies?: string[];
+  clarification?: { missingSlots: string[]; originalMessage: string } | null;
 };
 
 export const PART_CATEGORY_LABELS: Record<PartCategory, string> = {

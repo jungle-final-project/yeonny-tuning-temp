@@ -56,6 +56,8 @@ export function AiBuildAssistant({ surface = 'home' }: AiBuildAssistantProps) {
   const [failedBuild, setFailedBuild] = useState<AiRecommendedBuild | null>(null);
   const [applyingBuildId, setApplyingBuildId] = useState<string | null>(null);
   const [pendingSubmit, setPendingSubmit] = useState<string | null>(null);
+  // 직전 응답이 되묻기였다면 다음 전송에 원 요청을 에코해 서버가 두 문장을 합성하게 한다(1회 왕복).
+  const [pendingClarification, setPendingClarification] = useState<{ originalMessage: string } | null>(null);
   const hasToken = Boolean(getToken());
   // 패널을 실제로 연 뒤에만 현재 견적(드래프트)을 미리 받는다. 전역 렌더라 로그인만으로
   // 모든 페이지에서 draft API가 선행되던 것을 없앤다. 완성/시뮬레이션 요청은 패널 open 시점에
@@ -182,8 +184,14 @@ export function AiBuildAssistant({ surface = 'home' }: AiBuildAssistantProps) {
       const response = await buildChat({
         message: nextPrompt,
         currentBuilds: recentBuildsForChatContext(baseSession),
-        currentQuoteDraft
+        currentQuoteDraft,
+        clarificationContext: pendingClarification ?? undefined
       });
+      setPendingClarification(
+        response.clarification?.originalMessage
+          ? { originalMessage: response.clarification.originalMessage }
+          : null
+      );
       const responseTime = new Date().toISOString();
       const responseBuilds = response.builds?.length ? normalizeAiBuilds(response.builds) : undefined;
       const latestBuilds = responseBuilds ? mergeAiBuildHistory(responseBuilds, baseSession.latestBuilds) : baseSession.latestBuilds;
@@ -196,7 +204,8 @@ export function AiBuildAssistant({ surface = 'home' }: AiBuildAssistantProps) {
         kind: messageKind(response.answerType),
         builds: responseBuilds,
         simulation: response.simulation ?? undefined,
-        warnings: response.warnings ?? []
+        warnings: response.warnings ?? [],
+        quickReplies: response.quickReplies ?? undefined
       };
       const nextSession = {
         messages: [...optimisticSession.messages, assistantMessage],
@@ -225,6 +234,12 @@ export function AiBuildAssistant({ surface = 'home' }: AiBuildAssistantProps) {
       setIsSending(false);
     }
   }
+
+  // 되묻기 칩 클릭 → 기존 pendingSubmit 경로로 자동 전송. setState만 쓰므로 참조가 영구 안정이라
+  // ChatMessage memo를 깨지 않는다.
+  const handleQuickReply = useCallback((reply: string) => {
+    setPendingSubmit(reply);
+  }, []);
 
   // 새 메시지 추가로 리스트가 리렌더될 때 ChatMessage memo가 유지되도록 참조를 안정화한다.
   const selectBuild = useCallback(async (build: AiRecommendedBuild) => {
@@ -332,6 +347,7 @@ export function AiBuildAssistant({ surface = 'home' }: AiBuildAssistantProps) {
               key={message.id}
               message={message}
               onSelectBuild={selectBuild}
+              onQuickReply={handleQuickReply}
               applyingBuildId={applyingBuildId}
             />
           ))}
@@ -438,10 +454,12 @@ function toolFromPrompt(prompt: string): BuildGraphFocus['tool'] {
 const ChatMessage = memo(function ChatMessage({
   message,
   onSelectBuild,
+  onQuickReply,
   applyingBuildId
 }: {
   message: AiChatMessage;
   onSelectBuild: (build: AiRecommendedBuild) => void;
+  onQuickReply: (reply: string) => void;
   applyingBuildId: string | null;
 }) {
   const isUser = message.role === 'user';
@@ -459,6 +477,20 @@ const ChatMessage = memo(function ChatMessage({
             </div>
           ) : null}
           <p className="break-keep">{message.text}</p>
+          {!isUser && message.quickReplies?.length ? (
+            <div data-testid="ai-quick-replies" className="mt-2 flex flex-wrap gap-2">
+              {message.quickReplies.map((reply) => (
+                <button
+                  key={reply}
+                  type="button"
+                  onClick={() => onQuickReply(reply)}
+                  className="rounded-full border border-slate-200 bg-white px-3 py-1.5 text-[11px] font-black text-slate-600 shadow-sm transition hover:border-brand-blue hover:text-brand-blue focus:outline-none focus:ring-4 focus:ring-blue-100"
+                >
+                  {reply}
+                </button>
+              ))}
+            </div>
+          ) : null}
         </div>
 
         {message.simulation ? (
@@ -481,6 +513,7 @@ const ChatMessage = memo(function ChatMessage({
   // applyingBuildId가 바뀌면 카드 버튼의 로딩/비활성 상태가 갱신되도록 비교에 포함한다.
   prev.message.id === next.message.id
   && prev.onSelectBuild === next.onSelectBuild
+  && prev.onQuickReply === next.onQuickReply
   && prev.applyingBuildId === next.applyingBuildId
 ));
 

@@ -1056,6 +1056,64 @@ test('chatbot asks for login when token disappears before submit', async ({ page
   expect(buildChatCalls).toBe(0);
 });
 
+test('chatbot asks clarification with quick replies for vague requests and merges the follow-up', async ({ page }) => {
+  await mockBuildGraphApi(page);
+  await mockCompatibleCandidatesApi(page);
+  await mockCurrentQuoteDraftApi(page);
+  const chatRequests: Array<{ message: string; clarificationContext?: { originalMessage?: string } }> = [];
+  await page.route('**/api/ai/build-chat', async (route) => {
+    const body = JSON.parse(route.request().postData() ?? '{}') as {
+      message?: string;
+      clarificationContext?: { originalMessage?: string };
+    };
+    chatRequests.push({ message: body.message ?? '', clarificationContext: body.clarificationContext });
+    if (chatRequests.length === 1) {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          answerType: 'GENERAL',
+          message: '어떤 해상도 기준으로 맞출까요? 예산까지 알려주시면 바로 추천해드릴게요.',
+          builds: [],
+          warnings: ['LOW_INFORMATION'],
+          quickReplies: ['FHD 게이밍 150만원', 'QHD 게이밍 250만원', '4K 게이밍 400만원'],
+          clarification: { missingSlots: ['budget', 'useCase'], originalMessage: '해상도 좋은 피시 맞춰줘' }
+        })
+      });
+      return;
+    }
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        answerType: 'BUDGET',
+        message: '250만원 기준 추천입니다.',
+        builds: budgetBuilds(2500000),
+        warnings: []
+      })
+    });
+  });
+  await openHomeAsUser(page);
+  await openDesktopAiAssistant(page);
+  const chatbotPanel = page.getByTestId('ai-chatbot-panel');
+  const chatbotInput = page.getByRole('textbox', { name: 'AI 챗봇에게 PC 사양 질문' });
+
+  await chatbotInput.fill('해상도 좋은 피시 맞춰줘');
+  await page.getByRole('button', { name: '질문 보내기' }).click();
+
+  // 1턴: 견적 없이 되묻기 + 선택지 칩
+  const quickReplies = chatbotPanel.getByTestId('ai-quick-replies');
+  await expect(quickReplies).toBeVisible();
+  await expect(chatbotPanel).toContainText('어떤 해상도 기준으로');
+  await quickReplies.getByRole('button', { name: 'QHD 게이밍 250만원' }).click();
+
+  // 2턴: 칩 문구가 그대로 전송되고 원 요청이 clarificationContext로 에코된다
+  await expect.poll(() => chatRequests.length).toBe(2);
+  expect(chatRequests[1].message).toBe('QHD 게이밍 250만원');
+  expect(chatRequests[1].clarificationContext?.originalMessage).toBe('해상도 좋은 피시 맞춰줘');
+  await expect(chatbotPanel).toContainText('250만원 기준 추천입니다.');
+});
+
 test('chatbot sends draft mutation messages to build-chat without touching the quote draft', async ({ page }) => {
   let buildChatCalls = 0;
   const draftMutationMethods: string[] = [];
