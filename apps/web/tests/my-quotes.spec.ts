@@ -168,6 +168,17 @@ async function openMyQuotesAsUser(page: Page) {
       body: JSON.stringify({ items: priceAlerts, page: 0, size: 20, total: priceAlerts.length })
     });
   });
+  // 저장 견적 단위 성능 요약(카드 스트립) — CPU/GPU 벤치마크 점수를 돌려준다.
+  await page.route('**/api/tools/performance/check', async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        tool: 'performance', status: 'PASS', confidence: 'HIGH', summary: '',
+        details: { cpuBenchmarkScore: 72, gpuBenchmarkScore: 78, benchmarkSource: 'benchmark_summaries', gameFpsEvidence: [] }
+      })
+    });
+  });
   await page.route('**/api/build-graphs/resolve', async (route) => {
     const body = JSON.parse(route.request().postData() ?? '{}');
     graphRequests.push(body);
@@ -196,7 +207,13 @@ async function openMyQuotesAsUser(page: Page) {
         focusNodeIds: ['part-CPU', 'part-GPU'],
         insights: [],
         toolResults: [
-          { tool: 'performance', status: 'PASS', confidence: 'HIGH', summary: '저장 견적 성능 균형을 확인했습니다.' }
+          {
+            tool: 'performance',
+            status: 'PASS',
+            confidence: 'HIGH',
+            summary: '저장 견적 성능 균형을 확인했습니다.',
+            details: { cpu: 'AMD Ryzen 7 9700X', gpu: 'GeForce RTX 5070', cpuBenchmarkScore: 72, gpuBenchmarkScore: 78, benchmarkSource: 'benchmark_summaries' }
+          }
         ]
       })
     });
@@ -218,6 +235,10 @@ test('shows saved quotes, actionable price alert setup, and alert progress', asy
   await expect(firstBuild).toContainText('QHD 균형 저장 견적');
   await expect(firstBuild.getByRole('link', { name: '견적 상세' })).toHaveAttribute('href', '/builds/build-qhd-balanced');
   await expect(firstBuild.getByRole('button', { name: '부품 변경' })).toBeVisible();
+  // 저장 견적 단위 성능 요약 — CPU/GPU 벤치마크 등급으로 저장 견적끼리 비교.
+  const perf = firstBuild.getByTestId('saved-build-performance-build-qhd-balanced');
+  await expect(perf).toContainText('성능 요약');
+  await expect(perf).toContainText('상위급');
   await firstBuild.getByRole('button', { name: '목표가 등록' }).click();
 
   await expect(page.getByLabel('저장 견적 부품')).toHaveValue('part-cpu-9700x');

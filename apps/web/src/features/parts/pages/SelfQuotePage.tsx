@@ -391,7 +391,7 @@ export function SelfQuotePage() {
         </div>
 
         {/* 담긴 견적으로 성능 비교(R1): resolveBuildGraph가 이미 내려주는 performance 툴 결과를 표시한다. */}
-        <QuotePerformancePanel graph={graphQuery.data} draftItems={draftItems} />
+        <QuotePerformancePanel graph={graphQuery.data} items={draftItems} />
 
         {/* 멘토 피드백: 지금까지 고른 부품 한눈에 — 그리드 아래 비어 있던 띠를 전폭 견적 테이블로 채운다. */}
         <QuoteItemsTable draftItems={draftItems} />

@@ -2,7 +2,6 @@ import { useMemo, useState } from 'react';
 import { keepPreviousData, useQuery } from '@tanstack/react-query';
 import type { BuildGraphResolveResponse } from '../../../quote/aiSelection';
 import { checkBuildPerformance, type GameFpsEvidence } from '../../../quote/quoteApi';
-import type { QuoteDraftItem } from '../../types';
 
 // 담긴 견적으로 FPS를 조회할 수 있는 게임·해상도 — game_fps_benchmarks 시드 커버리지 기준.
 const FPS_GAMES = [
@@ -32,15 +31,18 @@ type PerformanceDetails = {
 // 담긴 견적의 성능을 셀프견적에 바로 보여준다 — resolveBuildGraph가 이미 내려주는 performance 툴 결과를
 // 읽어(신규 백엔드 없음) CPU/GPU 성능 점수와 용도 적합도를 표시한다. 점수는 카테고리 내부 비교용(0~100)
 // 공개 벤치마크/스펙 기반 참고값이며 정확 FPS·실성능을 보장하지 않는다(정책: guaranteePolicy).
+// 셀프견적 드래프트·저장 견적 어디서든 재사용할 수 있게 최소 필드(category, partId)만 받는다.
+type PerfItem = { category: string; partId: string };
+
 export function QuotePerformancePanel({
   graph,
-  draftItems
+  items
 }: {
   graph?: BuildGraphResolveResponse;
-  draftItems: QuoteDraftItem[];
+  items: PerfItem[];
 }) {
   // CPU·GPU가 하나도 없으면 성능을 말할 근거가 없다 — 패널을 숨긴다.
-  const hasScorable = draftItems.some((item) => item.category === 'CPU' || item.category === 'GPU');
+  const hasScorable = items.some((item) => item.category === 'CPU' || item.category === 'GPU');
   if (!hasScorable) {
     return null;
   }
@@ -52,10 +54,11 @@ export function QuotePerformancePanel({
   const cpuScore = toScore(details.cpuBenchmarkScore);
   const gpuScore = toScore(details.gpuBenchmarkScore);
   // FPS 참고범위는 GPU가 있어야 의미 있다 — CPU·GPU partIds만 조회에 넘긴다.
-  const hasGpu = draftItems.some((item) => item.category === 'GPU');
-  const perfPartIds = draftItems
+  const hasGpu = items.some((item) => item.category === 'GPU');
+  const perfPartIds = items
     .filter((item) => item.category === 'CPU' || item.category === 'GPU')
-    .map((item) => item.partId);
+    .map((item) => item.partId)
+    .filter(Boolean);
   // 벤치마크 근거 vs 스펙 추정 — 사용자에게 신뢰 수준을 숨기지 않는다.
   const benchmarkBacked = details.benchmarkSource === 'benchmark_summaries';
   const fit = performance.status === 'PASS'

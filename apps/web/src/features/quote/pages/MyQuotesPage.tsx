@@ -4,9 +4,10 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { BellRing, CheckCircle2, FileText, GitBranch, PencilLine, Save, ShoppingBag, Target, X } from 'lucide-react';
 import { Panel, Screen, StateMessage } from '../../../components/ui';
 import { applyAiBuildToQuoteDraft } from '../../parts/partsApi';
+import { QuotePerformancePanel } from '../../parts/components/slot-board/QuotePerformancePanel';
 import type { PartCategory } from '../aiSelection';
 import { BuildDependencyGraph } from '../components/BuildDependencyGraph';
-import { createQuotePriceAlert, getBuildHistory, getPriceAlerts, resolveBuildGraph, type PriceAlert } from '../quoteApi';
+import { checkBuildPerformance, createQuotePriceAlert, getBuildHistory, getPriceAlerts, resolveBuildGraph, type PriceAlert } from '../quoteApi';
 import type { BuildItem, BuildSummary } from '../types';
 
 type SavedPartOption = {
@@ -366,6 +367,8 @@ function SavedBuildCard({
               </span>
             ))}
           </div>
+          {/* 저장 견적 단위 성능 요약 — 저장한 견적들을 성능으로 한눈에 비교한다(공개 벤치마크 참고값). */}
+          <SavedBuildPerformanceStrip build={build} />
         </div>
         <div className="shrink-0 lg:text-right">
           <div className="text-xs font-black text-slate-500">견적 합계</div>
@@ -404,6 +407,73 @@ function SavedBuildCard({
       </div>
     </article>
   );
+}
+
+// 저장 견적 카드의 경량 성능 요약: CPU/GPU 벤치마크 점수를 등급 막대로 — 저장 견적끼리 성능 비교.
+// 그래프 resolve(무거움) 대신 performance 툴만 부르는 경량 엔드포인트를 재사용한다.
+function SavedBuildPerformanceStrip({ build }: { build: BuildSummary }) {
+  const partIds = useMemo(() => {
+    return (build.items ?? [])
+      .filter((item) => item.category === 'CPU' || item.category === 'GPU')
+      .map((item) => resolvePartId(item))
+      .filter(Boolean);
+  }, [build.items]);
+
+  const { data, isLoading } = useQuery({
+    queryKey: ['saved-build-performance', build.id, partIds.join(',')],
+    queryFn: () => checkBuildPerformance({ partIds }),
+    enabled: partIds.length > 0,
+    staleTime: 5 * 60 * 1000
+  });
+
+  if (partIds.length === 0) {
+    return null;
+  }
+  const details = (data?.details ?? {}) as { cpuBenchmarkScore?: number; gpuBenchmarkScore?: number };
+  const cpu = toPerfScore(details.cpuBenchmarkScore);
+  const gpu = toPerfScore(details.gpuBenchmarkScore);
+
+  return (
+    <div data-testid={`saved-build-performance-${build.id}`} className="mt-3 rounded-md border border-slate-200 bg-slate-50/70 px-3 py-2.5">
+      <div className="mb-1.5 text-[11px] font-black text-slate-500">성능 요약 <span className="font-bold text-slate-400">(공개 벤치마크 참고)</span></div>
+      {isLoading ? (
+        <div className="h-7 animate-pulse rounded bg-slate-200" />
+      ) : (
+        <div className="grid grid-cols-2 gap-2.5">
+          <PerfMiniBar label="CPU" score={cpu} />
+          <PerfMiniBar label="GPU" score={gpu} />
+        </div>
+      )}
+    </div>
+  );
+}
+
+function PerfMiniBar({ label, score }: { label: string; score: number | null }) {
+  const tone = score === null ? 'bg-slate-300' : score >= 80 ? 'bg-emerald-500' : score >= 55 ? 'bg-brand-blue' : 'bg-amber-500';
+  return (
+    <div>
+      <div className="flex items-baseline justify-between gap-1">
+        <span className="text-[10px] font-black text-slate-600">{label}</span>
+        <span className="text-[10px] font-bold text-slate-500">{score === null ? '자료 없음' : `${perfTier(score)} · ${Math.round(score)}`}</span>
+      </div>
+      <div className="mt-1 h-1.5 overflow-hidden rounded-full bg-slate-200">
+        <div className={`h-full rounded-full ${tone}`} style={{ width: `${score === null ? 0 : Math.min(100, Math.max(4, score))}%` }} />
+      </div>
+    </div>
+  );
+}
+
+function toPerfScore(value: unknown): number | null {
+  const num = Number(value);
+  return Number.isFinite(num) && num > 0 ? num : null;
+}
+
+function perfTier(score: number): string {
+  if (score >= 85) return '최상위급';
+  if (score >= 70) return '상위급';
+  if (score >= 55) return '중상위급';
+  if (score >= 40) return '중급';
+  return '입문급';
 }
 
 function PriceAlertRow({ alert }: { alert: PriceAlert }) {
@@ -495,7 +565,7 @@ function SavedBuildGraphDialog({
             <X size={18} aria-hidden="true" />
           </button>
         </header>
-        <div className="min-h-0 flex-1 overflow-y-auto p-3 sm:p-5">
+        <div className="min-h-0 flex-1 space-y-4 overflow-y-auto p-3 sm:p-5">
           <BuildDependencyGraph
             graph={graph}
             isLoading={isLoading}
@@ -504,6 +574,8 @@ function SavedBuildGraphDialog({
             title="견적 관계 그래프"
             subtitle="저장 견적에 포함된 부품만 기준으로 계산한 읽기 전용 관계도입니다."
           />
+          {/* 저장 견적 단위 성능 상세 — resolve 응답에 이미 담긴 performance 결과 + 게임별 FPS 참고. */}
+          <QuotePerformancePanel graph={graph} items={perfItemsForBuild(build)} />
         </div>
       </section>
     </div>
@@ -548,6 +620,13 @@ function collectSavedPartOptions(build: BuildSummary): SavedPartOption[] {
   }
 
   return options;
+}
+
+// 성능 패널이 쓰는 최소 형태(category, partId)로 저장 견적 부품을 정규화한다.
+function perfItemsForBuild(build: BuildSummary) {
+  return (build.items ?? [])
+    .map((item) => ({ category: item.category, partId: resolvePartId(item) }))
+    .filter((item) => Boolean(item.partId));
 }
 
 function quoteDraftItemsForBuild(build: BuildSummary) {
