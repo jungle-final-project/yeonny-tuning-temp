@@ -736,6 +736,10 @@ test('shows the current build performance panel from the resolve performance too
   await page.route('**/api/parts**', async (route) => {
     await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ items: [], page: 0, size: 20, total: 0 }) });
   });
+  // GPU가 있어 FPS 섹션이 조회를 시도한다 — 자료 없음 응답으로 격리(이 테스트는 FPS를 단언하지 않음).
+  await page.route('**/api/tools/performance/check', async (route) => {
+    await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ tool: 'performance', status: 'WARN', confidence: 'MEDIUM', summary: '', details: { gameFpsEvidence: [] } }) });
+  });
 
   await page.goto('/self-quote');
 
@@ -749,6 +753,89 @@ test('shows the current build performance panel from the resolve performance too
   await expect(panel).toContainText('공개 벤치마크 기준');
   // 정책: 정확 FPS·실성능 보장 아님 문구 노출.
   await expect(panel).toContainText('보장하지 않습니다');
+});
+
+test('shows game FPS reference in the performance panel with game and resolution selectors', async ({ page }) => {
+  await loginAsUser(page);
+  const draft = {
+    ...emptyDraft,
+    items: [
+      draftItem('part-perf-cpu', 'CPU', '라이젠 9600X', 300000),
+      draftItem('part-perf-gpu', 'GPU', 'RTX 5060', 500000)
+    ],
+    totalPrice: 800000,
+    itemCount: 2
+  };
+  await page.route('**/api/quote-drafts/current**', async (route) => {
+    await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(draft) });
+  });
+  await page.route('**/api/build-graphs/resolve', async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        ...buildGraphResponse(),
+        toolResults: [{
+          tool: 'performance',
+          status: 'PASS',
+          confidence: 'HIGH',
+          summary: '적합도 점수상 무리가 적습니다.',
+          details: { cpu: '라이젠 9600X', gpu: 'RTX 5060', cpuBenchmarkScore: 68, gpuBenchmarkScore: 63, benchmarkSource: 'benchmark_summaries' }
+        }]
+      })
+    });
+  });
+  await page.route('**/api/parts**', async (route) => {
+    await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ items: [], page: 0, size: 20, total: 0 }) });
+  });
+  // FPS 조회 — 요청 body의 game/resolution에 따라 다른 값을 돌려줘 선택기 동작을 검증한다.
+  await page.route('**/api/tools/performance/check', async (route) => {
+    const body = JSON.parse(route.request().postData() ?? '{}');
+    const game = String(body?.context?.game ?? '');
+    const resolution = String(body?.context?.resolution ?? '');
+    const avgFps = game.includes('valorant') ? 240 : resolution === '4k' ? 55 : 130;
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        tool: 'performance', status: 'PASS', confidence: 'HIGH', summary: '',
+        details: {
+          gameFpsEvidence: [{
+            gameTitle: game.includes('valorant') ? '발로란트' : '배틀그라운드',
+            gameKey: game.includes('valorant') ? 'valorant' : 'pubg',
+            resolution: resolution === '4k' ? '4K' : resolution === 'fhd' ? 'FHD' : 'QHD',
+            graphicsPreset: 'PC_BUILDS_MEDIUM',
+            avgFps,
+            onePercentLowFps: Math.round(avgFps * 0.7),
+            sourceName: 'PC-Builds FPS calculator',
+            confidence: 'MEDIUM',
+            match: { evidenceExactness: 'GPU_CLASS_REFERENCE', gameMatched: true, resolutionMatched: true }
+          }]
+        }
+      })
+    });
+  });
+
+  await page.goto('/self-quote');
+
+  const fps = page.getByTestId('quote-fps-section');
+  await expect(fps).toBeVisible();
+  // 기본: 배그 · QHD → 130fps, '매우 부드러움', 프리셋 한글화, 1% low.
+  await expect(fps.getByTestId('fps-avg')).toHaveText('130');
+  await expect(fps.getByTestId('fps-result')).toContainText('매우 부드러움');
+  await expect(fps.getByTestId('fps-result')).toContainText('중간 옵션');
+  await expect(fps.getByTestId('fps-result')).toContainText('최저 약 91 fps');
+  // 정책 문구.
+  await expect(fps).toContainText('공개 자료 기준 참고 범위');
+
+  // 해상도 4K 전환 → 55fps, '무난'.
+  await fps.getByTestId('fps-res-4K').click();
+  await expect(fps.getByTestId('fps-avg')).toHaveText('55');
+  await expect(fps.getByTestId('fps-result')).toContainText('무난');
+
+  // 게임 발로란트 전환 → 240fps, '매우 부드러움'.
+  await fps.getByTestId('fps-game-valorant').click();
+  await expect(fps.getByTestId('fps-avg')).toHaveText('240');
 });
 
 test('offers a performance comparison entry point on CPU candidates that prefills the assistant', async ({ page }) => {

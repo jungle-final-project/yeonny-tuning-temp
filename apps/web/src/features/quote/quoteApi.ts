@@ -84,3 +84,45 @@ export function resolveBuildGraph(payload: BuildGraphResolveRequest) {
     body: JSON.stringify(payload)
   });
 }
+
+// 게임별 FPS 참고범위 — 공개 자료 기반 참고값이며 정확 FPS를 보장하지 않는다(guaranteePolicy).
+export type GameFpsEvidence = {
+  gameTitle: string;
+  gameKey: string;
+  resolution: string;
+  graphicsPreset?: string | null;
+  avgFps?: number | null;
+  onePercentLowFps?: number | null;
+  sourceName?: string | null;
+  confidence?: 'LOW' | 'MEDIUM' | 'HIGH';
+  match?: {
+    evidenceExactness?: string;
+    resolutionMatched?: boolean;
+    gameMatched?: boolean;
+  };
+};
+
+export type PerformanceCheckResult = {
+  tool: string;
+  status: 'PASS' | 'WARN' | 'FAIL';
+  confidence: string;
+  summary: string;
+  details?: {
+    gameFpsEvidence?: GameFpsEvidence[];
+    gameFpsEvidenceStatus?: string;
+    guaranteePolicy?: string;
+    [key: string]: unknown;
+  };
+};
+
+// 기존 Tool 엔드포인트 재사용(신규 백엔드 없음): 담긴 견적의 CPU/GPU partIds + 게임·해상도 context로
+// game_fps_benchmarks 공개 참고값을 조회한다.
+export function checkBuildPerformance(payload: { partIds: string[]; game?: string; resolution?: string }) {
+  return api<PerformanceCheckResult>('/api/tools/performance/check', {
+    method: 'POST',
+    body: JSON.stringify({
+      partIds: payload.partIds,
+      context: { game: payload.game, resolution: payload.resolution }
+    })
+  });
+}
