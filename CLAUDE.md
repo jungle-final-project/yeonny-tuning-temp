@@ -55,8 +55,9 @@ cd apps/api && ./gradlew test --tests "com.buildgraph.prototype.user.UserControl
 ## Design direction
 - Final UX is not a physical PC assembly simulator.
 - **Information first, graphics assist**: 견적 체크리스트(순서·상태·가격·총액)와 후보 카드가 주인공이고, 보드/연결선은 호환성 이해 도구다. 장식용 배경 평면도·하드웨어 라벨(PCIe/24핀 등)은 쓰지 않는다.
-- 보드는 **메인보드 허브 방사형**: 중앙 허브(메인보드)에서 스포크가 뻗고, 크로스 관계는 인접 배치 + 곡선(bow 설정). 장착 시 카드가 허브 방향으로 밀려 들어오는 "꽂힘" 모션(slot-plug-in, reduced-motion 시 off).
-- 장착된 슬롯 카드는 **상품 이미지 + 카테고리 + 짧은 요약(shortSpec)**만 — 상품명 전문·가격은 체크리스트와 hover 툴팁(title)이 담당한다. 빈 슬롯은 local SVG glyph(`/slot-board/parts/*.svg`)로 표시한다.
+- 보드는 **실장도(placement)**: 추상 메인보드 평면도(BoardPlanArt, viewBox 160×100)의 실장 지점(CPU 소켓·DIMM·PCIe·M.2·명판)에 부품이 꽂히고, 보드에 안 꽂히는 부품(파워·쿨러·케이스)은 우측 도킹 베이. **배치는 고정** — 아트와 핫스팟 좌표(SLOT_CONFIGS)는 같은 상수 계보라 함께만 움직인다(구 관리자 드래그 배치는 미사용). 장착 시 꽂힘 모션(slot-plug-in)+선 draw-in+포트 점등, reduced-motion 시 전부 off.
+- 부품 표현은 **카테고리 통일 SVG 에셋**(`/slot-board/parts/*.svg`, 단색 기하 추상 — 기판 #f4f7fb/부품 #e2e8f0/선 #cbd5e1) — 개별 상품 사진을 보드에 쓰지 않는다. 상품명 전문·가격은 체크리스트와 hover 툴팁(title)이 담당한다.
+- 실장 관계(CPU-보드, RAM-보드, GPU-보드)는 선을 그리지 않는다 — 꽂혀 있는 그림이 관계다(상태 점/문제 라벨만 실장 지점 옆에). 도킹 부품의 관계(24핀·쿨러 장착·전력 등)만 연결선으로 그린다.
 - 관계선 라벨은 **문제일 때만 텍스트**(WARN/FAIL — 서버 사유 그대로), 정상/미장착은 상태 점(dot)만. "PCIe x16/소켓" 같은 전문용어를 평상시에 노출하지 않는다(상세는 title 툴팁).
 - Do not draw complex CPU/RAM/GPU/SSD/PSU/case/cooler shapes with CSS.
 - SVG files are glyphs only. Product name, category, price, selected ring, status badge, and empty state must be rendered by React/CSS.

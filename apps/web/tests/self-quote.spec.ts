@@ -372,9 +372,9 @@ test('renders the slot board as an information-first compatibility diagram with 
   await expect(page.getByText('장착 불가', { exact: true })).toBeVisible();
   await expect(page.getByText('미장착', { exact: true })).toBeVisible();
 
-  // 카드는 이미지+짧은 요약(사양) 중심 — 상품명 전문은 hover 툴팁과 체크리스트가 담당한다.
+  // 카드는 카테고리 통일 에셋+짧은 요약(사양) 중심 — 상품명 전문은 hover 툴팁과 체크리스트가 담당한다.
   const gpuSlot = page.getByTestId('slot-GPU');
-  await expect(gpuSlot.getByTestId('slot-part-image')).toHaveAttribute('src', 'https://example.test/visual-gpu.png');
+  await expect(gpuSlot.getByTestId('slot-part-image')).toHaveAttribute('src', '/slot-board/parts/gpu.svg');
   await expect(gpuSlot).toHaveAttribute('title', 'NVIDIA GeForce RTX 4070 Ti SUPER');
   await expect(gpuSlot).toContainText('PCIe x16 4.0');
 
@@ -555,7 +555,7 @@ test('shows the completion guide when all eight slots are filled', async ({ page
   await expect(page.getByTestId('quote-checklist-progress')).toHaveText('8/8 완료');
 });
 
-test('applies saved admin slot positions from the graph response when they use slot-board percent coordinates', async ({ page }) => {
+test('keeps fixed placement coordinates even when the graph response carries saved positions', async ({ page }) => {
   await loginAsUser(page);
 
   await page.route('**/api/build-graphs/resolve', async (route) => {
@@ -586,10 +586,11 @@ test('applies saved admin slot positions from the graph response when they use s
 
   await page.goto('/self-quote');
 
-  await expect(page.getByTestId('slot-GPU')).toHaveAttribute('style', /--sx:\s*54%;\s*--sy:\s*8%/);
-  await expect(page.getByTestId('slot-PSU')).toHaveAttribute('style', /--sx:\s*8%;\s*--sy:\s*64%/);
-  // 저장 좌표가 없는 슬롯은 허브 방사형 기본 좌표(CPU = 12시 방향)로 떨어진다.
-  await expect(page.getByTestId('slot-CPU')).toHaveAttribute('style', /--sx:\s*39%;\s*--sy:\s*2\.5%/);
+  // 실장도는 평면도 아트(소켓/DIMM/PCIe)와 실장 지점이 픽셀 정합해야 하므로 배치가 고정이다 —
+  // 그래프 응답에 저장 좌표가 있어도 무시한다(구 관리자 드래그 배치는 실장도에서 미사용).
+  await expect(page.getByTestId('slot-GPU')).toHaveAttribute('style', /--sx:\s*6\.25%;\s*--sy:\s*54%/);
+  await expect(page.getByTestId('slot-PSU')).toHaveAttribute('style', /--sx:\s*70%;\s*--sy:\s*68%/);
+  await expect(page.getByTestId('slot-CPU')).toHaveAttribute('style', /--sx:\s*18\.75%;\s*--sy:\s*16%/);
 });
 
 test('shows graph edge labels on the fallback topology relationships', async ({ page }) => {

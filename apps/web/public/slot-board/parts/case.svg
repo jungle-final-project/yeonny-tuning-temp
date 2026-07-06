@@ -1,20 +1,9 @@
-<svg width="128" height="128" viewBox="0 0 128 128" fill="none" xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="title desc">
-  <title id="title">Case glyph</title>
-  <desc id="desc">Abstract PC case outline glyph for a slot board node.</desc>
-  <defs>
-    <linearGradient id="caseBody" x1="34" y1="14" x2="94" y2="116" gradientUnits="userSpaceOnUse">
-      <stop stop-color="#FAFCFF"/>
-      <stop offset="1" stop-color="#E6EFF7"/>
-    </linearGradient>
-  </defs>
-  <rect x="34" y="12" width="60" height="104" rx="13" fill="url(#caseBody)" stroke="#557488" stroke-width="3"/>
-  <rect x="44" y="24" width="40" height="80" rx="8" stroke="#9CB5C8" stroke-width="2" stroke-dasharray="5 7"/>
-  <circle cx="72" cy="38" r="5" fill="#19A7B8" opacity="0.62"/>
-  <g fill="#9CB5C8" opacity="0.58">
-    <circle cx="54" cy="66" r="3"/><circle cx="64" cy="66" r="3"/><circle cx="74" cy="66" r="3"/>
-    <circle cx="54" cy="78" r="3"/><circle cx="64" cy="78" r="3"/><circle cx="74" cy="78" r="3"/>
-    <circle cx="54" cy="90" r="3"/><circle cx="64" cy="90" r="3"/><circle cx="74" cy="90" r="3"/>
-  </g>
-  <path d="M94 26H102C106.418 26 110 29.582 110 34V100C110 104.418 106.418 108 102 108H94" stroke="#9CB5C8" stroke-width="2" opacity="0.55"/>
-  <path d="M50 16V8H78V16" stroke="#557488" stroke-width="3" stroke-linecap="round"/>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" fill="none" role="img" aria-label="CASE">
+  <rect x="34" y="8" width="60" height="112" rx="10" fill="#e2e8f0" stroke="#cbd5e1" stroke-width="4"/>
+  <rect x="44" y="34" width="40" height="52" rx="4" fill="#eef2f7" stroke="#cbd5e1" stroke-width="3"/>
+  <line x1="48" y1="44" x2="80" y2="44" stroke="#cbd5e1" stroke-width="3"/>
+  <line x1="48" y1="56" x2="80" y2="56" stroke="#cbd5e1" stroke-width="3"/>
+  <line x1="48" y1="68" x2="80" y2="68" stroke="#cbd5e1" stroke-width="3"/>
+  <circle cx="64" cy="20" r="4" fill="#94a3b8"/>
+  <rect x="44" y="96" width="40" height="12" rx="3" fill="#eef2f7" stroke="#cbd5e1" stroke-width="3"/>
 </svg>

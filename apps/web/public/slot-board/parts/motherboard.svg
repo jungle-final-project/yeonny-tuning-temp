@@ -1,30 +1,12 @@
-<svg width="128" height="128" viewBox="0 0 128 128" fill="none" xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="title desc">
-  <title id="title">Motherboard glyph</title>
-  <desc id="desc">Abstract motherboard glyph with socket, expansion lane, and component hints.</desc>
-  <defs>
-    <linearGradient id="board" x1="16" y1="12" x2="112" y2="116" gradientUnits="userSpaceOnUse">
-      <stop stop-color="#F7FBFF"/>
-      <stop offset="1" stop-color="#E8F2F8"/>
-    </linearGradient>
-  </defs>
-  <rect x="15" y="13" width="98" height="102" rx="15" fill="url(#board)" stroke="#557488" stroke-width="3"/>
-  <rect x="28" y="27" width="36" height="36" rx="8" fill="#FFFFFF" stroke="#6F8DA1" stroke-width="2.4"/>
-  <rect x="36" y="35" width="20" height="20" rx="4" fill="#DCE8F1" stroke="#9CB5C8" stroke-width="1.5"/>
-  <g stroke="#9CB5C8" stroke-width="2" stroke-linecap="round" opacity="0.72">
-    <path d="M75 27V67"/>
-    <path d="M84 27V67"/>
-    <path d="M93 27V67"/>
-    <path d="M102 27V67"/>
-  </g>
-  <rect x="28" y="81" width="72" height="8" rx="4" fill="#557488" opacity="0.72"/>
-  <rect x="28" y="97" width="58" height="6" rx="3" fill="#9CB5C8" opacity="0.65"/>
-  <rect x="78" y="74" width="27" height="27" rx="6" fill="#D4E0EA" stroke="#9CB5C8" stroke-width="2"/>
-  <path d="M82 78L101 97M90 76L106 92M78 88L92 102" stroke="#FFFFFF" stroke-width="3" opacity="0.65"/>
-  <g fill="#19A7B8" opacity="0.55">
-    <circle cx="24" cy="22" r="3"/>
-    <circle cx="104" cy="22" r="3"/>
-    <circle cx="24" cy="106" r="3"/>
-    <circle cx="104" cy="106" r="3"/>
-  </g>
-  <path d="M46 64V73H64V81" stroke="#19A7B8" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" opacity="0.75"/>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" fill="none" role="img" aria-label="MOTHERBOARD">
+  <rect x="12" y="12" width="104" height="104" rx="8" fill="#eef2f7" stroke="#cbd5e1" stroke-width="4"/>
+  <rect x="26" y="26" width="34" height="34" rx="4" fill="#e2e8f0" stroke="#cbd5e1" stroke-width="3"/>
+  <rect x="72" y="24" width="7" height="42" rx="2" fill="none" stroke="#cbd5e1" stroke-width="3"/>
+  <rect x="86" y="24" width="7" height="42" rx="2" fill="none" stroke="#cbd5e1" stroke-width="3"/>
+  <rect x="24" y="76" width="66" height="9" rx="2" fill="none" stroke="#cbd5e1" stroke-width="3"/>
+  <rect x="24" y="94" width="40" height="7" rx="2" fill="none" stroke="#cbd5e1" stroke-width="3"/>
+  <circle cx="20" cy="20" r="3" fill="#cbd5e1"/>
+  <circle cx="108" cy="20" r="3" fill="#cbd5e1"/>
+  <circle cx="20" cy="108" r="3" fill="#cbd5e1"/>
+  <circle cx="108" cy="108" r="3" fill="#cbd5e1"/>
 </svg>

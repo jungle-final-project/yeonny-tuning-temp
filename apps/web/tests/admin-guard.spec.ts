@@ -954,7 +954,7 @@ test('admin can drag self quote slot cards and save the fixed board layout', asy
             CPU: { x: 9, y: 6 },
             MOTHERBOARD: { x: 31, y: 76 },
             RAM: { x: 43, y: 8 },
-            GPU: { x: 61, y: 53 },
+            GPU: { x: 41, y: 53 },
             PSU: { x: 58, y: 78 },
             CASE: { x: 8, y: 76 },
             COOLER: { x: 9, y: 30 },
@@ -988,7 +988,7 @@ test('admin can drag self quote slot cards and save the fixed board layout', asy
           source: 'DEFAULT',
           positions: {
             CPU: { x: 9, y: 6 },
-            GPU: { x: 61, y: 53 }
+            GPU: { x: 41, y: 53 }
           }
         })
       });
@@ -1003,7 +1003,7 @@ test('admin can drag self quote slot cards and save the fixed board layout', asy
   await expect(page.getByRole('link', { name: '슬롯 보드 배치' })).toHaveAttribute('aria-current', 'page');
   await expect(page.getByTestId('admin-slot-layout-board')).toBeVisible();
   await expect(page.getByTestId('admin-slot-layout-card-GPU')).toContainText('GPU');
-  await expect(page.getByText('x 61 · y 53')).toBeVisible();
+  await expect(page.getByText('x 41 · y 53')).toBeVisible();
 
   const gpuSlot = page.getByTestId('admin-slot-layout-card-GPU');
   await expect(gpuSlot).toBeVisible();
@@ -1016,9 +1016,9 @@ test('admin can drag self quote slot cards and save the fixed board layout', asy
 
   await expect(page.getByText('저장되지 않은 변경')).toBeVisible();
   await page.getByRole('button', { name: '고정하기' }).click();
-  await expect.poll(() => savedPayload?.positions?.GPU?.x ?? 0).toBeGreaterThan(61);
+  await expect.poll(() => savedPayload?.positions?.GPU?.x ?? 0).toBeGreaterThan(41);
   // 클램프 상한 = 100 - 카드 폭. 허브 방사형 좌표에서 GPU 카드 폭이 21%라 상한은 79다.
-  await expect.poll(() => savedPayload?.positions?.GPU?.x ?? 999).toBeLessThanOrEqual(79);
+  await expect.poll(() => savedPayload?.positions?.GPU?.x ?? 999).toBeLessThanOrEqual(57.5);
   await expect.poll(() => savedPayload?.positions?.GPU?.y ?? 0).toBeGreaterThan(53);
   await expect.poll(() => savedPayload?.positions?.PRICE).toBeUndefined();
   await expect(page.getByText('저장 완료')).toBeVisible();
@@ -1026,7 +1026,7 @@ test('admin can drag self quote slot cards and save the fixed board layout', asy
   await page.getByRole('button', { name: '기본값으로 초기화' }).click();
   await expect.poll(() => resetCalled).toBe(true);
   await expect(page.getByText('기본 배치로 초기화됨')).toBeVisible();
-  await expect(page.getByText('x 61 · y 53')).toBeVisible();
+  await expect(page.getByText('x 41 · y 53')).toBeVisible();
 });
 
 test('renders price job and load test admin menu pages for ADMIN role', async ({ page }) => {
