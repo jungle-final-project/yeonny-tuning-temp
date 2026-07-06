@@ -16,6 +16,7 @@ import {
   getRecommendationModels,
   getRecommendationModelSummary,
   getRecommendationShadowSummary,
+  getRecommendationDriftSnapshots,
   getRecommendationTrainingOverview,
   listRecommendationTrainingDatasets,
   listRecommendationTrainingJobs,
@@ -56,6 +57,23 @@ function VerdictBadge({ comparison }: { comparison?: RecommendationModelComparis
   );
 }
 
+// M3 드리프트: free-form metrics에서 카탈로그 최대 PSI를 뽑고 임계 태그를 붙인다.
+function maxCatalogPsi(metrics: Record<string, unknown>): number | null {
+  const catalog = metrics?.catalogFeaturePsi as Record<string, unknown> | undefined;
+  if (!catalog) return null;
+  let max: number | null = null;
+  for (const value of Object.values(catalog)) {
+    const psi = (value as { psi?: number })?.psi;
+    if (typeof psi === 'number') max = max === null ? psi : Math.max(max, psi);
+  }
+  return max;
+}
+function psiLabel(psi: number | null): string {
+  if (psi === null) return '표본 부족';
+  const tag = psi >= 0.3 ? ' ⚠심각' : psi >= 0.2 ? ' ⚠경고' : '';
+  return `${psi.toFixed(3)}${tag}`;
+}
+
 export function AdminDashboardPage() {
   const queryClient = useQueryClient();
   const [trainingTab, setTrainingTab] = useState<'overview' | 'datasets' | 'jobs' | 'models'>('overview');
@@ -84,6 +102,12 @@ export function AdminDashboardPage() {
   const shadowSummaryQuery = useQuery({
     queryKey: ['admin-recommendation-shadow-summary'],
     queryFn: () => getRecommendationShadowSummary(7),
+    enabled: Boolean(dashboard),
+    retry: false
+  });
+  const driftQuery = useQuery({
+    queryKey: ['admin-recommendation-drift'],
+    queryFn: () => getRecommendationDriftSnapshots(14),
     enabled: Boolean(dashboard),
     retry: false
   });
@@ -593,6 +617,34 @@ export function AdminDashboardPage() {
                 ) : null}
               </div>
             </div>
+          )}
+        </Panel>
+      </div>
+      <div className="mt-5">
+        <Panel title="추천 드리프트 (M3)" subtitle="카탈로그 피처·예측 분포 PSI + 운영 지표 (최근 14일 스냅샷)">
+          {driftQuery.isLoading ? (
+            <StateMessage type="info" title="드리프트 로딩 중" body="최근 드리프트 스냅샷을 불러오고 있습니다." />
+          ) : driftQuery.isError ? (
+            <StateMessage type="warn" title="드리프트 조회 실패" body="드리프트 스냅샷 API 응답을 불러오지 못했습니다(스케줄러 미활성 시 데이터 없음)." />
+          ) : (driftQuery.data?.items.length ?? 0) > 0 ? (
+            <DataTable
+              columns={['날짜', '카탈로그 PSI', '예측 PSI', 'fallback', '경보']}
+              rows={(driftQuery.data?.items ?? []).map((snap) => {
+                const operational = (snap.metrics?.operational ?? {}) as { fallbackRatio?: number | null };
+                const prediction = (snap.metrics?.predictionDriftPsi ?? {}) as { psi?: number };
+                return {
+                  날짜: snap.snapshotDate,
+                  '카탈로그 PSI': psiLabel(maxCatalogPsi(snap.metrics)),
+                  '예측 PSI': typeof prediction.psi === 'number' ? psiLabel(prediction.psi) : '표본 부족',
+                  fallback: typeof operational.fallbackRatio === 'number' ? percentLabel(operational.fallbackRatio) : '-',
+                  경보: snap.alerts.length > 0
+                    ? <span className="font-black text-rose-600">{snap.alerts.length}건 · {snap.alerts.map((a) => a.level).join(', ')}</span>
+                    : <span className="text-slate-400">없음</span>
+                };
+              })}
+            />
+          ) : (
+            <StateMessage type="info" title="드리프트 스냅샷 없음" body="drift 스케줄러(recommendation.drift.enabled)가 켜지고 일일 스냅샷이 쌓이면 PSI 추이·경보가 표시됩니다." />
           )}
         </Panel>
       </div>

@@ -443,6 +443,27 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/RecommendationShadowSummaryResponse"
+  /api/admin/recommendation-drift:
+    get:
+      summary: Drift 스냅샷 목록 (M3)
+      description: 최근 days일 드리프트 스냅샷(카탈로그 피처 PSI·예측 drift PSI·운영 지표·경보) 목록을 최신순으로 반환한다. 일일 스케줄러가 recommendation_drift_snapshots에 기록한다(스케줄러 미활성 시 빈 목록).
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: days
+          in: query
+          required: false
+          schema:
+            type: integer
+            default: 14
+          description: 조회 창(일). 1~90으로 클램프된다.
+      responses:
+        "200":
+          description: drift 스냅샷 목록
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RecommendationDriftResponse"
   /api/admin/recommendation-training/overview:
     get:
       summary: 추천 학습 운영 요약
@@ -3586,6 +3607,34 @@ components:
           description: baseline 상위 4 중 모델 상위 4에서 빠진 평균 비율(0~1)
         generatedAt:
           type: string
+    RecommendationDriftResponse:
+      type: object
+      required: [items, total]
+      properties:
+        total:
+          type: integer
+        items:
+          type: array
+          items:
+            type: object
+            required: [snapshotDate, metrics, alerts]
+            properties:
+              snapshotDate:
+                type: string
+                format: date
+              metrics:
+                type: object
+                additionalProperties: true
+                description: "3계열: catalogFeaturePsi(피처별 psi/skipped), predictionDriftPsi(psi/modelChanged), operational(fallbackRatio·scoreErrorsDelta·trainingJobFailureRate)"
+              alerts:
+                type: array
+                items:
+                  type: object
+                  additionalProperties: true
+                  description: "임계 초과 항목 {series, level(WARN/SEVERE), value}"
+              createdAt:
+                type: string
+                nullable: true
     RecommendationModelSummaryResponse:
       type: object
       required: [homeParts, generatedAt]

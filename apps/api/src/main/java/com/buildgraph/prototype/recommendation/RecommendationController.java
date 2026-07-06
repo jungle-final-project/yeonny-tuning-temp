@@ -20,17 +20,20 @@ public class RecommendationController {
     private final RecommendationLearningService recommendationLearningService;
     private final RecommendationTrainingService recommendationTrainingService;
     private final HomePartRecommendationService homePartRecommendationService;
+    private final RecommendationDriftService recommendationDriftService;
     private final CurrentUserService currentUserService;
 
     public RecommendationController(
             RecommendationLearningService recommendationLearningService,
             RecommendationTrainingService recommendationTrainingService,
             HomePartRecommendationService homePartRecommendationService,
+            RecommendationDriftService recommendationDriftService,
             CurrentUserService currentUserService
     ) {
         this.recommendationLearningService = recommendationLearningService;
         this.recommendationTrainingService = recommendationTrainingService;
         this.homePartRecommendationService = homePartRecommendationService;
+        this.recommendationDriftService = recommendationDriftService;
         this.currentUserService = currentUserService;
     }
 
@@ -93,6 +96,15 @@ public class RecommendationController {
     ) {
         currentUserService.requireAdmin(authorization);
         return recommendationLearningService.shadowComparisonSummary(days);
+    }
+
+    @GetMapping("/admin/recommendation-drift")
+    Map<String, Object> recommendationDrift(
+            @RequestParam(value = "days", defaultValue = "14") int days,
+            @RequestHeader(value = "Authorization", required = false) String authorization
+    ) {
+        currentUserService.requireAdmin(authorization);
+        return recommendationDriftService.recentSnapshots(days);
     }
 
     @GetMapping("/admin/recommendation-training/overview")

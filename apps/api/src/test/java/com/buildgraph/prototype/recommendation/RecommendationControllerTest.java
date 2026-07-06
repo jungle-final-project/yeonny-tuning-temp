@@ -57,6 +57,9 @@ class RecommendationControllerTest {
     private HomePartRecommendationService homePartRecommendationService;
 
     @MockitoBean
+    private RecommendationDriftService recommendationDriftService;
+
+    @MockitoBean
     private CurrentUserService currentUserService;
 
     @BeforeEach

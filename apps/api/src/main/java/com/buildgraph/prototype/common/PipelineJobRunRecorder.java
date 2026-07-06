@@ -38,6 +38,11 @@ public class PipelineJobRunRecorder {
      * (주의: 잡이 도는 동안 커넥션 1개를 점유한다 — 장시간 잡 5종 동시여도 풀 여유 내)
      */
     public void run(String jobName, Supplier<Map<String, Object>> body) {
+        run(jobName, "SCHEDULED", body);
+    }
+
+    /** triggerType으로 실행 계기를 구분한다(예: 'SCHEDULED' 크론, 'DRIFT_TRIGGERED' 드리프트발 재훈련). */
+    public void run(String jobName, String triggerType, Supplier<Map<String, Object>> body) {
         OffsetDateTime startedAt = OffsetDateTime.now();
         long startNanos = System.nanoTime();
         long lockKey = advisoryLockKey(jobName);
@@ -50,15 +55,15 @@ public class PipelineJobRunRecorder {
                 }
             }
             if (!locked) {
-                insert(jobName, "SKIPPED_LOCKED", null, "다른 인스턴스가 같은 잡을 실행 중이라 건너뛰었습니다.", startedAt, elapsedMs(startNanos));
+                insert(jobName, triggerType, "SKIPPED_LOCKED", null, "다른 인스턴스가 같은 잡을 실행 중이라 건너뛰었습니다.", startedAt, elapsedMs(startNanos));
                 LOGGER.info("Pipeline job {} skipped: advisory lock held by another instance", jobName);
                 return null;
             }
             try {
                 Map<String, Object> result = body.get();
-                insert(jobName, "SUCCEEDED", result, null, startedAt, elapsedMs(startNanos));
+                insert(jobName, triggerType, "SUCCEEDED", result, null, startedAt, elapsedMs(startNanos));
             } catch (RuntimeException exception) {
-                insert(jobName, "FAILED", null, limited(exception.getMessage()), startedAt, elapsedMs(startNanos));
+                insert(jobName, triggerType, "FAILED", null, limited(exception.getMessage()), startedAt, elapsedMs(startNanos));
                 LOGGER.warn("Pipeline job {} failed: {}", jobName, exception.getMessage());
             } finally {
                 try (java.sql.PreparedStatement unlock = connection.prepareStatement("SELECT pg_advisory_unlock(?)")) {
@@ -77,8 +82,12 @@ public class PipelineJobRunRecorder {
 
     /** 데모 동결 등으로 실행을 건너뛴 사실도 이력에 남긴다(침묵 스킵 방지). */
     public void recordSkippedFrozen(String jobName) {
+        recordSkippedFrozen(jobName, "SCHEDULED");
+    }
+
+    public void recordSkippedFrozen(String jobName, String triggerType) {
         OffsetDateTime now = OffsetDateTime.now();
-        insert(jobName, "SKIPPED_FROZEN", null, "데모 동결(DEMO_FREEZE_MUTATIONS)로 실행을 건너뛰었습니다.", now, 0L);
+        insert(jobName, triggerType, "SKIPPED_FROZEN", null, "데모 동결(DEMO_FREEZE_MUTATIONS)로 실행을 건너뛰었습니다.", now, 0L);
     }
 
     public Map<String, Object> listRecent(Integer limit) {
@@ -114,16 +123,17 @@ public class PipelineJobRunRecorder {
         return MockData.map("items", items, "total", items.size());
     }
 
-    private void insert(String jobName, String status, Map<String, Object> result, String errorSummary, OffsetDateTime startedAt, long durationMs) {
+    private void insert(String jobName, String triggerType, String status, Map<String, Object> result, String errorSummary, OffsetDateTime startedAt, long durationMs) {
         try {
             jdbcTemplate.update("""
                     INSERT INTO pipeline_job_runs (
                       job_name, trigger_type, status, result_summary, error_summary,
                       started_at, finished_at, duration_ms
                     )
-                    VALUES (?, 'SCHEDULED', ?, ?::jsonb, ?, ?, now(), ?)
+                    VALUES (?, ?, ?, ?::jsonb, ?, ?, now(), ?)
                     """,
                     jobName,
+                    triggerType == null ? "SCHEDULED" : triggerType,
                     status,
                     result == null ? null : OBJECT_MAPPER.writeValueAsString(result),
                     errorSummary,

@@ -743,6 +743,27 @@ export function getRecommendationShadowSummary(days = 7) {
   return api<RecommendationShadowSummary>(`/api/admin/recommendation-shadow/summary?days=${days}`);
 }
 
+// M3 drift 스냅샷. metrics/alerts는 계열 확장에 유연하도록 free-form.
+export type RecommendationDriftAlert = {
+  series?: string;
+  level?: 'WARN' | 'SEVERE';
+  value?: number;
+};
+export type RecommendationDriftSnapshot = {
+  snapshotDate: string;
+  metrics: Record<string, unknown>;
+  alerts: RecommendationDriftAlert[];
+  createdAt?: string | null;
+};
+export type RecommendationDriftResponse = {
+  items: RecommendationDriftSnapshot[];
+  total: number;
+};
+
+export function getRecommendationDriftSnapshots(days = 14) {
+  return api<RecommendationDriftResponse>(`/api/admin/recommendation-drift?days=${days}`);
+}
+
 export function getRecommendationModels() {
   return api<RecommendationModelsResponse>('/api/admin/recommendation-models');
 }

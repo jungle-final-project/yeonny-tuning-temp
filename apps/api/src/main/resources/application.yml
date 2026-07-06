@@ -180,6 +180,14 @@ recommendation:
     # 워커 RECOMMENDATION_TRAINING_MIN_ROWS(기본 50)와 일치시킨다 — 미달이면 job을 만들지 않아
     # SKIPPED_LOW_DATASET 무한 재생성 루프를 막는다.
     min-rows: ${RECOMMENDATION_AUTO_RETRAIN_MIN_ROWS:50}
+  # M3 drift 모니터링(일일). 기본 off. drift 스냅샷은 읽기 전용 관측이고, retrain-on-severe를 별도로
+  # 켜야만 심각 PSI 시 재훈련을 트리거한다(관측과 트리거 분리 opt-in).
+  drift:
+    enabled: ${RECOMMENDATION_DRIFT_ENABLED:false}
+    cron: "${RECOMMENDATION_DRIFT_CRON:0 50 4 * * *}"
+    zone: "${RECOMMENDATION_DRIFT_ZONE:Asia/Seoul}"
+    min-samples: ${RECOMMENDATION_DRIFT_MIN_SAMPLES:500}
+    retrain-on-severe: ${RECOMMENDATION_DRIFT_RETRAIN_ON_SEVERE:false}
 
 part:
   price-refresh:
