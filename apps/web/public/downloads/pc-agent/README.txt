@@ -7,7 +7,8 @@ Extract the zip first, then double-click PCAgent.exe:
 
   Creates %LOCALAPPDATA%\BuildGraphAgent\agent-config.json when missing.
   Creates %LOCALAPPDATA%\BuildGraphAgent\logs.
-  Registers a startup command in the current user's Startup folder.
+  Copies PCAgent.exe to %LOCALAPPDATA%\BuildGraphAgent\PCAgent.exe.
+  Registers a startup command that points to the stable local copy.
   Starts demo metric collection in the background.
   Reads pcagent-activation.json once to register this device.
   Deletes pcagent-activation.json after successful registration.
@@ -50,6 +51,7 @@ Run examples:
 
   Extract PCAgent.zip
   PCAgent.exe
+  The extracted folder can be moved or deleted after PCAgent starts successfully.
   agent-cli.exe doctor --config agent-config.json
   agent-cli.exe collect --config agent-config.json --iterations 1
   agent-cli.exe upload --config agent-config.json --no-open

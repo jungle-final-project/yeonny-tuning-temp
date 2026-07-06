@@ -11,6 +11,7 @@ import os
 import platform
 import random
 import re
+import shutil
 import socket
 import subprocess
 import sys
@@ -2274,9 +2275,31 @@ def startup_dir() -> Path:
     return Path(appdata) / "Microsoft" / "Windows" / "Start Menu" / "Programs" / "Startup"
 
 
+def installed_executable_path() -> Path:
+    return app_data_dir() / f"{APP_NAME}.exe"
+
+
+def ensure_installed_executable() -> Path:
+    if not getattr(sys, "frozen", False):
+        return Path(sys.executable)
+
+    source = Path(sys.executable).resolve()
+    target = installed_executable_path()
+    if source == target.resolve():
+        return target
+
+    target.parent.mkdir(parents=True, exist_ok=True)
+    try:
+        if not target.exists() or source.stat().st_mtime_ns != target.stat().st_mtime_ns or source.stat().st_size != target.stat().st_size:
+            shutil.copy2(source, target)
+    except OSError as exception:
+        raise AgentError(f"Failed to install PCAgent executable for startup: {exception}") from exception
+    return target
+
+
 def executable_command() -> str:
     if getattr(sys, "frozen", False):
-        return f'"{sys.executable}" run-background'
+        return f'"{ensure_installed_executable()}" run-background'
     script = Path(__file__).resolve()
     return f'"{sys.executable}" "{script}" run-background'
 

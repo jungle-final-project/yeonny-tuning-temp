@@ -61,7 +61,7 @@ build-agent-exe.cmd
 .\dist\agent-cli.exe doctor --config agent-config.example.json
 ```
 
-`agent.exe`는 사용자용 무콘솔 실행 파일입니다. 인자 없이 더블클릭하면 `%LOCALAPPDATA%\BuildGraphAgent` 아래에 기본 config/log 폴더를 만들고, Windows 시작프로그램에 등록한 뒤 트레이 아이콘으로 백그라운드 수집을 시작합니다. 트레이 메뉴에서는 로그 뷰어 열기, 로그 폴더 열기, AS 페이지 열기, 종료를 사용할 수 있습니다. 로그 뷰어는 날짜와 시간을 선택해 1시간 단위 JSONL row를 가볍게 보여주는 창입니다. 이것은 Windows Service가 아니라 MVP용 시작프로그램 기반 백그라운드 실행입니다.
+`agent.exe`는 사용자용 무콘솔 실행 파일입니다. 인자 없이 더블클릭하면 `%LOCALAPPDATA%\BuildGraphAgent` 아래에 기본 config/log 폴더를 만들고, 실행 파일을 `%LOCALAPPDATA%\BuildGraphAgent\PCAgent.exe`로 복사한 뒤 Windows 시작프로그램에 고정 경로로 등록합니다. 이후 트레이 아이콘으로 백그라운드 수집을 시작합니다. 트레이 메뉴에서는 로그 뷰어 열기, 로그 폴더 열기, AS 페이지 열기, 종료를 사용할 수 있습니다. 로그 뷰어는 날짜와 시간을 선택해 1시간 단위 JSONL row를 가볍게 보여주는 창입니다. 이것은 Windows Service가 아니라 MVP용 시작프로그램 기반 백그라운드 실행입니다.
 
 사용자 등록은 웹 지원 페이지의 PCAgent 다운로드 흐름을 기준으로 합니다. 웹은 `/api/users/me/agent-activation-token`으로 activation token을 발급한 뒤 `PCAgent.zip`을 내려받게 합니다. ZIP 안에는 `PCAgent.exe`, `pcagent-activation.json`, `README.txt`가 들어 있습니다. 사용자는 압축을 풀고 `PCAgent.exe`를 실행해야 합니다. Agent는 첫 실행 때 같은 폴더 또는 다운로드 폴더의 activation JSON에서 token을 읽어 기존 `agentToken`을 지운 뒤 현재 prototype DB에 다시 등록합니다. 등록에 성공하면 activation JSON은 자동 삭제합니다. 저장소의 `apps/web/public/downloads/pc-agent/agent.exe`를 직접 실행하면 activation JSON이 없으므로, 기존 로컬 config나 demo token이 현재 DB와 맞지 않는 환경에서는 PC 진단이 등록 실패로 끝날 수 있습니다.
 
@@ -78,7 +78,7 @@ cd C:\나만무\prototype
 .\.venv\Scripts\python.exe apps\pc-agent\buildgraph_agent.py viewer --config apps\pc-agent\agent-config.example.json
 ```
 
-로컬 웹 데모에서 내려받는 바이너리 원본은 `apps/web/public/downloads/pc-agent/agent.exe`에 둡니다. 새 exe를 만들면 해당 위치에 복사한 뒤 웹 이미지를 다시 빌드합니다. 실제 사용자는 웹 다운로드 버튼으로 `PCAgent.zip`을 받고 압축 해제 후 같은 폴더의 `PCAgent.exe`를 실행해야 합니다. 기존 `BuildGraphAgent-<activationToken>.exe` 파일명 방식도 호환 목적으로 인식하지만, 신규 다운로드 흐름에서는 token을 파일명에 노출하지 않습니다.
+로컬 웹 데모에서 내려받는 바이너리 원본은 `apps/web/public/downloads/pc-agent/agent.exe`에 둡니다. 새 exe를 만들면 해당 위치에 복사한 뒤 웹 이미지를 다시 빌드합니다. 실제 사용자는 웹 다운로드 버튼으로 `PCAgent.zip`을 받고 압축 해제 후 같은 폴더의 `PCAgent.exe`를 실행해야 합니다. 첫 실행 후에는 시작프로그램이 `%LOCALAPPDATA%\BuildGraphAgent\PCAgent.exe`를 가리키므로 압축 해제 폴더가 이동되거나 삭제되어도 자동 실행 경로가 깨지지 않습니다. 기존 `BuildGraphAgent-<activationToken>.exe` 파일명 방식도 호환 목적으로 인식하지만, 신규 다운로드 흐름에서는 token을 파일명에 노출하지 않습니다.
 
 ## 출력 예시
 

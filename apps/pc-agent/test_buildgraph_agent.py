@@ -1625,6 +1625,26 @@ class AgentGoal1112Test(unittest.TestCase):
             self.assertEqual(model["versionCard"]["value"], "1.2.3")
             self.assertEqual(model["versionCard"]["detail"], "최신 버전")
 
+    def test_register_startup_uses_stable_localappdata_executable_for_frozen_build(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            source = root / "Downloads" / "PCAgent.exe"
+            source.parent.mkdir(parents=True)
+            source.write_bytes(b"pca-agent-exe")
+            localappdata = root / "LocalAppData"
+            appdata = root / "AppData" / "Roaming"
+
+            with patch.dict("os.environ", {"LOCALAPPDATA": str(localappdata), "APPDATA": str(appdata)}), \
+                    patch.object(agent.sys, "frozen", True, create=True), \
+                    patch.object(agent.sys, "executable", str(source)):
+                startup_path = agent.register_startup()
+
+            installed = localappdata / agent.DATA_APP_NAME / f"{agent.APP_NAME}.exe"
+            self.assertTrue(installed.exists())
+            self.assertEqual(installed.read_bytes(), b"pca-agent-exe")
+            self.assertEqual(startup_path.name, f"{agent.APP_NAME}.cmd")
+            self.assertIn(f'"{installed}" run-background', startup_path.read_text(encoding="utf-8"))
+
     def test_status_home_model_marks_recent_memory_pressure_as_warning(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / "agent-metrics.jsonl"
