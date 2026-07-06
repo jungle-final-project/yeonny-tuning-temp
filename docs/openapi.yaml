@@ -2343,6 +2343,84 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/AsTicketDto"
+  /api/support/chat-sessions/current:
+    get:
+      summary: 현재 사용자 상담방 조회
+      description: asTicketId가 없고 active 상담방도 없으면 contact=null과 supportNewPath=/support/new를 반환한다.
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: query
+          name: asTicketId
+          required: false
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: 현재 사용자 상담방 또는 AS 접수 유도 응답
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SupportChatSessionDto"
+        "404":
+          description: 로그인 사용자 소유 AS 티켓이 아님
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+  /api/support/chat-sessions/{id}:
+    get:
+      summary: 사용자 상담방 상세
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/PublicId"
+      responses:
+        "200":
+          description: 상담방 상세와 메시지 목록
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SupportChatSessionDto"
+        "404":
+          description: 로그인 사용자 소유 상담방이 아님
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+  /api/support/chat-sessions/{id}/messages:
+    post:
+      summary: 사용자 상담 메시지 전송
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/PublicId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SupportChatMessageRequest"
+      responses:
+        "200":
+          description: 메시지 전송 후 갱신된 상담방 상세
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SupportChatSessionDto"
+        "400":
+          description: 메시지 내용 누락 또는 2000자 초과
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "409":
+          description: 종료된 AS 티켓 상담방
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
   /api/ai/as-chat:
     get:
       summary: AS AI 챗봇 세션과 메시지 조회
@@ -2566,6 +2644,70 @@ paths:
                 $ref: "#/components/schemas/RagEmbeddingBackfillResponse"
         "428":
           description: OPENAI_API_KEY 등 embedding 선행 설정 누락
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+  /api/admin/support/chat-sessions:
+    get:
+      summary: 관리자 상담방 목록
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: active 상담방 목록
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SupportChatSessionList"
+  /api/admin/support/chat-sessions/{id}:
+    get:
+      summary: 관리자 상담방 상세
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/PublicId"
+      responses:
+        "200":
+          description: 상담방 상세와 메시지 목록
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SupportChatSessionDto"
+        "404":
+          description: 상담방 없음
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+  /api/admin/support/chat-sessions/{id}/messages:
+    post:
+      summary: 관리자 상담 메시지 전송
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/PublicId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SupportChatMessageRequest"
+      responses:
+        "200":
+          description: 메시지 전송 후 갱신된 상담방 상세
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SupportChatSessionDto"
+        "400":
+          description: 메시지 내용 누락 또는 2000자 초과
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "409":
+          description: 종료된 AS 티켓 상담방
           content:
             application/json:
               schema:
@@ -5964,6 +6106,119 @@ components:
           format: uuid
         symptom:
           type: string
+    SupportChatMessageRequest:
+      type: object
+      required: [content]
+      properties:
+        content:
+          type: string
+          minLength: 1
+          maxLength: 2000
+    SupportChatSessionList:
+      type: object
+      required: [items, pollingIntervalMs]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/SupportChatContactDto"
+        pollingIntervalMs:
+          type: integer
+          example: 5000
+    SupportChatSessionDto:
+      type: object
+      required: [contact, messages, pollingIntervalMs]
+      properties:
+        contact:
+          nullable: true
+          allOf:
+            - $ref: "#/components/schemas/SupportChatContactDto"
+        messages:
+          type: array
+          items:
+            $ref: "#/components/schemas/SupportChatMessageDto"
+        supportNewPath:
+          type: string
+          nullable: true
+          example: /support/new
+        pollingIntervalMs:
+          type: integer
+          example: 5000
+    SupportChatContactDto:
+      type: object
+      required: [id, asTicketId, status, ticketStatus, title, symptom, userUnreadCount, adminUnreadCount, user, canSendMessage]
+      properties:
+        id:
+          type: string
+          format: uuid
+        asTicketId:
+          type: string
+          format: uuid
+        status:
+          type: string
+          enum: [ACTIVE, ARCHIVED]
+        ticketStatus:
+          $ref: "#/components/schemas/AsTicketStatus"
+        title:
+          type: string
+        symptom:
+          type: string
+        lastMessagePreview:
+          type: string
+          nullable: true
+        lastMessageAt:
+          type: string
+          format: date-time
+          nullable: true
+        userUnreadCount:
+          type: integer
+          minimum: 0
+        adminUnreadCount:
+          type: integer
+          minimum: 0
+        assignedAdminId:
+          type: string
+          format: uuid
+          nullable: true
+        user:
+          $ref: "#/components/schemas/SupportChatUserDto"
+        canSendMessage:
+          type: boolean
+    SupportChatUserDto:
+      type: object
+      required: [id]
+      properties:
+        id:
+          type: string
+          format: uuid
+        email:
+          type: string
+          nullable: true
+        name:
+          type: string
+          nullable: true
+    SupportChatMessageDto:
+      type: object
+      required: [id, role, content]
+      properties:
+        id:
+          type: string
+          format: uuid
+        role:
+          type: string
+          enum: [USER, ADMIN, SYSTEM]
+        content:
+          type: string
+        senderId:
+          type: string
+          format: uuid
+          nullable: true
+        senderName:
+          type: string
+          nullable: true
+        createdAt:
+          type: string
+          format: date-time
     AsTicketDto:
       type: object
       required: [id, status, symptom, causeCandidates, upgradeCandidates]
@@ -6026,6 +6281,20 @@ components:
           items:
             type: object
             additionalProperties: true
+        supportChatRoomId:
+          type: string
+          format: uuid
+          nullable: true
+        supportChatUserUnreadCount:
+          type: integer
+          minimum: 0
+        supportChatAdminUnreadCount:
+          type: integer
+          minimum: 0
+        supportChatLastMessageAt:
+          type: string
+          format: date-time
+          nullable: true
         adminNote:
           type: string
           nullable: true

@@ -1688,7 +1688,7 @@ Index:
 
 목적: AS 티켓 1건에 대해 사용자가 AI 챗봇 상담을 이어갈 수 있는 active 대화 세션을 저장한다.
 
-Owner: 3번, AS 협업 4번
+Owner: 3번 AS AI Chat
 
 | 컬럼명 | 타입 | nullable | FK | 설명 |
 |---|---|---:|---|---|
@@ -1715,12 +1715,13 @@ MVP 기준 결정값:
 - 한 사용자와 한 AS 티켓에는 active chat session 1개만 유지한다.
 - `GET /api/ai/as-chat`은 active session이 없어도 row를 만들지 않는다.
 - `POST /api/ai/as-chat`은 active session이 없으면 생성한다.
+- 사용자-관리자 상담방은 이 테이블을 쓰지 않고 별도 `support_chat_rooms`를 사용한다.
 
 ### as_chat_messages
 
 목적: AS AI 챗봇의 사용자/AI 메시지와 AI 구조화 응답을 저장한다.
 
-Owner: 3번, AS 협업 4번
+Owner: 3번 AS AI Chat
 
 | 컬럼명 | 타입 | nullable | FK | 설명 |
 |---|---|---:|---|---|
@@ -1746,6 +1747,75 @@ MVP 기준 결정값:
 - `role=ASSISTANT` 메시지는 LLM JSON 계약을 만족한 경우에만 저장한다.
 - LLM JSON 계약 실패 시 assistant message는 저장하지 않고 연결된 `agent_sessions`를 `FAILED`로 종료한다.
 - `as_tickets.cause_candidates`, `as_tickets.upgrade_candidates`는 이 테이블 저장 과정에서 수정하지 않는다.
+
+### support_chat_rooms
+
+목적: AS 티켓 1건에 대한 사용자-관리자 상담방(사람 상담) 상태를 저장한다. AS AI Chat(`as_chat_*`)과 완전히 분리된 테이블이다.
+
+Owner: 4번 사용자-관리자 상담방
+
+| 컬럼명 | 타입 | nullable | FK | 설명 |
+|---|---|---:|---|---|
+| `id` | `BIGINT` | no | - | 내부 PK |
+| `public_id` | `UUID` | no | - | 외부 ID (상담방 ID) |
+| `user_id` | `BIGINT` | no | `users.id` | 상담 사용자 |
+| `as_ticket_id` | `BIGINT` | no | `as_tickets.id` | 기준 AS 티켓 |
+| `status` | `VARCHAR(30)` | no | - | `ACTIVE`, `ARCHIVED` |
+| `title` | `VARCHAR(160)` | no | - | 상담방 제목 (기본 `AS 상담방`) |
+| `last_message_preview` | `VARCHAR(240)` | yes | - | 목록/전역 위젯에 표시할 마지막 메시지 요약 |
+| `last_message_at` | `TIMESTAMPTZ` | yes | - | 마지막 상담 메시지 시각 |
+| `user_unread_count` | `INTEGER` | no | - | 사용자가 읽지 않은 관리자 메시지 수 |
+| `admin_unread_count` | `INTEGER` | no | - | 관리자가 읽지 않은 사용자 메시지 수 |
+| `created_at` | `TIMESTAMPTZ` | no | - | 생성 시각 |
+| `updated_at` | `TIMESTAMPTZ` | yes | - | 마지막 갱신 시각 |
+| `deleted_at` | `TIMESTAMPTZ` | yes | - | soft delete |
+
+Index:
+
+- unique: `support_chat_rooms.public_id`
+- unique partial: `ux_support_chat_rooms_active_ticket_user` on `(user_id, as_ticket_id)` where `status='ACTIVE' AND deleted_at IS NULL`
+- index: `support_chat_rooms.user_id`
+- index: `support_chat_rooms.as_ticket_id`
+- index: `support_chat_rooms.last_message_at`
+- index: `support_chat_rooms.deleted_at`
+
+MVP 기준 결정값:
+
+- 한 사용자와 한 AS 티켓에는 active 상담방 1개만 유지한다(partial unique).
+- `POST /api/as-tickets`는 active 상담방과 최초 `SYSTEM` 메시지를 `ON CONFLICT DO NOTHING`으로 멱등하게 생성한다.
+- `GET /api/support/chat-sessions/current`는 티켓이 없는 사용자에게 row를 만들지 않고 `supportNewPath=/support/new`를 반환한다.
+- `GET /api/support/chat-sessions/current?asTicketId=...`는 로그인 사용자 소유 티켓이면 active 상담방을 보장한다.
+- 관리자 목록은 `as_tickets.status NOT IN ('CLOSED','CANCELLED')`인 상담방만 노출한다.
+- 상담방은 LLM/RAG/Tool을 호출하지 않는다.
+
+### support_chat_messages
+
+목적: 사용자-관리자 상담방의 사용자/관리자/시스템 메시지를 저장한다.
+
+Owner: 4번 사용자-관리자 상담방
+
+| 컬럼명 | 타입 | nullable | FK | 설명 |
+|---|---|---:|---|---|
+| `id` | `BIGINT` | no | - | 내부 PK |
+| `public_id` | `UUID` | no | - | 외부 ID |
+| `room_id` | `BIGINT` | no | `support_chat_rooms.id` | 상담방 |
+| `role` | `VARCHAR(30)` | no | - | `USER`, `ADMIN`, `SYSTEM` |
+| `content` | `TEXT` | no | - | 사용자, 관리자, 시스템 메시지 본문 |
+| `sender_user_id` | `BIGINT` | yes | `users.id` | 실제 메시지를 보낸 사용자 또는 관리자 (`SYSTEM`은 `NULL`) |
+| `created_at` | `TIMESTAMPTZ` | no | - | 생성 시각 |
+
+Index:
+
+- unique: `support_chat_messages.public_id`
+- index: `support_chat_messages.room_id`
+- index: `support_chat_messages.sender_user_id`
+- index: `support_chat_messages.created_at`
+
+MVP 기준 결정값:
+
+- `role=USER` / `role=ADMIN` 메시지는 `sender_user_id`를 저장한다.
+- `role=SYSTEM` 메시지는 상담방 생성 안내 같은 시스템 메시지이며 `sender_user_id`는 `NULL`이다.
+- 상세 조회는 최근 100개 메시지만 시간순으로 반환한다.
 
 ### llm_generations
 

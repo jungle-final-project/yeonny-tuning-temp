@@ -137,12 +137,12 @@ XGBoost reranker는 Build Chat에서 shadow scoring만 수행하고, 홈 하단 
 
 | 항목 | 내용 |
 |---|---|
-| 담당 화면 route | `/support/new`, `/support/:ticketId`, `/admin/as-tickets`, `/admin/as-tickets/:ticketId` |
-| frontend files | `features/support/**`, `features/admin/as-tickets/**` |
+| 담당 화면 route | `/support/new`, `/support/:ticketId`, `/admin/as-tickets`, `/admin/as-tickets/:ticketId`, `/admin/support-chat-sessions` |
+| frontend files | `features/support/**` 중 AS 접수/티켓/사용자-관리자 상담방 전역 위젯, `features/admin/as-tickets/**` |
 | backend packages | `agent`, `log`, `ticket` |
-| DB tables | `agent_log_uploads`, `agent_log_bundles`, `agent_upload_jobs`, `agent_log_summaries`, `as_tickets`, `as_ticket_labels` |
-| API endpoints | `POST /api/agent/devices/register`, `POST /api/agent/consents`, `POST /api/agent/heartbeat`, `POST /api/agent/log-uploads`, `POST /api/agent-logs/upload`, `GET /api/agent-logs/{id}`, `POST /api/as-tickets`, `GET /api/as-tickets/{id}`, `GET /api/admin/as-tickets`, `GET /api/admin/as-tickets/{id}`, `PATCH /api/admin/as-tickets/{id}` |
-| 협업자 | Auth/guard는 5번, AS 원인 후보 Agent와 추천 학습 bridge는 3번 |
+| DB tables | `agent_log_uploads`, `agent_log_bundles`, `agent_upload_jobs`, `agent_log_summaries`, `as_tickets`, `as_ticket_labels`, `support_chat_rooms`, `support_chat_messages` |
+| API endpoints | `POST /api/agent/devices/register`, `POST /api/agent/consents`, `POST /api/agent/heartbeat`, `POST /api/agent/log-uploads`, `POST /api/agent-logs/upload`, `GET /api/agent-logs/{id}`, `POST /api/as-tickets`, `GET /api/as-tickets/{id}`, `GET /api/support/chat-sessions/current`, `GET /api/support/chat-sessions/{id}`, `POST /api/support/chat-sessions/{id}/messages`, `GET /api/admin/support/chat-sessions`, `GET /api/admin/support/chat-sessions/{id}`, `POST /api/admin/support/chat-sessions/{id}/messages`, `GET /api/admin/as-tickets`, `GET /api/admin/as-tickets/{id}`, `PATCH /api/admin/as-tickets/{id}`, `WS /ws/support-chat` |
+| 협업자 | Auth/guard는 5번, AS 원인 후보 Agent와 추천 학습 bridge는 3번. 상담방은 `support_chat_*` 전용 테이블로 3번 AS AI Chat(`as_chat_*`)과 완전히 분리 |
 
 ### 5번: AdminShell/Auth Common/Infra
 
@@ -174,12 +174,13 @@ XGBoost reranker는 Build Chat에서 shadow scoring만 수행하고, 홈 하단 
 | `/auth/callback`(미구현 — Google OAuth 도입 시 활성화, 현재 App.tsx에 route 없음) | 1번 | 5번 | `POST /api/auth/exchange`(미구현) |
 | `/support/new` | 4번 | 5번 | `POST /api/agent-logs/upload`, `POST /api/as-tickets` |
 | `/support/ai-chat` | 3번 | 4번, 5번 | `GET /api/ai/as-chat`, `POST /api/ai/as-chat/stream`, `POST /api/ai/as-chat` |
-| `/support/:ticketId` | 4번 | - | `GET /api/as-tickets/{id}` |
+| `/support/:ticketId` | 4번 | - | `GET /api/as-tickets/{id}`, 전역 위젯 `GET /api/support/chat-sessions/current?asTicketId={id}` |
 | `/admin` | 5번 | 2번, 3번, 4번 | `GET /api/admin/dashboard`, `GET /api/admin/audit-logs/recent` |
 | `/admin/parts` | 2번 | 5번, 3번 | `GET/POST /api/admin/parts`, `GET /api/admin/parts/quality-report`, `GET/PATCH/DELETE /api/admin/parts/{id}`, `POST /api/admin/parts/{id}/restore`, `POST /api/admin/parts/{id}/manual-price`, `PATCH /api/admin/parts/{id}/external-offer`, `GET /api/parts/{id}/price-history`, `POST /api/admin/parts/catalog/refresh`, `POST /api/admin/parts/external-offers/refresh`, `POST /api/admin/parts/danawa-price-snapshots/refresh`, `POST /api/admin/parts/danawa-price-trends/refresh`, source/post/candidate CRUD under `/api/admin/manufacturer-*`, `POST /api/admin/manufacturer-sources/{id}/scan`, `POST /api/admin/manufacturer-sources/scan`, `POST /api/admin/manufacturer-posts/{id}/ai-asset-draft`, `POST /api/admin/part-catalog-candidates/{id}/approve|reject|refresh-offers`, `GET/POST /api/admin/part-alias-rules`, `GET /api/admin/part-alias-review-items`, `GET /api/admin/part-alias-review-items/summary`, `POST /api/admin/part-alias-review-items/{id}/resolve|ignore` |
 | `/admin/price-jobs` | 2번 | 5번 | `GET /api/admin/price-jobs`, `POST /api/admin/price-jobs/run`, `GET /api/admin/pipeline-job-runs` |
 | `/admin/build-graph-layouts` | 1번 | 5번 | `GET/PUT/DELETE /api/admin/build-graph-layouts/default` |
 | `/admin/load-tests` | 5번 | 2번, 3번, 4번 | k6 smoke/load report, `GET /api/health` smoke |
+| `/admin/support-chat-sessions` | 4번 | 5번 | `GET /api/admin/support/chat-sessions`, `GET /api/admin/support/chat-sessions/{id}`, `POST /api/admin/support/chat-sessions/{id}/messages` |
 | `/admin/agent-sessions` | 3번 | 5번 | `GET /api/admin/agent-sessions` |
 | `/admin/agent-sessions/:id` | 3번 | 5번 | `GET /api/admin/agent-sessions/{id}` |
 | `/admin/tool-invocations` | 3번 | 5번 | `GET /api/admin/tool-invocations` |
@@ -273,6 +274,13 @@ XGBoost reranker는 Build Chat에서 shadow scoring만 수행하고, 홈 하단 
 | `GET /api/ai/as-chat` | 3번 | 4번, 5번 |
 | `POST /api/ai/as-chat` | 3번 | 4번, 5번 |
 | `POST /api/ai/as-chat/stream` | 3번 | 4번, 5번 |
+| `GET /api/support/chat-sessions/current` | 4번 | 3번, 5번 |
+| `GET /api/support/chat-sessions/{id}` | 4번 | 3번, 5번 |
+| `POST /api/support/chat-sessions/{id}/messages` | 4번 | 3번, 5번 |
+| `GET /api/admin/support/chat-sessions` | 4번 | 3번, 5번 |
+| `GET /api/admin/support/chat-sessions/{id}` | 4번 | 3번, 5번 |
+| `POST /api/admin/support/chat-sessions/{id}/messages` | 4번 | 3번, 5번 |
+| `WS /ws/support-chat` | 4번 | 5번 |
 | `POST /api/ai/agent-sessions` | 3번 | - |
 | `POST /api/ai/agent-sessions/{id}/run` | 3번 | - |
 | `GET /api/ai/agent-sessions/{id}` | 3번 | - |
@@ -312,6 +320,8 @@ XGBoost reranker는 Build Chat에서 shadow scoring만 수행하고, 홈 하단 
 - `/support/ai-chat`은 3번 owner API/화면이지만 AS 티켓을 기준으로 동작하므로 4번과 협업한다.
 - 3번은 AS Chat에서 `as_tickets`를 읽기만 하고 `cause_candidates`, `upgrade_candidates`, `status`를 수정하지 않는다.
 - AS Chat 대화 이력은 `as_chat_sessions`, `as_chat_messages`에 저장하고, 원인 후보를 티켓에 반영하는 작업은 4번 API가 별도로 결정한다.
+- 사용자-관리자 상담방은 4번 owner API/전역 위젯이며 기존 `/support/ai-chat`을 대체하지 않는다. AS 티켓 생성 시 상담방을 만들고, 티켓이 없는 사용자는 전역 위젯에서 `/support/new`로 유도한다.
+- 사용자-관리자 상담방은 `support_chat_rooms`, `support_chat_messages` 전용 테이블을 쓰며 `as_chat_*`(3번 AS AI Chat)와 공유하지 않는다. LLM/RAG/Tool 호출을 수행하지 않고 `role=USER|ADMIN|SYSTEM`과 unread/last-message 컬럼만 사용한다.
 - AS Chat profile 비교와 `llm_generations` 기록은 3번 owner 범위다. 기본 사용자 요청은 profile 1개만 실행하고, OpenAI profile 비교는 benchmark 명령에서만 수행한다.
 - `/api/ai/build-chat`의 `X-BuildGraph-AI-Profile` header는 3번 benchmark용이다. UI는 header를 보내지 않고, 1번/프론트 owner는 기존 응답 shape만 소비한다.
 - Build Chat의 순수 화면 이동 fast path, 서버 `BuildChatIntentRouter` decision, LLM `routeIntent` 판정, `OPEN_ROUTE`/quote draft action 생성은 3번 AI 계약이며, 실제 화면 라우팅은 프론트, 실제 견적초안 저장은 2번 quote draft API가 수행한다. draft mutation 자동 실행은 `intentConfidence=HIGH`와 `sideEffectRisk=LOW`인 action으로 제한한다. 관리자 화면 자동 이동은 허용하지 않는다.
