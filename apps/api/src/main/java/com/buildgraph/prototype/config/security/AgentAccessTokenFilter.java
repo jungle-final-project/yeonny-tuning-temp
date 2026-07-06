@@ -5,6 +5,7 @@ import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import java.io.IOException;
+import java.util.Set;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.core.context.SecurityContextHolder;
@@ -14,6 +15,14 @@ import org.springframework.web.servlet.HandlerMapping;
 
 public class AgentAccessTokenFilter extends OncePerRequestFilter {
     private static final String BEARER_PREFIX = "Bearer ";
+    private static final Set<String> PC_AGENT_TOKEN_PATHS = Set.of(
+            "/api/agent/devices/register",
+            "/api/agent/consents",
+            "/api/agent/heartbeat",
+            "/api/agent/log-uploads",
+            "/api/agent/log-uploads/as-rag-preview",
+            "/api/agent/as-drafts"
+    );
 
     private final AgentTokenAuthenticationService authenticationService;
     private final SecurityErrorResponseWriter errorResponseWriter;
@@ -29,7 +38,7 @@ public class AgentAccessTokenFilter extends OncePerRequestFilter {
     @Override
     protected boolean shouldNotFilter(HttpServletRequest request) {
         String path = path(request);
-        return !path.startsWith("/api/agent/") || isRegisterRequest(request, path);
+        return !PC_AGENT_TOKEN_PATHS.contains(path) || isRegisterRequest(request, path);
     }
 
     @Override

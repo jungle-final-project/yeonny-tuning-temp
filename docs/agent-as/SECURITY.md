@@ -61,7 +61,7 @@
 6. 그 외 status는 `403 FORBIDDEN`으로 처리한다.
 7. 인증 성공 시 `AgentAuthenticationToken`을 만들어 SecurityContext에 저장한다.
 
-현재 DB 기준 필드는 `V56__pc_agent_gold_mode_contract.sql`의 `agent_devices` 테이블을 따른다.
+현재 DB 기준 필드는 `V53__pc_agent_gold_mode_contract.sql`의 `agent_devices` 테이블을 따른다.
 
 ## AgentPrincipal 필드
 
@@ -120,4 +120,4 @@ Register API는 Agent token을 발급하기 전 단계일 수 있다. 이 경우
 ## 확인 필요
 
 - 현재 `AgentSecurityConfig`는 `/api/agent/**` 전체에 `authenticated()`를 요구한다. `POST /api/agent/devices/register`가 token 발급 전 API라면 현 구조와 충돌할 수 있다.
-- 웹 JWT 기반 AI Agent/RAG session API는 `POST /api/ai/agent-sessions`, `POST /api/ai/agent-sessions/{id}/run`, `GET /api/ai/agent-sessions/{id}`로 분리했다. `/api/agent/**`에는 웹 JWT 기반 API를 두지 않는다.
+- 현재 계약 문서에는 웹 JWT 기반 `POST /api/agent/sessions`, `POST /api/agent/sessions/{id}/run`, `GET /api/agent/sessions/{id}`가 남아 있다. 현재 Security Chain 기준으로는 이 path가 Agent token 전용 영역에 걸리므로 Goal 4 전에 계약 정리가 필요하다.

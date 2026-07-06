@@ -16,10 +16,16 @@ import org.springframework.web.bind.annotation.RestController;
 @RequestMapping("/api")
 public class TicketController {
     private final TicketQueryService ticketQueryService;
+    private final AsTicketDraftService asTicketDraftService;
     private final CurrentUserService currentUserService;
 
-    public TicketController(TicketQueryService ticketQueryService, CurrentUserService currentUserService) {
+    public TicketController(
+            TicketQueryService ticketQueryService,
+            AsTicketDraftService asTicketDraftService,
+            CurrentUserService currentUserService
+    ) {
         this.ticketQueryService = ticketQueryService;
+        this.asTicketDraftService = asTicketDraftService;
         this.currentUserService = currentUserService;
     }
 
@@ -40,5 +46,35 @@ public class TicketController {
     ) {
         CurrentUserService.CurrentUser user = currentUserService.requireUser(authorization);
         return ticketQueryService.ticket(id, user);
+    }
+
+    @PostMapping("/as-tickets/{id}/remote-support-requests")
+    @ResponseStatus(HttpStatus.CREATED)
+    Map<String, Object> requestRemoteSupport(
+            @PathVariable String id,
+            @RequestBody(required = false) Map<String, Object> request,
+            @RequestHeader(value = "Authorization", required = false) String authorization
+    ) {
+        CurrentUserService.CurrentUser user = currentUserService.requireUser(authorization);
+        return ticketQueryService.requestRemoteSupport(id, request == null ? Map.of() : request, user);
+    }
+
+    @PostMapping("/as-tickets/{id}/feedback")
+    Map<String, Object> submitFeedback(
+            @PathVariable String id,
+            @RequestBody(required = false) Map<String, Object> request,
+            @RequestHeader(value = "Authorization", required = false) String authorization
+    ) {
+        CurrentUserService.CurrentUser user = currentUserService.requireUser(authorization);
+        return ticketQueryService.submitFeedback(id, request == null ? Map.of() : request, user);
+    }
+
+    @GetMapping("/as-ticket-drafts/{id}")
+    Map<String, Object> draft(
+            @PathVariable String id,
+            @RequestHeader(value = "Authorization", required = false) String authorization
+    ) {
+        CurrentUserService.CurrentUser user = currentUserService.requireUser(authorization);
+        return asTicketDraftService.draft(id, user);
     }
 }

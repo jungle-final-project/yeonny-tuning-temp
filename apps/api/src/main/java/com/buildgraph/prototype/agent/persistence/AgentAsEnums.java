@@ -12,7 +12,10 @@ enum AgentDeviceStatus {
 enum AgentConsentType {
     LOCAL_COLLECTION,
     SERVER_UPLOAD,
-    QUALITY_IMPROVEMENT
+    QUALITY_IMPROVEMENT,
+    REMOTE_CONNECTION,
+    REMOTE_FULL_CONTROL,
+    HIGH_RISK_REMOTE_ACTION
 }
 
 enum AgentUpdateChannel {
@@ -89,7 +92,10 @@ enum AsSupportDecision {
     SELF_SOLVABLE,
     REMOTE_POSSIBLE,
     VISIT_REQUIRED,
-    NEEDS_MORE_INFO
+    REPAIR_OR_REPLACE,
+    NEEDS_MORE_INFO,
+    MONITOR_ONLY,
+    UNSUPPORTED
 }
 
 enum RiskLevel {

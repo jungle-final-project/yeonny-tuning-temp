@@ -57,7 +57,7 @@ class AgentAsJpaMappingTest {
     @Test
     void enumsUseDbSchemaValues() {
         assertEnumValues(AgentDeviceStatus.class, "PENDING_REGISTERED", "ACTIVE", "UPDATE_REQUIRED", "BLOCKED", "REVOKED", "UNINSTALLED");
-        assertEnumValues(AgentConsentType.class, "LOCAL_COLLECTION", "SERVER_UPLOAD", "QUALITY_IMPROVEMENT");
+        assertEnumValues(AgentConsentType.class, "LOCAL_COLLECTION", "SERVER_UPLOAD", "QUALITY_IMPROVEMENT", "REMOTE_CONNECTION", "REMOTE_FULL_CONTROL", "HIGH_RISK_REMOTE_ACTION");
         assertEnumValues(AgentUpdateChannel.class, "STABLE");
         assertEnumValues(AgentRolloutStatus.class, "ACTIVE", "PAUSED", "ROLLED_BACK");
         assertEnumValues(AgentUploadJobStatus.class, "QUEUED", "UPLOADING", "UPLOADED", "FAILED_RETRYABLE", "FAILED_FINAL", "CANCELLED", "EXPIRED");
@@ -68,7 +68,7 @@ class AgentAsJpaMappingTest {
         assertEnumValues(AsTicketStatus.class, "OPEN", "ASSIGNED", "IN_PROGRESS", "RESOLVED", "CLOSED", "CANCELLED");
         assertEnumValues(AsAnalysisStatus.class, "NOT_STARTED", "QUEUED", "ANALYZING", "RULE_READY", "LLM_READY", "FAILED");
         assertEnumValues(AsReviewStatus.class, "NOT_REQUIRED", "REQUIRED", "IN_REVIEW", "APPROVED", "REJECTED");
-        assertEnumValues(AsSupportDecision.class, "SELF_SOLVABLE", "REMOTE_POSSIBLE", "VISIT_REQUIRED", "NEEDS_MORE_INFO");
+        assertEnumValues(AsSupportDecision.class, "SELF_SOLVABLE", "REMOTE_POSSIBLE", "VISIT_REQUIRED", "REPAIR_OR_REPLACE", "NEEDS_MORE_INFO", "MONITOR_ONLY", "UNSUPPORTED");
         assertEnumValues(RiskLevel.class, "LOW", "MEDIUM", "HIGH");
         assertEnumValues(RemoteSupportProvider.class, "EXTERNAL_LINK", "ANYDESK", "TEAMVIEWER", "ZOOM", "GOOGLE_MEET");
         assertEnumValues(RemoteSupportStatus.class, "REQUESTED", "LINK_SENT", "IN_PROGRESS", "COMPLETED", "CANCELLED");

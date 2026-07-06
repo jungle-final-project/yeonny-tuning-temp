@@ -1,5 +1,6 @@
 package com.buildgraph.prototype.user;
 
+import com.buildgraph.prototype.agent.PcAgentAsService;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.NotBlank;
@@ -18,9 +19,17 @@ import org.springframework.web.bind.annotation.RestController;
 @RequestMapping("/api")
 public class UserController {
     private final UserQueryService userQueryService;
+    private final CurrentUserService currentUserService;
+    private final PcAgentAsService pcAgentAsService;
 
-    public UserController(UserQueryService userQueryService) {
+    public UserController(
+            UserQueryService userQueryService,
+            CurrentUserService currentUserService,
+            PcAgentAsService pcAgentAsService
+    ) {
         this.userQueryService = userQueryService;
+        this.currentUserService = currentUserService;
+        this.pcAgentAsService = pcAgentAsService;
     }
 
     @PostMapping("/auth/login")
@@ -57,6 +66,13 @@ public class UserController {
     @GetMapping("/auth/me")
     Map<String, Object> me(@RequestHeader(value = "Authorization", required = false) String authorization) {
         return userQueryService.me(authorization);
+    }
+
+    @PostMapping("/users/me/agent-activation-token")
+    @ResponseStatus(HttpStatus.CREATED)
+    Map<String, Object> issueAgentActivationToken(@RequestHeader(value = "Authorization", required = false) String authorization) {
+        CurrentUserService.CurrentUser user = currentUserService.requireUser(authorization);
+        return pcAgentAsService.issueActivationTokenForUser(user);
     }
 
     record LoginRequest(@NotBlank @Email String email, @NotBlank String password) {

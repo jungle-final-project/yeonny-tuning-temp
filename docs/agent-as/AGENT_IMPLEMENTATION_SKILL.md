@@ -101,5 +101,5 @@
 - `apps/api/src/main/java/com/buildgraph/prototype/config/security/AgentIdempotencyService.java`
 - `apps/api/src/main/java/com/buildgraph/prototype/agent/persistence/AgentDeviceEntity.java`
 - `apps/api/src/main/java/com/buildgraph/prototype/agent/persistence/AgentIdempotencyRecordEntity.java`
-- `apps/api/src/main/resources/db/migration/V56__pc_agent_gold_mode_contract.sql`
-- `apps/api/src/main/resources/db/migration/V57__agent_idempotency_records.sql`
+- `apps/api/src/main/resources/db/migration/V53__pc_agent_gold_mode_contract.sql`
+- `apps/api/src/main/resources/db/migration/V54__agent_idempotency_records.sql`

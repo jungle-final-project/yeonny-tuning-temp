@@ -38,6 +38,15 @@ public class AgentLogUploadEntity extends PublicIdEntity {
     @Column(name = "summary")
     private String summary;
 
+    @Column(name = "incident_window", columnDefinition = "jsonb")
+    private String incidentWindow;
+
+    @Column(name = "range_started_at")
+    private Instant rangeStartedAt;
+
+    @Column(name = "range_ended_at")
+    private Instant rangeEndedAt;
+
     @Column(name = "consent_accepted_at", nullable = false)
     private Instant consentAcceptedAt;
 
