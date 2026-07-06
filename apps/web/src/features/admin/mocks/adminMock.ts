@@ -1,8 +1,8 @@
 export const agentStateRows = [
   { step: '1', state: 'INPUT_RECEIVED', owner: 'Frontend', api: 'POST /api/requirements/parse', output: 'Requirement' },
   { step: '2', state: 'RAG_SEARCHED', owner: 'RAG Service', api: 'GET /api/rag/search', output: 'RagEvidence[]' },
-  { step: '3', state: 'TOOLS_CALLED', owner: 'Agent Orchestrator', api: 'POST /api/ai/agent-sessions/:id/run', output: 'ToolInvocation[]' },
-  { step: '4', state: 'SUMMARY_READY', owner: 'Agent + LLM', api: 'GET /api/ai/agent-sessions/:id', output: 'Build explanation' },
+  { step: '3', state: 'TOOLS_CALLED', owner: 'Agent Orchestrator', api: 'POST /api/agent/sessions/:id/run', output: 'ToolInvocation[]' },
+  { step: '4', state: 'SUMMARY_READY', owner: 'Agent + LLM', api: 'GET /api/agent/sessions/:id', output: 'Build explanation' },
   { step: '5', state: 'FALLBACK_READY', owner: 'Backend', api: 'same session', output: 'Seed result when LLM fails' }
 ];
 
@@ -23,7 +23,7 @@ export const adminTicketDetailRows = [
   { field: 'ticketId', value: '00000000-0000-4000-8000-000000006001' },
   { field: 'user', value: 'user@example.com' },
   { field: 'symptom', value: '게임 중 프레임 급락' },
-  { field: 'logRange', value: '최근 30분' },
+  { field: 'logRange', value: '선택한 IncidentWindow' },
   { field: 'consent', value: '로그 업로드 명시 동의 필요' },
   { field: 'retention', value: '업로드 로그 30일 보관 후 삭제 예정' },
   { field: 'causeCandidate1', value: 'GPU 온도 과열 가능성' },

@@ -76,6 +76,59 @@ background:
   animation: slot-attach-flash 600ms cubic-bezier(0.2, 0.8, 0.2, 1);
 }
 
+/* "메인보드에 꽂힌다": 장착 순간 카드가 보드 바깥에서 허브 방향으로 밀려 들어와 살짝 튕기며 안착한다.
+   방향(--plug-dx/dy)은 카드 위치에서 컴포넌트가 계산해 준다. */
+@keyframes slot-plug-in {
+  0% {
+    transform: translate(var(--plug-dx, 0px), var(--plug-dy, 0px)) scale(0.97);
+    opacity: 0.55;
+  }
+  70% {
+    transform: translate(calc(var(--plug-dx, 0px) * -0.1), calc(var(--plug-dy, 0px) * -0.1)) scale(1.01);
+    opacity: 1;
+  }
+  100% {
+    transform: translate(0px, 0px) scale(1);
+  }
+}
+
+.slot-plug-in {
+  animation: slot-plug-in 480ms cubic-bezier(0.22, 0.9, 0.32, 1.1);
+}
+
+/* 장착 순간 관계선이 부품→포트까지 그려진다. pathLength=1 기준이라 경로 길이와 무관하게 동작. */
+@keyframes slot-edge-draw {
+  from {
+    stroke-dashoffset: 1;
+  }
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+
+.slot-edge-draw {
+  animation: slot-edge-draw 520ms ease-out;
+}
+
+/* 꽂힌 포트가 잠깐 점등되는 펄스. */
+@keyframes slot-port-pulse {
+  0% {
+    transform: scale(1);
+  }
+  40% {
+    transform: scale(1.7);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+
+.slot-port-pulse {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: slot-port-pulse 700ms ease-out;
+}
+
 @keyframes slot-empty-pulse {
   0%,
   100% {
@@ -107,6 +160,9 @@ background:
 
 @media (prefers-reduced-motion: reduce) {
   .slot-attach-flash,
+  .slot-plug-in,
+  .slot-edge-draw,
+  .slot-port-pulse,
   .slot-empty-pulse,
   .slot-panel-in {
     animation: none;

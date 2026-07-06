@@ -6,10 +6,14 @@ import { Screen } from '../../../components/ui';
 import { AUTH_CHANGED_EVENT, getToken } from '../../../lib/api';
 import { openAiAssistant } from '../../../lib/events';
 import {
+  AI_ASSISTANT_SESSION_CHANGED_EVENT,
   AI_SELECTED_BUILD_CHANGED_EVENT,
   PART_CATEGORY_LABELS,
   clearSelectedAiBuild,
+  readAssistantSession,
   readSelectedAiBuild,
+  recentBuildsForChatContext,
+  saveSelectedAiBuild,
   type AiBuildItem,
   type AiRecommendedBuild,
   type BuildGraphFocus,
@@ -18,11 +22,13 @@ import {
   type AiSelectedBuild
 } from '../../quote/aiSelection';
 import { resolveBuildGraph, saveBuildFromChat } from '../../quote/quoteApi';
+import { QuoteComparePanel } from '../components/slot-board/QuoteComparePanel';
+import { UpgradeAdvisorPanel } from '../components/slot-board/UpgradeAdvisorPanel';
 import { SlotBoard } from '../components/slot-board/SlotBoard';
 import { SlotCandidatePanel } from '../components/slot-board/SlotCandidatePanel';
 import { SlotStatusBar } from '../components/slot-board/SlotStatusBar';
 import { SLOT_CONFIGS, SLOT_COUNT, isSlotCategory, slotConfigFor } from '../components/slot-board/slotBoardConfig';
-import { deleteQuoteDraftItem, getCurrentQuoteDraft, patchQuoteDraftItem, putQuoteDraftItem } from '../partsApi';
+import { applyAiBuildToQuoteDraft, deleteQuoteDraftItem, getCurrentQuoteDraft, patchQuoteDraftItem, putQuoteDraftItem } from '../partsApi';
 import type { PartRow, QuoteDraft, QuoteDraftItem } from '../types';
 
 export function SelfQuotePage() {
@@ -34,6 +40,12 @@ export function SelfQuotePage() {
   const selectedCategory: PartCategory | null = isSlotCategory(categoryParam) ? categoryParam : null;
   const selectedSlot = selectedCategory ? slotConfigFor(selectedCategory) ?? null : null;
   const [aiBuild, setAiBuild] = useState<AiSelectedBuild | null>(() => readSelectedAiBuild());
+  // R1 견적 비교: 챗봇이 마지막으로 내려준 추천 배치(최대 3안 — 가성비/균형/고성능).
+  const [recentBuilds, setRecentBuilds] = useState<AiRecommendedBuild[]>(() => recentBuildsForChatContext(readAssistantSession()));
+  const [compareOpen, setCompareOpen] = useState(false);
+  const [applyingBuildId, setApplyingBuildId] = useState<string | null>(null);
+  const [compareApplyError, setCompareApplyError] = useState<string | null>(null);
+  const [upgradeOpen, setUpgradeOpen] = useState(false);
   const hasToken = Boolean(getToken());
   const loginHref = `/login?redirect=${encodeURIComponent(`${location.pathname}${location.search}`)}`;
 
@@ -93,15 +105,48 @@ export function SelfQuotePage() {
 
   useEffect(() => {
     const syncSelectedBuild = () => setAiBuild(readSelectedAiBuild());
+    const syncRecentBuilds = () => setRecentBuilds(recentBuildsForChatContext(readAssistantSession()));
+    const syncAll = () => {
+      syncSelectedBuild();
+      syncRecentBuilds();
+    };
     window.addEventListener(AI_SELECTED_BUILD_CHANGED_EVENT, syncSelectedBuild);
-    window.addEventListener(AUTH_CHANGED_EVENT, syncSelectedBuild);
-    window.addEventListener('storage', syncSelectedBuild);
+    window.addEventListener(AI_ASSISTANT_SESSION_CHANGED_EVENT, syncRecentBuilds);
+    window.addEventListener(AUTH_CHANGED_EVENT, syncAll);
+    window.addEventListener('storage', syncAll);
     return () => {
       window.removeEventListener(AI_SELECTED_BUILD_CHANGED_EVENT, syncSelectedBuild);
-      window.removeEventListener(AUTH_CHANGED_EVENT, syncSelectedBuild);
-      window.removeEventListener('storage', syncSelectedBuild);
+      window.removeEventListener(AI_ASSISTANT_SESSION_CHANGED_EVENT, syncRecentBuilds);
+      window.removeEventListener(AUTH_CHANGED_EVENT, syncAll);
+      window.removeEventListener('storage', syncAll);
     };
   }, []);
+
+  // 비교 패널에서 안 선택 — 챗봇 selectBuild와 같은 레시피(일괄 적용 성공 후에만 선택 저장).
+  const applyCompareBuild = async (build: AiRecommendedBuild) => {
+    if (applyingBuildId) return;
+    setCompareApplyError(null);
+    setApplyingBuildId(build.id);
+    try {
+      const appliedDraft = await applyAiBuildToQuoteDraft({
+        buildId: build.id,
+        conflictPolicy: 'REPLACE',
+        items: build.items.map((item) => ({
+          partId: item.partId,
+          category: item.category,
+          quantity: item.quantity
+        }))
+      });
+      saveSelectedAiBuild(build);
+      setAiBuild(readSelectedAiBuild());
+      queryClient.setQueryData(['quote-draft', 'current'], appliedDraft);
+      invalidateQuoteDraft();
+    } catch {
+      setCompareApplyError('선택한 조합을 견적에 적용하지 못했습니다. 잠시 후 다시 시도해 주세요.');
+    } finally {
+      setApplyingBuildId(null);
+    }
+  };
 
   const selectSlot = (category: PartCategory) => {
     if (!hasToken) {
@@ -257,6 +302,55 @@ export function SelfQuotePage() {
               clearSelectedAiBuild();
               setAiBuild(null);
             }}
+          />
+        ) : null}
+
+        {/* R1 견적 비교: 최근 AI 추천 배치가 2안 이상이면 나란히 비교를 제공한다 (멘토 피드백). */}
+        {recentBuilds.length >= 2 && !compareOpen ? (
+          <div className="panel flex flex-wrap items-center justify-between gap-2 border-blue-100 px-4 py-2.5">
+            <span className="text-xs font-bold text-slate-600">
+              AI가 추천한 {recentBuilds.length}안(가성비·균형·고성능)을 나란히 비교할 수 있어요
+            </span>
+            <button
+              type="button"
+              data-testid="quote-compare-open"
+              onClick={() => setCompareOpen(true)}
+              className="rounded-md border border-brand-blue/30 bg-white px-3 py-1.5 text-xs font-black text-brand-blue transition hover:bg-blue-50"
+            >
+              {recentBuilds.length}안 비교하기
+            </button>
+          </div>
+        ) : null}
+        {compareOpen && recentBuilds.length >= 2 ? (
+          <QuoteComparePanel
+            builds={recentBuilds}
+            draftItems={draftItems}
+            onApply={(build) => void applyCompareBuild(build)}
+            applyingBuildId={applyingBuildId}
+            applyError={compareApplyError}
+            onClose={() => setCompareOpen(false)}
+          />
+        ) : null}
+
+        {/* R1 업그레이드 진단: 부품이 담긴 견적(=기존 PC 구성)에서 증상 기반 교체 제안으로 진입한다. */}
+        {draftItems.length > 0 && !upgradeOpen ? (
+          <div className="panel flex flex-wrap items-center justify-between gap-2 border-commerce-line px-4 py-2.5">
+            <span className="text-xs font-bold text-slate-600">PC가 예전 같지 않다면 — 증상만 고르면 병목 부품 교체를 제안해 드려요</span>
+            <button
+              type="button"
+              data-testid="upgrade-advisor-open"
+              onClick={() => setUpgradeOpen(true)}
+              className="rounded-md border border-commerce-line bg-white px-3 py-1.5 text-xs font-black text-slate-700 transition hover:border-commerce-ink"
+            >
+              업그레이드 진단
+            </button>
+          </div>
+        ) : null}
+        {upgradeOpen && draftItems.length > 0 ? (
+          <UpgradeAdvisorPanel
+            draftItems={draftItems}
+            onOpenSlot={selectSlot}
+            onClose={() => setUpgradeOpen(false)}
           />
         ) : null}
 

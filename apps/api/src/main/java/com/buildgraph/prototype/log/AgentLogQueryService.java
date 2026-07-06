@@ -3,6 +3,7 @@ package com.buildgraph.prototype.log;
 import com.buildgraph.prototype.common.ApiException;
 import com.buildgraph.prototype.common.DbValueMapper;
 import com.buildgraph.prototype.common.MockData;
+import com.buildgraph.prototype.support.AsLogRagAnalysisService;
 import com.buildgraph.prototype.user.CurrentUserService;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -12,6 +13,7 @@ import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Set;
 import java.util.regex.Pattern;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
@@ -46,9 +48,59 @@ public class AgentLogQueryService {
     );
 
     private final JdbcTemplate jdbcTemplate;
+    private final AsLogRagAnalysisService asLogRagAnalysisService;
 
     public AgentLogQueryService(JdbcTemplate jdbcTemplate) {
+        this(jdbcTemplate, new AsLogRagAnalysisService(jdbcTemplate));
+    }
+
+    @Autowired
+    public AgentLogQueryService(JdbcTemplate jdbcTemplate, AsLogRagAnalysisService asLogRagAnalysisService) {
         this.jdbcTemplate = jdbcTemplate;
+        this.asLogRagAnalysisService = asLogRagAnalysisService;
+    }
+
+    public Map<String, Object> upload(MultipartFile file, Integer rangeMinutes, Boolean consentAccepted) {
+        if (!Boolean.TRUE.equals(consentAccepted)) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Log upload consent is required.");
+        }
+        ValidatedLogFile validated = validateLogFile(file);
+        Integer minutes = rangeMinutes == null ? 30 : rangeMinutes;
+        Map<String, Object> asRagAnalysis = asLogRagAnalysisService.analyze(file, minutes);
+        Map<String, Object> row = jdbcTemplate.queryForMap("""
+                INSERT INTO agent_log_uploads (
+                  user_id,
+                  range_minutes,
+                  status,
+                  file_name,
+                  file_size,
+                  storage_path,
+                  summary,
+                  as_rag_analysis,
+                  consent_accepted_at,
+                  delete_after
+                )
+                VALUES (
+                  (SELECT id FROM users WHERE email = 'user@example.com'),
+                  ?,
+                  'UPLOADED',
+                  ?,
+                  ?,
+                  'seed/agent-logs/' || ?,
+                  ?,
+                  ?::jsonb,
+                  now(),
+                  now() + interval '30 days'
+                )
+                RETURNING public_id::text AS id, status, file_name, file_size, range_minutes, summary, as_rag_analysis::text AS as_rag_analysis, created_at, delete_after
+                """,
+                minutes,
+                validated.fileName(),
+                validated.fileSize(),
+                validated.fileName(),
+                asRagAnalysis.get("summaryText"),
+                toJson(asRagAnalysis));
+        return logMap(row);
     }
 
     public Map<String, Object> upload(
@@ -58,7 +110,7 @@ public class AgentLogQueryService {
             CurrentUserService.CurrentUser user
     ) {
         if (!Boolean.TRUE.equals(consentAccepted)) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "로그 업로드 동의가 필요합니다.");
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Log upload consent is required.");
         }
         ValidatedLogFile validated = validateLogFile(file);
         Integer minutes = rangeMinutes == null ? 30 : rangeMinutes;
@@ -91,9 +143,26 @@ public class AgentLogQueryService {
         return logMap(row);
     }
 
+    public Map<String, Object> previewAsRag(MultipartFile file, Integer rangeMinutes) {
+        Integer minutes = rangeMinutes == null ? 30 : rangeMinutes;
+        return asLogRagAnalysisService.analyze(file, minutes);
+    }
+
+    public Map<String, Object> detail(String id) {
+        return jdbcTemplate.queryForList("""
+                        SELECT public_id::text AS id, status, file_name, file_size, range_minutes, summary, as_rag_analysis::text AS as_rag_analysis, created_at, delete_after
+                        FROM agent_log_uploads
+                        WHERE public_id = ?::uuid
+                        """, id)
+                .stream()
+                .findFirst()
+                .map(this::logMap)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Log upload not found."));
+    }
+
     public Map<String, Object> detail(String id, CurrentUserService.CurrentUser user) {
         return jdbcTemplate.queryForList("""
-                        SELECT public_id::text AS id, status, file_name, file_size, range_minutes, summary, created_at, delete_after
+                        SELECT public_id::text AS id, status, file_name, file_size, range_minutes, summary, as_rag_analysis::text AS as_rag_analysis, created_at, delete_after
                         FROM agent_log_uploads
                         WHERE public_id = ?::uuid
                           AND user_id = ?
@@ -101,7 +170,7 @@ public class AgentLogQueryService {
                 .stream()
                 .findFirst()
                 .map(this::logMap)
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "로그 업로드를 찾을 수 없습니다."));
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Log upload not found."));
     }
 
     private Map<String, Object> logMap(Map<String, Object> row) {
@@ -112,6 +181,7 @@ public class AgentLogQueryService {
                 "fileSize", DbValueMapper.integer(row, "file_size"),
                 "rangeMinutes", DbValueMapper.integer(row, "range_minutes"),
                 "summary", DbValueMapper.string(row, "summary"),
+                "asRagAnalysis", DbValueMapper.json(row, "as_rag_analysis", null),
                 "createdAt", DbValueMapper.timestamp(row, "created_at"),
                 "deleteAfter", DbValueMapper.timestamp(row, "delete_after")
         );
@@ -119,27 +189,27 @@ public class AgentLogQueryService {
 
     static ValidatedLogFile validateLogFile(MultipartFile file) {
         if (file == null || file.isEmpty()) {
-            throw fileValidationError("MISSING_FILE", "업로드할 로그 파일이 필요합니다.");
+            throw fileValidationError("MISSING_FILE", "A log file is required.");
         }
         if (file.getSize() > MAX_FILE_SIZE) {
-            throw fileValidationError("FILE_SIZE_EXCEEDED", "로그 파일은 10MiB 이하만 업로드할 수 있습니다.");
+            throw fileValidationError("FILE_SIZE_EXCEEDED", "Log files must be 10MiB or smaller.");
         }
         String fileName = normalizeFileName(file.getOriginalFilename());
         String lowerFileName = fileName.toLowerCase(java.util.Locale.ROOT);
         if (!lowerFileName.endsWith(".jsonl") && !lowerFileName.endsWith(".ndjson")) {
-            throw fileValidationError("INVALID_EXTENSION", "로그 파일은 .jsonl 또는 .ndjson만 업로드할 수 있습니다.");
+            throw fileValidationError("INVALID_EXTENSION", "Only .jsonl or .ndjson log files are allowed.");
         }
         String contentType = file.getContentType();
         if (contentType != null && !contentType.isBlank()
                 && !ALLOWED_MIME_TYPES.contains(contentType.toLowerCase(java.util.Locale.ROOT))) {
-            throw fileValidationError("INVALID_MIME", "로그 파일 MIME 타입이 올바르지 않습니다.");
+            throw fileValidationError("INVALID_MIME", "Unsupported log file MIME type.");
         }
 
         String rawContent;
         try {
             rawContent = new String(file.getBytes(), StandardCharsets.UTF_8);
         } catch (IOException exception) {
-            throw fileValidationError("READ_FAILED", "로그 파일을 읽을 수 없습니다.");
+            throw fileValidationError("READ_FAILED", "Could not read log file.");
         }
 
         int lineCount = 0;
@@ -153,21 +223,21 @@ public class AgentLogQueryService {
             }
             int lineNumber = index + 1;
             if (line.isBlank()) {
-                throw fileValidationError("INVALID_JSONL", "빈 JSONL line은 허용하지 않습니다.", Map.of("line", lineNumber));
+                throw fileValidationError("INVALID_JSONL", "Blank JSONL lines are not allowed.", Map.of("line", lineNumber));
             }
             lineCount += 1;
             if (lineCount > MAX_LINE_COUNT) {
-                throw fileValidationError("LINE_LIMIT_EXCEEDED", "로그 파일은 최대 20000 line까지만 업로드할 수 있습니다.");
+                throw fileValidationError("LINE_LIMIT_EXCEEDED", "Log files can contain at most 20000 lines.");
             }
             validateJsonObjectLine(line, lineNumber);
             sanitized.append(maskSensitive(line)).append('\n');
         }
         if (lineCount == 0) {
-            throw fileValidationError("EMPTY_JSONL", "로그 파일에 JSONL line이 없습니다.");
+            throw fileValidationError("EMPTY_JSONL", "The log file does not contain JSONL lines.");
         }
         String sanitizedContent = sanitized.toString();
         if (containsSensitiveValue(sanitizedContent)) {
-            throw fileValidationError("PII_MASKING_FAILED", "로그 파일 민감정보 마스킹에 실패했습니다.");
+            throw fileValidationError("PII_MASKING_FAILED", "Failed to mask sensitive log values.");
         }
         return new ValidatedLogFile(fileName, file.getSize(), lineCount, sanitizedContent);
     }
@@ -176,10 +246,10 @@ public class AgentLogQueryService {
         try {
             JsonNode node = OBJECT_MAPPER.readTree(line);
             if (node == null || !node.isObject()) {
-                throw fileValidationError("INVALID_JSONL", "JSONL line은 JSON object여야 합니다.", Map.of("line", lineNumber));
+                throw fileValidationError("INVALID_JSONL", "JSONL lines must be JSON objects.", Map.of("line", lineNumber));
             }
         } catch (IOException exception) {
-            throw fileValidationError("INVALID_JSONL", "JSONL line 파싱에 실패했습니다.", Map.of("line", lineNumber));
+            throw fileValidationError("INVALID_JSONL", "Failed to parse JSONL line.", Map.of("line", lineNumber));
         }
     }
 
@@ -216,6 +286,14 @@ public class AgentLogQueryService {
         details.put("reason", reason);
         details.putAll(extraDetails);
         return new ApiException(HttpStatus.BAD_REQUEST, "FILE_VALIDATION_ERROR", message, details);
+    }
+
+    private static String toJson(Object value) {
+        try {
+            return OBJECT_MAPPER.writeValueAsString(value);
+        } catch (Exception exception) {
+            throw new IllegalStateException("JSON serialization failed", exception);
+        }
     }
 
     record ValidatedLogFile(String fileName, long fileSize, int lineCount, String sanitizedContent) {

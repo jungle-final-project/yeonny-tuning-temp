@@ -1,0 +1,6 @@
+agent-config.json
+out/
+build/
+dist/
+agent.spec
+agent-cli.spec

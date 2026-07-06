@@ -293,7 +293,14 @@ export type RagEvidenceResponse = {
 
 export type AsTicketStatus = 'OPEN' | 'ASSIGNED' | 'IN_PROGRESS' | 'RESOLVED' | 'CLOSED' | 'CANCELLED';
 export type AsReviewStatus = 'NOT_REQUIRED' | 'REQUIRED' | 'IN_REVIEW' | 'APPROVED' | 'REJECTED';
-export type AsSupportDecision = 'SELF_SOLVABLE' | 'REMOTE_POSSIBLE' | 'VISIT_REQUIRED' | 'NEEDS_MORE_INFO';
+export type AsSupportDecision =
+  | 'SELF_SOLVABLE'
+  | 'REMOTE_POSSIBLE'
+  | 'VISIT_REQUIRED'
+  | 'REPAIR_OR_REPLACE'
+  | 'NEEDS_MORE_INFO'
+  | 'MONITOR_ONLY'
+  | 'UNSUPPORTED';
 export type RiskLevel = 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL';
 
 export type AdminAsTicket = {
@@ -310,11 +317,21 @@ export type AdminAsTicket = {
   description?: string | null;
   detailDescription?: string | null;
   logUploadId?: string | null;
-  logSummary?: string | null;
+  incidentWindow?: Record<string, unknown> | null;
+  logSummary?: string | Record<string, unknown> | null;
+  logSummaryText?: string | null;
   logSummaryId?: string | null;
   logSummaryPayload?: Record<string, unknown>;
   logFeaturePayload?: Record<string, unknown>;
   logRiskFlags?: Record<string, unknown>;
+  supportRouting?: Record<string, unknown> | null;
+  aiDiagnosisRequest?: Record<string, unknown> | null;
+  safetyAdviceLevel?: string | null;
+  safetyNotices?: Record<string, unknown>[] | null;
+  feedbackRating?: number | null;
+  feedbackComment?: string | null;
+  feedbackCreatedAt?: string | null;
+  diagnosticAccuracy?: string | null;
   asTrainingLabel?: {
     id: string;
     failureCategory?: string | null;
@@ -330,6 +347,12 @@ export type AdminAsTicket = {
   causeCandidates: Record<string, unknown>[];
   upgradeCandidates: Record<string, unknown>[];
   adminNote?: string | null;
+  remoteSupportLink?: string | null;
+  remoteSupportStatus?: string | null;
+  visitSupportRequired?: boolean | null;
+  visitSupportStatus?: string | null;
+  visitPreferredDate?: string | null;
+  visitTimeSlot?: string | null;
   resolvedAt?: string | null;
   createdAt?: string;
   updatedAt?: string;
@@ -349,6 +372,11 @@ export type AdminAsTicketUpdateRequest = {
   supportDecision?: AsSupportDecision | string | null;
   riskLevel?: RiskLevel | string | null;
   autoResponseAllowed?: boolean | null;
+  diagnosticAccuracy?: string | null;
+  remoteSupportLink?: string | null;
+  visitSupportRequired?: boolean | null;
+  visitPreferredDate?: string | null;
+  visitTimeSlot?: string | null;
 };
 
 export type AdminTicketPayload = AdminAsTicketUpdateRequest;

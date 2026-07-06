@@ -42,6 +42,13 @@ class AgentEndpointProbeController {
                 .body(Map.of("mutationCount", mutationCounter.incrementAndGet()));
     }
 
+    @PostMapping("/agent/sessions")
+    Object createAgentSession(@RequestHeader(value = "Authorization", required = false) String authorization) {
+        CurrentUserService.CurrentUser user = currentUserService.requireUser(authorization);
+        return ResponseEntity.status(HttpStatus.CREATED)
+                .body(Map.of("userId", user.id()));
+    }
+
     @GetMapping("/web-jwt-protected")
     Object webJwtProtected(@RequestHeader(value = "Authorization", required = false) String authorization) {
         CurrentUserService.CurrentUser user = currentUserService.requireUser(authorization);

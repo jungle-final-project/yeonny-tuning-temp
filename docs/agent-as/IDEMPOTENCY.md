@@ -8,7 +8,7 @@ PC Agent는 네트워크 장애, 재시도, 프로세스 재시작으로 같은 
 
 | 구분 | 실제 경로 |
 |---|---|
-| migration | `apps/api/src/main/resources/db/migration/V57__agent_idempotency_records.sql` |
+| migration | `apps/api/src/main/resources/db/migration/V54__agent_idempotency_records.sql` |
 | Entity | `apps/api/src/main/java/com/buildgraph/prototype/agent/persistence/AgentIdempotencyRecordEntity.java` |
 | Repository | `apps/api/src/main/java/com/buildgraph/prototype/agent/persistence/AgentIdempotencyRecordRepository.java` |
 | Service | `apps/api/src/main/java/com/buildgraph/prototype/config/security/AgentIdempotencyService.java` |

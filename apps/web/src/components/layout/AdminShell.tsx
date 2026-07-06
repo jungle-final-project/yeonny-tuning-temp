@@ -28,6 +28,13 @@ export function AdminShell({ children, title, exportRows = [], exportFileName = 
         <div className="flex h-16 items-center justify-between border-b border-slate-200 bg-white px-7">
           <h1 className="text-lg font-bold text-brand-navy">{title}</h1>
           <div className="flex gap-2">
+            <Link
+              to="/"
+              className="inline-flex items-center gap-1 rounded border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-brand-navy hover:bg-slate-50"
+            >
+              <Home size={14} />
+              홈으로
+            </Link>
             <button
               type="button"
               disabled={!canExport}

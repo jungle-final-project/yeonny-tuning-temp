@@ -517,7 +517,7 @@ test('support intake shows the existing chat CTA when stale submit receives a co
   await page.getByLabel('증상 제목').fill('새 증상');
   await page.getByLabel('증상 상세').fill('새로 접수하려던 증상입니다.');
   await selectAgentLogFile(page);
-  await page.getByLabel('최근 30분 로그 업로드와 30일 보관 후 삭제 정책에 동의합니다.').check();
+  await page.getByLabel('선택한 구간의 로그 업로드와 30일 보관 후 삭제 정책에 동의합니다.').check();
   await page.getByRole('button', { name: 'AS 접수하기' }).click();
 
   await expect.poll(() => createTicketCalls).toBe(1);

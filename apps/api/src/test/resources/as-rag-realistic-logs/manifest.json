@@ -1,0 +1,121 @@
+[
+  {
+    "id": "remote_driver_display_tdr",
+    "fileName": "remote_driver_display_tdr.jsonl",
+    "expectedService": "REMOTE_SUPPORT",
+    "expectedDecision": "REMOTE_POSSIBLE",
+    "basis": "Display source, Event ID 4101 style TDR recovery message"
+  },
+  {
+    "id": "remote_driver_wudfrd",
+    "fileName": "remote_driver_wudfrd.jsonl",
+    "expectedService": "REMOTE_SUPPORT",
+    "expectedDecision": "REMOTE_POSSIBLE",
+    "basis": "Kernel-PnP/WudfRd driver load failure style event"
+  },
+  {
+    "id": "remote_app_error_1000",
+    "fileName": "remote_app_error_1000.jsonl",
+    "expectedService": "REMOTE_SUPPORT",
+    "expectedDecision": "REMOTE_POSSIBLE",
+    "basis": "Application Error, Event ID 1000 style faulting application event"
+  },
+  {
+    "id": "remote_dotnet_runtime_1026",
+    "fileName": "remote_dotnet_runtime_1026.jsonl",
+    "expectedService": "REMOTE_SUPPORT",
+    "expectedDecision": "REMOTE_POSSIBLE",
+    "basis": ".NET Runtime, Event ID 1026 style application exception event"
+  },
+  {
+    "id": "remote_dns_client_1014",
+    "fileName": "remote_dns_client_1014.jsonl",
+    "expectedService": "REMOTE_SUPPORT",
+    "expectedDecision": "REMOTE_POSSIBLE",
+    "basis": "DNS Client Events, Event ID 1014 style timeout event"
+  },
+  {
+    "id": "remote_service_control_7031",
+    "fileName": "remote_service_control_7031.jsonl",
+    "expectedService": "REMOTE_SUPPORT",
+    "expectedDecision": "REMOTE_POSSIBLE",
+    "basis": "Service Control Manager, Event ID 7031 style terminated unexpectedly event"
+  },
+  {
+    "id": "remote_resource_exhaustion_2004",
+    "fileName": "remote_resource_exhaustion_2004.jsonl",
+    "expectedService": "REMOTE_SUPPORT",
+    "expectedDecision": "REMOTE_POSSIBLE",
+    "basis": "Resource-Exhaustion-Detector, Event ID 2004 style low virtual memory event"
+  },
+  {
+    "id": "remote_agent_upload_401",
+    "fileName": "remote_agent_upload_401.jsonl",
+    "expectedService": "REMOTE_SUPPORT",
+    "expectedDecision": "REMOTE_POSSIBLE",
+    "basis": "BuildGraph Agent health log for upload/auth failure"
+  },
+  {
+    "id": "visit_kernel_power_41",
+    "fileName": "visit_kernel_power_41.jsonl",
+    "expectedService": "VISIT_SUPPORT",
+    "expectedDecision": "VISIT_REQUIRED",
+    "basis": "Microsoft-Windows-Kernel-Power, Event ID 41 unexpected restart"
+  },
+  {
+    "id": "visit_whea_bugcheck",
+    "fileName": "visit_whea_bugcheck.jsonl",
+    "expectedService": "VISIT_SUPPORT",
+    "expectedDecision": "VISIT_REQUIRED",
+    "basis": "WHEA-Logger hardware error plus BugCheck reboot event"
+  },
+  {
+    "id": "visit_disk_bad_block",
+    "fileName": "visit_disk_bad_block.jsonl",
+    "expectedService": "VISIT_SUPPORT",
+    "expectedDecision": "VISIT_REQUIRED",
+    "basis": "Disk, Event ID 7 style bad block event"
+  },
+  {
+    "id": "visit_ntfs_filesystem",
+    "fileName": "visit_ntfs_filesystem.jsonl",
+    "expectedService": "VISIT_SUPPORT",
+    "expectedDecision": "VISIT_REQUIRED",
+    "basis": "Ntfs, Event ID 55 style file system corruption event"
+  },
+  {
+    "id": "visit_smart_predictive_failure",
+    "fileName": "visit_smart_predictive_failure.jsonl",
+    "expectedService": "VISIT_SUPPORT",
+    "expectedDecision": "VISIT_REQUIRED",
+    "basis": "Agent STORAGE_HEALTH row for SMART critical predictive failure"
+  },
+  {
+    "id": "visit_thermal_shutdown",
+    "fileName": "visit_thermal_shutdown.jsonl",
+    "expectedService": "VISIT_SUPPORT",
+    "expectedDecision": "VISIT_REQUIRED",
+    "basis": "Agent thermal sensor row for fan rpm 0 and thermal shutdown"
+  },
+  {
+    "id": "visit_boot_remote_blocked",
+    "fileName": "visit_boot_remote_blocked.jsonl",
+    "expectedService": "VISIT_SUPPORT",
+    "expectedDecision": "VISIT_REQUIRED",
+    "basis": "Agent health row for offline device, heartbeat gap, and remote unavailable"
+  },
+  {
+    "id": "weak_clean_shutdown",
+    "fileName": "weak_clean_shutdown.jsonl",
+    "expectedService": "DIAGNOSIS_ONLY",
+    "expectedDecision": "NEEDS_MORE_INFO",
+    "basis": "User32 1074 and EventLog 6006 clean shutdown events should not become visit support"
+  },
+  {
+    "id": "unsupported_game_fps",
+    "fileName": "unsupported_game_fps.jsonl",
+    "expectedService": "DIAGNOSIS_ONLY",
+    "expectedDecision": "NEEDS_MORE_INFO",
+    "basis": "Game FPS tuning request is outside PC Agent AS support scope"
+  }
+]

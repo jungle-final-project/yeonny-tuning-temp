@@ -1,25 +1,65 @@
-import { ChangeEvent, FormEvent, useState } from 'react';
-import { useMutation, useQuery } from '@tanstack/react-query';
+import { ChangeEvent, FormEvent, useEffect, useState } from 'react';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
-import { DataTable, Panel, Screen, StateMessage, StatusBadge } from '../../components/ui';
-import { ApiError, getCachedAuthUser } from '../../lib/api';
+import { DataTable, Panel, Screen, StateMessage, StatusBadge, statusLabel } from '../../components/ui';
+import { API_BASE_URL, ApiError, getCachedAuthUser } from '../../lib/api';
 import { AS_CHAT_DEFAULT_TICKET_ID, getAsChat, sendAsChat, streamAsChat } from './asChatApi';
 import type { AsChatEvidence, AsChatResponse, AsChatToolResult } from './asChatApi';
-import { createSupportTicket, getSupportTicket, uploadAgentLog } from './supportApi';
+import { createSupportTicket, getSupportDraft, getSupportTicket, issueAgentActivationToken, previewAgentLogRag, requestRemoteSupport, submitSupportFeedback, uploadAgentLog } from './supportApi';
 import { getCurrentSupportChat } from './supportChatApi';
-import type { AsTicketDto, CauseCandidate, SupportChatContact } from './types';
+import type { AsRagAnalysisDto, AsTicketDraftDto, AsTicketDto, CauseCandidate, SupportChatContact } from './types';
 
 type SubmitState = 'default' | 'validation_error' | 'consent_required' | 'uploading' | 'upload_error' | 'ticket_error' | 'ticket_created';
+type AgentDownloadState = 'idle' | 'issuing' | 'done' | 'error';
+type AsRagPreviewState = 'idle' | 'loading' | 'ready' | 'error';
+type SupportRequestKind = 'DIAGNOSIS_ONLY' | 'REMOTE_REQUESTED' | 'VISIT_REQUESTED';
 type BlockingSupportChat = {
   asTicketId: string;
   supportChatRoomId?: string | null;
 };
+type ZipEntryInput = {
+  name: string;
+  data: Uint8Array<ArrayBuffer>;
+};
+
+const crc32Table = createCrc32Table();
+
+const remoteSymptomTypes = new Set([
+  'REMOTE_AGENT',
+  'REMOTE_DRIVER_OS',
+  'REMOTE_APP_LAUNCHER',
+  'REMOTE_STORAGE_MEMORY',
+  'REMOTE_STARTUP_SERVICE',
+  'REMOTE_LOCAL_NETWORK'
+]);
+
+const visitSymptomTypes = new Set([
+  'VISIT_BOOT_REMOTE_BLOCKED',
+  'VISIT_DISK_FAILURE',
+  'VISIT_WHEA_BSOD',
+  'VISIT_POWER_SHUTDOWN',
+  'VISIT_FAN_THERMAL'
+]);
+
+const symptomTypeOptions = [
+  ['REMOTE_AGENT', 'Agent 설치/등록/업로드/권한 오류'],
+  ['REMOTE_DRIVER_OS', '드라이버/OS 업데이트/장치 오류'],
+  ['REMOTE_APP_LAUNCHER', '앱/런처 실행 오류'],
+  ['REMOTE_STORAGE_MEMORY', '저장공간 부족/메모리 압박'],
+  ['REMOTE_STARTUP_SERVICE', '시작프로그램/서비스 부하'],
+  ['REMOTE_LOCAL_NETWORK', '로컬 네트워크/DNS/어댑터 문제'],
+  ['VISIT_BOOT_REMOTE_BLOCKED', '부팅 불가 또는 원격 연결 불가'],
+  ['VISIT_DISK_FAILURE', '디스크 장애 의심'],
+  ['VISIT_WHEA_BSOD', 'WHEA/블루스크린 반복'],
+  ['VISIT_POWER_SHUTDOWN', '부하 시 전원 꺼짐'],
+  ['VISIT_FAN_THERMAL', '팬/과열/thermal shutdown']
+];
 
 export function AsChatPage() {
   const [searchParams] = useSearchParams();
   const initialTicketId = searchParams.get('asTicketId')?.trim() || AS_CHAT_DEFAULT_TICKET_ID;
   const [ticketId, setTicketId] = useState(initialTicketId);
-  const [message, setMessage] = useState('');
+  const [message, setMessage] = useState('게임 20분 뒤 프레임이 급락하고 GPU 온도가 95도까지 올라가요.');
   const [latestResponse, setLatestResponse] = useState<AsChatResponse | null>(null);
   const [error, setError] = useState('');
   const [progressMessage, setProgressMessage] = useState('');
@@ -97,7 +137,7 @@ export function AsChatPage() {
 
   return (
     <Screen>
-      <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_400px]">
+      <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_430px]">
         <Panel title="AS AI 챗봇" subtitle="AS 접수 후 티켓 증상, RAG 근거, Tool 결과를 사용해 1차 상담 답변을 생성합니다.">
           <form onSubmit={submitTicket} className="mb-4 flex gap-3">
             <input
@@ -113,7 +153,7 @@ export function AsChatPage() {
           {chatQuery.isError ? <StateMessage type="warn" title="챗봇 세션 조회 실패" body="GET /api/ai/as-chat 응답을 불러오지 못했습니다." /> : null}
           {error ? <div className="mb-4"><StateMessage type="warn" title="AS AI 확인 필요" body={error} /></div> : null}
 
-          <div className="h-[55vh] max-h-[560px] min-h-[320px] overflow-y-auto rounded border border-slate-200 bg-slate-50 p-4">
+          <div className="h-[560px] overflow-y-auto rounded border border-slate-200 bg-slate-50 p-4">
             {chat?.messages.length ? (
               <div className="space-y-3">
                 {chat.messages.map((item) => (
@@ -216,12 +256,33 @@ function progressLabel(eventName: string) {
 
 export function SupportNewPage() {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const draftId = searchParams.get('draftId')?.trim() ?? '';
   const [symptomTitle, setSymptomTitle] = useState('');
   const [symptomDetail, setSymptomDetail] = useState('');
+  const [symptomType, setSymptomType] = useState('REMOTE_DRIVER_OS');
+  const [detectedAt, setDetectedAt] = useState(() => datetimeLocalValue(new Date()));
+  const [windowStartedAt, setWindowStartedAt] = useState(() => {
+    const base = new Date();
+    base.setMinutes(base.getMinutes() - 15);
+    return datetimeLocalValue(base);
+  });
+  const [windowEndedAt, setWindowEndedAt] = useState(() => {
+    const base = new Date();
+    base.setMinutes(base.getMinutes() + 5);
+    return datetimeLocalValue(base);
+  });
+  const [supportRequestKind, setSupportRequestKind] = useState<SupportRequestKind>('DIAGNOSIS_ONLY');
   const [consentAccepted, setConsentAccepted] = useState(false);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [draftLogUploadId, setDraftLogUploadId] = useState('');
   const [logPreview, setLogPreview] = useState('');
+  const [asRagPreview, setAsRagPreview] = useState<AsRagAnalysisDto | null>(null);
+  const [asRagPreviewState, setAsRagPreviewState] = useState<AsRagPreviewState>('idle');
+  const [asRagPreviewError, setAsRagPreviewError] = useState('');
   const [submitState, setSubmitState] = useState<SubmitState>('default');
+  const [agentDownloadState, setAgentDownloadState] = useState<AgentDownloadState>('idle');
+  const [agentDownloadMessage, setAgentDownloadMessage] = useState('');
   const [error, setError] = useState('');
   const [conflictChat, setConflictChat] = useState<BlockingSupportChat | null>(null);
   const authScope = authScopeKey(getCachedAuthUser());
@@ -231,6 +292,46 @@ export function SupportNewPage() {
     retry: false
   });
   const blockingChat = conflictChat ?? blockingChatFromContact(currentChatQuery.data?.contact ?? null);
+
+  const draftQuery = useQuery({
+    queryKey: ['as-ticket-draft', draftId],
+    queryFn: () => getSupportDraft(draftId),
+    enabled: Boolean(draftId)
+  });
+
+  useEffect(() => {
+    const draft = draftQuery.data;
+    if (!draft) return;
+    setDraftLogUploadId(draft.logUploadId);
+    setSymptomTitle(draft.title || 'PCAgent가 문제를 감지했습니다');
+    setSymptomDetail(draft.detailDescription || draft.symptom || 'PCAgent가 문제 이벤트를 감지했습니다.');
+    setSymptomType(draft.symptomType || 'REMOTE_AGENT');
+    setSupportRequestKind(toSupportRequestKind(draft.supportRequestKind));
+    setDetectedAt(datetimeLocalFromIso(draft.detectedAt) || datetimeLocalValue(new Date()));
+    const draftStartedAt = datetimeLocalFromIso(draft.incidentWindow?.startedAt);
+    const draftEndedAt = datetimeLocalFromIso(draft.incidentWindow?.endedAt);
+    if (draftStartedAt) setWindowStartedAt(draftStartedAt);
+    if (draftEndedAt) setWindowEndedAt(draftEndedAt);
+    setConsentAccepted(true);
+    setSelectedFile(null);
+    setLogPreview('PCAgent가 감지 시점 기준 선택 구간 로그를 gzip으로 이미 업로드했습니다.');
+    setAsRagPreview(null);
+    setAsRagPreviewState('idle');
+    setAsRagPreviewError('');
+    setSubmitState('default');
+    setError('');
+  }, [draftQuery.data]);
+
+  function applyDefaultWindow(nextSymptomType = symptomType, nextDetectedAt = detectedAt) {
+    const detected = datetimeLocalToDate(nextDetectedAt);
+    const { preMinutes, postMinutes } = incidentWindowPreset(nextSymptomType);
+    const start = new Date(detected);
+    start.setMinutes(start.getMinutes() - preMinutes);
+    const end = new Date(detected);
+    end.setMinutes(end.getMinutes() + postMinutes);
+    setWindowStartedAt(datetimeLocalValue(start));
+    setWindowEndedAt(datetimeLocalValue(end));
+  }
 
   function downloadSampleJsonl() {
     const sampleLines = [
@@ -253,6 +354,9 @@ export function SupportNewPage() {
     setError('');
     setSelectedFile(null);
     setLogPreview('');
+    setAsRagPreview(null);
+    setAsRagPreviewState('idle');
+    setAsRagPreviewError('');
     setSubmitState('default');
 
     if (!file) return;
@@ -265,12 +369,39 @@ export function SupportNewPage() {
     }
 
     setSelectedFile(file);
+    setAsRagPreviewState('loading');
+    previewAgentLogRag(incidentRangeMinutes(windowStartedAt, windowEndedAt), file)
+      .then((analysis) => {
+        setAsRagPreview(analysis);
+        setAsRagPreviewState('ready');
+        setSupportRequestKind(supportKindFromRecommendation(analysis.recommendedService));
+      })
+      .catch((cause) => {
+        setAsRagPreviewState('error');
+        setAsRagPreviewError(cause instanceof Error && cause.message ? cause.message : 'AS RAG 추천을 불러오지 못했습니다.');
+      });
     file.text()
       .then((text) => {
         const lines = text.split(/\r?\n/).filter(Boolean).slice(0, 8);
         setLogPreview(lines.join('\n') || '선택한 파일에 표시할 로그 라인이 없습니다.');
       })
       .catch(() => setLogPreview('로그 미리보기를 읽지 못했습니다. 파일은 그대로 제출할 수 있습니다.'));
+  }
+
+  async function downloadPcAgent() {
+    setAgentDownloadState('issuing');
+    setAgentDownloadMessage('');
+    try {
+      const activation = await issueAgentActivationToken();
+      await downloadAgentPackage(activation.activationToken);
+      setAgentDownloadState('done');
+      setAgentDownloadMessage('PCAgent.zip을 내려받았습니다. 압축을 풀고 PCAgent.exe를 실행하면 자동 등록됩니다.');
+    } catch (cause) {
+      setAgentDownloadState('error');
+      setAgentDownloadMessage(cause instanceof ApiError && cause.status === 401
+        ? '로그인 후 PCAgent를 다운로드해 주세요.'
+        : 'Agent 등록 토큰 발급에 실패했습니다. 잠시 후 다시 시도해 주세요.');
+    }
   }
 
   async function submit(event: FormEvent) {
@@ -294,9 +425,14 @@ export function SupportNewPage() {
       setError('증상 상세 내용을 입력해 주세요.');
       return;
     }
-    if (!selectedFile) {
+    if (!windowEndedAt || !windowStartedAt || datetimeLocalToDate(windowEndedAt) <= datetimeLocalToDate(windowStartedAt)) {
       setSubmitState('validation_error');
-      setError('최근 30분 PC Agent 로그 파일을 선택해 주세요. .jsonl 또는 .ndjson 파일을 사용할 수 있습니다.');
+      setError('업로드 구간의 종료 시각은 시작 시각보다 뒤여야 합니다.');
+      return;
+    }
+    if (!selectedFile && !draftLogUploadId) {
+      setSubmitState('validation_error');
+      setError('선택한 문제 발생 전후 로그 구간의 PCAgent 로그 파일을 선택해 주세요. .jsonl 또는 .ndjson 파일을 사용할 수 있습니다.');
       return;
     }
     if (!consentAccepted) {
@@ -326,12 +462,39 @@ export function SupportNewPage() {
     }
   }
 
-  async function uploadAndCreateTicket(title: string, detail: string, file: File) {
-    const uploadedLog = await uploadAgentLog(30, consentAccepted, file);
-    const symptom = `${title}\n\n${detail}`;
-    const ticket = await createSupportTicket(symptom, uploadedLog.id);
-    setSubmitState('ticket_created');
-    navigate(`/support/${ticket.id}`);
+  async function uploadAndCreateTicket(title: string, detail: string, file: File | null) {
+    const rangeMinutes = incidentRangeMinutes(windowStartedAt, windowEndedAt);
+    const incidentId = `web-incident-${crypto.randomUUID()}`;
+    const uploadedLog = file ? await uploadAgentLog(rangeMinutes, consentAccepted, file, {
+      incidentId,
+      triggerType: 'USER_REQUEST',
+      symptomType,
+      detectedAt: toIsoFromDatetimeLocal(detectedAt),
+      rangeStartedAt: toIsoFromDatetimeLocal(windowStartedAt),
+      rangeEndedAt: toIsoFromDatetimeLocal(windowEndedAt),
+      selectedByUser: true,
+      consentId: `web-consent-${incidentId}`
+    }) : null;
+    const logUploadId = uploadedLog?.id || draftLogUploadId;
+    const symptom = [
+      title,
+      '',
+      detail,
+      '',
+      `[증상 유형] ${symptomLabel(symptomType)}`,
+      `[문제 발생 전후 로그] ${windowStartedAt} ~ ${windowEndedAt}`,
+      `[지원 신청] ${supportRequestLabel(supportRequestKind)}`
+    ].join('\n');
+    try {
+      const ticket = await createSupportTicket(symptom, logUploadId);
+      setSubmitState('ticket_created');
+      navigate(`/support/${ticket.id}`);
+    } catch (cause) {
+      if (cause instanceof ApiError && cause.status === 409 && cause.code === 'CONFLICT_STATE') {
+        throw cause;
+      }
+      throw new TicketCreateError();
+    }
   }
 
   const isUploading = submitState === 'uploading';
@@ -340,41 +503,155 @@ export function SupportNewPage() {
   return (
     <Screen>
       <form onSubmit={submit} className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_360px]">
-        <Panel title="AS 접수" subtitle="증상과 PC Agent 로그를 함께 보내면 담당자가 더 정확히 확인할 수 있습니다.">
+        {blockingChat ? (
+          <div className="lg:col-span-2">
+            <ActiveSupportChatNotice chat={blockingChat} />
+          </div>
+        ) : null}
+        <Panel title="AS 접수" subtitle="증상과 PCAgent 로그를 함께 보내면 담당자가 더 정확히 확인할 수 있습니다.">
           <div className="space-y-4">
-            {blockingChat ? <ActiveSupportChatNotice chat={blockingChat} /> : null}
+            {draftQuery.isLoading ? <StateMessage type="info" title="Agent 초안 불러오는 중" body="감지된 문제와 선택 구간 로그 정보를 확인하고 있습니다." /> : null}
+            {draftQuery.isError ? <StateMessage type="warn" title="Agent 초안 조회 실패" body="초안을 불러오지 못했습니다. 로그인 상태를 확인하거나 수동으로 AS를 접수해 주세요." /> : null}
+            {draftLogUploadId ? <StateMessage type="success" title="Agent 초안 적용됨" body="감지된 문제 시각과 선택 구간 로그가 접수 폼에 반영되었습니다." /> : null}
             <div>
-              <label htmlFor="support-symptom-title" className="mb-1 block text-xs font-bold text-slate-600">증상 제목</label>
+              <label className="mb-1 block text-xs font-bold text-slate-600">증상 제목</label>
               <input
                 id="support-symptom-title"
+                aria-label="증상 제목"
                 className="h-11 w-full rounded border border-slate-300 px-3 text-sm"
                 placeholder="예: 게임 중 프레임 드랍"
                 value={symptomTitle}
                 onChange={(event) => setSymptomTitle(event.target.value)}
               />
             </div>
+            <div className="grid gap-3 md:grid-cols-2">
+              <div>
+                <label className="mb-1 block text-xs font-bold text-slate-600">증상 유형</label>
+                <select
+                  className="h-11 w-full rounded border border-slate-300 bg-white px-3 text-sm"
+                  value={symptomType}
+                  onChange={(event) => {
+                    const next = event.target.value;
+                    setSymptomType(next);
+                    applyDefaultWindow(next, detectedAt);
+                  }}
+                >
+                  {symptomTypeOptions.map(([value, label]) => (
+                    <option key={value} value={value}>{label}</option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="mb-1 block text-xs font-bold text-slate-600">증상 발생 시각</label>
+                <input
+                  type="datetime-local"
+                  className="h-11 w-full rounded border border-slate-300 px-3 text-sm"
+                  value={detectedAt}
+                  onChange={(event) => {
+                    setDetectedAt(event.target.value);
+                    applyDefaultWindow(symptomType, event.target.value);
+                  }}
+                />
+              </div>
+            </div>
             <div>
-              <label htmlFor="support-symptom-detail" className="mb-1 block text-xs font-bold text-slate-600">증상 상세</label>
+              <label className="mb-1 block text-xs font-bold text-slate-600">증상 상세</label>
               <textarea
                 id="support-symptom-detail"
+                aria-label="증상 상세"
                 className="h-36 w-full rounded border border-slate-300 p-4 text-sm"
                 placeholder="언제부터 발생했는지, 어떤 작업 중 재현되는지 입력해 주세요."
                 value={symptomDetail}
                 onChange={(event) => setSymptomDetail(event.target.value)}
               />
             </div>
-            <div>
-              <label htmlFor="support-log-file" className="mb-1 block text-xs font-bold text-slate-600">최근 30분 로그 파일</label>
-              <button
-                type="button"
-                className="mb-2 rounded border border-slate-300 px-3 py-2 text-xs font-bold"
-                onClick={downloadSampleJsonl}
-              >
-                샘플 JSONL 다운로드
-              </button>
-              <p className="mb-2 text-xs leading-5 text-slate-500">
-                JSON Lines 형식 예시입니다. 서버 검증 규칙을 확정하는 파일은 아닙니다.
+            <div className="rounded border border-slate-200 bg-slate-50 p-4">
+              <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+                <p className="text-sm font-bold text-slate-800">문제 발생 전후 로그</p>
+                <button
+                  type="button"
+                  className="rounded border border-slate-300 bg-white px-3 py-2 text-xs font-bold"
+                  onClick={() => applyDefaultWindow()}
+                >
+                  기본 구간 다시 적용
+                </button>
+              </div>
+              <p className="mb-3 text-xs leading-5 text-slate-500">
+                증상 발생 시점을 기준으로 필요한 구간의 로그만 업로드합니다. 필요하면 시작/종료 시각을 직접 조정할 수 있습니다.
               </p>
+              <div className="grid gap-3 md:grid-cols-2">
+                <div>
+                  <label className="mb-1 block text-xs font-bold text-slate-600">시작 시각</label>
+                  <input
+                    type="datetime-local"
+                    className="h-11 w-full rounded border border-slate-300 px-3 text-sm"
+                    value={windowStartedAt}
+                    onChange={(event) => setWindowStartedAt(event.target.value)}
+                  />
+                </div>
+                <div>
+                  <label className="mb-1 block text-xs font-bold text-slate-600">종료 시각</label>
+                  <input
+                    type="datetime-local"
+                    className="h-11 w-full rounded border border-slate-300 px-3 text-sm"
+                    value={windowEndedAt}
+                    onChange={(event) => setWindowEndedAt(event.target.value)}
+                  />
+                </div>
+              </div>
+              <p className="mt-2 text-xs font-semibold text-slate-600">선택 구간: 약 {incidentRangeMinutes(windowStartedAt, windowEndedAt)}분</p>
+            </div>
+            <div>
+              <label className="mb-2 block text-xs font-bold text-slate-600">지원 신청 방식</label>
+              <div className="grid gap-2 md:grid-cols-3">
+                {(['DIAGNOSIS_ONLY', 'REMOTE_REQUESTED', 'VISIT_REQUESTED'] as SupportRequestKind[]).map((kind) => (
+                  <label key={kind} className="flex min-h-12 items-center gap-2 rounded border border-slate-200 px-3 py-2 text-sm font-bold text-slate-700">
+                    <input
+                      type="radio"
+                      checked={supportRequestKind === kind}
+                      onChange={() => setSupportRequestKind(kind)}
+                    />
+                    {supportRequestLabel(kind)}
+                  </label>
+                ))}
+              </div>
+            </div>
+            <div>
+              <label className="mb-1 block text-xs font-bold text-slate-600">선택 구간 로그 파일</label>
+              <div className="mb-2 flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  className="rounded border border-brand-blue px-3 py-2 text-xs font-bold text-brand-blue"
+                  onClick={downloadPcAgent}
+                  disabled={agentDownloadState === 'issuing'}
+                >
+                  {agentDownloadState === 'issuing' ? '등록 토큰 발급 중...' : 'PCAgent 다운로드'}
+                </button>
+                <a
+                  className="rounded border border-slate-300 px-3 py-2 text-xs font-bold"
+                  href="/downloads/pc-agent/README.txt"
+                  download
+                >
+                  실행 안내
+                </a>
+                <button
+                  type="button"
+                  className="rounded border border-slate-300 px-3 py-2 text-xs font-bold"
+                  onClick={downloadSampleJsonl}
+                >
+                  샘플 JSONL 다운로드
+                </button>
+              </div>
+              <p className="mb-2 text-xs leading-5 text-slate-500">
+                {draftLogUploadId
+                  ? 'PCAgent가 선택한 구간의 로그를 이미 gzip으로 전송했습니다. 다른 로그로 교체할 때만 파일을 선택해 주세요.'
+                  : 'PCAgent는 더블클릭 시 트레이 아이콘으로 백그라운드 수집을 시작합니다. 선택한 구간의 로그만 gzip 또는 JSONL로 전송합니다.'}
+              </p>
+              {agentDownloadMessage ? (
+                <p className={`mb-2 text-xs font-semibold ${agentDownloadState === 'error' ? 'text-red-600' : 'text-emerald-700'}`}>
+                  {agentDownloadMessage}
+                </p>
+              ) : null}
               <input
                 id="support-log-file"
                 className="block w-full rounded border border-slate-300 p-3 text-sm file:mr-4 file:rounded file:border-0 file:bg-brand-blue file:px-4 file:py-2 file:text-sm file:font-bold file:text-white"
@@ -383,13 +660,17 @@ export function SupportNewPage() {
                 onChange={handleFileChange}
               />
               {selectedFile ? <p className="mt-2 text-xs text-slate-500">{selectedFile.name} · {selectedFile.size.toLocaleString()} bytes</p> : null}
+              {draftLogUploadId && !selectedFile ? <p className="mt-2 text-xs font-semibold text-brand-blue">Agent 업로드 로그 ID: {draftLogUploadId}</p> : null}
             </div>
             <div className="min-h-32 rounded bg-slate-900 p-4 font-mono text-xs leading-6 text-slate-200">
               {logPreview ? <pre className="whitespace-pre-wrap">{logPreview}</pre> : '선택한 로그 파일의 일부가 여기에 표시됩니다.'}
             </div>
+            {asRagPreviewState === 'loading' ? <StateMessage type="info" title="AS RAG 분석 중" body="업로드한 로그를 바탕으로 적절한 지원 방식을 찾고 있습니다." /> : null}
+            {asRagPreviewState === 'error' ? <StateMessage type="warn" title="AS RAG 추천 실패" body={asRagPreviewError || '추천 결과를 불러오지 못했습니다. AS 접수는 계속 진행할 수 있습니다.'} /> : null}
+            {asRagPreview ? <AsRagRecommendation analysis={asRagPreview} /> : null}
             <label className="flex items-center gap-2 text-sm">
               <input type="checkbox" checked={consentAccepted} onChange={(event) => setConsentAccepted(event.target.checked)} />
-              최근 30분 로그 업로드와 30일 보관 후 삭제 정책에 동의합니다.
+              선택한 구간의 로그 업로드와 30일 보관 후 삭제 정책에 동의합니다.
             </label>
             {error ? <StateMessage type="warn" title="AS 접수 확인 필요" body={error} /> : null}
             {submitState === 'ticket_created' ? <StateMessage type="success" title="AS 티켓 생성 완료" body="생성된 티켓 상세 화면으로 이동합니다." /> : null}
@@ -399,9 +680,9 @@ export function SupportNewPage() {
           </div>
         </Panel>
         <Panel title="접수 상태">
-          {submitState === 'default' ? <StateMessage type="info" title="접수 준비" body="증상과 최근 30분 로그 파일을 함께 제출하면 AS 접수가 시작됩니다." /> : null}
+          {submitState === 'default' ? <StateMessage type="info" title="접수 준비" body="증상 유형, 발생 시각, 선택 구간 로그를 함께 제출하면 AS 접수가 시작됩니다." /> : null}
           {submitState === 'validation_error' ? <StateMessage type="warn" title="입력 확인 필요" body={error || '증상과 로그 파일 입력값을 확인해 주세요.'} /> : null}
-          {submitState === 'consent_required' ? <StateMessage type="warn" title="동의 필요" body="PC Agent 로그에는 사용 환경 정보가 포함될 수 있어 업로드 동의가 필요합니다." /> : null}
+          {submitState === 'consent_required' ? <StateMessage type="warn" title="동의 필요" body="PCAgent 로그에는 사용 환경 정보가 포함될 수 있어 업로드 동의가 필요합니다." /> : null}
           {submitState === 'uploading' ? <StateMessage type="info" title="접수 중" body="로그를 업로드한 뒤 AS 티켓을 생성하고 있습니다." /> : null}
           {submitState === 'upload_error' ? <StateMessage type="warn" title="로그 업로드 실패" body={error || '로그 파일과 백엔드 실행 상태를 확인해 주세요.'} /> : null}
           {submitState === 'ticket_error' ? <StateMessage type="warn" title="티켓 생성 실패" body={error || 'AS 티켓을 생성하지 못했습니다. 잠시 후 다시 시도해 주세요.'} /> : null}
@@ -464,18 +745,89 @@ function authScopeKey(user: unknown) {
   return `${role}:${id}`;
 }
 
+function AsRagRecommendation({ analysis }: { analysis: AsRagAnalysisDto }) {
+  return (
+    <div className="rounded border border-blue-200 bg-blue-50 p-4">
+      <div className="flex flex-wrap items-center gap-2">
+        <span className="text-sm font-bold text-blue-950">추천 서비스</span>
+        <StatusBadge status={analysis.supportDecision ?? 'NEEDS_MORE_INFO'} />
+        {analysis.confidence ? <StatusBadge status={analysis.confidence} /> : null}
+      </div>
+      <p className="mt-2 text-base font-bold text-blue-950">
+        {analysis.recommendationMessage ?? `이 증상은 ${analysis.recommendedServiceLabel ?? '우선 진단만 받기'} 서비스를 받는 것이 좋습니다.`}
+      </p>
+      {analysis.summaryText ? <p className="mt-2 text-sm leading-6 text-blue-900">{analysis.summaryText}</p> : null}
+      {analysis.evidence?.length ? (
+        <div className="mt-3 space-y-1 text-xs leading-5 text-blue-800">
+          {analysis.evidence.slice(0, 2).map((item, index) => (
+            <p key={`${String(item.sourceId ?? index)}`}>근거 {index + 1}. {String(item.summary ?? item.title ?? item.sourceId ?? 'AS RAG 근거')}</p>
+          ))}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+function supportKindFromRecommendation(value?: string): SupportRequestKind {
+  if (value === 'REMOTE_SUPPORT') return 'REMOTE_REQUESTED';
+  if (value === 'VISIT_SUPPORT') return 'VISIT_REQUESTED';
+  return 'DIAGNOSIS_ONLY';
+}
+
 function uploadFailureMessage(cause: unknown) {
   if (cause instanceof ApiError && cause.status === 400) {
-    return '로그 업로드가 거부되었습니다. JSONL/NDJSON 파일 형식 또는 내용 검증에 실패했을 수 있습니다.';
+    return '로그 업로드가 거부되었습니다. 선택 구간, JSONL/NDJSON 파일 형식 또는 내용 검증에 실패했을 수 있습니다.';
   }
   return '로그 업로드에 실패했습니다. 파일을 다시 선택하거나 잠시 후 다시 시도해 주세요.';
 }
 
 export function SupportTicketPage() {
   const { ticketId = '00000000-0000-4000-8000-000000006001' } = useParams();
+  const queryClient = useQueryClient();
+  const [remoteRequestReason, setRemoteRequestReason] = useState('원격지원으로 화면을 함께 확인하고 싶습니다.');
+  const [remoteRequestError, setRemoteRequestError] = useState('');
+  const [feedbackRating, setFeedbackRating] = useState('5');
+  const [feedbackComment, setFeedbackComment] = useState('');
+  const [feedbackError, setFeedbackError] = useState('');
   const { data: ticket, isError, isLoading } = useQuery({
     queryKey: ['support-ticket', ticketId],
     queryFn: () => getSupportTicket(ticketId)
+  });
+  const remoteRequestMutation = useMutation({
+    mutationFn: async () => {
+      const reason = remoteRequestReason.trim();
+      return requestRemoteSupport(ticketId, {
+        reason: reason || '사용자가 원격지원을 요청했습니다.'
+      });
+    },
+    onSuccess: (updatedTicket) => {
+      setRemoteRequestError('');
+      queryClient.setQueryData(['support-ticket', ticketId], updatedTicket);
+    },
+    onError: (cause) => {
+      if (cause instanceof ApiError && cause.status === 409) {
+        setRemoteRequestError('이미 진행 중인 원격지원 요청이 있습니다.');
+        return;
+      }
+      if (cause instanceof ApiError && cause.status === 400) {
+        setRemoteRequestError('원격지원 요청 사유를 입력해 주세요.');
+        return;
+      }
+      setRemoteRequestError('원격지원 요청을 저장하지 못했습니다. 잠시 후 다시 시도해 주세요.');
+    }
+  });
+  const feedbackMutation = useMutation({
+    mutationFn: async () => submitSupportFeedback(ticketId, {
+      rating: Number(feedbackRating),
+      comment: feedbackComment.trim() || undefined
+    }),
+    onSuccess: (updatedTicket) => {
+      setFeedbackError('');
+      queryClient.setQueryData(['support-ticket', ticketId], updatedTicket);
+    },
+    onError: () => {
+      setFeedbackError('피드백을 저장하지 못했습니다. 평점 값을 확인한 뒤 다시 시도해 주세요.');
+    }
   });
 
   if (isLoading) {
@@ -494,26 +846,142 @@ export function SupportTicketPage() {
     );
   }
 
+  const remoteRequestLocked = isActiveRemoteSupportStatus(ticket.remoteSupportStatus);
+
   return (
     <Screen>
       <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_420px]">
         <Panel title={`AS 티켓 #${shortTicketId(ticket.id)}`} subtitle="접수 내용과 처리 상태를 확인할 수 있습니다.">
           <div className="mb-4 flex flex-wrap gap-2">
             <StatusBadge status={ticket.status} />
+            {ticket.analysisStatus ? <StatusBadge status={ticket.analysisStatus} /> : null}
+            {ticket.reviewStatus ? <StatusBadge status={ticket.reviewStatus} /> : null}
+            {ticket.supportDecision ? <StatusBadge status={ticket.supportDecision} /> : null}
           </div>
+          {hasSafetyAdvice(ticket) ? <SafetyNoticePanel ticket={ticket} /> : null}
           <DataTable columns={['시간', '주체', '내용']} rows={ticketTimeline(ticket)} />
         </Panel>
         <Panel title="담당자 확인 자료" subtitle="업로드한 로그를 바탕으로 담당자가 접수 내용을 확인합니다.">
           <DataTable columns={['확인 항목', '내용', '상태']} rows={causeRows(ticket.causeCandidates)} />
+          <div className="mt-5">
+            <DataTable columns={['항목', '값']} rows={ticketDecisionRows(ticket)} />
+          </div>
+          {ticket.remoteSupportLink ? (
+            <div className="mt-5 rounded border border-blue-200 bg-blue-50 p-4">
+              <p className="text-sm font-bold text-blue-900">Quick Assist 안내</p>
+              <p className="mt-2 break-all text-sm leading-6 text-blue-800">{ticket.remoteSupportLink}</p>
+              <p className="mt-2 text-xs text-blue-700">원격 연결 전 사용자 추가 확인이 필요합니다. Quick Assist는 사용자가 직접 코드를 입력해 연결합니다.</p>
+            </div>
+          ) : null}
+          {!ticket.remoteSupportLink ? (
+            <form
+              className="mt-5 rounded border border-slate-200 bg-slate-50 p-4"
+              onSubmit={(event) => {
+                event.preventDefault();
+                remoteRequestMutation.mutate();
+              }}
+            >
+              <label className="mb-2 block text-sm font-bold text-slate-800">원격지원 요청</label>
+              <textarea
+                className="h-20 w-full rounded border border-slate-300 bg-white p-3 text-sm"
+                value={remoteRequestReason}
+                onChange={(event) => setRemoteRequestReason(event.target.value)}
+                disabled={remoteRequestMutation.isPending || remoteRequestLocked}
+              />
+              {remoteRequestError ? <p className="mt-2 text-xs font-semibold text-red-600">{remoteRequestError}</p> : null}
+              {remoteRequestLocked ? (
+                <p className="mt-2 text-xs font-semibold text-brand-blue">원격지원 상태: {statusLabel(ticket.remoteSupportStatus ?? 'REQUESTED')}</p>
+              ) : null}
+              <button
+                className="mt-3 rounded bg-brand-blue px-4 py-2 text-sm font-bold text-white disabled:cursor-not-allowed disabled:bg-slate-400"
+                disabled={remoteRequestMutation.isPending || remoteRequestLocked}
+              >
+                {remoteRequestMutation.isPending ? '요청 저장 중...' : '원격지원 요청'}
+              </button>
+            </form>
+          ) : null}
+          <form
+            className="mt-5 rounded border border-slate-200 bg-white p-4"
+            onSubmit={(event) => {
+              event.preventDefault();
+              feedbackMutation.mutate();
+            }}
+          >
+            <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+              <label className="text-sm font-bold text-slate-800">처리 피드백</label>
+              {ticket.feedbackRating ? <span className="text-xs font-semibold text-slate-500">저장된 평점 {ticket.feedbackRating}/5</span> : null}
+            </div>
+            <div className="grid gap-3 md:grid-cols-[120px_minmax(0,1fr)]">
+              <select
+                className="h-10 rounded border border-slate-300 bg-white px-3 text-sm"
+                value={feedbackRating}
+                onChange={(event) => setFeedbackRating(event.target.value)}
+              >
+                {[5, 4, 3, 2, 1].map((rating) => (
+                  <option key={rating} value={rating}>{rating}점</option>
+                ))}
+              </select>
+              <input
+                className="h-10 rounded border border-slate-300 px-3 text-sm"
+                value={feedbackComment}
+                onChange={(event) => setFeedbackComment(event.target.value)}
+                placeholder={ticket.feedbackComment || '처리 결과에 대한 의견을 남겨 주세요.'}
+              />
+            </div>
+            {feedbackError ? <p className="mt-2 text-xs font-semibold text-red-600">{feedbackError}</p> : null}
+            <button
+              className="mt-3 rounded border border-slate-300 px-4 py-2 text-sm font-bold disabled:cursor-not-allowed disabled:bg-slate-100"
+              disabled={feedbackMutation.isPending}
+            >
+              {feedbackMutation.isPending ? '피드백 저장 중...' : '피드백 저장'}
+            </button>
+          </form>
           <p className="mt-5 text-sm leading-6 text-slate-700">
             담당자가 증상과 로그를 확인한 뒤 필요한 경우 추가 정보를 요청할 수 있습니다.
           </p>
-          <Link to={`/support/ai-chat?asTicketId=${ticket.id}`} className="mt-5 block rounded bg-brand-blue px-4 py-3 text-center text-sm font-bold text-white hover:bg-blue-700">AI 상담 시작</Link>
-          <Link to="/support/new" className="mt-2 block rounded border border-slate-300 px-4 py-3 text-center text-sm font-bold">새 AS 접수</Link>
+          <Link to="/support/new" className="mt-5 block rounded border border-slate-300 px-4 py-3 text-center text-sm font-bold">새 AS 접수</Link>
         </Panel>
       </div>
     </Screen>
   );
+}
+
+function SafetyNoticePanel({ ticket }: { ticket: AsTicketDto }) {
+  const notices = ticket.safetyNotices?.length ? ticket.safetyNotices : [{ message: safetyAdviceMessage(ticket.safetyAdviceLevel) }];
+  return (
+    <div className="mb-4 rounded border border-red-200 bg-red-50 p-4">
+      <div className="mb-2 flex flex-wrap items-center gap-2">
+        <p className="text-sm font-bold text-red-900">안전 안내</p>
+        {ticket.safetyAdviceLevel ? <StatusBadge status={ticket.safetyAdviceLevel} /> : null}
+      </div>
+      <ul className="space-y-1 text-sm leading-6 text-red-800">
+        {notices.map((notice, index) => (
+          <li key={`${notice.code ?? 'notice'}-${index}`}>{notice.message || safetyAdviceMessage(ticket.safetyAdviceLevel)}</li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
+function hasSafetyAdvice(ticket: AsTicketDto) {
+  return Boolean(
+    (ticket.safetyAdviceLevel && ticket.safetyAdviceLevel !== 'NONE')
+    || ticket.safetyNotices?.length
+  );
+}
+
+function isActiveRemoteSupportStatus(status?: string | null) {
+  return status === 'REQUESTED' || status === 'LINK_SENT' || status === 'IN_PROGRESS';
+}
+
+function safetyAdviceMessage(level?: string | null) {
+  if (level === 'STOP_USE_UNTIL_REVIEW') {
+    return '담당자 검토 전까지 해당 PC 사용을 중지하거나 중요한 작업을 피해주세요.';
+  }
+  if (level === 'CAUTION') {
+    return '하드웨어 오류 가능성이 있어 추가 조치 전 상태를 주의 깊게 확인해 주세요.';
+  }
+  return '담당자가 위험 신호를 확인하고 있습니다.';
 }
 
 function ticketTimeline(ticket: AsTicketDto) {
@@ -526,13 +994,25 @@ function ticketTimeline(ticket: AsTicketDto) {
     {
       시간: formatTime(ticket.createdAt),
       주체: '시스템',
-      내용: ticket.causeCandidates.length ? '로그 확인 자료 준비 완료' : '로그 확인 자료 준비 중'
+      내용: ticket.analysisStatus ? `진단 상태: ${statusLabel(ticket.analysisStatus)}` : ticket.causeCandidates.length ? '로그 확인 자료 준비 완료' : '로그 확인 자료 준비 중'
     },
     {
       시간: '-',
       주체: '상담원',
-      내용: ticket.assignedAdminId ? '담당자 배정 완료' : '담당자 배정 대기'
+      내용: ticket.supportDecision ? `지원 결정: ${statusLabel(ticket.supportDecision)}` : ticket.assignedAdminId ? '담당자 배정 완료' : '담당자 배정 대기'
     }
+  ];
+}
+
+function ticketDecisionRows(ticket: AsTicketDto) {
+  return [
+    { 항목: '진단 상태', 값: ticket.analysisStatus ? <StatusBadge status={ticket.analysisStatus} /> : '-' },
+    { 항목: '검토 상태', 값: ticket.reviewStatus ? <StatusBadge status={ticket.reviewStatus} /> : '-' },
+    { 항목: '지원 결정', 값: ticket.supportDecision ? <StatusBadge status={ticket.supportDecision} /> : '-' },
+    { 항목: '위험도', 값: ticket.riskLevel ? <StatusBadge status={ticket.riskLevel} /> : '-' },
+    { 항목: '관리자 메모', 값: ticket.adminNote ?? '-' },
+    { 항목: '원격지원', 값: ticket.remoteSupportLink ? `${statusLabel(ticket.remoteSupportStatus ?? 'LINK_SENT')} · ${ticket.remoteSupportLink}` : ticket.remoteSupportStatus ? statusLabel(ticket.remoteSupportStatus) : '-' },
+    { 항목: '방문지원', 값: ticket.visitSupportRequired ? `${statusLabel(ticket.visitSupportStatus ?? 'REQUESTED')} ${ticket.visitPreferredDate ?? ''} ${visitSlotLabel(ticket.visitTimeSlot)}`.trim() : '-' }
   ];
 }
 
@@ -542,7 +1022,7 @@ function causeRows(candidates: CauseCandidate[]) {
   }
   return candidates.map((candidate) => ({
     '확인 항목': candidate.label ?? candidate.code ?? '로그 확인 항목',
-    내용: candidate.evidenceIds?.length ? candidate.evidenceIds.join(', ') : '업로드한 로그 기반 참고 자료',
+    내용: candidate.reason ?? (candidate.evidenceIds?.length ? candidate.evidenceIds.join(', ') : '업로드한 로그 기반 참고 자료'),
     상태: <StatusBadge status={candidate.confidence ?? 'MEDIUM'} />
   }));
 }
@@ -558,6 +1038,233 @@ function formatTime(value?: string) {
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return '-';
   return date.toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' });
+}
+
+function datetimeLocalValue(date: Date) {
+  const offset = date.getTimezoneOffset();
+  const local = new Date(date.getTime() - offset * 60_000);
+  return local.toISOString().slice(0, 16);
+}
+
+function datetimeLocalFromIso(value?: string | null) {
+  if (!value) return '';
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return '';
+  return datetimeLocalValue(date);
+}
+
+function datetimeLocalToDate(value: string) {
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? new Date() : date;
+}
+
+function toIsoFromDatetimeLocal(value: string) {
+  return datetimeLocalToDate(value).toISOString();
+}
+
+function incidentWindowPreset(symptomType: string) {
+  if (symptomType === 'VISIT_BOOT_REMOTE_BLOCKED') {
+    return { preMinutes: 30, postMinutes: 0 };
+  }
+  if (visitSymptomTypes.has(symptomType)) {
+    return { preMinutes: 30, postMinutes: 10 };
+  }
+  if (remoteSymptomTypes.has(symptomType)) {
+    return { preMinutes: 15, postMinutes: 5 };
+  }
+  return { preMinutes: 15, postMinutes: 5 };
+}
+
+function incidentRangeMinutes(startValue: string, endValue: string) {
+  const start = datetimeLocalToDate(startValue).getTime();
+  const end = datetimeLocalToDate(endValue).getTime();
+  if (Number.isNaN(start) || Number.isNaN(end) || end <= start) {
+    return 0;
+  }
+  return Math.max(1, Math.ceil((end - start) / 60_000));
+}
+
+function symptomLabel(value: string) {
+  return symptomTypeOptions.find(([option]) => option === value)?.[1] ?? value;
+}
+
+function supportRequestLabel(value: SupportRequestKind) {
+  if (value === 'REMOTE_REQUESTED') return '원격지원 신청';
+  if (value === 'VISIT_REQUESTED') return '방문지원 신청';
+  return '우선 진단만 받기';
+}
+
+function toSupportRequestKind(value?: string | null): SupportRequestKind {
+  if (value === 'REMOTE_REQUESTED' || value === 'VISIT_REQUESTED' || value === 'DIAGNOSIS_ONLY') {
+    return value;
+  }
+  return 'DIAGNOSIS_ONLY';
+}
+
+async function downloadAgentPackage(activationToken: string) {
+  const response = await fetch('/downloads/pc-agent/agent.exe');
+  if (!response.ok) {
+    throw new Error('Agent exe download failed.');
+  }
+  const exe = new Uint8Array(await response.arrayBuffer());
+  const config = {
+    apiBaseUrl: resolveAgentApiBaseUrl(),
+    webBaseUrl: window.location.origin,
+    activationToken,
+    environment: import.meta.env.MODE ?? 'local'
+  };
+  const encoder = new TextEncoder();
+  const zip = createZipBlob([
+    { name: 'PCAgent.exe', data: exe },
+    { name: 'pcagent-activation.json', data: encoder.encode(`${JSON.stringify(config, null, 2)}\n`) },
+    { name: 'README.txt', data: encoder.encode(createAgentPackageReadme()) }
+  ]);
+  const url = URL.createObjectURL(zip);
+  downloadUrl(url, 'PCAgent.zip');
+  window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
+function createAgentPackageReadme() {
+  return [
+    'PCAgent',
+    '',
+    '1. Extract this zip file first.',
+    '2. Keep PCAgent.exe and pcagent-activation.json in the same folder.',
+    '3. Double-click PCAgent.exe.',
+    '',
+    'pcagent-activation.json is a one-time registration file.',
+    'PCAgent deletes it automatically after registration succeeds.',
+    ''
+  ].join('\n');
+}
+
+function createZipBlob(entries: ZipEntryInput[]) {
+  const encoder = new TextEncoder();
+  const localParts: Uint8Array<ArrayBuffer>[] = [];
+  const centralParts: Uint8Array<ArrayBuffer>[] = [];
+  let offset = 0;
+  const { dosTime, dosDate } = toDosDateTime(new Date());
+
+  entries.forEach((entry) => {
+    const nameBytes = encoder.encode(entry.name.replace(/\\/g, '/'));
+    const crc = crc32(entry.data);
+
+    const localHeader = new Uint8Array(30 + nameBytes.length);
+    const localView = new DataView(localHeader.buffer);
+    localView.setUint32(0, 0x04034b50, true);
+    localView.setUint16(4, 20, true);
+    localView.setUint16(6, 0, true);
+    localView.setUint16(8, 0, true);
+    localView.setUint16(10, dosTime, true);
+    localView.setUint16(12, dosDate, true);
+    localView.setUint32(14, crc, true);
+    localView.setUint32(18, entry.data.length, true);
+    localView.setUint32(22, entry.data.length, true);
+    localView.setUint16(26, nameBytes.length, true);
+    localView.setUint16(28, 0, true);
+    localHeader.set(nameBytes, 30);
+
+    const centralHeader = new Uint8Array(46 + nameBytes.length);
+    const centralView = new DataView(centralHeader.buffer);
+    centralView.setUint32(0, 0x02014b50, true);
+    centralView.setUint16(4, 20, true);
+    centralView.setUint16(6, 20, true);
+    centralView.setUint16(8, 0, true);
+    centralView.setUint16(10, 0, true);
+    centralView.setUint16(12, dosTime, true);
+    centralView.setUint16(14, dosDate, true);
+    centralView.setUint32(16, crc, true);
+    centralView.setUint32(20, entry.data.length, true);
+    centralView.setUint32(24, entry.data.length, true);
+    centralView.setUint16(28, nameBytes.length, true);
+    centralView.setUint16(30, 0, true);
+    centralView.setUint16(32, 0, true);
+    centralView.setUint16(34, 0, true);
+    centralView.setUint16(36, 0, true);
+    centralView.setUint32(38, 0, true);
+    centralView.setUint32(42, offset, true);
+    centralHeader.set(nameBytes, 46);
+
+    localParts.push(localHeader, entry.data);
+    centralParts.push(centralHeader);
+    offset += localHeader.length + entry.data.length;
+  });
+
+  const centralOffset = offset;
+  const centralSize = centralParts.reduce((size, part) => size + part.length, 0);
+  const endRecord = new Uint8Array(22);
+  const endView = new DataView(endRecord.buffer);
+  endView.setUint32(0, 0x06054b50, true);
+  endView.setUint16(4, 0, true);
+  endView.setUint16(6, 0, true);
+  endView.setUint16(8, entries.length, true);
+  endView.setUint16(10, entries.length, true);
+  endView.setUint32(12, centralSize, true);
+  endView.setUint32(16, centralOffset, true);
+  endView.setUint16(20, 0, true);
+
+  return new Blob([...localParts, ...centralParts, endRecord], { type: 'application/zip' });
+}
+
+function createCrc32Table() {
+  const table = new Uint32Array(256);
+  for (let index = 0; index < table.length; index += 1) {
+    let value = index;
+    for (let bit = 0; bit < 8; bit += 1) {
+      value = value & 1 ? 0xedb88320 ^ (value >>> 1) : value >>> 1;
+    }
+    table[index] = value >>> 0;
+  }
+  return table;
+}
+
+function crc32(data: Uint8Array) {
+  let crc = 0xffffffff;
+  data.forEach((byte) => {
+    crc = crc32Table[(crc ^ byte) & 0xff] ^ (crc >>> 8);
+  });
+  return (crc ^ 0xffffffff) >>> 0;
+}
+
+function toDosDateTime(date: Date) {
+  const year = Math.max(1980, date.getFullYear());
+  const dosTime = (date.getHours() << 11) | (date.getMinutes() << 5) | Math.floor(date.getSeconds() / 2);
+  const dosDate = ((year - 1980) << 9) | ((date.getMonth() + 1) << 5) | date.getDate();
+  return { dosTime, dosDate };
+}
+
+function resolveAgentApiBaseUrl() {
+  const configured = API_BASE_URL.trim().replace(/\/$/, '');
+  if (/^https?:\/\//.test(configured)) {
+    return configured;
+  }
+  if (configured.startsWith('/')) {
+    return `${window.location.origin}${configured}`;
+  }
+  if (isLocalDevWebOrigin()) {
+    return `${window.location.protocol}//${window.location.hostname}:8080`;
+  }
+  return window.location.origin;
+}
+
+function isLocalDevWebOrigin() {
+  return ['localhost', '127.0.0.1'].includes(window.location.hostname) && window.location.port === '5173';
+}
+
+function downloadUrl(url: string, filename: string) {
+  const anchor = document.createElement('a');
+  anchor.href = url;
+  anchor.download = filename;
+  document.body.appendChild(anchor);
+  anchor.click();
+  anchor.remove();
+}
+
+function visitSlotLabel(value?: string | null) {
+  if (value === 'MORNING') return '오전';
+  if (value === 'AFTERNOON') return '오후';
+  if (value === 'EVENING') return '저녁';
+  return value ?? '';
 }
 
 function InfoRow({ label, value }: { label: string; value: string }) {

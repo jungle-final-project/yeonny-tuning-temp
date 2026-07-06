@@ -18,6 +18,7 @@ const categoryRoutes: Record<string, string> = {
   '쿨러': '/self-quote?category=COOLER',
   '목표가 알림': '/my/quotes',
   'PC Agent': '/support/new',
+  'PCAgent': '/support/new',
   'AS 접수': '/support/new'
 };
 

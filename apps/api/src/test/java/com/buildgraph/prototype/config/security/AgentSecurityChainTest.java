@@ -125,9 +125,9 @@ class AgentSecurityChainTest {
 
     @Test
     void authenticatedAgentMutationRejectsMissingIdempotencyKeyWithBadRequest() throws Exception {
-        AgentPrincipal principal = authenticateAgent(VALID_AGENT_TOKEN, 10L, "device-public-id");
+        authenticateAgent(VALID_AGENT_TOKEN, 10L, "device-public-id");
 
-        mockMvc.perform(post("/api/agent/mutations")
+        mockMvc.perform(post("/api/agent/heartbeat")
                         .header("Authorization", "Bearer " + VALID_AGENT_TOKEN)
                         .content("{\"value\":1}")
                         .contentType("application/json"))
@@ -141,7 +141,7 @@ class AgentSecurityChainTest {
     void authenticatedAgentMutationRejectsInvalidIdempotencyKeyWithBadRequest() throws Exception {
         authenticateAgent(VALID_AGENT_TOKEN, 10L, "device-public-id");
 
-        mockMvc.perform(post("/api/agent/mutations")
+        mockMvc.perform(post("/api/agent/heartbeat")
                         .header("Authorization", "Bearer " + VALID_AGENT_TOKEN)
                         .header("Idempotency-Key", "bad key")
                         .content("{\"value\":1}")
@@ -158,30 +158,30 @@ class AgentSecurityChainTest {
         when(agentIdempotencyService.reserve(
                 eq(principal),
                 eq("POST"),
-                eq("/api/agent/mutations"),
+                eq("/api/agent/heartbeat"),
                 eq(IDEMPOTENCY_KEY),
                 anyString()
         )).thenReturn(
                 AgentIdempotencyDecision.proceed(100L),
-                AgentIdempotencyDecision.replay(201, "{\"mutationCount\":999}", "application/json")
+                AgentIdempotencyDecision.replay(200, "{\"deviceId\":\"replayed-device\"}", "application/json")
         );
 
-        mockMvc.perform(post("/api/agent/mutations")
+        mockMvc.perform(post("/api/agent/heartbeat")
                         .header("Authorization", "Bearer " + VALID_AGENT_TOKEN)
                         .header("Idempotency-Key", IDEMPOTENCY_KEY)
                         .content("{\"value\":1}")
                         .contentType("application/json"))
-                .andExpect(status().isCreated());
+                .andExpect(status().isOk());
 
-        mockMvc.perform(post("/api/agent/mutations")
+        mockMvc.perform(post("/api/agent/heartbeat")
                         .header("Authorization", "Bearer " + VALID_AGENT_TOKEN)
                         .header("Idempotency-Key", IDEMPOTENCY_KEY)
                         .content("{\"value\":1}")
                         .contentType("application/json"))
-                .andExpect(status().isCreated())
-                .andExpect(jsonPath("$.mutationCount").value(999));
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.deviceId").value("replayed-device"));
 
-        verify(agentIdempotencyService).complete(eq(100L), eq(201), anyString(), anyString());
+        verify(agentIdempotencyService).complete(eq(100L), eq(200), anyString(), anyString());
     }
 
     @Test
@@ -190,12 +190,12 @@ class AgentSecurityChainTest {
         when(agentIdempotencyService.reserve(
                 eq(principal),
                 eq("POST"),
-                eq("/api/agent/mutations"),
+                eq("/api/agent/heartbeat"),
                 eq(IDEMPOTENCY_KEY),
                 anyString()
         )).thenReturn(AgentIdempotencyDecision.conflict());
 
-        mockMvc.perform(post("/api/agent/mutations")
+        mockMvc.perform(post("/api/agent/heartbeat")
                         .header("Authorization", "Bearer " + VALID_AGENT_TOKEN)
                         .header("Idempotency-Key", IDEMPOTENCY_KEY)
                         .content("{\"value\":2}")
@@ -211,57 +211,66 @@ class AgentSecurityChainTest {
         when(agentIdempotencyService.reserve(
                 eq(first),
                 eq("POST"),
-                eq("/api/agent/mutations"),
+                eq("/api/agent/heartbeat"),
                 eq(IDEMPOTENCY_KEY),
                 anyString()
         )).thenReturn(AgentIdempotencyDecision.proceed(201L));
         when(agentIdempotencyService.reserve(
                 eq(second),
                 eq("POST"),
-                eq("/api/agent/mutations"),
+                eq("/api/agent/heartbeat"),
                 eq(IDEMPOTENCY_KEY),
                 anyString()
         )).thenReturn(AgentIdempotencyDecision.proceed(202L));
 
-        mockMvc.perform(post("/api/agent/mutations")
+        mockMvc.perform(post("/api/agent/heartbeat")
                         .header("Authorization", "Bearer " + VALID_AGENT_TOKEN)
                         .header("Idempotency-Key", IDEMPOTENCY_KEY)
                         .content("{\"value\":1}")
                         .contentType("application/json"))
-                .andExpect(status().isCreated());
+                .andExpect(status().isOk());
 
-        mockMvc.perform(post("/api/agent/mutations")
+        mockMvc.perform(post("/api/agent/heartbeat")
                         .header("Authorization", "Bearer " + SECOND_AGENT_TOKEN)
                         .header("Idempotency-Key", IDEMPOTENCY_KEY)
                         .content("{\"value\":1}")
                         .contentType("application/json"))
-                .andExpect(status().isCreated());
+                .andExpect(status().isOk());
 
         verify(agentIdempotencyService).reserve(
                 argThat(agent -> agent.deviceInternalId().equals(10L)),
                 eq("POST"),
-                eq("/api/agent/mutations"),
+                eq("/api/agent/heartbeat"),
                 eq(IDEMPOTENCY_KEY),
                 anyString()
         );
         verify(agentIdempotencyService).reserve(
                 argThat(agent -> agent.deviceInternalId().equals(11L)),
                 eq("POST"),
-                eq("/api/agent/mutations"),
+                eq("/api/agent/heartbeat"),
                 eq(IDEMPOTENCY_KEY),
                 anyString()
         );
     }
 
     @Test
-    void agentGetEndpointDoesNotRequireIdempotencyKey() throws Exception {
-        authenticateAgent(VALID_AGENT_TOKEN, 10L, "device-public-id");
+    void webJwtAgentSessionEndpointDoesNotUseAgentTokenSecurityChain() throws Exception {
+        when(currentUserService.requireUser("Bearer " + WEB_JWT_TOKEN))
+                .thenReturn(new CurrentUserService.CurrentUser(
+                        1L,
+                        "user-public-id",
+                        "user@example.com",
+                        "User",
+                        "USER",
+                        null
+                ));
 
-        mockMvc.perform(get("/api/agent/probe")
-                        .header("Authorization", "Bearer " + VALID_AGENT_TOKEN))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.deviceId").value("device-public-id"));
+        mockMvc.perform(post("/api/agent/sessions")
+                        .header("Authorization", "Bearer " + WEB_JWT_TOKEN))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.userId").value("user-public-id"));
 
+        verify(agentTokenAuthenticationService, never()).authenticate(anyString());
         verify(agentIdempotencyService, never()).reserve(any(), anyString(), anyString(), anyString(), anyString());
     }
 

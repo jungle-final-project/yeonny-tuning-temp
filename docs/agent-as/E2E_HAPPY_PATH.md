@@ -32,6 +32,80 @@ Agent 등록
 | 8 | 관리자 결정 | 관리자 AS ticket update API | ADMIN JWT | supportDecision, reviewStatus, adminNote |
 | 9 | 사용자 상태 확인 | `GET /api/as-tickets/{id}` 또는 웹 AS 페이지 | USER JWT | status, analysisStatus, supportDecision, nextActions |
 
+## 현재 integration 데모 실행 순서
+
+`integration/agent-as-e2e` 기준 최소 데모는 다음 순서로 검증한다. 이 절차는 Goal 4~7의 전체 기능 완성이 아니라 Goal 8 happy path 안정화용이다.
+
+1. Agent 등록
+   - `POST /api/agent/devices/register`
+   - `Authorization` header를 보내지 않는다.
+   - request body에 `activationToken: "demo-agent-activation-token"`을 포함한다.
+   - response의 `agentToken`은 Agent가 최초 1회 저장하고, 서버 DB에는 hash만 저장한다.
+2. 사용자 동의 저장
+   - `POST /api/agent/consents`
+   - headers:
+     - `Authorization: Bearer <agentToken>`
+     - `Idempotency-Key: consent-demo-1`
+   - body: `consentType=SERVER_UPLOAD`, `accepted=true`
+3. Heartbeat
+   - `POST /api/agent/heartbeat`
+   - headers:
+     - `Authorization: Bearer <agentToken>`
+     - `Idempotency-Key: heartbeat-demo-1`
+   - 성공 시 device `lastSeenAt`과 heartbeat row가 갱신된다.
+4. gzip multipart 로그 업로드
+   - `POST /api/agent/log-uploads`
+   - headers:
+     - `Authorization: Bearer <agentToken>`
+     - `Idempotency-Key: upload-demo-1`
+   - multipart fields:
+     - `file=@agent-log.jsonl.gz`
+     - `rangeMinutes=30`
+     - `symptom=GPU temperature spike`
+   - 성공 시 `uploadJobId`, `logUploadId`, `ticketId`, `analysisStatus=RULE_READY`를 받는다.
+5. 같은 upload 재시도
+   - 같은 Agent, 같은 path, 같은 body, 같은 `Idempotency-Key: upload-demo-1`로 재전송한다.
+   - 저장된 응답이 replay되어야 하며 새 ticket이 생성되면 안 된다.
+6. 관리자 supportDecision 확정
+   - `PATCH /api/admin/as-tickets/{ticketId}`
+   - `Authorization: Bearer <adminJwt>`
+   - body 예시:
+
+```json
+{
+  "supportDecision": "REMOTE_POSSIBLE",
+  "reviewStatus": "APPROVED",
+  "adminNote": "Remote support link sent."
+}
+```
+
+7. 사용자/웹 AS 상태 조회
+   - `GET /api/as-tickets/{ticketId}`
+   - `Authorization: Bearer <userJwt>`
+   - `analysisStatus`, `reviewStatus`, `supportDecision`이 노출되는지 확인한다.
+
+### gzip multipart 업로드 예시
+
+```bash
+printf '{"at":"2026-07-02T00:00:00Z","level":"WARN","message":"GPU temperature spike"}\n' | gzip > agent-log.jsonl.gz
+
+curl -X POST http://localhost:8080/api/agent/log-uploads \
+  -H "Authorization: Bearer ${AGENT_TOKEN}" \
+  -H "Idempotency-Key: upload-demo-1" \
+  -F "file=@agent-log.jsonl.gz;type=application/gzip" \
+  -F "rangeMinutes=30" \
+  -F "symptom=GPU temperature spike"
+```
+
+### 데모 실패 시 우선 확인 로그
+
+- API boot 실패: `api-smoke.log` 또는 `docker compose logs api`
+- DB migration 실패: Flyway error와 `flyway_schema_history`
+- Agent 인증 실패: `Authorization: Bearer <agentToken>` 형식과 `agent_devices.agent_token_hash`
+- mutation 400: `Idempotency-Key` 누락 또는 형식 오류
+- upload 400: gzip 파일 여부, `rangeMinutes=30`, `SERVER_UPLOAD` consent 존재 여부
+- supportDecision 400/409: 허용 enum과 ticket 상태 전이
+
 ## 요청/응답 핵심 필드
 
 ### Agent 등록
@@ -106,7 +180,7 @@ Agent 등록
 
 최소 구현 필드:
 
-- supportDecision: `SELF_SOLVABLE`, `REMOTE_POSSIBLE`, `VISIT_REQUIRED`, `NEEDS_MORE_INFO`
+- supportDecision: `SELF_SOLVABLE`, `REMOTE_POSSIBLE`, `VISIT_REQUIRED`, `REPAIR_OR_REPLACE`, `NEEDS_MORE_INFO`, `MONITOR_ONLY`, `UNSUPPORTED`
 - reviewStatus
 - adminNote
 
@@ -143,4 +217,4 @@ Agent 등록
 ## 확인 필요
 
 - 현재 계약 문서에는 `POST /api/agent-logs/upload`, `POST /api/as-tickets`가 웹 JWT USER API로 정의되어 있다. PC Agent 직접 업로드와 AS ticket 생성 path는 Goal 6 전에 확정해야 한다.
-- AI Agent/RAG session API는 `/api/ai/agent-sessions`로 분리되어 PC Agent 전용 `/api/agent/**` 원칙과 충돌하지 않는다.
+- 현재 계약 문서에는 `/api/agent/sessions`가 웹 JWT USER API로 남아 있다. PC Agent 전용 `/api/agent/**` 원칙과 충돌 가능성이 있다.

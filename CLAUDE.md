@@ -55,7 +55,9 @@ cd apps/api && ./gradlew test --tests "com.buildgraph.prototype.user.UserControl
 ## Design direction
 - Final UX is not a physical PC assembly simulator.
 - **Information first, graphics assist**: 견적 체크리스트(순서·상태·가격·총액)와 후보 카드가 주인공이고, 보드/연결선은 호환성 이해 도구다. 장식용 배경 평면도·하드웨어 라벨(PCIe/24핀 등)은 쓰지 않는다.
-- 장착된 슬롯 카드는 실제 상품 이미지 중심으로, 빈 슬롯은 local SVG glyph(`/slot-board/parts/*.svg`)로 표시한다.
+- 보드는 **메인보드 허브 방사형**: 중앙 허브(메인보드)에서 스포크가 뻗고, 크로스 관계는 인접 배치 + 곡선(bow 설정). 장착 시 카드가 허브 방향으로 밀려 들어오는 "꽂힘" 모션(slot-plug-in, reduced-motion 시 off).
+- 장착된 슬롯 카드는 **상품 이미지 + 카테고리 + 짧은 요약(shortSpec)**만 — 상품명 전문·가격은 체크리스트와 hover 툴팁(title)이 담당한다. 빈 슬롯은 local SVG glyph(`/slot-board/parts/*.svg`)로 표시한다.
+- 관계선 라벨은 **문제일 때만 텍스트**(WARN/FAIL — 서버 사유 그대로), 정상/미장착은 상태 점(dot)만. "PCIe x16/소켓" 같은 전문용어를 평상시에 노출하지 않는다(상세는 title 툴팁).
 - Do not draw complex CPU/RAM/GPU/SSD/PSU/case/cooler shapes with CSS.
 - SVG files are glyphs only. Product name, category, price, selected ring, status badge, and empty state must be rendered by React/CSS.
 - Do not use remote images or bitmap images inside the empty-slot glyph layer.

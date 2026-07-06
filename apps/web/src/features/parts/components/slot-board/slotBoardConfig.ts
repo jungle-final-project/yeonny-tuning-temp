@@ -19,17 +19,19 @@ export type SlotBoardPosition = {
 
 export const SLOT_BOARD_BG = '/slot-board/backgrounds/topology-board-bg.svg';
 
-// 목표 이미지처럼 메인보드의 실제 장착 위치가 먼저 읽히도록 잡은 기본 좌표(%).
+// 허브 방사형 기본 좌표(%): 메인보드가 중앙 허브, 7부품이 시계 방향 링.
+// "모든 부품은 메인보드에 꽂힌다"는 직관 그대로 — 허브 스포크는 교차하지 않고,
+// 크로스 관계(쿨러-케이스, GPU-파워 등)가 있는 부품끼리 인접 배치해 곡선이 짧게 지나간다.
 // 관리자 저장 좌표가 있으면 이 좌표는 fallback으로만 사용된다.
 export const SLOT_CONFIGS: SlotConfig[] = [
-  { category: 'CPU', label: 'CPU', glyph: '/slot-board/parts/cpu.svg', layout: { x: 9, y: 6, w: 23, h: 18 } },
-  { category: 'RAM', label: 'RAM', glyph: '/slot-board/parts/ram.svg', miniSlots: 4, miniFillBy: 'quantity', layout: { x: 43, y: 8, w: 18, h: 18 } },
-  { category: 'STORAGE', label: 'SSD', glyph: '/slot-board/parts/ssd.svg', miniSlots: 2, miniFillBy: 'items', layout: { x: 74, y: 25, w: 20, h: 17 } },
-  { category: 'COOLER', label: '쿨러', glyph: '/slot-board/parts/cooler.svg', layout: { x: 9, y: 30, w: 23, h: 17 } },
-  { category: 'MOTHERBOARD', label: '메인보드', glyph: '/slot-board/parts/motherboard.svg', layout: { x: 31, y: 76, w: 20, h: 15 } },
-  { category: 'GPU', label: 'GPU', glyph: '/slot-board/parts/gpu.svg', layout: { x: 61, y: 53, w: 34, h: 18 } },
-  { category: 'PSU', label: '파워', glyph: '/slot-board/parts/psu.svg', layout: { x: 58, y: 78, w: 25, h: 16 } },
-  { category: 'CASE', label: '케이스', glyph: '/slot-board/parts/case.svg', layout: { x: 8, y: 76, w: 20, h: 16 } }
+  { category: 'CPU', label: 'CPU', glyph: '/slot-board/parts/cpu.svg', layout: { x: 39, y: 2.5, w: 22, h: 17 } },
+  { category: 'RAM', label: 'RAM', glyph: '/slot-board/parts/ram.svg', miniSlots: 4, miniFillBy: 'quantity', layout: { x: 73, y: 13.5, w: 21, h: 17 } },
+  { category: 'STORAGE', label: 'SSD', glyph: '/slot-board/parts/ssd.svg', miniSlots: 2, miniFillBy: 'items', layout: { x: 78, y: 46.5, w: 21, h: 17 } },
+  { category: 'GPU', label: 'GPU', glyph: '/slot-board/parts/gpu.svg', layout: { x: 66, y: 77.5, w: 21, h: 17 } },
+  { category: 'PSU', label: '파워', glyph: '/slot-board/parts/psu.svg', layout: { x: 30.5, y: 81.5, w: 21, h: 17 } },
+  { category: 'CASE', label: '케이스', glyph: '/slot-board/parts/case.svg', layout: { x: 1.5, y: 67.5, w: 21, h: 17 } },
+  { category: 'COOLER', label: '쿨러', glyph: '/slot-board/parts/cooler.svg', layout: { x: 5.5, y: 13.5, w: 21, h: 17 } },
+  { category: 'MOTHERBOARD', label: '메인보드', glyph: '/slot-board/parts/motherboard.svg', layout: { x: 37, y: 39, w: 26, h: 22 } }
 ];
 
 export const SLOT_COUNT = SLOT_CONFIGS.length;
@@ -44,18 +46,27 @@ export type SlotEdgeConfig = {
   to: PartCategory;
   /** graph API 응답이 없을 때 항상 표시하는 기본 topology 라벨 */
   label: string;
+  /**
+   * 크로스 관계(허브 미경유) 곡선의 볼록 정도(%). 양수 = 보드 바깥쪽으로 휨,
+   * 음수 = 중앙 쪽으로 휨(빈 회랑 통과). 허브 스포크는 직선이라 무시된다.
+   */
+  bow?: number;
+  /** 라벨 위치(0=from 쪽 … 1=to 쪽, 기본 0.5) — 이웃 라벨과 겹칠 때만 조정한다. */
+  labelT?: number;
 };
 
 export const FALLBACK_EDGES: SlotEdgeConfig[] = [
   { from: 'CPU', to: 'MOTHERBOARD', label: '소켓 호환' },
-  { from: 'CPU', to: 'COOLER', label: '쿨러 장착' },
   { from: 'MOTHERBOARD', to: 'RAM', label: '메모리 규격' },
   { from: 'GPU', to: 'MOTHERBOARD', label: 'PCIe x16' },
-  { from: 'PSU', to: 'MOTHERBOARD', label: '24핀 전원' },
-  { from: 'GPU', to: 'PSU', label: '전력 여유' },
-  { from: 'GPU', to: 'CASE', label: '장착 길이' },
-  { from: 'COOLER', to: 'CASE', label: '높이 여유' },
-  { from: 'PSU', to: 'CASE', label: '파워 깊이' }
+  // 라벨을 허브 쪽으로 올려 케이스-GPU 안쪽 곡선 라벨과의 겹침을 피한다.
+  { from: 'PSU', to: 'MOTHERBOARD', label: '24핀 전원', labelT: 0.72 },
+  { from: 'CPU', to: 'COOLER', label: '쿨러 장착', bow: 7 },
+  { from: 'COOLER', to: 'CASE', label: '높이 여유', bow: 6 },
+  { from: 'PSU', to: 'CASE', label: '파워 깊이', bow: 6 },
+  { from: 'GPU', to: 'PSU', label: '전력 여유', bow: 5 },
+  // 케이스-GPU는 하단이 붐벼서 허브와 파워 사이의 빈 회랑으로 안쪽 곡선을 태운다.
+  { from: 'GPU', to: 'CASE', label: '장착 길이', bow: -9 }
 ];
 
 export function slotConfigFor(category: string): SlotConfig | undefined {
