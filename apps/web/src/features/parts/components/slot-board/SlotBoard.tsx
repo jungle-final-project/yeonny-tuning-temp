@@ -1,6 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
 import type { BuildGraphResolveResponse, PartCategory } from '../../../quote/aiSelection';
-import { partImageUrl, partShortSpec } from '../../partDisplay';
 import type { QuoteDraftItem } from '../../types';
 import {
   FALLBACK_EDGES,
@@ -52,13 +51,13 @@ export function SlotBoard({ items, selectedCategory, onSlotSelect, onRemoveItem,
       <div
         data-testid="slot-board"
         data-visual-mode="motherboard"
-        className="relative flex flex-col gap-2 bg-slate-50/60 p-3 lg:block lg:aspect-[16/8.4] lg:overflow-hidden lg:bg-[#f8fbff] lg:p-4"
+        className="relative flex flex-col gap-2 bg-slate-50/60 p-3 lg:block lg:aspect-[1324/845] lg:overflow-hidden lg:bg-[#f8fbff] lg:p-4"
         style={{ ['--slot-board-bg' as string]: `url(${SLOT_BOARD_BG})` }}
       >
         <div
           data-testid="slot-board-motherboard-art"
           aria-hidden="true"
-          className="pointer-events-none absolute inset-2 hidden rounded-lg bg-[url('/slot-board/backgrounds/topology-board-bg.svg')] bg-contain bg-center bg-no-repeat opacity-[0.82] lg:block"
+          className="pointer-events-none absolute inset-2 hidden rounded-lg bg-[image:var(--slot-board-bg)] bg-contain bg-center bg-no-repeat opacity-[0.82] lg:block"
         />
         <BoardHardwareLabels />
         <SlotBoardEdges items={items} graph={graph} slotPositions={slotPositions} selectedCategory={selectedCategory} />
@@ -123,7 +122,6 @@ function BoardSlot({
   const visibleName = filled
     ? items.length > 1 ? `${primaryItem.name} 외 ${items.length - 1}개` : primaryItem.name
     : '';
-  const visibleSpec = filled ? partShortSpec(primaryItem) : '';
 
   return (
     <div
@@ -143,68 +141,73 @@ function BoardSlot({
         onClick={onSelect}
         className="absolute inset-0 z-0 h-full w-full rounded-lg focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-blue"
       />
-      <div className="pointer-events-none relative z-10 flex h-full flex-col gap-1 overflow-hidden">
-        {/* 카드 헤더: 아이콘 + 카테고리명 + 상태 배지 */}
-        <div className="flex items-center justify-between gap-1">
-          <span className="flex items-center gap-1 text-[10px] font-black text-slate-600">
-            <img src={slot.glyph} alt="" aria-hidden="true" className={`h-4 w-4 shrink-0 ${filled ? 'opacity-70' : 'opacity-35'}`} />
-            {slot.label}
-          </span>
-          {slotStatus === 'FAIL' ? (
-            <span className="rounded border border-red-200 bg-red-50 px-1 py-0.5 text-[9px] font-black text-red-700">안 맞음</span>
-          ) : slotStatus === 'WARN' ? (
-            <span className="rounded border border-amber-200 bg-amber-50 px-1 py-0.5 text-[9px] font-black text-amber-700">간섭 주의</span>
-          ) : filled ? (
-            <span className="rounded border border-emerald-200 bg-emerald-50 px-1 py-0.5 text-[9px] font-black text-emerald-700">정상</span>
-          ) : null}
-        </div>
-        {/* 카드 본체 */}
-        {filled ? (
-          <>
-            <div className="flex min-h-0 flex-1 gap-2 overflow-hidden">
-              <img
-                data-testid="slot-part-image"
-                src={partImageUrl(primaryItem)}
-                alt=""
-                aria-hidden="true"
-                className="hidden h-12 w-14 shrink-0 rounded border border-slate-200 bg-slate-50 object-contain lg:block"
-              />
-              <div className="min-w-0 flex-1">
-                <div className="line-clamp-2 text-[11px] font-black leading-[1.32] text-commerce-ink">
+      <div className="pointer-events-none relative z-10 flex h-full min-w-0 gap-2 overflow-hidden">
+        {slot.fixedIcon ? <FixedSlotIcon slot={slot} /> : null}
+        <div className="flex min-w-0 flex-1 flex-col gap-1 overflow-hidden">
+          {/* 카드 헤더: 아이콘 + 카테고리명 + 상태 배지 */}
+          <div className="flex items-center justify-between gap-1">
+            <span className="flex items-center gap-1 text-[10px] font-black text-slate-600">
+              {slot.label}
+            </span>
+            {slotStatus === 'FAIL' ? (
+              <span className="rounded border border-red-200 bg-red-50 px-1 py-0.5 text-[9px] font-black text-red-700">안 맞음</span>
+            ) : slotStatus === 'WARN' ? (
+              <span className="rounded border border-amber-200 bg-amber-50 px-1 py-0.5 text-[9px] font-black text-amber-700">간섭 주의</span>
+            ) : filled ? (
+              <span className="rounded border border-emerald-200 bg-emerald-50 px-1 py-0.5 text-[9px] font-black text-emerald-700">정상</span>
+            ) : null}
+          </div>
+          {/* 카드 본체 */}
+          {filled ? (
+            <>
+              <div className="min-h-0 flex-1 overflow-hidden">
+                <div className="line-clamp-1 text-[11px] font-black leading-[1.32] text-commerce-ink">
                   {visibleName}
                 </div>
-                {visibleSpec ? (
-                  <div className="mt-0.5 line-clamp-1 text-[10px] font-bold leading-4 text-slate-500">
-                    {visibleSpec}
-                  </div>
-                ) : null}
               </div>
-            </div>
-            <div className="mt-auto flex items-end justify-between gap-1">
-              <span className="text-[11px] font-black text-brand-blue">{lineTotal.toLocaleString()}원</span>
-              <div className="flex items-center gap-1">
-                {slot.miniSlots ? <MiniSlotRow slot={slot} items={items} /> : null}
-                {!isMultiItemCategory(slot.category) ? (
-                  <button
-                    type="button"
-                    aria-label={`${primaryItem.name} 견적에서 제거`}
-                    disabled={isRemovePending}
-                    onClick={() => onRemoveItem(primaryItem.partId)}
-                    className="pointer-events-auto rounded border border-commerce-line bg-white px-1.5 py-0.5 text-[9px] font-black text-slate-400 opacity-0 transition group-hover:opacity-100 focus-visible:opacity-100 hover:border-commerce-sale hover:text-commerce-sale disabled:cursor-wait"
-                  >
-                    빼기
-                  </button>
-                ) : null}
+              <div className="mt-auto flex items-end justify-between gap-1">
+                <span className="text-[11px] font-black text-brand-blue">{lineTotal.toLocaleString()}원</span>
+                <div className="flex items-center gap-1">
+                  {slot.miniSlots ? <MiniSlotRow slot={slot} items={items} /> : null}
+                  {!isMultiItemCategory(slot.category) ? (
+                    <button
+                      type="button"
+                      aria-label={`${primaryItem.name} 견적에서 제거`}
+                      disabled={isRemovePending}
+                      onClick={() => onRemoveItem(primaryItem.partId)}
+                      className="pointer-events-auto rounded border border-commerce-line bg-white px-1.5 py-0.5 text-[9px] font-black text-slate-400 opacity-0 transition group-hover:opacity-100 focus-visible:opacity-100 hover:border-commerce-sale hover:text-commerce-sale disabled:cursor-wait"
+                    >
+                      빼기
+                    </button>
+                  ) : null}
+                </div>
               </div>
+            </>
+          ) : (
+            <div className="flex flex-1 items-center justify-start gap-1">
+              <span className="text-[11px] font-black text-brand-blue">+ 부품 선택</span>
+              {slot.miniSlots ? <MiniSlotRow slot={slot} items={items} /> : null}
             </div>
-          </>
-        ) : (
-          <div className="flex flex-1 items-center justify-start gap-1">
-            <span className="text-[11px] font-black text-brand-blue">+ 부품 선택</span>
-            {slot.miniSlots ? <MiniSlotRow slot={slot} items={items} /> : null}
-          </div>
-        )}
+          )}
+        </div>
       </div>
+    </div>
+  );
+}
+
+function FixedSlotIcon({ slot }: { slot: SlotConfig }) {
+  if (!slot.fixedIcon) {
+    return null;
+  }
+  return (
+    <div className="flex h-[90%] w-auto shrink-0 self-center items-center justify-center overflow-hidden">
+      <img
+        data-testid={`slot-fixed-icon-${slot.category}`}
+        src={slot.fixedIcon}
+        alt=""
+        aria-hidden="true"
+        className="h-full w-auto object-contain opacity-85"
+      />
     </div>
   );
 }
@@ -386,6 +389,18 @@ function edgeGeometry(config: SlotEdgeConfig, slotPositions: Partial<Record<Part
     end = { x: bc.x, y: dy > 0 ? b.y : b.y + b.h };
     corner = { x: end.x, y: start.y };
   }
+
+  if (config.from === 'MOTHERBOARD' && config.to === 'RAM') {
+    start = { x: bc.x, y: a.y };
+    end = { x: bc.x, y: b.y + b.h };
+  } else if (config.from === 'GPU' && config.to === 'MOTHERBOARD') {
+    end = { x: b.x, y: bc.y };
+  } else if (config.from === 'PSU' && config.to === 'MOTHERBOARD') {
+    end = { x: b.x + b.w, y: bc.y };
+  }
+  corner = start.x === end.x || start.y === end.y
+    ? { x: (start.x + end.x) / 2, y: (start.y + end.y) / 2 }
+    : { x: end.x, y: start.y };
 
   const path = `M ${start.x} ${start.y} L ${corner.x} ${corner.y} L ${end.x} ${end.y}`;
   // 라벨은 시작-코너 구간과 코너-끝 구간 중 더 긴 쪽 중앙에 둔다.
