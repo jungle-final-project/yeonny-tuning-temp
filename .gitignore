@@ -24,3 +24,13 @@ buildgraph-before-*.sql
 .devcontainer/devcontainer-lock.json
 *.tsbuildinfo
 .claude
+# 도구 및 설정 폴더 무시
+.agents/
+.codex/
+.github/hooks/
+.github/skills/
+.impeccable/
+
+# 기획 및 디자인 문서 무시
+DESIGN.md
+PRODUCT.md
