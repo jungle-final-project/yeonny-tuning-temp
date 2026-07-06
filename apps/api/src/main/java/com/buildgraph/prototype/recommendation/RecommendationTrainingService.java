@@ -250,6 +250,315 @@ public class RecommendationTrainingService {
         return datasetById(longValue(dataset, "id"));
     }
 
+    // ---- M2 자동 재훈련 (설계 §3) ------------------------------------------------
+
+    /** 조건 판정 결과. proceed=false면 reason이 skip 사유. */
+    record AutoRetrainDecision(boolean proceed, String reason) {
+    }
+
+    /**
+     * M2 자동 재훈련의 순수 조건 판정(단위 테스트 대상). 실패 백오프 → 데이터량 → 간격 순으로 본다.
+     */
+    static AutoRetrainDecision autoRetrainDecision(
+            long untrainedEvents,
+            long untrainedPositives,
+            Integer daysSinceLastSuccess,
+            int consecutiveAutoFailures,
+            int minNewEvents,
+            int minNewPositives,
+            int minIntervalDays
+    ) {
+        if (consecutiveAutoFailures >= 2) {
+            return new AutoRetrainDecision(false,
+                    "자동 재훈련이 연속 " + consecutiveAutoFailures + "회 실패해 중단되었습니다. 관리자 확인이 필요합니다.");
+        }
+        if (consecutiveAutoFailures == 1) {
+            return new AutoRetrainDecision(false, "직전 자동 재훈련이 실패해 재시도를 보류합니다(관리자 확인 후 재개).");
+        }
+        if (untrainedEvents < minNewEvents) {
+            return new AutoRetrainDecision(false, "새 이벤트 " + untrainedEvents + " < " + minNewEvents);
+        }
+        if (untrainedPositives < minNewPositives) {
+            return new AutoRetrainDecision(false, "새 양성 라벨 " + untrainedPositives + " < " + minNewPositives);
+        }
+        if (daysSinceLastSuccess != null && daysSinceLastSuccess < minIntervalDays) {
+            return new AutoRetrainDecision(false,
+                    "마지막 성공 훈련 후 " + daysSinceLastSuccess + "일 < " + minIntervalDays + "일");
+        }
+        return new AutoRetrainDecision(true, "조건 충족");
+    }
+
+    /**
+     * 자동 재훈련 1회 시도. 조건 미충족이면 {skipped:true, reason} 을, 충족이면 dataset·job을 자동 생성하고
+     * {created:true, ...} 를 반환한다. 절대 예외를 던지지 않아야 recorder가 SUCCEEDED+result_summary로 기록한다
+     * (조건 미충족은 정상 결과이지 실패가 아님). 승급은 하지 않는다(원칙 2).
+     */
+    @Transactional
+    public Map<String, Object> runAutoRetrain(int minNewEvents, int minNewPositives, int minIntervalDays, int minRows) {
+        long untrainedEvents = countUntrainedEligible(false);
+        long untrainedPositives = countUntrainedEligible(true);
+        Integer daysSinceLastSuccess = daysSinceLastSuccessfulTraining();
+        int consecutiveFailures = consecutiveAutoRetrainFailures();
+
+        AutoRetrainDecision decision = autoRetrainDecision(
+                untrainedEvents, untrainedPositives, daysSinceLastSuccess, consecutiveFailures,
+                minNewEvents, minNewPositives, minIntervalDays);
+        if (!decision.proceed()) {
+            return MockData.map(
+                    "skipped", true,
+                    "reason", decision.reason(),
+                    "untrainedEvents", untrainedEvents,
+                    "untrainedPositives", untrainedPositives
+            );
+        }
+
+        archivePreviousAutoDatasets();
+        Long datasetId = createDatasetInternal(
+                "auto-" + java.time.LocalDate.now(), MockData.map("trigger", "AUTO_RETRAIN"));
+        int concentrationExcluded = applyConcentrationGuard(datasetId);
+        int highWeightExcluded = applyHighWeightGuard(datasetId);
+        refreshDatasetCounts(datasetId);
+
+        long included = includedCount(datasetId);
+        // 워커의 min_rows 미달이면 job을 만들지 않는다. job을 만들면 워커가 SKIPPED_LOW_DATASET로 마감하는데,
+        // 그 상태는 미학습/실패 게이트가 인식하지 못해 같은 데이터로 매주 무한 재생성된다(설계 §3a #4).
+        // 방금 만든 DRAFT dataset은 아카이브해 누적을 막는다.
+        if (included < minRows) {
+            archivePreviousAutoDatasets();
+            return MockData.map(
+                    "skipped", true,
+                    "reason", "오염 가드 적용 후 포함 " + included + "건 < 최소 " + minRows + "건",
+                    "concentrationExcluded", concentrationExcluded,
+                    "highWeightExcluded", highWeightExcluded
+            );
+        }
+        lockDatasetById(datasetId);
+        Long jobId = createJobInternal(datasetId, "자동 재훈련 스케줄러(AUTO_RETRAIN)가 학습을 등록했습니다.");
+        return MockData.map(
+                "created", true,
+                "datasetId", datasetId,
+                "jobId", jobId,
+                "untrainedEvents", untrainedEvents,
+                "untrainedPositives", untrainedPositives,
+                "includedItems", included,
+                "concentrationExcluded", concentrationExcluded,
+                "highWeightExcluded", highWeightExcluded
+        );
+    }
+
+    /** created_by=NULL(자동)로 dataset을 만들고 eligible 이벤트를 담는다. datasetId 반환. */
+    Long createDatasetInternal(String name, Map<String, Object> filters) {
+        Map<String, Object> dataset = jdbcTemplate.queryForMap("""
+                INSERT INTO recommendation_training_datasets (
+                  name,
+                  source_surface,
+                  filters,
+                  status,
+                  created_by
+                )
+                VALUES (?, 'HOME_PARTS_WITH_AS_FEEDBACK', ?::jsonb, 'DRAFT', NULL)
+                RETURNING id, public_id::text AS public_id
+                """, name, writeJson(filters));
+        Long datasetId = longValue(dataset, "id");
+        for (Map<String, Object> event : eligibleEvents(filters)) {
+            jdbcTemplate.update("""
+                    INSERT INTO recommendation_training_dataset_items (
+                      dataset_id,
+                      event_id,
+                      included,
+                      label_score_snapshot,
+                      features_snapshot,
+                      event_snapshot
+                    )
+                    VALUES (?, ?, true, ?, ?::jsonb, ?::jsonb)
+                    ON CONFLICT (dataset_id, event_id) DO NOTHING
+                    """,
+                    datasetId,
+                    longValue(event, "event_id"),
+                    event.get("label_score"),
+                    writeJson(featureSnapshot(event)),
+                    writeJson(eventSnapshot(event)));
+        }
+        refreshDatasetCounts(datasetId);
+        return datasetId;
+    }
+
+    /** queued_by=NULL(자동)로 QUEUED job을 만든다. jobId 반환. */
+    Long createJobInternal(Long datasetId, String logSummary) {
+        Long included = jdbcTemplate.queryForObject("""
+                SELECT count(*)
+                FROM recommendation_training_dataset_items
+                WHERE dataset_id = ?
+                  AND included = true
+                """, Long.class, datasetId);
+        if (included == null || included <= 0) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "포함된 학습 데이터가 없습니다.");
+        }
+        Map<String, Object> job = jdbcTemplate.queryForMap("""
+                INSERT INTO recommendation_training_jobs (
+                  dataset_id,
+                  status,
+                  queued_by,
+                  log_summary
+                )
+                VALUES (?, 'QUEUED', NULL, ?)
+                RETURNING id
+                """, datasetId, logSummary);
+        return longValue(job, "id");
+    }
+
+    private void lockDatasetById(Long datasetId) {
+        refreshDatasetCounts(datasetId);
+        jdbcTemplate.update("""
+                UPDATE recommendation_training_datasets
+                SET status = 'LOCKED',
+                    locked_at = now(),
+                    updated_at = now()
+                WHERE id = ?
+                  AND status = 'DRAFT'
+                """, datasetId);
+    }
+
+    private void archivePreviousAutoDatasets() {
+        jdbcTemplate.update("""
+                UPDATE recommendation_training_datasets
+                SET status = 'ARCHIVED',
+                    updated_at = now()
+                WHERE filters->>'trigger' = 'AUTO_RETRAIN'
+                  AND status IN ('DRAFT', 'LOCKED')
+                """);
+    }
+
+    /**
+     * 오염 가드 ①(설계 3b): 단일 user가 dataset 양성 라벨의 30% 초과 시 그 user의 아이템 전부 제외.
+     * 자동 LOCK이 우회하는 B5(이벤트 위조) 방어. 제외 행 수 반환.
+     */
+    private int applyConcentrationGuard(Long datasetId) {
+        return jdbcTemplate.update("""
+                UPDATE recommendation_training_dataset_items i
+                SET included = false,
+                    excluded_reason = 'AUTO_SUSPECT_CONCENTRATION',
+                    updated_at = now()
+                FROM recommendation_events e
+                WHERE i.event_id = e.id
+                  AND i.dataset_id = ?
+                  AND i.included = true
+                  AND e.user_id IN (
+                    SELECT e2.user_id
+                    FROM recommendation_training_dataset_items i2
+                    JOIN recommendation_events e2 ON e2.id = i2.event_id
+                    WHERE i2.dataset_id = ?
+                      AND i2.included = true
+                      AND i2.label_score_snapshot > 0
+                      AND e2.user_id IS NOT NULL
+                    GROUP BY e2.user_id
+                    HAVING count(*) > 0.30 * (
+                      SELECT count(*)
+                      FROM recommendation_training_dataset_items i3
+                      WHERE i3.dataset_id = ?
+                        AND i3.included = true
+                        AND i3.label_score_snapshot > 0
+                    )
+                  )
+                """, datasetId, datasetId, datasetId);
+    }
+
+    /**
+     * 오염 가드 ②(설계 3b): 고가중(label_score_snapshot >= 3.0) 아이템이 포함분의 20% 초과 시
+     * 초과분을 최신순으로 제외. 제외 행 수 반환.
+     */
+    private int applyHighWeightGuard(Long datasetId) {
+        // 최신순은 dataset item의 created_at(단일 트랜잭션이라 전부 동일)이 아니라 원 이벤트(e.created_at)
+        // 기준으로 매긴다 — 방금 위조된 최신 고가중 버스트를 제거하는 게 B5 방어의 목적이다.
+        // 남길 개수 keep = floor(0.25 * non_high)로 두면 제외 후 고가중/전체 ≤ 20%가 보장된다
+        // (keep/(non_high+keep) ≤ 0.25*non_high/(1.25*non_high) = 0.20).
+        return jdbcTemplate.update("""
+                UPDATE recommendation_training_dataset_items t
+                SET included = false,
+                    excluded_reason = 'AUTO_HIGH_WEIGHT_CAP',
+                    updated_at = now()
+                FROM (
+                  SELECT i.id,
+                         row_number() OVER (ORDER BY e.created_at DESC, e.id DESC) AS rn,
+                         count(*) OVER () AS high_count,
+                         (SELECT count(*)
+                          FROM recommendation_training_dataset_items a
+                          WHERE a.dataset_id = ?
+                            AND a.included = true) AS total
+                  FROM recommendation_training_dataset_items i
+                  JOIN recommendation_events e ON e.id = i.event_id
+                  WHERE i.dataset_id = ?
+                    AND i.included = true
+                    AND i.label_score_snapshot >= 3.0
+                ) ranked
+                WHERE t.id = ranked.id
+                  AND ranked.rn <= ranked.high_count - floor(0.25 * (ranked.total - ranked.high_count))
+                """, datasetId, datasetId);
+    }
+
+    private long includedCount(Long datasetId) {
+        Long count = jdbcTemplate.queryForObject("""
+                SELECT count(*)
+                FROM recommendation_training_dataset_items
+                WHERE dataset_id = ?
+                  AND included = true
+                """, Long.class, datasetId);
+        return count == null ? 0L : count;
+    }
+
+    private long countUntrainedEligible(boolean positivesOnly) {
+        Long count = jdbcTemplate.queryForObject("""
+                SELECT count(*)
+                FROM recommendation_events e
+                WHERE e.source_surface IN ('HOME_RECOMMENDED_PARTS', 'ADMIN_HOME_PART_FEEDBACK', 'ADMIN_AS_FEEDBACK')
+                  AND (? = false OR e.label_score > 0)
+                  AND NOT EXISTS (
+                    SELECT 1
+                    FROM recommendation_training_dataset_items i
+                    JOIN recommendation_training_jobs j ON j.dataset_id = i.dataset_id
+                    WHERE i.event_id = e.id
+                      AND i.included = true
+                      AND j.status = 'SUCCEEDED'
+                  )
+                """, Long.class, positivesOnly);
+        return count == null ? 0L : count;
+    }
+
+    private Integer daysSinceLastSuccessfulTraining() {
+        return jdbcTemplate.queryForObject("""
+                SELECT CASE
+                         WHEN max(finished_at) IS NULL THEN NULL
+                         ELSE floor(extract(epoch FROM (now() - max(finished_at))) / 86400)::int
+                       END
+                FROM recommendation_training_jobs
+                WHERE status = 'SUCCEEDED'
+                  AND finished_at IS NOT NULL
+                """, Integer.class);
+    }
+
+    private int consecutiveAutoRetrainFailures() {
+        // SKIPPED_LOW_DATASET도 '진행 방해'로 취급한다: min_rows pre-check로 보통은 job이 안 만들어지지만,
+        // 워커 min_rows가 Java 설정보다 크면 job이 SKIPPED로 끝날 수 있어 백오프 대상에 포함한다.
+        List<String> recent = jdbcTemplate.queryForList("""
+                SELECT j.status
+                FROM recommendation_training_jobs j
+                JOIN recommendation_training_datasets d ON d.id = j.dataset_id
+                WHERE d.filters->>'trigger' = 'AUTO_RETRAIN'
+                  AND j.status IN ('SUCCEEDED', 'FAILED', 'SKIPPED_LOW_DATASET')
+                ORDER BY j.created_at DESC, j.id DESC
+                LIMIT 5
+                """, String.class);
+        int failures = 0;
+        for (String status : recent) {
+            if ("FAILED".equals(status) || "SKIPPED_LOW_DATASET".equals(status)) {
+                failures += 1;
+            } else {
+                break;
+            }
+        }
+        return failures;
+    }
+
     public Map<String, Object> datasetItems(String datasetPublicId) {
         Map<String, Object> dataset = requireDataset(datasetPublicId);
         List<Map<String, Object>> items = jdbcTemplate.queryForList("""
@@ -544,7 +853,10 @@ public class RecommendationTrainingService {
                                ps.collected_at AS price_collected_at,
                                CASE
                                  WHEN ps.collected_at IS NULL THEN NULL
-                                 ELSE extract(epoch FROM (now() - ps.collected_at)) / 86400.0
+                                 -- M2 3d: 학습 age는 dataset 생성 시점(now())이 아니라 이벤트(라벨) 발생
+                                 -- 시점 기준으로 고정한다. now() 기준이면 같은 이벤트도 매주 값이 달라져
+                                 -- M1 '같은 holdout 비교' 전제가 깨진다(미래 정보 주입).
+                                 ELSE extract(epoch FROM (e.created_at - ps.collected_at)) / 86400.0
                                END AS price_age_days,
                                EXISTS (
                                  SELECT 1
@@ -579,7 +891,8 @@ public class RecommendationTrainingService {
                           SELECT snapshot.collected_at
                           FROM price_snapshots snapshot
                           WHERE snapshot.part_id = p.id
-                            AND snapshot.collected_at <= now()
+                            -- 이벤트 발생 이후 수집된 미래 가격 스냅샷을 고르지 않도록 컷오프도 e.created_at 기준.
+                            AND snapshot.collected_at <= e.created_at
                           ORDER BY snapshot.collected_at DESC, snapshot.id DESC
                           LIMIT 1
                         ) ps ON true

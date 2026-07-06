@@ -422,6 +422,27 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/RecommendationModelSummaryResponse"
+  /api/admin/recommendation-shadow/summary:
+    get:
+      summary: Shadow 비교 관측 (M4)
+      description: 최근 days일 HOME/PART shadow 실모델 점수를 스코어링 회차별로 묶어, features로 재구성한 baseline 순위 대비 모델 순위의 역전율·top-4 교체율을 집계한다. baseline-shadow·BUILD_CHAT·중복 회차는 제외된다. 승급 전 "모델이 순위를 얼마나 바꾸는가"의 판단 근거.
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: days
+          in: query
+          required: false
+          schema:
+            type: integer
+            default: 7
+          description: 집계 창(일). 1~30으로 클램프된다.
+      responses:
+        "200":
+          description: shadow 비교 요약
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RecommendationShadowSummaryResponse"
   /api/admin/recommendation-training/overview:
     get:
       summary: 추천 학습 운영 요약
@@ -3538,6 +3559,33 @@ components:
           type: string
           nullable: true
           description: 활성화 시 승급 근거가 약했던 경우의 경고 문구(M1 champion-challenger). 활성화 응답에서만 채워진다.
+    RecommendationShadowSummaryResponse:
+      type: object
+      required: [windowDays, totalGroups, scoredGroups, scoredCandidates, avgInversionRate, avgTop4ReplacementRate]
+      properties:
+        windowDays:
+          type: integer
+          example: 7
+        totalGroups:
+          type: integer
+          description: 창 안의 전체 스코어링 회차 수
+        scoredGroups:
+          type: integer
+          description: 후보 2개 이상이라 지표를 낸 회차 수
+        scoredCandidates:
+          type: integer
+        avgInversionRate:
+          type: number
+          format: double
+          nullable: true
+          description: baseline 순위 대비 모델 순위의 평균 역전율(0~1). scoredGroups=0이면 null
+        avgTop4ReplacementRate:
+          type: number
+          format: double
+          nullable: true
+          description: baseline 상위 4 중 모델 상위 4에서 빠진 평균 비율(0~1)
+        generatedAt:
+          type: string
     RecommendationModelSummaryResponse:
       type: object
       required: [homeParts, generatedAt]

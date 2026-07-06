@@ -42,7 +42,9 @@
 | 로그 요약 연결 | `logSummaryId` 명시 지정 가능(티켓 소속 검증, 오지정 400). 미지정 시 **최신 요약** | 코드 |
 | 모델 피처 | `features_snapshot` = 모델이 소비하는 피처만(reranker_service.py `FEATURES`와 1:1). AS 컨텍스트는 `event_snapshot.asContext`에 보존(모델 미사용) | 코드 |
 | 피처 결측 기본값 | `part_price_age_days` 결측 = **999**(훈련·서빙 동일). `rank_position`은 모델 피처 아님(학습-서빙 의미 불일치·포지션 누수) | 코드 |
+| 가격 신선도 기준시각 | **학습** `price_age_days`는 이벤트(라벨) 발생 시점(`event.created_at`) 기준으로 계산(M2) — dataset 생성 시점(now())이 아니라. 같은 이벤트가 매주 재훈련마다 값이 달라지는 미래정보 주입을 막아 M1 비교 재현성을 지킨다. **서빙**은 요청 시점(now()) 기준(서빙 신선도가 맞음) | 코드 |
 | shadow 보존 | `recommendation_shadow_scores` 30일 후 매일 03:40 KST 삭제 | 코드 |
+| 자동 재훈련(M2) | 주 1회(기본 off). 미학습 이벤트≥100 **그중 양성 라벨≥10** + 마지막 성공 훈련 후 7일 경과 시 dataset·job 자동 생성. **오염 가드**: 단일 user가 양성 30% 초과 시 제외(`AUTO_SUSPECT_CONCENTRATION`), 고가중(≥3.0) 20% 초과분 제외(`AUTO_HIGH_WEIGHT_CAP`). 승급은 안 함(SHADOW까지만). 연속 2회 실패 시 중단 | 코드/env |
 
 ## 4. 운영 플래그 (env)
 
@@ -52,10 +54,15 @@
 | `RECOMMENDATION_RERANKER_ENDPOINT` | http://xgb-reranker:8091/score | 스코어러 주소 |
 | `RECOMMENDATION_RERANKER_TIMEOUT_MS` | 1200 | 스코어러 호출 타임아웃 |
 | `RECOMMENDATION_RERANKER_SHADOW_THROTTLE_MS` (yml: shadow-throttle-ms) | 300000 | 같은 후보 집합 shadow 재기록 스로틀 |
-| `RECOMMENDATION_TRAINING_WORKER_ENABLED` | true | 컨테이너 내 훈련 워커 |
+| `RECOMMENDATION_TRAINING_WORKER_ENABLED` | true | 컨테이너 내 훈련 워커. **데모 시 false로 재기동해 워커 동결**(freeze는 Java 잡 생성만 막고 워커는 별개 프로세스 — 섹션 6) |
 | `RECOMMENDATION_TRAINING_MIN_ROWS` | 50 | 훈련 최소 행 |
+| `RECOMMENDATION_AUTO_RETRAIN_ENABLED` | false | **M2 자동 재훈련** 스케줄러 on/off |
+| `RECOMMENDATION_AUTO_RETRAIN_CRON` | `0 0 3 * * SUN` | 자동 재훈련 주기(일요일 03:00 KST) |
+| `RECOMMENDATION_AUTO_RETRAIN_MIN_NEW_EVENTS` | 100 | 자동 재훈련 트리거 최소 미학습 이벤트 |
+| `RECOMMENDATION_AUTO_RETRAIN_MIN_NEW_POSITIVES` | 10 | 그중 최소 양성 라벨(라벨 없는 재훈련 방지) |
+| `RECOMMENDATION_AUTO_RETRAIN_MIN_INTERVAL_DAYS` | 7 | 마지막 성공 훈련 후 최소 간격 |
 | `recommendation.shadow.retention-days` | 30 | shadow 보존일 |
-| `DEMO_FREEZE_MUTATIONS` | false | **데모 동결**: 수집 스케줄러 4종 skip + 관리자 가격 Job 409 (섹션 6) |
+| `DEMO_FREEZE_MUTATIONS` | false | **데모 동결**: 수집 스케줄러 5종 skip + 관리자 가격 Job 409 (섹션 6) |
 
 ## 5. 관측
 
@@ -66,8 +73,9 @@
 ## 6. 데모 체크리스트
 
 1. 데모 전: `DEMO_FREEZE_MUTATIONS=true`로 재기동 → 가격/자산 수집 일괄 동결(잡 이력에 SKIPPED_FROZEN 기록됨)
-2. 저품질 SHADOW 모델을 실수로 activate하지 않았는지 확인(홈 scoreSource가 의도와 일치하는지)
-3. 데모 후: freeze 해제
+2. 데모 전: **훈련 워커 동결** — `RECOMMENDATION_TRAINING_WORKER_ENABLED=false`로 `xgb-reranker` 재기동. `DEMO_FREEZE_MUTATIONS`는 Java 잡 생성만 막고 Python 워커는 별개 프로세스라, 금요일에 QUEUED된 잡을 데모 중 소비해 모델 행이 생길 수 있다. 잔여 QUEUED 잡이 있으면 `UPDATE recommendation_training_jobs SET status='CANCELLED' WHERE status='QUEUED'`로 정리
+3. 저품질 SHADOW 모델을 실수로 activate하지 않았는지 확인(홈 scoreSource가 의도와 일치하는지)
+4. 데모 후: freeze 해제 + `RECOMMENDATION_TRAINING_WORKER_ENABLED` 원복(워커 재활성화)
 
 ## 7. 하지 말 것 (안전선)
 

@@ -101,14 +101,14 @@ holdout은 ~30행(min_rows=50이면 10행까지) 수준이고 양성 라벨이 0
 1. **조건**: ① 미학습 eligible 이벤트 ≥ `auto-retrain-min-new-events`(기본 100) **② 그중 양성 라벨(label > 0) ≥ `auto-retrain-min-new-positives`(기본 10)** ③ 마지막 SUCCEEDED 훈련 후 `auto-retrain-min-interval-days`(기본 7) 경과. — ②가 없으면 홈 방문 IMPRESSION(1회 방문당 최대 4건 자동 기록)만으로 조건이 충족되어 라벨 없는 재훈련이 반복된다.
 2. 충족 시: dataset 자동 생성(이름 `auto-{date}`, 직전 auto dataset은 ARCHIVED 처리) → **오염 가드(3b) 적용** → LOCK → 훈련 job 생성. 워커가 소비(기존 흐름) → SHADOW + M1 comparison까지 자동.
 3. 미충족 시: **status=SUCCEEDED + result_summary `{"skipped":true,"reason":"newEvents=37 < 100"}`** 로 기록. (pipeline_job_runs의 CHECK 제약이 SUCCEEDED/FAILED/SKIPPED_FROZEN/SKIPPED_LOCKED만 허용하므로 범용 'SKIPPED' 상태는 쓸 수 없다 — 스키마 불변 유지를 위해 요약 필드로 표현. 기존 recordSkippedFrozen 관례와 구분됨을 관리자 UI 라벨로 명시.)
-4. **실패 백오프**: 직전 자동 재훈련 job이 FAILED면 관리자 확인 전 재시도 억제(연속 2회 실패 시 자동 재훈련 중단 + 대시보드 경고). 없으면 같은 데이터로 dataset·job이 매주 무한 생성된다.
+4. **실패 백오프**: 직전 자동 재훈련 job이 FAILED **또는 SKIPPED_LOW_DATASET**이면 관리자 확인 전 재시도 억제(연속 2회 시 중단 + 대시보드 경고). 또한 오염 가드 적용 후 included가 워커 `min_rows`(기본 50) 미만이면 **job을 만들지 않고 skip**(doomed job이 SKIPPED_LOW_DATASET로 끝나 같은 데이터로 매주 무한 재생성되는 것을 원천 차단). 없으면 같은 데이터로 dataset·job이 매주 무한 생성된다.
 
 ### 3b. 오염 가드 — 자동 LOCK은 B5 방어선을 우회한다 (필수)
 
 감사 B5(학습 이벤트 사용자 위조)의 완화책 중 하나가 "관리자가 LOCK 전 datasetItems 검토·제외"였는데, 자동 LOCK은 그 검토를 건너뛴다. sourceSurface 화이트리스트는 surface만 제한할 뿐이고, 아무 로그인 사용자나 ORDER_INTENT(+5.0)·SAVE(+3.0)를 임의 partId에 기록할 수 있으며 rate limit도 없다 — 가드 없는 자동 LOCK은 "위조 이벤트 → 무인 훈련 → 오염 SHADOW" 경로를 완성하고, M1 verdict도 오염된 holdout 위에서 계산되므로 승급 판단 근거까지 오염된다. **다음 가드를 자동 dataset에 강제한다**:
 
 - **사용자 편중 컷**: 단일 user_id가 dataset 양성 라벨의 30% 초과 시 해당 사용자의 이벤트를 자동 제외(`excluded_reason='AUTO_SUSPECT_CONCENTRATION'`) + 대시보드 경고.
-- **고가중 비율 상한**: 가중치 ≥3.0 이벤트(ORDER_INTENT/SAVE)가 dataset의 20%를 초과하면 초과분을 최신순으로 제외(`excluded_reason='AUTO_HIGH_WEIGHT_CAP'`).
+- **고가중 비율 상한**: 가중치 ≥3.0 이벤트(ORDER_INTENT/SAVE)가 dataset의 20%를 초과하면 초과분을 제외(`excluded_reason='AUTO_HIGH_WEIGHT_CAP'`). **최신순 = 원 이벤트 발생 시각(`event.created_at`) 기준**(dataset item의 created_at은 단일 트랜잭션이라 전부 동일 — 위조 버스트는 최신 이벤트다). 남길 개수 = `floor(0.25 × 비고가중)`으로 **제외 후 고가중 비율 ≤20% 보장**.
 - 제외 내역은 datasetItems에 남아 관리자가 사후 검토·복원 가능(수동 승급 전 확인 항목).
 - *(대안으로 "DRAFT 생성 → 24h 유예 후 자동 LOCK(그 사이 관리자 제외 가능)"도 가능 — 가드보다 사람 검토를 선호하면 이 옵션. 기본안은 가드+즉시 LOCK.)*
 
@@ -164,7 +164,7 @@ CREATE TABLE recommendation_drift_snapshots (
 
 **설계 (정정판)**:
 - **baseline 순위 재구성**: shadow 행의 features JSONB에 deterministicScore의 입력이 전부 저장돼 있으므로(part_benchmark_score, part_has_fps_coverage, part_has_image, part_has_offer, part_tool_ready, part_price_age_days, part_price, category), 집계 시 Java deterministicScore를 재계산해 그룹 내 baseline 순위를 복원한 뒤 모델 score 순위와 Kendall-τ를 계산한다. *(선택 최적화: shadow INSERT 시 baseline 점수를 features jsonb에 `baseline_score`로 함께 기록 — jsonb라 스키마 불변)*
-- **오염 필터 3종(필수)**: ① `source_surface='HOME_RECOMMENDED_PARTS' AND candidate_type='PART'`(BUILD_CHAT 행은 BUILD/PART별 rank_position이 0부터 재시작해 혼합 τ가 무의미), ② model_version_id 조인으로 **baseline-shadow 행 제외**, ③ 그룹 키는 request_hash 단독이 아니라 **(request_hash, model_version_id, 스코어링 회차 — created_at 초 단위 버스트)** — 실모델 동기 경로는 스로틀 없이 매 요청 INSERT하므로 같은 그룹에 동일 후보가 N중복된다.
+- **오염 필터 3종(필수)**: ① `source_surface='HOME_RECOMMENDED_PARTS' AND candidate_type='PART'`(BUILD_CHAT 행은 BUILD/PART별 rank_position이 0부터 재시작해 혼합 τ가 무의미), ② model_version_id 조인으로 **baseline-shadow 행 제외**, ③ **후보별 최신 1건으로 dedup**(`row_number` PARTITION BY request_hash, model_version_id, candidate_id) 후 **(request_hash, model_version_id)로 그룹** — 홈 부품 점수는 사용자·시각 무관(부품 결정적)이라 같은 request_hash는 같은 후보집합이므로, 초 버스트 분리 대신 후보별 최신 점수 dedup이 중복 회차·초 경계 straddle 편향을 모두 없앤다.
 - **top-4 교체율**: baseline score 상위 4 vs 모델 score 상위 4의 집합 차이. 단 실제 사용자가 본 top-4는 diverseTop(카테고리 다양성 규칙)까지 거친 결과이므로, 이 지표는 "점수 순위 기준"임을 UI에 명시(실서빙 재현이 필요하면 diverseTop 로직 재적용).
 - API `GET /api/admin/recommendation-shadow/summary?days=7` + 대시보드 카드 1행: "shadow가 순위를 평균 N% 바꿈 · top4 교체율 M%" — **승급 전 사람 판단의 근거**(순위를 거의 안 바꾸는 모델은 승급 가치 없음).
 

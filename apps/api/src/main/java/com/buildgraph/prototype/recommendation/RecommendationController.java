@@ -10,6 +10,7 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 
@@ -83,6 +84,15 @@ public class RecommendationController {
     Map<String, Object> recommendationModelSummary(@RequestHeader(value = "Authorization", required = false) String authorization) {
         currentUserService.requireAdmin(authorization);
         return recommendationLearningService.modelSummary();
+    }
+
+    @GetMapping("/admin/recommendation-shadow/summary")
+    Map<String, Object> recommendationShadowSummary(
+            @RequestParam(value = "days", defaultValue = "7") int days,
+            @RequestHeader(value = "Authorization", required = false) String authorization
+    ) {
+        currentUserService.requireAdmin(authorization);
+        return recommendationLearningService.shadowComparisonSummary(days);
     }
 
     @GetMapping("/admin/recommendation-training/overview")

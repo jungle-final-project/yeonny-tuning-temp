@@ -15,6 +15,7 @@ import {
   getRecentAdminAuditLogs,
   getRecommendationModels,
   getRecommendationModelSummary,
+  getRecommendationShadowSummary,
   getRecommendationTrainingOverview,
   listRecommendationTrainingDatasets,
   listRecommendationTrainingJobs,
@@ -77,6 +78,12 @@ export function AdminDashboardPage() {
   const recommendationModelQuery = useQuery({
     queryKey: ['admin-recommendation-model-summary'],
     queryFn: getRecommendationModelSummary,
+    enabled: Boolean(dashboard),
+    retry: false
+  });
+  const shadowSummaryQuery = useQuery({
+    queryKey: ['admin-recommendation-shadow-summary'],
+    queryFn: () => getRecommendationShadowSummary(7),
     enabled: Boolean(dashboard),
     retry: false
   });
@@ -479,7 +486,19 @@ export function AdminDashboardPage() {
                   { metric: 'HOME impressions', value: countLabel(recommendationSummary.homeParts.impressions) },
                   { metric: 'HOME clicks', value: countLabel(recommendationSummary.homeParts.clicks) },
                   { metric: 'HOME CTR', value: percentLabel(recommendationSummary.homeParts.ctr) },
-                  { metric: 'shadow scores', value: countLabel(recommendationSummary.homeParts.recentShadowScores) }
+                  { metric: 'shadow scores', value: countLabel(recommendationSummary.homeParts.recentShadowScores) },
+                  {
+                    metric: 'shadow 순위 역전율 (7일)',
+                    value: shadowSummaryQuery.data?.avgInversionRate != null
+                      ? `${percentLabel(shadowSummaryQuery.data.avgInversionRate)} · ${shadowSummaryQuery.data.scoredGroups}회차`
+                      : '신호 부족'
+                  },
+                  {
+                    metric: 'shadow top-4 교체율 (7일)',
+                    value: shadowSummaryQuery.data?.avgTop4ReplacementRate != null
+                      ? percentLabel(shadowSummaryQuery.data.avgTop4ReplacementRate)
+                      : '신호 부족'
+                  }
                 ]}
               />
               {scoreSourceRows.length > 0 ? (

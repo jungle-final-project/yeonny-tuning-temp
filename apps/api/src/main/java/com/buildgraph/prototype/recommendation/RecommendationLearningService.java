@@ -3,7 +3,9 @@ package com.buildgraph.prototype.recommendation;
 import com.buildgraph.prototype.common.DbValueMapper;
 import com.buildgraph.prototype.common.MockData;
 import com.buildgraph.prototype.user.CurrentUserService;
+import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
@@ -441,6 +443,88 @@ public class RecommendationLearningService {
                 ),
                 "generatedAt", java.time.Instant.now().toString()
         );
+    }
+
+    /**
+     * M4 Shadow 비교 관측(설계 §5). 최근 windowDays 동안의 HOME/PART shadow 실모델 점수를 논리적 쿼리
+     * (request_hash, model_version_id)별로 묶어, features로 재구성한 baseline 순위 대비 모델 순위의
+     * 역전율·top4 교체율을 집계한다. 오염 필터를 SQL에서 강제한다:
+     * ① HOME_RECOMMENDED_PARTS + PART만, ② baseline-shadow 모델 제외,
+     * ③ 후보별 최신 1건만(row_number)으로 중복 회차 붕괴 — 홈 부품 피처는 사용자·시각 무관(부품 결정적)이라
+     *    같은 request_hash는 같은 후보집합이므로, 초 버스트 분리 대신 후보별 최신 점수로 dedup하는 게
+     *    회차 중복·초 경계 straddle 편향을 모두 없앤다.
+     */
+    public Map<String, Object> shadowComparisonSummary(int days) {
+        int windowDays = Math.min(Math.max(days, 1), 30);
+        List<Map<String, Object>> rows = jdbcTemplate.queryForList("""
+                        SELECT dedup.request_hash,
+                               dedup.model_version_id,
+                               dedup.score,
+                               dedup.features
+                        FROM (
+                          SELECT s.request_hash,
+                                 s.model_version_id,
+                                 s.candidate_id,
+                                 s.score,
+                                 s.features,
+                                 row_number() OVER (
+                                   PARTITION BY s.request_hash, s.model_version_id, s.candidate_id
+                                   ORDER BY s.created_at DESC, s.id DESC
+                                 ) AS rn
+                          FROM recommendation_shadow_scores s
+                          JOIN recommendation_model_versions mv ON mv.id = s.model_version_id
+                          WHERE s.source_surface = 'HOME_RECOMMENDED_PARTS'
+                            AND s.candidate_type = 'PART'
+                            AND mv.model_version <> 'baseline-shadow'
+                            AND s.created_at >= now() - make_interval(days => ?)
+                        ) dedup
+                        WHERE dedup.rn = 1
+                        ORDER BY dedup.request_hash, dedup.model_version_id
+                        """, windowDays);
+        List<ShadowComparisonMetrics.ShadowRow> shadowRows = new ArrayList<>(rows.size());
+        for (Map<String, Object> row : rows) {
+            String groupKey = text(row.get("request_hash")) + "|" + text(row.get("model_version_id"));
+            shadowRows.add(new ShadowComparisonMetrics.ShadowRow(
+                    groupKey,
+                    doubleValue(row.get("score"), 0.0),
+                    parseJsonMap(row.get("features"))
+            ));
+        }
+        Map<String, Object> summary = ShadowComparisonMetrics.summarize(shadowRows, 2);
+        summary.put("windowDays", windowDays);
+        summary.put("generatedAt", java.time.Instant.now().toString());
+        return summary;
+    }
+
+    private static double doubleValue(Object value, double fallback) {
+        if (value instanceof Number number) {
+            return number.doubleValue();
+        }
+        if (value == null) {
+            return fallback;
+        }
+        try {
+            return Double.parseDouble(value.toString());
+        } catch (NumberFormatException ignored) {
+            return fallback;
+        }
+    }
+
+    private static Map<String, Object> parseJsonMap(Object value) {
+        if (value == null) {
+            return Map.of();
+        }
+        if (value instanceof Map<?, ?> map) {
+            Map<String, Object> result = new LinkedHashMap<>();
+            map.forEach((key, mapValue) -> result.put(String.valueOf(key), mapValue));
+            return result;
+        }
+        try {
+            return OBJECT_MAPPER.readValue(value.toString(), new TypeReference<Map<String, Object>>() {
+            });
+        } catch (Exception ignored) {
+            return Map.of();
+        }
     }
 
     private Map<String, Object> insertEvent(

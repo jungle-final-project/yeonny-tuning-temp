@@ -728,6 +728,21 @@ export function getRecommendationModelSummary() {
   return api<RecommendationModelSummary>('/api/admin/recommendation-models/summary');
 }
 
+// M4 shadow 비교 관측: 실모델 shadow 순위가 baseline 순위를 얼마나 바꾸는가.
+export type RecommendationShadowSummary = {
+  windowDays: number;
+  totalGroups: number;
+  scoredGroups: number;
+  scoredCandidates: number;
+  avgInversionRate: number | null;
+  avgTop4ReplacementRate: number | null;
+  generatedAt?: string;
+};
+
+export function getRecommendationShadowSummary(days = 7) {
+  return api<RecommendationShadowSummary>(`/api/admin/recommendation-shadow/summary?days=${days}`);
+}
+
 export function getRecommendationModels() {
   return api<RecommendationModelsResponse>('/api/admin/recommendation-models');
 }
