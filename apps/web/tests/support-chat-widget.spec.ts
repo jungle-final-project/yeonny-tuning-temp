@@ -28,7 +28,9 @@ test('global support chat can send a message when a ticket chat session exists',
   await page.getByRole('button', { name: '전송' }).click();
 
   await expect.poll(() => postPayload).toEqual({ content: '지금 상담 가능할까요?' });
-  await expect.poll(() => page.evaluate(() => (window as unknown as { __supportChatSocketSends?: string[] }).__supportChatSocketSends ?? [])).toEqual([]);
+  await expect.poll(() => page.evaluate(() => (window as unknown as { __supportChatSocketSends?: string[] }).__supportChatSocketSends ?? [])).toEqual([
+    JSON.stringify({ type: 'AUTH', ticket: 'user-ws-ticket-1' })
+  ]);
   await expect(page.getByText('지금 상담 가능할까요?')).toBeVisible();
 });
 
@@ -186,25 +188,111 @@ test('global support chat closes and clears chat cache on auth change', async ({
   await expect(page.getByRole('button', { name: '상담방 열기' })).toHaveCount(0);
 });
 
-test('global support chat reconnects with the latest token after socket close', async ({ page }) => {
+test('global support chat uses socket tickets without leaking access tokens in the websocket url', async ({ page }) => {
+  let ticketCalls = 0;
   await mockOpenSupportWebSocket(page);
   await mockLoggedInUser(page);
-  await mockActiveChat(page, () => null, () => {});
+  await mockActiveChat(page, () => null, () => {}, () => {
+    ticketCalls += 1;
+    return `user-ws-ticket-${ticketCalls}`;
+  });
 
   await page.goto('/support/00000000-0000-4000-8000-000000006001');
   await page.getByRole('button', { name: '상담방 열기' }).click();
+
+  await expect.poll(() => ticketCalls).toBe(1);
+  await expect.poll(() => page.evaluate(() => {
+    const urls = (window as unknown as { __supportChatSocketUrls?: string[] }).__supportChatSocketUrls ?? [];
+    return urls[urls.length - 1] ?? '';
+  })).not.toContain('token=');
+  await expect.poll(() => page.evaluate(() => {
+    const sends = (window as unknown as { __supportChatSocketSends?: string[] }).__supportChatSocketSends ?? [];
+    return sends[sends.length - 1] ?? '';
+  })).toBe(JSON.stringify({ type: 'AUTH', ticket: 'user-ws-ticket-1' }));
+});
+
+test('global support chat refreshes auth through REST when websocket ticket request returns 401', async ({ page }) => {
+  let ticketCalls = 0;
+  let refreshCalls = 0;
+  await mockOpenSupportWebSocket(page);
+  await mockLoggedInUser(page);
+  await page.addInitScript(() => {
+    localStorage.setItem('buildgraph.refreshToken', 'refresh-token-1');
+  });
+  await mockActiveChat(page, () => null, () => {});
+  await page.route('**/api/auth/refresh', async (route) => {
+    refreshCalls += 1;
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        accessToken: 'jwt-user-token-2',
+        refreshToken: 'refresh-token-2'
+      })
+    });
+  });
+  await page.route('**/api/support/chat-sessions/00000000-0000-4000-8000-000000009001/ws-ticket', async (route) => {
+    ticketCalls += 1;
+    if (ticketCalls === 1) {
+      await route.fulfill({
+        status: 401,
+        contentType: 'application/json',
+        body: JSON.stringify({ code: 'UNAUTHORIZED', message: '로그인이 필요합니다.' })
+      });
+      return;
+    }
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        ticket: 'user-ws-ticket-after-refresh',
+        expiresAt: '2026-07-06T10:01:00Z',
+        expiresInSeconds: 60
+      })
+    });
+  });
+
+  await page.goto('/support/00000000-0000-4000-8000-000000006001');
+  await page.getByRole('button', { name: '상담방 열기' }).click();
+
+  await expect.poll(() => refreshCalls).toBe(1);
+  await expect.poll(() => ticketCalls).toBe(2);
+  await expect.poll(() => page.evaluate(() => localStorage.getItem('buildgraph.token'))).toBe('jwt-user-token-2');
+  await expect.poll(() => page.evaluate(() => {
+    const sends = (window as unknown as { __supportChatSocketSends?: string[] }).__supportChatSocketSends ?? [];
+    return sends[sends.length - 1] ?? '';
+  })).toBe(JSON.stringify({ type: 'AUTH', ticket: 'user-ws-ticket-after-refresh' }));
+});
+
+test('global support chat reconnects by issuing a fresh websocket ticket', async ({ page }) => {
+  let ticketCalls = 0;
+  await mockOpenSupportWebSocket(page);
+  await mockLoggedInUser(page);
+  await mockActiveChat(page, () => null, () => {}, () => {
+    ticketCalls += 1;
+    return `user-ws-ticket-${ticketCalls}`;
+  });
+
+  await page.goto('/support/00000000-0000-4000-8000-000000006001');
+  await page.getByRole('button', { name: '상담방 열기' }).click();
+  await expect.poll(() => page.evaluate(() => {
+    const sends = (window as unknown as { __supportChatSocketSends?: string[] }).__supportChatSocketSends ?? [];
+    return sends.length;
+  })).toBe(1);
+  await pushUserChatMessage(page, '초기 인증 완료');
   await expect(page.getByText('실시간 연결')).toBeVisible();
 
   await page.evaluate(() => {
-    localStorage.setItem('buildgraph.token', 'jwt-user-token-2');
     const sockets = (window as unknown as { __supportChatSockets?: Array<EventTarget & { close?: () => void }> }).__supportChatSockets ?? [];
     sockets[sockets.length - 1]?.close?.();
   });
 
+  await expect(page.getByText('재연결 중')).toBeVisible();
+  await expect.poll(() => ticketCalls, { timeout: 3000 }).toBe(2);
   await expect.poll(() => page.evaluate(() => {
-    const urls = (window as unknown as { __supportChatSocketUrls?: string[] }).__supportChatSocketUrls ?? [];
-    return urls[urls.length - 1] ?? '';
-  }), { timeout: 3000 }).toContain('token=jwt-user-token-2');
+    const sends = (window as unknown as { __supportChatSocketSends?: string[] }).__supportChatSocketSends ?? [];
+    return sends[sends.length - 1] ?? '';
+  }), { timeout: 3000 }).toBe(JSON.stringify({ type: 'AUTH', ticket: 'user-ws-ticket-2' }));
 });
 
 test('global support chat stays hidden on support intake', async ({ page }) => {
@@ -444,7 +532,8 @@ async function mockEmptyChat(page: Page) {
 async function mockActiveChat(
   page: Page,
   postPayload: () => unknown,
-  setPostPayload: (payload: unknown) => void
+  setPostPayload: (payload: unknown) => void,
+  issueTicket: () => string = () => 'user-ws-ticket-1'
 ) {
   const initial = {
     contact: {
@@ -488,6 +577,21 @@ async function mockActiveChat(
   await page.route('**/api/support/chat-sessions/00000000-0000-4000-8000-000000009001', async (route) => {
     if (route.request().method() === 'GET') {
       await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(initial) });
+      return;
+    }
+    await route.fallback();
+  });
+  await page.route('**/api/support/chat-sessions/00000000-0000-4000-8000-000000009001/ws-ticket', async (route) => {
+    if (route.request().method() === 'POST') {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          ticket: issueTicket(),
+          expiresAt: '2026-07-06T10:01:00Z',
+          expiresInSeconds: 60
+        })
+      });
       return;
     }
     await route.fallback();
@@ -547,6 +651,21 @@ async function mockLongActiveChat(page: Page) {
   });
   await page.route('**/api/support/chat-sessions/00000000-0000-4000-8000-000000009001', async (route) => {
     await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(detail) });
+  });
+  await page.route('**/api/support/chat-sessions/00000000-0000-4000-8000-000000009001/ws-ticket', async (route) => {
+    if (route.request().method() === 'POST') {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          ticket: 'user-ws-ticket-1',
+          expiresAt: '2026-07-06T10:01:00Z',
+          expiresInSeconds: 60
+        })
+      });
+      return;
+    }
+    await route.fallback();
   });
 }
 

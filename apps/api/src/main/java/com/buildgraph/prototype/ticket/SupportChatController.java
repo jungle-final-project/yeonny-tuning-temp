@@ -17,15 +17,18 @@ public class SupportChatController {
     private final SupportChatService supportChatService;
     private final CurrentUserService currentUserService;
     private final SupportChatWebSocketHandler supportChatWebSocketHandler;
+    private final SupportChatWebSocketTicketService supportChatWebSocketTicketService;
 
     public SupportChatController(
             SupportChatService supportChatService,
             CurrentUserService currentUserService,
-            SupportChatWebSocketHandler supportChatWebSocketHandler
+            SupportChatWebSocketHandler supportChatWebSocketHandler,
+            SupportChatWebSocketTicketService supportChatWebSocketTicketService
     ) {
         this.supportChatService = supportChatService;
         this.currentUserService = currentUserService;
         this.supportChatWebSocketHandler = supportChatWebSocketHandler;
+        this.supportChatWebSocketTicketService = supportChatWebSocketTicketService;
     }
 
     @GetMapping("/current")
@@ -56,5 +59,14 @@ public class SupportChatController {
         Map<String, Object> detail = supportChatService.postUserMessage(id, request == null ? Map.of() : request, user);
         supportChatWebSocketHandler.broadcastRoomUpdate(id);
         return detail;
+    }
+
+    @PostMapping("/{id}/ws-ticket")
+    Map<String, Object> issueWebSocketTicket(
+            @PathVariable String id,
+            @RequestHeader(value = "Authorization", required = false) String authorization
+    ) {
+        CurrentUserService.CurrentUser user = currentUserService.requireUser(authorization);
+        return supportChatWebSocketTicketService.issueUserTicket(id, user);
     }
 }

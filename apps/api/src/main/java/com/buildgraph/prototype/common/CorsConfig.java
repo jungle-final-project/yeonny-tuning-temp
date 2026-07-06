@@ -8,13 +8,19 @@ import org.springframework.web.servlet.config.annotation.WebMvcConfigurer;
 
 @Configuration
 public class CorsConfig {
+    private final BuildGraphCorsProperties corsProperties;
+
+    public CorsConfig(BuildGraphCorsProperties corsProperties) {
+        this.corsProperties = corsProperties;
+    }
+
     @Bean
     WebMvcConfigurer corsConfigurer() {
         return new WebMvcConfigurer() {
             @Override
             public void addCorsMappings(@NonNull CorsRegistry registry) {
                 registry.addMapping("/api/**")
-                        .allowedOrigins("http://localhost:5173", "http://127.0.0.1:5173")
+                        .allowedOrigins(corsProperties.allowedOrigins())
                         .allowedMethods("GET", "POST", "PATCH", "DELETE", "OPTIONS")
                         .allowedHeaders("*");
             }

@@ -11,6 +11,7 @@ import type { SupportChatMessage, SupportChatSessionDto } from './types';
 const DEFAULT_POLL_MS = 5000;
 const SOCKET_RECONNECT_DELAYS_MS = [1000, 2000, 5000, 10000];
 const SUPPORT_CHAT_MOBILE_QUERY = '(max-width: 767px)';
+type SocketStatus = 'polling' | 'connecting' | 'reconnecting' | 'connected' | 'disconnected';
 
 export function SupportChatWidget() {
   const location = useLocation();
@@ -23,7 +24,7 @@ export function SupportChatWidget() {
   const [open, setOpen] = useState(false);
   const [message, setMessage] = useState('');
   const [sendError, setSendError] = useState<string | null>(null);
-  const [socketConnected, setSocketConnected] = useState(false);
+  const [socketStatus, setSocketStatus] = useState<SocketStatus>('polling');
   const [authToken, setAuthToken] = useState(() => getToken());
   const [newMarkerMessageId, setNewMarkerMessageId] = useState<string | null>(null);
   const hidden = shouldHideSupportChat(location.pathname);
@@ -117,7 +118,7 @@ export function SupportChatWidget() {
       setSendError(null);
       socketRef.current?.close();
       socketRef.current = null;
-      setSocketConnected(false);
+      setSocketStatus('polling');
       queryClient.removeQueries({ queryKey: ['support-chat'] });
     };
     window.addEventListener(AUTH_CHANGED_EVENT, handleAuthChanged);
@@ -153,13 +154,14 @@ export function SupportChatWidget() {
   useEffect(() => {
     socketRef.current?.close();
     socketRef.current = null;
-    setSocketConnected(false);
+    setSocketStatus('polling');
     if (!open || !sessionId) {
       return undefined;
     }
     let disposed = false;
     let reconnectTimer: ReturnType<typeof window.setTimeout> | null = null;
     let reconnectAttempt = 0;
+    let activeConnectionId = 0;
 
     const clearReconnectTimer = () => {
       if (reconnectTimer !== null) {
@@ -170,6 +172,7 @@ export function SupportChatWidget() {
     const scheduleReconnect = () => {
       if (disposed) return;
       if (reconnectTimer !== null) return;
+      setSocketStatus('reconnecting');
       const delay = SOCKET_RECONNECT_DELAYS_MS[Math.min(reconnectAttempt, SOCKET_RECONNECT_DELAYS_MS.length - 1)];
       reconnectAttempt += 1;
       reconnectTimer = window.setTimeout(() => {
@@ -177,34 +180,49 @@ export function SupportChatWidget() {
         connect();
       }, delay);
     };
-    const connect = () => {
+    const connect = async () => {
       if (disposed) return;
-      const socket = openSupportChatSocket({
-        mode: 'user',
-        sessionId,
-        onOpen: () => {
-          if (disposed) return;
-          reconnectAttempt = 0;
-          setSocketConnected(true);
-        },
-        onClose: () => {
-          if (disposed) return;
-          setSocketConnected(false);
-          scheduleReconnect();
-        },
-        onError: () => {
-          if (disposed) return;
-          setSocketConnected(false);
-          scheduleReconnect();
-        },
-        onSocketError: (error) => {
-          if (error.message) {
-            setSendError(error.message);
-          }
-        },
-        onDetail: updateChatCache
-      });
-      socketRef.current = socket;
+      const connectionId = ++activeConnectionId;
+      setSocketStatus(reconnectAttempt > 0 ? 'reconnecting' : 'connecting');
+      try {
+        const socket = await openSupportChatSocket({
+          mode: 'user',
+          sessionId,
+          onOpen: () => {
+            if (disposed || activeConnectionId !== connectionId) return;
+            reconnectAttempt = 0;
+            setSocketStatus('connected');
+          },
+          onClose: () => {
+            if (disposed || activeConnectionId !== connectionId) return;
+            socketRef.current = null;
+            scheduleReconnect();
+          },
+          onError: () => {
+            if (disposed || activeConnectionId !== connectionId) return;
+            setSocketStatus('disconnected');
+            scheduleReconnect();
+          },
+          onSocketError: (error) => {
+            if (error.message) {
+              setSendError(error.message);
+            }
+          },
+          onDetail: updateChatCache
+        });
+        if (disposed || activeConnectionId !== connectionId) {
+          socket?.close();
+          return;
+        }
+        socketRef.current = socket;
+        if (!socket) {
+          setSocketStatus('polling');
+        }
+      } catch (error) {
+        if (disposed || activeConnectionId !== connectionId) return;
+        setSocketStatus('disconnected');
+        scheduleReconnect();
+      }
     };
 
     connect();
@@ -213,7 +231,7 @@ export function SupportChatWidget() {
       clearReconnectTimer();
       socketRef.current?.close();
       socketRef.current = null;
-      setSocketConnected(false);
+      setSocketStatus('polling');
     };
   }, [open, sessionId, updateChatCache]);
 
@@ -299,7 +317,7 @@ export function SupportChatWidget() {
             <div className="truncate font-bold text-slate-900">{contact.symptom ?? 'AS 상담'}</div>
             <div className="mt-1 flex items-center justify-between gap-2">
               <span>티켓 {shortId(contact.asTicketId)}</span>
-              <span>{socketConnected ? '실시간 연결' : '자동 새로고침'}</span>
+              <span>{socketStatusLabel(socketStatus)}</span>
             </div>
           </div>
           <div className="relative flex-1 overflow-hidden bg-slate-50">
@@ -470,6 +488,21 @@ function supportTicketIdFromPath(pathname: string) {
 
 function shortId(id: string) {
   return id.length <= 12 ? id : `${id.slice(0, 8)}...${id.slice(-4)}`;
+}
+
+function socketStatusLabel(status: SocketStatus) {
+  switch (status) {
+    case 'connected':
+      return '실시간 연결';
+    case 'connecting':
+    case 'reconnecting':
+      return '재연결 중';
+    case 'disconnected':
+      return '연결 끊김';
+    case 'polling':
+    default:
+      return '자동 새로고침';
+  }
 }
 
 function errorMessage(error: unknown) {

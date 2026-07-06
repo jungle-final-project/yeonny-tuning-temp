@@ -17,8 +17,10 @@ import java.net.URI;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
+import org.springframework.web.socket.CloseStatus;
 import org.springframework.web.socket.TextMessage;
 import org.springframework.web.socket.WebSocketSession;
 
@@ -34,12 +36,15 @@ class SupportChatWebSocketHandlerTest {
     );
 
     private final SupportChatService supportChatService = mock(SupportChatService.class);
-    private final CurrentUserService currentUserService = mock(CurrentUserService.class);
-    private final SupportChatWebSocketHandler handler = new SupportChatWebSocketHandler(supportChatService, currentUserService);
+    private final SupportChatWebSocketTicketService ticketService = mock(SupportChatWebSocketTicketService.class);
+    private final SupportChatWebSocketHandler handler = new SupportChatWebSocketHandler(
+            supportChatService,
+            ticketService
+    );
 
     @Test
-    void inboundMessageFrameIsRejectedWithoutPersistingMessage() throws Exception {
-        WebSocketSession session = session("user");
+    void inboundMessageFrameIsRejectedWithoutPersistingMessageAfterAuth() throws Exception {
+        WebSocketSession session = authenticatedSession("user");
 
         assertThatCode(() -> handler.handleTextMessage(session, new TextMessage("""
                 {
@@ -51,11 +56,12 @@ class SupportChatWebSocketHandlerTest {
         verify(supportChatService, never()).postUserMessage(any(), any(), any());
         verify(supportChatService, never()).postAdminMessage(any(), any(), any());
         assertSentFrame(session, "ERROR", "WS_MESSAGE_DISABLED");
+        verify(session, never()).close(any(CloseStatus.class));
     }
 
     @Test
-    void malformedPayloadReturnsErrorFrameWithoutThrowing() throws Exception {
-        WebSocketSession session = session("user");
+    void malformedPayloadReturnsErrorFrameWithoutThrowingAfterAuth() throws Exception {
+        WebSocketSession session = authenticatedSession("user");
 
         assertThatCode(() -> handler.handleTextMessage(session, new TextMessage("{not-json")))
                 .doesNotThrowAnyException();
@@ -63,11 +69,12 @@ class SupportChatWebSocketHandlerTest {
         verify(supportChatService, never()).postUserMessage(any(), any(), any());
         verify(supportChatService, never()).postAdminMessage(any(), any(), any());
         assertSentFrame(session, "ERROR", "INVALID_WS_PAYLOAD");
+        verify(session, never()).close(any(CloseStatus.class));
     }
 
     @Test
-    void unknownPayloadTypeReturnsErrorFrameWithoutThrowing() throws Exception {
-        WebSocketSession session = session("admin");
+    void unknownPayloadTypeReturnsErrorFrameWithoutThrowingAfterAuth() throws Exception {
+        WebSocketSession session = authenticatedSession("admin");
 
         assertThatCode(() -> handler.handleTextMessage(session, new TextMessage("""
                 {
@@ -78,11 +85,13 @@ class SupportChatWebSocketHandlerTest {
         verify(supportChatService, never()).postUserMessage(any(), any(), any());
         verify(supportChatService, never()).postAdminMessage(any(), any(), any());
         assertSentFrame(session, "ERROR", "INVALID_WS_PAYLOAD");
+        verify(session, never()).close(any(CloseStatus.class));
     }
 
     @Test
-    void missingPayloadTypeReturnsErrorFrameWithoutThrowing() throws Exception {
-        WebSocketSession session = session("user");
+    void missingPayloadTypeRequiresAuthAndClosesBeforeAuth() throws Exception {
+        WebSocketSession session = connectedButUnauthenticatedSession("user");
+        handler.afterConnectionEstablished(session);
 
         assertThatCode(() -> handler.handleTextMessage(session, new TextMessage("""
                 {
@@ -92,15 +101,30 @@ class SupportChatWebSocketHandlerTest {
 
         verify(supportChatService, never()).postUserMessage(any(), any(), any());
         verify(supportChatService, never()).postAdminMessage(any(), any(), any());
-        assertSentFrame(session, "ERROR", "INVALID_WS_PAYLOAD");
+        assertSentFrame(session, "ERROR", "WS_AUTH_REQUIRED");
+        verify(session).close(CloseStatus.POLICY_VIOLATION);
     }
 
     @Test
-    void socketOpenAndBroadcastUseUnreadSafeSnapshot() throws Exception {
-        WebSocketSession session = session("user");
-        when(session.getUri()).thenReturn(URI.create("ws://localhost/ws/support-chat?token=jwt-token&mode=user&sessionId=" + ROOM_ID));
-        when(session.isOpen()).thenReturn(true);
-        when(currentUserService.requireUser("Bearer jwt-token")).thenReturn(USER);
+    void malformedPayloadClosesBeforeAuth() throws Exception {
+        WebSocketSession session = connectedButUnauthenticatedSession("user");
+        handler.afterConnectionEstablished(session);
+
+        assertThatCode(() -> handler.handleTextMessage(session, new TextMessage("{not-json")))
+                .doesNotThrowAnyException();
+
+        assertSentFrame(session, "ERROR", "INVALID_WS_PAYLOAD");
+        verify(session).close(CloseStatus.POLICY_VIOLATION);
+    }
+
+    @Test
+    void authFrameRegistersSessionAndSendsInitialUnreadSafeSnapshot() throws Exception {
+        WebSocketSession session = connectedButUnauthenticatedSession("user");
+        when(ticketService.consume("ticket-1")).thenReturn(Optional.of(new SupportChatWebSocketTicketService.AuthenticatedTicket(
+                "user",
+                ROOM_ID,
+                USER
+        )));
         when(supportChatService.userCanAccess(ROOM_ID, USER)).thenReturn(true);
         when(supportChatService.detailSnapshot(ROOM_ID, USER)).thenReturn(MockData.map(
                 "contact", MockData.map("id", ROOM_ID, "userUnreadCount", 2),
@@ -109,24 +133,68 @@ class SupportChatWebSocketHandlerTest {
         ));
 
         handler.afterConnectionEstablished(session);
+        handler.handleTextMessage(session, new TextMessage("""
+                {
+                  "type": "AUTH",
+                  "ticket": "ticket-1"
+                }
+                """));
         handler.broadcastRoomUpdate(ROOM_ID);
 
         verify(supportChatService, times(2)).detailSnapshot(ROOM_ID, USER);
         verify(supportChatService, never()).detail(ROOM_ID, USER);
+        assertThat(session.getAttributes()).containsEntry("authenticated", true);
+        assertSentFrame(session, "CHAT_UPDATED", null);
+    }
+
+    @Test
+    void invalidTicketReturnsErrorAndCloses() throws Exception {
+        WebSocketSession session = connectedButUnauthenticatedSession("user");
+        when(ticketService.consume("expired-ticket")).thenReturn(Optional.empty());
+
+        handler.afterConnectionEstablished(session);
+        handler.handleTextMessage(session, new TextMessage("""
+                {
+                  "type": "AUTH",
+                  "ticket": "expired-ticket"
+                }
+                """));
+
+        assertSentFrame(session, "ERROR", "INVALID_WS_TICKET");
+        verify(session).close(CloseStatus.POLICY_VIOLATION);
+    }
+
+    @Test
+    void mismatchedTicketReturnsErrorAndCloses() throws Exception {
+        WebSocketSession session = connectedButUnauthenticatedSession("user");
+        when(ticketService.consume("admin-ticket")).thenReturn(Optional.of(new SupportChatWebSocketTicketService.AuthenticatedTicket(
+                "admin",
+                ROOM_ID,
+                USER
+        )));
+
+        handler.afterConnectionEstablished(session);
+        handler.handleTextMessage(session, new TextMessage("""
+                {
+                  "type": "AUTH",
+                  "ticket": "admin-ticket"
+                }
+                """));
+
+        assertSentFrame(session, "ERROR", "INVALID_WS_TICKET");
+        verify(session).close(CloseStatus.POLICY_VIOLATION);
     }
 
     @Test
     void broadcastKeepsOtherSessionsWhenOneSessionSendFails() throws Exception {
-        WebSocketSession failingSession = connectedSession();
-        WebSocketSession healthySession = connectedSession();
+        WebSocketSession failingSession = authenticatedConnectedSession("ticket-failing");
+        WebSocketSession healthySession = authenticatedConnectedSession("ticket-healthy");
         when(supportChatService.detailSnapshot(ROOM_ID, USER)).thenReturn(MockData.map(
                 "contact", MockData.map("id", ROOM_ID, "userUnreadCount", 2),
                 "messages", List.of(),
                 "pollingIntervalMs", 5000
         ));
 
-        handler.afterConnectionEstablished(failingSession);
-        handler.afterConnectionEstablished(healthySession);
         doThrow(new IOException("socket write failed")).when(failingSession).sendMessage(any(TextMessage.class));
 
         assertThatCode(() -> handler.broadcastRoomUpdate(ROOM_ID)).doesNotThrowAnyException();
@@ -135,30 +203,52 @@ class SupportChatWebSocketHandlerTest {
         verify(healthySession, times(2)).sendMessage(any(TextMessage.class));
     }
 
-    private static WebSocketSession session(String mode) {
+    private WebSocketSession authenticatedConnectedSession(String ticket) throws Exception {
+        WebSocketSession session = connectedButUnauthenticatedSession("user");
+        when(ticketService.consume(ticket)).thenReturn(Optional.of(new SupportChatWebSocketTicketService.AuthenticatedTicket(
+                "user",
+                ROOM_ID,
+                USER
+        )));
+        when(supportChatService.userCanAccess(ROOM_ID, USER)).thenReturn(true);
+        handler.afterConnectionEstablished(session);
+        handler.handleTextMessage(session, new TextMessage("""
+                {
+                  "type": "AUTH",
+                  "ticket": "%s"
+                }
+                """.formatted(ticket)));
+        return session;
+    }
+
+    private static WebSocketSession authenticatedSession(String mode) {
         WebSocketSession session = mock(WebSocketSession.class);
         Map<String, Object> attributes = new HashMap<>();
-        attributes.put("chatSessionId", "00000000-0000-4000-8000-000000009001");
+        attributes.put("chatSessionId", ROOM_ID);
         attributes.put("mode", mode);
-        attributes.put("authorization", "Bearer jwt-token");
+        attributes.put("user", USER);
+        attributes.put("authenticated", true);
         when(session.getAttributes()).thenReturn(attributes);
         return session;
     }
 
-    private WebSocketSession connectedSession() {
-        WebSocketSession session = session("user");
-        when(session.getUri()).thenReturn(URI.create("ws://localhost/ws/support-chat?token=jwt-token&mode=user&sessionId=" + ROOM_ID));
+    private static WebSocketSession connectedButUnauthenticatedSession(String mode) {
+        WebSocketSession session = mock(WebSocketSession.class);
+        Map<String, Object> attributes = new HashMap<>();
+        when(session.getId()).thenReturn("session-" + mode + "-" + System.nanoTime());
+        when(session.getAttributes()).thenReturn(attributes);
+        when(session.getUri()).thenReturn(URI.create("ws://localhost/ws/support-chat?mode=" + mode + "&sessionId=" + ROOM_ID));
         when(session.isOpen()).thenReturn(true);
-        when(currentUserService.requireUser("Bearer jwt-token")).thenReturn(USER);
-        when(supportChatService.userCanAccess(ROOM_ID, USER)).thenReturn(true);
         return session;
     }
 
     private static void assertSentFrame(WebSocketSession session, String type, String code) throws Exception {
         ArgumentCaptor<TextMessage> captor = ArgumentCaptor.forClass(TextMessage.class);
-        verify(session).sendMessage(captor.capture());
-        String payload = captor.getValue().getPayload();
+        verify(session, org.mockito.Mockito.atLeastOnce()).sendMessage(captor.capture());
+        String payload = captor.getAllValues().get(captor.getAllValues().size() - 1).getPayload();
         assertThat(payload).contains("\"type\":\"" + type + "\"");
-        assertThat(payload).contains("\"code\":\"" + code + "\"");
+        if (code != null) {
+            assertThat(payload).contains("\"code\":\"" + code + "\"");
+        }
     }
 }

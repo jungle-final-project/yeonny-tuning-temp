@@ -51,6 +51,9 @@ class SupportChatControllerTest {
     @MockitoBean
     private SupportChatWebSocketHandler supportChatWebSocketHandler;
 
+    @MockitoBean
+    private SupportChatWebSocketTicketService supportChatWebSocketTicketService;
+
     @Test
     void currentChatWithoutTicketGuidesUserToSupportNew() throws Exception {
         when(currentUserService.requireUser(USER_TOKEN)).thenReturn(USER);
@@ -132,6 +135,44 @@ class SupportChatControllerTest {
 
         verify(currentUserService).requireAdmin(ADMIN_TOKEN);
         verify(supportChatService).adminDetail("chat-session-id", ADMIN, false);
+    }
+
+    @Test
+    void userCanIssueSupportChatWebSocketTicket() throws Exception {
+        when(currentUserService.requireUser(USER_TOKEN)).thenReturn(USER);
+        when(supportChatWebSocketTicketService.issueUserTicket("chat-session-id", USER)).thenReturn(Map.of(
+                "ticket", "ws-ticket-user",
+                "expiresAt", "2026-07-06T10:01:00Z",
+                "expiresInSeconds", 60L
+        ));
+
+        mockMvc.perform(post("/api/support/chat-sessions/chat-session-id/ws-ticket")
+                        .header("Authorization", USER_TOKEN))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.ticket").value("ws-ticket-user"))
+                .andExpect(jsonPath("$.expiresAt").value("2026-07-06T10:01:00Z"))
+                .andExpect(jsonPath("$.expiresInSeconds").value(60));
+
+        verify(currentUserService).requireUser(USER_TOKEN);
+        verify(supportChatWebSocketTicketService).issueUserTicket("chat-session-id", USER);
+    }
+
+    @Test
+    void adminCanIssueSupportChatWebSocketTicket() throws Exception {
+        when(currentUserService.requireAdmin(ADMIN_TOKEN)).thenReturn(ADMIN);
+        when(supportChatWebSocketTicketService.issueAdminTicket("chat-session-id", ADMIN)).thenReturn(Map.of(
+                "ticket", "ws-ticket-admin",
+                "expiresAt", "2026-07-06T10:01:00Z",
+                "expiresInSeconds", 60L
+        ));
+
+        mockMvc.perform(post("/api/admin/support/chat-sessions/chat-session-id/ws-ticket")
+                        .header("Authorization", ADMIN_TOKEN))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.ticket").value("ws-ticket-admin"));
+
+        verify(currentUserService).requireAdmin(ADMIN_TOKEN);
+        verify(supportChatWebSocketTicketService).issueAdminTicket("chat-session-id", ADMIN);
     }
 
     private static Map<String, Object> chatDetail(String sessionId, String content) {

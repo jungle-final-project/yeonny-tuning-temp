@@ -17,6 +17,12 @@ export function postSupportChatMessage(sessionId: string, content: string) {
   });
 }
 
+export function postSupportChatWebSocketTicket(sessionId: string) {
+  return api<SupportChatWebSocketTicketDto>(`/api/support/chat-sessions/${sessionId}/ws-ticket`, {
+    method: 'POST'
+  });
+}
+
 export function getAdminSupportChatSession(sessionId: string, markRead = true) {
   const query = markRead ? '' : '?markRead=false';
   return api<SupportChatSessionDto>(`/api/admin/support/chat-sessions/${sessionId}${query}`);
@@ -33,8 +39,20 @@ export function postAdminSupportChatMessage(sessionId: string, content: string) 
   });
 }
 
+export function postAdminSupportChatWebSocketTicket(sessionId: string) {
+  return api<SupportChatWebSocketTicketDto>(`/api/admin/support/chat-sessions/${sessionId}/ws-ticket`, {
+    method: 'POST'
+  });
+}
+
 export type SupportChatSocket = {
   close: () => void;
+};
+
+type SupportChatWebSocketTicketDto = {
+  ticket?: string;
+  expiresAt?: string;
+  expiresInSeconds?: number;
 };
 
 type SupportChatSocketError = {
@@ -44,7 +62,7 @@ type SupportChatSocketError = {
   retryable?: boolean;
 };
 
-export function openSupportChatSocket(options: {
+export async function openSupportChatSocket(options: {
   mode: 'user' | 'admin';
   sessionId: string;
   onDetail: (detail: SupportChatSessionDto) => void;
@@ -52,13 +70,21 @@ export function openSupportChatSocket(options: {
   onClose?: () => void;
   onError?: () => void;
   onSocketError?: (error: SupportChatSocketError) => void;
-}): SupportChatSocket | null {
-  const token = getToken();
-  if (!token || typeof WebSocket === 'undefined') {
+}): Promise<SupportChatSocket | null> {
+  if (!getToken() || typeof WebSocket === 'undefined') {
     return null;
   }
-  const socket = new WebSocket(supportChatSocketUrl(token, options.mode, options.sessionId));
-  socket.addEventListener('open', () => options.onOpen?.());
+  const ticketResponse = options.mode === 'admin'
+    ? await postAdminSupportChatWebSocketTicket(options.sessionId)
+    : await postSupportChatWebSocketTicket(options.sessionId);
+  if (!ticketResponse.ticket) {
+    return null;
+  }
+  const socket = new WebSocket(supportChatSocketUrl(options.mode, options.sessionId));
+  let connected = false;
+  socket.addEventListener('open', () => {
+    socket.send(JSON.stringify({ type: 'AUTH', ticket: ticketResponse.ticket }));
+  });
   socket.addEventListener('close', () => options.onClose?.());
   socket.addEventListener('error', () => options.onError?.());
   socket.addEventListener('message', (event) => {
@@ -66,6 +92,10 @@ export function openSupportChatSocket(options: {
       const payload = JSON.parse(String(event.data)) as { type?: string; detail?: SupportChatSessionDto } & SupportChatSocketError;
       if (payload.type === 'CHAT_UPDATED' && payload.detail) {
         options.onDetail(payload.detail);
+        if (!connected) {
+          connected = true;
+          options.onOpen?.();
+        }
         return;
       }
       if (payload.type === 'ERROR') {
@@ -82,11 +112,10 @@ export function openSupportChatSocket(options: {
   };
 }
 
-function supportChatSocketUrl(token: string, mode: 'user' | 'admin', sessionId: string) {
+function supportChatSocketUrl(mode: 'user' | 'admin', sessionId: string) {
   const base = API_BASE_URL || window.location.origin;
   const url = new URL('/ws/support-chat', base);
   url.protocol = url.protocol === 'https:' ? 'wss:' : 'ws:';
-  url.searchParams.set('token', token);
   url.searchParams.set('mode', mode);
   url.searchParams.set('sessionId', sessionId);
   return url.toString();

@@ -8,6 +8,7 @@ import type { SupportChatContact, SupportChatMessage, SupportChatSessionDto, Sup
 
 const DEFAULT_POLL_MS = 5000;
 const SOCKET_RECONNECT_DELAYS_MS = [1000, 2000, 5000, 10000];
+type SocketStatus = 'polling' | 'connecting' | 'reconnecting' | 'connected' | 'disconnected';
 
 export function AdminSupportChatSessionsPage() {
   const queryClient = useQueryClient();
@@ -21,7 +22,7 @@ export function AdminSupportChatSessionsPage() {
   const [selectedSessionMarkRead, setSelectedSessionMarkRead] = useState(false);
   const [message, setMessage] = useState('');
   const [sendError, setSendError] = useState<string | null>(null);
-  const [socketConnected, setSocketConnected] = useState(false);
+  const [socketStatus, setSocketStatus] = useState<SocketStatus>('polling');
   const [newMarkerMessageId, setNewMarkerMessageId] = useState<string | null>(null);
 
   const listQuery = useQuery({
@@ -52,7 +53,7 @@ export function AdminSupportChatSessionsPage() {
       setAuthScope(authScopeKey(getCachedAuthUser()));
       socketRef.current?.close();
       socketRef.current = null;
-      setSocketConnected(false);
+      setSocketStatus('polling');
       setSelectedSessionId(null);
       setSelectedSessionMarkRead(false);
       setMessage('');
@@ -68,13 +69,14 @@ export function AdminSupportChatSessionsPage() {
   useEffect(() => {
     socketRef.current?.close();
     socketRef.current = null;
-    setSocketConnected(false);
+    setSocketStatus('polling');
     if (!selectedSessionId) {
       return undefined;
     }
     let disposed = false;
     let reconnectTimer: ReturnType<typeof window.setTimeout> | null = null;
     let reconnectAttempt = 0;
+    let activeConnectionId = 0;
 
     const clearReconnectTimer = () => {
       if (reconnectTimer !== null) {
@@ -85,6 +87,7 @@ export function AdminSupportChatSessionsPage() {
     const scheduleReconnect = () => {
       if (disposed) return;
       if (reconnectTimer !== null) return;
+      setSocketStatus('reconnecting');
       const delay = SOCKET_RECONNECT_DELAYS_MS[Math.min(reconnectAttempt, SOCKET_RECONNECT_DELAYS_MS.length - 1)];
       reconnectAttempt += 1;
       reconnectTimer = window.setTimeout(() => {
@@ -92,37 +95,52 @@ export function AdminSupportChatSessionsPage() {
         connect();
       }, delay);
     };
-    const connect = () => {
+    const connect = async () => {
       if (disposed) return;
-      const socket = openSupportChatSocket({
-        mode: 'admin',
-        sessionId: selectedSessionId,
-        onOpen: () => {
-          if (disposed) return;
-          reconnectAttempt = 0;
-          setSocketConnected(true);
-        },
-        onClose: () => {
-          if (disposed) return;
-          setSocketConnected(false);
-          scheduleReconnect();
-        },
-        onError: () => {
-          if (disposed) return;
-          setSocketConnected(false);
-          scheduleReconnect();
-        },
-        onSocketError: (error) => {
-          if (error.message) {
-            setSendError(error.message);
+      const connectionId = ++activeConnectionId;
+      setSocketStatus(reconnectAttempt > 0 ? 'reconnecting' : 'connecting');
+      try {
+        const socket = await openSupportChatSocket({
+          mode: 'admin',
+          sessionId: selectedSessionId,
+          onOpen: () => {
+            if (disposed || activeConnectionId !== connectionId) return;
+            reconnectAttempt = 0;
+            setSocketStatus('connected');
+          },
+          onClose: () => {
+            if (disposed || activeConnectionId !== connectionId) return;
+            socketRef.current = null;
+            scheduleReconnect();
+          },
+          onError: () => {
+            if (disposed || activeConnectionId !== connectionId) return;
+            setSocketStatus('disconnected');
+            scheduleReconnect();
+          },
+          onSocketError: (error) => {
+            if (error.message) {
+              setSendError(error.message);
+            }
+          },
+          onDetail: (detail) => {
+            wasAtBottomRef.current = isNearBottom(messagesRef.current);
+            cacheDetail(queryClient, authScope, detail);
           }
-        },
-        onDetail: (detail) => {
-          wasAtBottomRef.current = isNearBottom(messagesRef.current);
-          cacheDetail(queryClient, authScope, detail);
+        });
+        if (disposed || activeConnectionId !== connectionId) {
+          socket?.close();
+          return;
         }
-      });
-      socketRef.current = socket;
+        socketRef.current = socket;
+        if (!socket) {
+          setSocketStatus('polling');
+        }
+      } catch (error) {
+        if (disposed || activeConnectionId !== connectionId) return;
+        setSocketStatus('disconnected');
+        scheduleReconnect();
+      }
     };
 
     connect();
@@ -131,7 +149,7 @@ export function AdminSupportChatSessionsPage() {
       clearReconnectTimer();
       socketRef.current?.close();
       socketRef.current = null;
-      setSocketConnected(false);
+      setSocketStatus('polling');
     };
   }, [authScope, selectedSessionId, queryClient]);
 
@@ -243,7 +261,7 @@ export function AdminSupportChatSessionsPage() {
                   <span>티켓 {selectedRoom ? shortId(selectedRoom.asTicketId) : '-'}</span>
                   <span>상태 {selectedRoom?.ticketStatus ?? '-'}</span>
                   <span>안읽음 {selectedRoom?.adminUnreadCount ?? 0}</span>
-                  <span>{socketConnected ? '실시간 연결' : '자동 새로고침'}</span>
+                  <span>{socketStatusLabel(socketStatus)}</span>
                 </div>
               </div>
               <div className="relative h-[440px] overflow-hidden rounded border border-slate-200 bg-slate-50">
@@ -384,6 +402,21 @@ function shortId(id: string) {
 
 function formatDateTime(value?: string) {
   return value ? value.replace('T', ' ').slice(0, 19) : '-';
+}
+
+function socketStatusLabel(status: SocketStatus) {
+  switch (status) {
+    case 'connected':
+      return '실시간 연결';
+    case 'connecting':
+    case 'reconnecting':
+      return '재연결 중';
+    case 'disconnected':
+      return '연결 끊김';
+    case 'polling':
+    default:
+      return '자동 새로고침';
+  }
 }
 
 function errorMessage(error: unknown) {
