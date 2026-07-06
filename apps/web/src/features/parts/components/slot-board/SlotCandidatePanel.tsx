@@ -4,8 +4,12 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { partImageUrl, partShortSpec, specRows } from '../../partDisplay';
 import { listParts } from '../../partsApi';
 import type { PartRow, PartSearchParams, QuoteDraftItem } from '../../types';
+import { openAiAssistant } from '../../../../lib/events';
 import { PriceTrendBadge } from './PriceTrendBadge';
 import { isMultiItemCategory, type SlotConfig } from './slotBoardConfig';
+
+// CPU·GPU만 벤치마크 점수가 있어 교체 성능 비교가 의미 있다 — 그 외 카테고리는 버튼을 숨긴다.
+const PERF_COMPARABLE = new Set(['CPU', 'GPU']);
 
 const CANDIDATE_PAGE_SIZE = 20;
 
@@ -34,6 +38,9 @@ export function SlotCandidatePanel({
   const [replaceTargetId, setReplaceTargetId] = useState<string | null>(null);
   const isMulti = isMultiItemCategory(slot.category);
   const selectedPartIds = new Set(draftItems.map((item) => item.partId));
+  // 교체 성능 비교: CPU·GPU 슬롯에 현재 부품이 있으면, 후보로 바꿨을 때 성능 변화를 챗봇에 물어본다.
+  const currentPart = draftItems[0];
+  const canComparePerf = PERF_COMPARABLE.has(slot.category) && Boolean(currentPart);
 
   // 평가 의미론: 교체 대상을 지정하면 그 행만 빼고(REPLACE+target), RAM/SSD처럼 여러 개 담는
   // 카테고리는 담기 기준(ADD — 기존 구성 유지+후보 합산)으로 평가한다. 단일 슬롯은 서버 기본
@@ -251,21 +258,38 @@ export function SlotCandidatePanel({
                     <div className="mt-0.5 line-clamp-2 text-[10px] font-bold text-red-600">{failReason}</div>
                   ) : null}
                 </div>
-                <button
-                  type="button"
-                  aria-label={isFail ? `${part.name} 선택 불가` : actionLabel}
-                  disabled={isMutating || isSelected || isFail}
-                  onClick={() => replaceTarget ? onReplacePart(replaceTarget.partId, part) : onAddPart(part)}
-                  className={`shrink-0 rounded-md px-2.5 py-2 text-xs font-black transition disabled:cursor-not-allowed ${
-                    isFail
-                      ? 'border border-slate-200 bg-slate-100 text-slate-400'
-                      : isSelected
-                        ? 'border border-commerce-line bg-slate-50 text-slate-400 disabled:opacity-60'
-                        : 'bg-commerce-ink text-white hover:bg-slate-700 disabled:opacity-60'
-                  }`}
-                >
-                  {isFail ? '선택 불가' : isSelected ? '장착됨' : actionText}
-                </button>
+                <div className="flex shrink-0 flex-col items-stretch gap-1.5">
+                  <button
+                    type="button"
+                    aria-label={isFail ? `${part.name} 선택 불가` : actionLabel}
+                    disabled={isMutating || isSelected || isFail}
+                    onClick={() => replaceTarget ? onReplacePart(replaceTarget.partId, part) : onAddPart(part)}
+                    className={`rounded-md px-2.5 py-2 text-xs font-black transition disabled:cursor-not-allowed ${
+                      isFail
+                        ? 'border border-slate-200 bg-slate-100 text-slate-400'
+                        : isSelected
+                          ? 'border border-commerce-line bg-slate-50 text-slate-400 disabled:opacity-60'
+                          : 'bg-commerce-ink text-white hover:bg-slate-700 disabled:opacity-60'
+                    }`}
+                  >
+                    {isFail ? '선택 불가' : isSelected ? '장착됨' : actionText}
+                  </button>
+                  {/* 교체 성능 비교: 현재 부품 → 후보 시뮬레이션을 챗봇에 프리필(읽기 전용, 드래프트 무변경). */}
+                  {canComparePerf && !isSelected ? (
+                    <button
+                      type="button"
+                      data-testid="candidate-perf-compare"
+                      aria-label={`현재 ${currentPart.name}을(를) ${part.name}(으)로 바꾸면 성능 비교`}
+                      onClick={() => openAiAssistant({
+                        prefill: `현재 ${currentPart.name}을(를) ${part.name}(으)로 바꾸면 성능이 어떻게 달라져?`,
+                        autoSubmit: true
+                      })}
+                      className="rounded-md border border-brand-blue/30 bg-blue-50 px-2.5 py-1 text-[10px] font-black text-brand-blue transition hover:bg-blue-100"
+                    >
+                      성능 비교
+                    </button>
+                  ) : null}
+                </div>
               </article>
             );
           })}

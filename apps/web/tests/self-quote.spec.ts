@@ -693,6 +693,106 @@ test('keeps fallback topology edges when the graph api fails', async ({ page }) 
   await expect(page.getByTestId('slot-status-bar').getByText('장착 8/8')).toBeVisible();
 });
 
+test('shows the current build performance panel from the resolve performance tool result', async ({ page }) => {
+  await loginAsUser(page);
+  const draft = {
+    ...emptyDraft,
+    items: [
+      draftItem('part-perf-cpu', 'CPU', '라이젠 9600X', 300000),
+      draftItem('part-perf-gpu', 'GPU', 'RTX 5060', 500000)
+    ],
+    totalPrice: 800000,
+    itemCount: 2
+  };
+  await page.route('**/api/quote-drafts/current**', async (route) => {
+    await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(draft) });
+  });
+  await page.route('**/api/build-graphs/resolve', async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        ...buildGraphResponse(),
+        toolResults: [
+          {
+            tool: 'performance',
+            status: 'WARN',
+            confidence: 'HIGH',
+            summary: '성능 여유가 낮아 상위 부품을 검토해야 합니다. 점수는 참고용입니다.',
+            details: {
+              cpu: '라이젠 9600X',
+              gpu: 'RTX 5060',
+              cpuBenchmarkScore: 68,
+              gpuBenchmarkScore: 63,
+              vramGb: 8,
+              benchmarkSource: 'benchmark_summaries',
+              guaranteePolicy: 'NO_EXACT_FPS_OR_RENDER_TIME_GUARANTEE'
+            }
+          }
+        ]
+      })
+    });
+  });
+  await page.route('**/api/parts**', async (route) => {
+    await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ items: [], page: 0, size: 20, total: 0 }) });
+  });
+
+  await page.goto('/self-quote');
+
+  const panel = page.getByTestId('quote-performance-panel');
+  await expect(panel).toBeVisible();
+  // 용도 적합도(PASS/WARN → 사용자 언어) + 점수 막대 + 근거 표기.
+  await expect(panel.getByTestId('quote-performance-fit')).toHaveText('여유 낮음');
+  await expect(panel.getByTestId('quote-performance-cpu-score')).toContainText('68');
+  await expect(panel.getByTestId('quote-performance-gpu-score')).toContainText('63');
+  await expect(panel.getByTestId('quote-performance-cpu')).toContainText('라이젠 9600X');
+  await expect(panel).toContainText('공개 벤치마크 기준');
+  // 정책: 정확 FPS·실성능 보장 아님 문구 노출.
+  await expect(panel).toContainText('보장하지 않습니다');
+});
+
+test('offers a performance comparison entry point on CPU candidates that prefills the assistant', async ({ page }) => {
+  await loginAsUser(page);
+  const draft = {
+    ...emptyDraft,
+    items: [draftItem('part-perf-cpu', 'CPU', '라이젠 9600X', 300000)],
+    totalPrice: 300000,
+    itemCount: 1
+  };
+  await page.route('**/api/quote-drafts/current**', async (route) => {
+    await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(draft) });
+  });
+  await page.route('**/api/parts**', async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        items: [
+          {
+            id: 'cand-cpu-1',
+            category: 'CPU',
+            name: '인텔 245K',
+            manufacturer: '인텔',
+            price: 350000,
+            attributes: {},
+            compatibility: { status: 'PASS', statusLabel: '호환', summary: '' }
+          }
+        ],
+        page: 0,
+        size: 20,
+        total: 1
+      })
+    });
+  });
+
+  await page.goto('/self-quote?category=CPU');
+
+  // CPU 슬롯에 현재 부품이 있으면 후보마다 '성능 비교' 진입점이 뜬다.
+  const compareBtn = page.getByTestId('candidate-perf-compare').first();
+  await expect(compareBtn).toBeVisible();
+  await expect(compareBtn).toHaveAttribute('aria-label', /현재 라이젠 9600X.*인텔 245K.*성능/);
+});
+
 test('highlights WARN and FAIL slots with edges and blocks purchase on FAIL', async ({ page }) => {
   await loginAsUser(page);
   const saveRequests: unknown[] = [];
