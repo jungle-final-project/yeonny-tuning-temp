@@ -21,6 +21,7 @@ import {
   lockRecommendationTrainingDataset,
   retireRecommendationModel
 } from '../adminApi';
+import type { RecommendationModelComparison } from '../adminApi';
 
 function countLabel(value: number | null | undefined) {
   return `${value ?? 0}건`;
@@ -28,6 +29,30 @@ function countLabel(value: number | null | undefined) {
 
 function percentLabel(value: number | null | undefined) {
   return `${Math.round((value ?? 0) * 1000) / 10}%`;
+}
+
+// M1 champion-challenger verdict 뱃지. 승급 판단의 근거를 관리자에게 한눈에 보여준다.
+const VERDICT_STYLE: Record<string, { label: string; className: string }> = {
+  CHALLENGER_BETTER: { label: '신모델 우세', className: 'bg-emerald-100 text-emerald-800' },
+  CHAMPION_BETTER: { label: '기존모델 우세', className: 'bg-rose-100 text-rose-800' },
+  INCONCLUSIVE: { label: '판단 보류', className: 'bg-slate-100 text-slate-600' },
+  INSUFFICIENT_DATA: { label: '신호 부족', className: 'bg-amber-100 text-amber-800' }
+};
+
+function VerdictBadge({ comparison }: { comparison?: RecommendationModelComparison }) {
+  if (!comparison?.verdict) {
+    return null;
+  }
+  const style = VERDICT_STYLE[comparison.verdict] ?? { label: comparison.verdict, className: 'bg-slate-100 text-slate-600' };
+  const champion = comparison.champion ? ` vs ${comparison.champion}` : '';
+  return (
+    <span
+      className={`mt-1 inline-block rounded px-1.5 py-0.5 text-[10px] font-black ${style.className}`}
+      title={`${comparison.verdictReason ?? ''}${champion}`}
+    >
+      {style.label}
+    </span>
+  );
 }
 
 export function AdminDashboardPage() {
@@ -297,6 +322,7 @@ export function AdminDashboardPage() {
       <div>
         <div className="font-bold text-commerce-ink">{item.modelVersion}</div>
         <div className="text-xs text-slate-500">{item.artifactPath ?? 'artifact 없음'}</div>
+        <VerdictBadge comparison={item.metrics?.comparison} />
       </div>
     ),
     status: <StatusBadge status={item.status} />,
@@ -538,6 +564,13 @@ export function AdminDashboardPage() {
                 )}
                 {trainingMutationError ? (
                   <p className="mt-3 text-xs font-bold text-rose-600">추천 학습 운영 작업에 실패했습니다. 상태와 권한, scorer 연결을 확인하십시오.</p>
+                ) : null}
+                {/* M1: 승급 게이트가 반환한 구체 사유/경고를 관리자에게 그대로 노출한다. */}
+                {activateModelMutation.isError ? (
+                  <p className="mt-2 text-xs font-bold text-rose-600">활성화 거절: {(activateModelMutation.error as Error)?.message ?? '알 수 없는 오류'}</p>
+                ) : null}
+                {activateModelMutation.data?.activationWarning ? (
+                  <p className="mt-2 text-xs font-bold text-amber-700">⚠ {activateModelMutation.data.activationWarning}</p>
                 ) : null}
               </div>
             </div>

@@ -130,6 +130,28 @@ export type RecommendationTrainingJobsResponse = {
   total?: number;
 };
 
+export type RecommendationModelVerdict =
+  | 'CHALLENGER_BETTER'
+  | 'CHAMPION_BETTER'
+  | 'INCONCLUSIVE'
+  | 'INSUFFICIENT_DATA';
+
+// M1 champion-challenger 비교 결과(워커가 metrics.comparison에 기록). 소표본 None 경로가 있어
+// spearman/ndcg는 null 가능.
+export type RecommendationModelComparison = {
+  champion?: string | null;
+  holdoutRows?: number;
+  holdoutPositives?: number;
+  holdoutOverlapWithChampion?: number;
+  challengerSpearman?: number | null;
+  championSpearman?: number | null;
+  spearmanCi95?: [number, number] | null;
+  challengerNdcgAt4?: number | null;
+  championNdcgAt4?: number | null;
+  verdict?: RecommendationModelVerdict;
+  verdictReason?: string;
+};
+
 export type RecommendationModelVersion = {
   id: string;
   modelName?: string;
@@ -138,10 +160,16 @@ export type RecommendationModelVersion = {
   artifactPath?: string | null;
   status: string;
   // 새 학습 워커는 holdout(일반화) 지표를 기록한다. mae는 구 모델의 in-sample 지표.
-  metrics?: { mae?: number; holdout?: { mae?: number; rmse?: number; spearman?: number | null; ndcgAt4Global?: number | null } } & Record<string, unknown>;
+  metrics?: {
+    mae?: number;
+    holdout?: { mae?: number; rmse?: number; spearman?: number | null; ndcgAt4Global?: number | null };
+    comparison?: RecommendationModelComparison;
+  } & Record<string, unknown>;
   featureSchema?: Record<string, unknown>;
   activatedAt?: string | null;
   createdAt?: string | null;
+  // 활성화 응답에서만: 승급 근거가 약했을 때의 경고(M1).
+  activationWarning?: string | null;
 };
 
 export type RecommendationModelsResponse = {

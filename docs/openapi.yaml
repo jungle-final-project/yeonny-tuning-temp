@@ -3511,6 +3511,10 @@ components:
         createdAt:
           type: string
           format: date-time
+        activationWarning:
+          type: string
+          nullable: true
+          description: 활성화 시 승급 근거가 약했던 경우의 경고 문구(M1 champion-challenger). 활성화 응답에서만 채워진다.
     RecommendationModelSummaryResponse:
       type: object
       required: [homeParts, generatedAt]

@@ -12,6 +12,7 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 import org.springframework.http.HttpStatus;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -369,6 +370,10 @@ public class RecommendationTrainingService {
         // 학습-서빙 피처 스큐 게이트(M6): 모델이 지금 서빙 중인 스코어러의 FEATURES와 다른 스키마로
         // 훈련됐으면 승급을 막는다. reload보다 먼저 검사해, 차단 시 스코어러 인메모리 상태를 바꾸지 않는다.
         assertServingSchemaCompatible(model);
+        // Champion-Challenger 승급 게이트(M1): 워커가 기록한 comparison.verdict를 본다. 공정 비교
+        // (현재 ACTIVE 챔피언과 대조 + holdout 겹침 0)에서 챔피언이 더 우수하면 승급을 막는다.
+        // INCONCLUSIVE/INSUFFICIENT_DATA/verdict 부재/stale/겹침>0은 승급 허용(사람 판단 존중, 경고만).
+        String activationWarning = evaluatePromotionVerdict(json(metrics.get("comparison")));
         Map<String, Object> reload = scoringClient.reload(artifactPath);
         Object loaded = reload.get("modelLoaded");
         if (!(loaded instanceof Boolean bool && bool)) {
@@ -389,7 +394,52 @@ public class RecommendationTrainingService {
                 """, longValue(model, "id"));
         // 홈 서빙 경로가 다음 요청부터 즉시 동기 스코어링(실모델 순위 반영)으로 전환하도록 알린다.
         homePartRecommendationService.notifyScorerModelChanged(true);
-        return modelById(longValue(model, "id"));
+        Map<String, Object> activated = modelById(longValue(model, "id"));
+        if (activationWarning != null) {
+            activated.put("activationWarning", activationWarning);
+        }
+        return activated;
+    }
+
+    /**
+     * M1 승급 게이트 판정. 워커 metrics.comparison.verdict를 소비한다.
+     * CHAMPION_BETTER이면서 (1) 비교 대상 챔피언이 현재 ACTIVE와 동일하고 (2) holdout이 챔피언 학습
+     * 구간과 겹치지 않은(공정 비교) 경우에만 409로 승급을 막는다. 그 외에는 승급을 허용하되, 근거가
+     * 약한 경우(챔피언 우세이나 불공정, INCONCLUSIVE/INSUFFICIENT_DATA) 경고 문구를 반환한다.
+     * @return 경고 문구(없으면 null)
+     */
+    private String evaluatePromotionVerdict(Map<String, Object> comparison) {
+        String verdict = text(comparison.get("verdict"));
+        if (verdict == null || "CHALLENGER_BETTER".equals(verdict)) {
+            return null;
+        }
+        if ("CHAMPION_BETTER".equals(verdict)) {
+            boolean sameChampion = Objects.equals(text(comparison.get("champion")), currentActiveModelVersion());
+            boolean fairHoldout = comparison.containsKey("holdoutOverlapWithChampion")
+                    && doubleValue(comparison.get("holdoutOverlapWithChampion")) == 0.0;
+            if (sameChampion && fairHoldout) {
+                throw new ResponseStatusException(HttpStatus.CONFLICT,
+                        "현재 활성 모델이 더 우수해 승급이 거절되었습니다("
+                                + firstText(text(comparison.get("verdictReason")), "champion 우세") + ").");
+            }
+            return "챔피언 우세 판정이나 공정 비교 조건(동일 챔피언·holdout 겹침 0) 미충족으로 승급을 허용했습니다.";
+        }
+        return "승급 근거가 충분치 않습니다(verdict=" + verdict + "). 지표를 확인하고 신중히 판단하세요.";
+    }
+
+    private String currentActiveModelVersion() {
+        return jdbcTemplate.queryForList("""
+                        SELECT model_version
+                        FROM recommendation_model_versions
+                        WHERE deleted_at IS NULL
+                          AND status = 'ACTIVE'
+                        ORDER BY activated_at DESC NULLS LAST, created_at DESC
+                        LIMIT 1
+                        """)
+                .stream()
+                .findFirst()
+                .map(row -> text(row.get("model_version")))
+                .orElse(null);
     }
 
     @Transactional
@@ -860,6 +910,17 @@ public class RecommendationTrainingService {
             return number.longValue();
         }
         return value == null ? 0L : Long.parseLong(value.toString());
+    }
+
+    private static double doubleValue(Object value) {
+        if (value instanceof Number number) {
+            return number.doubleValue();
+        }
+        try {
+            return value == null ? 0.0 : Double.parseDouble(value.toString());
+        } catch (NumberFormatException ignored) {
+            return 0.0;
+        }
     }
 
     private static boolean booleanValue(Object value) {
