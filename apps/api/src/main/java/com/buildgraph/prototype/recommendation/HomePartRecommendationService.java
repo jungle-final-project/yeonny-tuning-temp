@@ -28,6 +28,14 @@ import org.springframework.stereotype.Service;
 public class HomePartRecommendationService {
     private static final Logger log = LoggerFactory.getLogger(HomePartRecommendationService.class);
     private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
+    // 홈 부품 카드가 서빙 시 배출하는 부품 피처 계약 키. 학습 스냅샷·스코어러 FEATURES와 이름·의미가
+    // 일치해야 한다(학습-서빙 스큐 방지, M6). 이 목록은 features() 빌더가 실제 배출하는 언더스코어
+    // 계약 키와 동일하게 유지해야 하며, FeatureContractTest가 스코어러 FEATURES와의 정합을 고정한다.
+    static final List<String> SERVING_CATEGORIES =
+            List.of("CPU", "GPU", "RAM", "MOTHERBOARD", "STORAGE", "PSU", "CASE", "COOLER");
+    static final List<String> SERVING_PART_FEATURE_KEYS = List.of(
+            "part_price", "part_benchmark_score", "part_tool_ready", "part_has_image",
+            "part_has_offer", "part_price_age_days", "part_has_fps_coverage");
     private final JdbcTemplate jdbcTemplate;
     private final RecommendationScoringClient scoringClient;
     private final RecommendationModelRegistry modelRegistry;
@@ -674,7 +682,7 @@ public class HomePartRecommendationService {
                     "part_has_fps_coverage", booleanValue(row.get("has_fps_coverage")),
                     "fps_coverage", booleanValue(row.get("has_fps_coverage"))
             ));
-            for (String category : List.of("CPU", "GPU", "RAM", "MOTHERBOARD", "STORAGE", "PSU", "CASE", "COOLER")) {
+            for (String category : SERVING_CATEGORIES) {
                 features.put("category_" + category, category.equals(category()) ? 1 : 0);
             }
             return features;

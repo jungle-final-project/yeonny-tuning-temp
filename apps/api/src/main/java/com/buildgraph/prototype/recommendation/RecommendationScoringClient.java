@@ -46,6 +46,27 @@ public class RecommendationScoringClient {
         return OBJECT_MAPPER.readValue(response.body(), MAP_TYPE);
     }
 
+    /**
+     * 스코어러의 현재 상태를 읽는다(읽기 전용). 응답의 featureSchema.features는 지금 서빙 중인
+     * 피처 계약이며, 활성화 게이트(M6)가 모델의 feature_schema와 대조하는 데 쓴다. reload와 달리
+     * 모델을 로드하지 않으므로 스코어러 인메모리 상태를 바꾸지 않는다.
+     */
+    public Map<String, Object> health() {
+        try {
+            HttpRequest request = HttpRequest.newBuilder(healthUri())
+                    .timeout(Duration.ofSeconds(3))
+                    .GET()
+                    .build();
+            HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
+            if (response.statusCode() < 200 || response.statusCode() >= 300) {
+                throw new IllegalStateException("scorer health returned HTTP " + response.statusCode());
+            }
+            return OBJECT_MAPPER.readValue(response.body(), MAP_TYPE);
+        } catch (Exception error) {
+            throw new IllegalStateException("scorer health failed: " + error.getMessage(), error);
+        }
+    }
+
     public Map<String, Object> reload(String modelPath) {
         try {
             HttpRequest request = HttpRequest.newBuilder(reloadUri())
@@ -81,14 +102,22 @@ public class RecommendationScoringClient {
     }
 
     private URI reloadUri() {
+        return siblingUri("/reload");
+    }
+
+    private URI healthUri() {
+        return siblingUri("/health");
+    }
+
+    private URI siblingUri(String siblingPath) {
         URI scoreUri = URI.create(endpoint);
         String path = scoreUri.getPath();
-        String reloadPath = path == null || path.isBlank() || "/".equals(path)
-                ? "/reload"
-                : path.replaceFirst("/score$", "/reload");
-        if (reloadPath.equals(path)) {
-            reloadPath = "/reload";
+        String resolved = path == null || path.isBlank() || "/".equals(path)
+                ? siblingPath
+                : path.replaceFirst("/score$", siblingPath);
+        if (resolved.equals(path)) {
+            resolved = siblingPath;
         }
-        return URI.create(scoreUri.getScheme() + "://" + scoreUri.getAuthority() + reloadPath);
+        return URI.create(scoreUri.getScheme() + "://" + scoreUri.getAuthority() + resolved);
     }
 }

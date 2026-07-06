@@ -12,6 +12,7 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 import org.springframework.http.HttpStatus;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -366,6 +367,13 @@ public class RecommendationTrainingService {
             throw new ResponseStatusException(HttpStatus.CONFLICT,
                     "holdout 평가 지표가 없는 모델은 활성화할 수 없습니다. 최신 학습 워커로 재훈련하세요.");
         }
+        // 학습-서빙 피처 스큐 게이트(M6): 모델이 지금 서빙 중인 스코어러의 FEATURES와 다른 스키마로
+        // 훈련됐으면 승급을 막는다. reload보다 먼저 검사해, 차단 시 스코어러 인메모리 상태를 바꾸지 않는다.
+        assertServingSchemaCompatible(model);
+        // Champion-Challenger 승급 게이트(M1): 워커가 기록한 comparison.verdict를 본다. 공정 비교
+        // (현재 ACTIVE 챔피언과 대조 + holdout 겹침 0)에서 챔피언이 더 우수하면 승급을 막는다.
+        // INCONCLUSIVE/INSUFFICIENT_DATA/verdict 부재/stale/겹침>0은 승급 허용(사람 판단 존중, 경고만).
+        String activationWarning = evaluatePromotionVerdict(json(metrics.get("comparison")));
         Map<String, Object> reload = scoringClient.reload(artifactPath);
         Object loaded = reload.get("modelLoaded");
         if (!(loaded instanceof Boolean bool && bool)) {
@@ -386,7 +394,57 @@ public class RecommendationTrainingService {
                 """, longValue(model, "id"));
         // 홈 서빙 경로가 다음 요청부터 즉시 동기 스코어링(실모델 순위 반영)으로 전환하도록 알린다.
         homePartRecommendationService.notifyScorerModelChanged(true);
-        return modelById(longValue(model, "id"));
+        Map<String, Object> activated = modelById(longValue(model, "id"));
+        if (activationWarning != null) {
+            activated.put("activationWarning", activationWarning);
+        }
+        return activated;
+    }
+
+    /**
+     * M1 승급 게이트 판정. 워커 metrics.comparison.verdict를 소비한다.
+     * CHAMPION_BETTER이면서 (1) 비교 대상 챔피언이 현재 ACTIVE와 동일하고 (2) holdout이 챔피언 학습
+     * 구간과 겹치지 않은(공정 비교) 경우에만 409로 승급을 막는다. 그 외에는 승급을 허용하되, 근거가
+     * 약한 경우(챔피언 우세이나 불공정, INCONCLUSIVE/INSUFFICIENT_DATA) 경고 문구를 반환한다.
+     * @return 경고 문구(없으면 null)
+     */
+    private String evaluatePromotionVerdict(Map<String, Object> comparison) {
+        return evaluatePromotionVerdict(comparison, currentActiveModelVersion());
+    }
+
+    // DB 조회를 분리한 순수 판정 로직(단위 테스트 대상). activeModelVersion은 현재 ACTIVE 챔피언의 버전.
+    static String evaluatePromotionVerdict(Map<String, Object> comparison, String activeModelVersion) {
+        String verdict = text(comparison.get("verdict"));
+        if (verdict == null || "CHALLENGER_BETTER".equals(verdict)) {
+            return null;
+        }
+        if ("CHAMPION_BETTER".equals(verdict)) {
+            boolean sameChampion = Objects.equals(text(comparison.get("champion")), activeModelVersion);
+            boolean fairHoldout = comparison.containsKey("holdoutOverlapWithChampion")
+                    && doubleValue(comparison.get("holdoutOverlapWithChampion")) == 0.0;
+            if (sameChampion && fairHoldout) {
+                throw new ResponseStatusException(HttpStatus.CONFLICT,
+                        "현재 활성 모델이 더 우수해 승급이 거절되었습니다("
+                                + firstText(text(comparison.get("verdictReason")), "champion 우세") + ").");
+            }
+            return "챔피언 우세 판정이나 공정 비교 조건(동일 챔피언·holdout 겹침 0) 미충족으로 승급을 허용했습니다.";
+        }
+        return "승급 근거가 충분치 않습니다(verdict=" + verdict + "). 지표를 확인하고 신중히 판단하세요.";
+    }
+
+    private String currentActiveModelVersion() {
+        return jdbcTemplate.queryForList("""
+                        SELECT model_version
+                        FROM recommendation_model_versions
+                        WHERE deleted_at IS NULL
+                          AND status = 'ACTIVE'
+                        ORDER BY activated_at DESC NULLS LAST, created_at DESC
+                        LIMIT 1
+                        """)
+                .stream()
+                .findFirst()
+                .map(row -> text(row.get("model_version")))
+                .orElse(null);
     }
 
     @Transactional
@@ -859,6 +917,17 @@ public class RecommendationTrainingService {
         return value == null ? 0L : Long.parseLong(value.toString());
     }
 
+    private static double doubleValue(Object value) {
+        if (value instanceof Number number) {
+            return number.doubleValue();
+        }
+        try {
+            return value == null ? 0.0 : Double.parseDouble(value.toString());
+        } catch (NumberFormatException ignored) {
+            return 0.0;
+        }
+    }
+
     private static boolean booleanValue(Object value) {
         if (value instanceof Boolean bool) {
             return bool;
@@ -909,6 +978,45 @@ public class RecommendationTrainingService {
         } catch (Exception ignored) {
             return Map.of();
         }
+    }
+
+    /**
+     * 학습-서빙 피처 스큐 게이트(M6). 모델의 feature_schema.features가 현재 스코어러의 서빙 피처
+     * 계약과 다르면 409로 활성화를 막는다. 안전측 설계: 어느 한쪽 스키마를 확정할 수 없으면(구모델의
+     * 스키마 부재, 스코어러 상태 조회 실패) 게이트를 발동하지 않고 뒤의 reload 게이트에 맡긴다 —
+     * 스큐를 "확실히 감지"했을 때만 차단하고, 판정 불능으로 승급을 막지 않는다.
+     */
+    private void assertServingSchemaCompatible(Map<String, Object> model) {
+        List<String> modelFeatures = featureNames(json(model.get("feature_schema")).get("features"));
+        List<String> scorerFeatures;
+        try {
+            scorerFeatures = featureNames(json(scoringClient.health().get("featureSchema")).get("features"));
+        } catch (RuntimeException probeFailed) {
+            return;
+        }
+        if (servingSchemaMismatch(modelFeatures, scorerFeatures)) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT,
+                    "이 모델은 현재 서빙 피처 스키마와 다르게 훈련되었습니다(학습-서빙 스큐). 최신 워커로 재훈련 후 활성화하세요.");
+        }
+    }
+
+    // 순수 스큐 판정(단위 테스트 대상). 양쪽 스키마를 모두 확정할 수 있고 서로 다를 때만 true.
+    // 어느 한쪽이 비면(구모델 스키마 부재 등) 판정 불능으로 보고 차단하지 않는다.
+    static boolean servingSchemaMismatch(List<String> modelFeatures, List<String> scorerFeatures) {
+        return !modelFeatures.isEmpty() && !scorerFeatures.isEmpty() && !scorerFeatures.equals(modelFeatures);
+    }
+
+    private static List<String> featureNames(Object value) {
+        if (!(value instanceof List<?> list)) {
+            return List.of();
+        }
+        List<String> names = new ArrayList<>(list.size());
+        for (Object item : list) {
+            if (item != null) {
+                names.add(item.toString());
+            }
+        }
+        return names;
     }
 
     private static String writeJson(Object value) {

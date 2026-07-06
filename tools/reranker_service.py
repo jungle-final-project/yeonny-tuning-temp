@@ -17,6 +17,7 @@ import argparse
 import json
 import math
 import os
+import random
 import shutil
 import threading
 import time
@@ -184,6 +185,8 @@ def make_handler(state: ScorerState):
                 "modelLoaded": scorer.model is not None,
                 "modelLoadError": scorer.load_error,
                 "counters": counters,
+                # 활성화 게이트(M6)가 모델의 feature_schema와 대조할 현재 서빙 피처 계약.
+                "featureSchema": {"features": FEATURES},
             })
 
         def do_POST(self):  # noqa: N802 - stdlib callback name
@@ -245,6 +248,7 @@ def make_handler(state: ScorerState):
                 "modelVersion": scorer.model_version,
                 "modelLoaded": scorer.model is not None,
                 "modelLoadError": scorer.load_error,
+                "featureSchema": {"features": FEATURES},
             })
 
         def read_json(self) -> dict[str, Any]:
@@ -430,6 +434,191 @@ def ndcg_at_k(predictions: list[float], actuals: list[float], k: int = 4) -> flo
     return dcg / ideal_dcg
 
 
+# ---------------------------------------------------------------------------
+# M1 Champion-Challenger 승급 비교 (설계 docs/mlops-maturity-design.md §2)
+# 모두 순수 함수/국소 I/O로, 실패해도 학습 잡을 터뜨리지 않고 verdict 사유로만 남긴다.
+# ---------------------------------------------------------------------------
+
+VERDICT_MIN_POSITIVES = int(os.getenv("RECOMMENDATION_COMPARE_MIN_POSITIVES", "10"))
+
+
+def baseline_comparison_score(features: dict[str, Any]) -> float:
+    # champion=baseline일 때의 예측 점수. Scorer.score의 model-None 휴리스틱과 동일하되 rank_position
+    # 항을 0으로 고정한다(→ 상수항 10): 훈련 스냅샷의 rank_position(노출 위치)은 라벨과 상관돼 baseline
+    # spearman을 부풀리는데 challenger XGB는 rank_position을 안 쓰므로 불공정 비교가 되기 때문(설계 2b).
+    price = number(features.get("part_price")) or number(features.get("totalPrice")) or 0
+    benchmark = number(features.get("part_benchmark_score")) or number(features.get("benchmark_score")) or 0
+    has_image = 1 if truthy(features.get("part_has_image")) or truthy(features.get("has_image")) else 0
+    has_offer = 1 if truthy(features.get("part_has_offer")) or truthy(features.get("has_offer")) else 0
+    return float(10 + benchmark / 20 + has_image + has_offer - (price / 10_000_000))
+
+
+def paired_spearman_diff_ci(
+    challenger_preds: list[float],
+    champion_preds: list[float],
+    actuals: list[float],
+    iterations: int = 1000,
+    seed: int = 42,
+) -> tuple[float, float] | None:
+    # (challenger spearman - champion spearman)의 paired bootstrap 95% CI. holdout 행을 복원추출로
+    # 리샘플해 두 모델의 순위 상관 차를 재계산한다. degenerate(분산 0) 리샘플은 건너뛰고, 유효 표본이
+    # 절반 미만이면 판정 불가(None)로 본다. 소표본 노이즈 위에 하드 게이트를 얹지 않기 위함(설계 2c).
+    n = len(actuals)
+    if n < 2:
+        return None
+    rng = random.Random(seed)
+    diffs: list[float] = []
+    for _ in range(iterations):
+        idx = [rng.randrange(n) for _ in range(n)]
+        resampled_actuals = [actuals[i] for i in idx]
+        challenger = spearman_correlation([challenger_preds[i] for i in idx], resampled_actuals)
+        champion = spearman_correlation([champion_preds[i] for i in idx], resampled_actuals)
+        if challenger is None or champion is None:
+            continue
+        diffs.append(challenger - champion)
+    if len(diffs) < iterations * 0.5:
+        return None
+    diffs.sort()
+    low = diffs[int(0.025 * len(diffs))]
+    high = diffs[min(len(diffs) - 1, int(0.975 * len(diffs)))]
+    return (low, high)
+
+
+def decide_verdict(
+    challenger_spearman: float | None,
+    champion_spearman: float | None,
+    ci: tuple[float, float] | None,
+    holdout_positives: int,
+    challenger_ndcg: float | None,
+    min_positives: int = VERDICT_MIN_POSITIVES,
+) -> tuple[str, str]:
+    # 설계 2c 3단 규칙. 소표본/지표 불능이면 INSUFFICIENT_DATA(게이트 비활성), 그 외에는 spearman 차
+    # 95% CI가 0을 배제할 때만 우열을 가린다.
+    if holdout_positives < min_positives:
+        return "INSUFFICIENT_DATA", f"holdout 양성 라벨 {holdout_positives}건 < {min_positives}건"
+    if challenger_spearman is None or champion_spearman is None or challenger_ndcg is None:
+        return "INSUFFICIENT_DATA", "지표 계산 불능(순위/gain 분산 부족)"
+    if ci is None:
+        return "INCONCLUSIVE", "bootstrap CI 계산 불능"
+    low, high = ci
+    if low > 0:
+        return "CHALLENGER_BETTER", f"spearman 차 95% CI [{low:.3f}, {high:.3f}] > 0"
+    if high < 0:
+        return "CHAMPION_BETTER", f"spearman 차 95% CI [{low:.3f}, {high:.3f}] < 0"
+    return "INCONCLUSIVE", f"spearman 차 95% CI [{low:.3f}, {high:.3f}]가 0을 포함"
+
+
+def load_active_champion() -> dict[str, Any] | None:
+    # 현재 ACTIVE 챔피언 모델의 비교 메타. 없으면(=baseline 서빙 중) None.
+    with db_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                SELECT model_version, artifact_path, feature_schema, trained_to
+                FROM recommendation_model_versions
+                WHERE status = 'ACTIVE'
+                  AND deleted_at IS NULL
+                ORDER BY activated_at DESC NULLS LAST, created_at DESC
+                LIMIT 1
+                """
+            )
+            return cur.fetchone()
+
+
+def champion_predictor(champion: dict[str, Any] | None):
+    # (predict_fn, champion_label, skip_reason). champion이 XGB인데 스키마 불일치/아티팩트 부재/로드
+    # 실패면 predict_fn=None + 사유를 돌려 verdict를 INCONCLUSIVE로 만든다(조용한 왜곡 방지, 설계 2b).
+    if champion is None:
+        return (lambda features: baseline_comparison_score(features)), "baseline-heuristic", None
+    schema = champion.get("feature_schema") or {}
+    champion_features = schema.get("features") if isinstance(schema, dict) else None
+    if champion_features != FEATURES:
+        return None, champion.get("model_version"), "featureSchemaMismatch"
+    artifact = champion.get("artifact_path")
+    if not artifact or not Path(artifact).exists():
+        return None, champion.get("model_version"), "artifactMissing"
+    try:
+        from xgboost import XGBRegressor
+
+        model = XGBRegressor()
+        model.load_model(artifact)
+    except Exception as exc:
+        return None, champion.get("model_version"), f"loadFailed:{exc}"
+
+    def predict(features: dict[str, Any]) -> float:
+        row = [[feature_value(features, name) for name in FEATURES]]
+        return float(model.predict(row)[0])
+
+    return predict, champion.get("model_version"), None
+
+
+def build_champion_comparison(
+    holdout_rows: list[dict[str, Any]],
+    y_holdout: list[float],
+    challenger_predictions: list[float],
+) -> dict[str, Any]:
+    # M1 2b/2c. 비교용 holdout은 champion.trained_to 이후 이벤트로 한정(챔피언 in-sample 이점 제거)하고,
+    # 두 모델을 같은 부분집합에 대해 채점해 paired bootstrap으로 우열을 가린다.
+    try:
+        champion = load_active_champion()
+    except Exception as exc:
+        return {"champion": None, "verdict": "INCONCLUSIVE", "verdictReason": f"championLoadFailed:{exc}"}
+
+    predict_fn, champion_label, skip_reason = champion_predictor(champion)
+
+    trained_to = champion.get("trained_to") if champion else None
+    full_n = len(holdout_rows)
+    if trained_to is not None:
+        keep = [
+            i for i, row in enumerate(holdout_rows)
+            if row.get("event_created_at") is not None and row["event_created_at"] > trained_to
+        ]
+    else:
+        keep = list(range(full_n))
+    overlap = 0.0 if full_n == 0 else round((full_n - len(keep)) / full_n, 4)
+
+    comparison: dict[str, Any] = {
+        "champion": champion_label,
+        "holdoutRows": len(keep),
+        "holdoutOverlapWithChampion": overlap,
+    }
+    if predict_fn is None:
+        comparison["verdict"] = "INCONCLUSIVE"
+        comparison["verdictReason"] = skip_reason
+        return comparison
+
+    # champion 예측(predict-time)·지표 계산도 방어한다. champion 아티팩트가 로드는 됐으나 xgboost 버전
+    # 스큐/부분 손상으로 predict에서 던지는 경우, 정상 학습된 challenger를 버리지 않고 verdict를
+    # INCONCLUSIVE로 강등한다(설계 2b/2c: 비교 실패는 승급 허용 대상, 학습은 계속).
+    try:
+        y_keep = [y_holdout[i] for i in keep]
+        challenger_keep = [challenger_predictions[i] for i in keep]
+        champion_keep = [predict_fn(holdout_rows[i].get("features_snapshot") or {}) for i in keep]
+        positives = sum(1 for value in y_keep if value > 0)
+
+        challenger_spearman = spearman_correlation(challenger_keep, y_keep)
+        champion_spearman = spearman_correlation(champion_keep, y_keep)
+        both_defined = challenger_spearman is not None and champion_spearman is not None
+        ci = paired_spearman_diff_ci(challenger_keep, champion_keep, y_keep) if both_defined else None
+        challenger_ndcg = ndcg_at_k(challenger_keep, y_keep, 4)
+        verdict, reason = decide_verdict(challenger_spearman, champion_spearman, ci, positives, challenger_ndcg)
+
+        comparison.update({
+            "holdoutPositives": positives,
+            "challengerSpearman": challenger_spearman,
+            "championSpearman": champion_spearman,
+            "spearmanCi95": list(ci) if ci else None,
+            "challengerNdcgAt4": challenger_ndcg,
+            "championNdcgAt4": ndcg_at_k(champion_keep, y_keep, 4),
+            "verdict": verdict,
+            "verdictReason": reason,
+        })
+    except Exception as exc:
+        comparison["verdict"] = "INCONCLUSIVE"
+        comparison["verdictReason"] = f"comparisonFailed:{exc}"
+    return comparison
+
+
 def train_model(job_id: int, dataset_id: int, rows: list[dict[str, Any]], worker_id: str):
     from psycopg2.extras import Json
     from xgboost import XGBRegressor
@@ -447,16 +636,35 @@ def train_model(job_id: int, dataset_id: int, rows: list[dict[str, Any]], worker
     train_size = len(rows) - holdout_size
     x_train, y_train = x[:train_size], y[:train_size]
     x_holdout, y_holdout = x[train_size:], y[train_size:]
+    holdout_rows = rows[train_size:]
 
-    model = XGBRegressor(
-        n_estimators=200,
-        max_depth=3,
-        learning_rate=0.08,
-        objective="reg:squarederror",
-        random_state=42,
-        early_stopping_rounds=15,
-    )
-    model.fit(x_train, y_train, eval_set=[(x_holdout, y_holdout)], verbose=False)
+    # M1 2a: early stopping 검증셋은 train 내부의 마지막 ~15%로 분리한다. holdout을 early stopping에
+    # 소비하면 challenger가 그 위에서 iteration을 '선택'해 champion 비교가 부풀려지므로(모델 선택과
+    # 평가의 분리), holdout은 순수 평가/비교 전용으로 남긴다. train이 너무 작아(< 10) fit 세트가 붕괴하면
+    # early stopping 없이 x_train 전체로 학습한다(검증셋 1행짜리 무의미 학습 방지).
+    if len(x_train) >= 10:
+        earlyval_size = max(2, len(x_train) // 7)
+        x_fit, y_fit = x_train[:-earlyval_size], y_train[:-earlyval_size]
+        x_earlyval, y_earlyval = x_train[-earlyval_size:], y_train[-earlyval_size:]
+        model = XGBRegressor(
+            n_estimators=200,
+            max_depth=3,
+            learning_rate=0.08,
+            objective="reg:squarederror",
+            random_state=42,
+            early_stopping_rounds=15,
+        )
+        model.fit(x_fit, y_fit, eval_set=[(x_earlyval, y_earlyval)], verbose=False)
+    else:
+        # 너무 작아 검증셋을 못 떼면 early stopping 없이 학습한다.
+        model = XGBRegressor(
+            n_estimators=200,
+            max_depth=3,
+            learning_rate=0.08,
+            objective="reg:squarederror",
+            random_state=42,
+        )
+        model.fit(x_train, y_train, verbose=False)
 
     train_predictions = [float(value) for value in model.predict(x_train)]
     holdout_predictions = [float(value) for value in model.predict(x_holdout)]
@@ -468,6 +676,8 @@ def train_model(job_id: int, dataset_id: int, rows: list[dict[str, Any]], worker
         "ndcgAt4Global": ndcg_at_k(holdout_predictions, y_holdout, 4),
         "split": "TIME_LAST_20PCT",
     }
+    # M1 2b/2c: 현재 ACTIVE 챔피언과의 순위 비교(verdict). 실패해도 학습을 막지 않는다.
+    comparison = build_champion_comparison(holdout_rows, y_holdout, holdout_predictions)
 
     model_version = f"home-parts-{datetime.now(timezone.utc).strftime('%Y%m%d%H%M%S')}-job{job_id}"
     artifact_path = f"/models/{model_version}.json"
@@ -482,6 +692,7 @@ def train_model(job_id: int, dataset_id: int, rows: list[dict[str, Any]], worker
         "trainMae": mean_absolute_error(train_predictions, y_train),
         "trainRmse": root_mean_squared_error(train_predictions, y_train),
         "holdout": holdout_metrics,
+        "comparison": comparison,
         "bestIteration": int(getattr(model, "best_iteration", 0) or 0),
         "createdAt": datetime.now(timezone.utc).isoformat(),
         "workerId": worker_id,
