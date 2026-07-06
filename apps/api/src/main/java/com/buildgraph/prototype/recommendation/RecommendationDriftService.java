@@ -117,6 +117,9 @@ public class RecommendationDriftService {
                         JOIN recommendation_training_jobs j ON j.dataset_id = i.dataset_id
                         WHERE j.model_version_id = ?
                           AND i.included = true
+                          -- current 카탈로그 쿼리의 price>0과 대칭. features_snapshot의 part_price=0은 실제
+                          -- 무료가 아니라 가격 결측(null→0 스냅샷)이라, 양쪽 모두 제외해야 분포가 정합한다.
+                          AND (i.features_snapshot->>'part_price')::numeric > 0
                         """, modelId);
 
         Map<String, Object> result = new LinkedHashMap<>();
@@ -205,12 +208,20 @@ public class RecommendationDriftService {
         Double jobFailureRate = jobTotal == 0 ? null : round4((double) jobFailed / jobTotal);
 
         // scorer scoreErrors 증분: 직전 스냅샷의 저장값과 비교. 현재값 < 직전값이면 컨테이너 리셋으로 간주.
-        long currentScoreErrors = scorerScoreErrors();
+        // 조회 실패(null)면 '측정 불가'로 표기 — 0으로 저장하면 baseline이 오염돼 다음날 과대/과소 보고가 된다.
+        Long currentScoreErrors = scorerScoreErrors();
         Long previousScoreErrors = previousScoreErrors();
-        long scoreErrorsDelta;
-        if (previousScoreErrors == null || currentScoreErrors < previousScoreErrors) {
-            scoreErrorsDelta = currentScoreErrors;
+        boolean measured = currentScoreErrors != null;
+        Long scoreErrorsTotal;
+        Long scoreErrorsDelta;
+        if (!measured) {
+            scoreErrorsTotal = previousScoreErrors; // 마지막 측정값 carry-forward — 0 오염 방지
+            scoreErrorsDelta = null;
+        } else if (previousScoreErrors == null || currentScoreErrors < previousScoreErrors) {
+            scoreErrorsTotal = currentScoreErrors;
+            scoreErrorsDelta = currentScoreErrors; // 최초 또는 리셋
         } else {
+            scoreErrorsTotal = currentScoreErrors;
             scoreErrorsDelta = currentScoreErrors - previousScoreErrors;
         }
 
@@ -218,12 +229,14 @@ public class RecommendationDriftService {
                 "fallbackRatio", fallbackRatio,
                 "impressionCount", total,
                 "trainingJobFailureRate", jobFailureRate,
-                "scoreErrorsTotal", currentScoreErrors,
+                "scoreErrorsMeasured", measured,
+                "scoreErrorsTotal", scoreErrorsTotal,
                 "scoreErrorsDelta", scoreErrorsDelta
         );
     }
 
-    private long scorerScoreErrors() {
+    // scorer 인메모리 scoreErrors 카운터. 조회 실패나 형식 불일치면 '측정 불가'로 null 반환(0으로 붕괴 금지).
+    private Long scorerScoreErrors() {
         try {
             Object counters = scoringClient.health().get("counters");
             if (counters instanceof Map<?, ?> map && map.get("scoreErrors") instanceof Number number) {
@@ -232,7 +245,7 @@ public class RecommendationDriftService {
         } catch (RuntimeException probeFailed) {
             LOGGER.info("scorer health 조회 실패(scoreErrors 증분 생략): {}", probeFailed.getMessage());
         }
-        return 0L;
+        return null;
     }
 
     private Long previousScoreErrors() {

@@ -82,8 +82,12 @@ public class PipelineJobRunRecorder {
 
     /** 데모 동결 등으로 실행을 건너뛴 사실도 이력에 남긴다(침묵 스킵 방지). */
     public void recordSkippedFrozen(String jobName) {
+        recordSkippedFrozen(jobName, "SCHEDULED");
+    }
+
+    public void recordSkippedFrozen(String jobName, String triggerType) {
         OffsetDateTime now = OffsetDateTime.now();
-        insert(jobName, "SCHEDULED", "SKIPPED_FROZEN", null, "데모 동결(DEMO_FREEZE_MUTATIONS)로 실행을 건너뛰었습니다.", now, 0L);
+        insert(jobName, triggerType, "SKIPPED_FROZEN", null, "데모 동결(DEMO_FREEZE_MUTATIONS)로 실행을 건너뛰었습니다.", now, 0L);
     }
 
     public Map<String, Object> listRecent(Integer limit) {

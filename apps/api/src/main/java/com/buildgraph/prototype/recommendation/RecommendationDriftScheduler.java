@@ -68,11 +68,17 @@ public class RecommendationDriftScheduler {
 
         Map<String, Object> result = snapshot.get();
         boolean severe = result != null && Boolean.TRUE.equals(result.get("catalogPsiSevere"));
-        if (severe && retrainOnSevere && !demoFreezeGuard.frozen()) {
-            // min-interval-days=0으로 즉시 재훈련(주 1회 스케줄을 안 기다림). trigger_type=DRIFT_TRIGGERED.
-            LOGGER.warn("Severe catalog PSI drift detected → triggering immediate retraining");
-            jobRunRecorder.run(RETRAIN_JOB, "DRIFT_TRIGGERED", () ->
-                    trainingService.runAutoRetrain(minNewEvents, minNewPositives, 0, minRows));
+        if (severe && retrainOnSevere) {
+            if (demoFreezeGuard.frozen()) {
+                // 침묵 스킵 금지(원칙 5): 심각 드리프트인데 동결로 재훈련을 못 한 사실을 이력에 남긴다.
+                LOGGER.info("Severe drift retraining skipped: demo freeze is on");
+                jobRunRecorder.recordSkippedFrozen(RETRAIN_JOB, "DRIFT_TRIGGERED");
+            } else {
+                // min-interval-days=0으로 즉시 재훈련(주 1회 스케줄을 안 기다림). trigger_type=DRIFT_TRIGGERED.
+                LOGGER.warn("Severe catalog PSI drift detected → triggering immediate retraining");
+                jobRunRecorder.run(RETRAIN_JOB, "DRIFT_TRIGGERED", () ->
+                        trainingService.runAutoRetrain(minNewEvents, minNewPositives, 0, minRows));
+            }
         }
     }
 }
