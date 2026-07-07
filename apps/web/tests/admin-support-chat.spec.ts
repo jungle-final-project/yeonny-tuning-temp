@@ -70,7 +70,7 @@ test('admin support chat limits answer input to 2000 characters', async ({ page 
   await expect(page.getByPlaceholder('관리자 답변을 입력하세요')).toHaveAttribute('maxLength', '2000');
 });
 
-test('admin support chat updates the room list from websocket push', async ({ page }) => {
+test('admin support chat updates an existing room from the queue websocket push', async ({ page }) => {
   await mockOpenSupportWebSocket(page);
   await mockAdmin(page);
   await mockAdminSupportChats(page, () => {});
@@ -79,48 +79,32 @@ test('admin support chat updates the room list from websocket push', async ({ pa
   await expect(page.getByRole('cell', { name: '게임 실행 후 온도가 95도까지 올라갑니다.' })).toBeVisible();
   const roomListPanel = page.locator('section').filter({ has: page.getByRole('heading', { name: '상담방 목록' }) });
   await expect(roomListPanel.getByText('재연결 중', { exact: true })).toBeVisible();
-
-  await page.evaluate(() => {
-    const sockets = (window as unknown as { __supportChatSockets?: EventTarget[] }).__supportChatSockets ?? [];
+  await expect.poll(() => page.evaluate(() => {
     const urls = (window as unknown as { __supportChatSocketUrls?: string[] }).__supportChatSocketUrls ?? [];
-    let index = -1;
-    for (let i = urls.length - 1; i >= 0; i -= 1) {
-      if (urls[i].includes('/ws/support-chat')) {
-        index = i;
-        break;
-      }
+    return urls.some((url) => url.includes('/ws/admin/support-chat-queue'));
+  })).toBe(true);
+
+  await pushAdminQueueReady(page);
+  await pushAdminQueueUpdated(page, {
+    id: '00000000-0000-4000-8000-000000009001',
+    asTicketId: '00000000-0000-4000-8000-000000006001',
+    status: 'ACTIVE',
+    ticketStatus: 'OPEN',
+    title: 'AS 상담방',
+    symptom: 'GPU 온도 상승',
+    lastMessagePreview: '방금 추가로 로그를 올렸습니다.',
+    lastMessageAt: '2026-07-06T10:09:00Z',
+    userUnreadCount: 0,
+    adminUnreadCount: 5,
+    canSendMessage: true,
+    user: {
+      id: '00000000-0000-4000-8000-000000001004',
+      email: 'user-a@example.com',
+      name: 'User A'
     }
-    const socket = sockets[index];
-    socket?.dispatchEvent(new MessageEvent('message', {
-      data: JSON.stringify({
-        type: 'CHAT_UPDATED',
-        detail: {
-          contact: {
-            id: '00000000-0000-4000-8000-000000009001',
-            asTicketId: '00000000-0000-4000-8000-000000006001',
-            status: 'ACTIVE',
-            ticketStatus: 'OPEN',
-            title: 'AS 상담방',
-            symptom: 'GPU 온도 상승',
-            lastMessagePreview: '방금 추가로 로그를 올렸습니다.',
-            lastMessageAt: '2026-07-06T10:09:00Z',
-            userUnreadCount: 0,
-            adminUnreadCount: 5,
-            canSendMessage: true,
-            user: {
-              id: '00000000-0000-4000-8000-000000001004',
-              email: 'user-a@example.com',
-              name: 'User A'
-            }
-          },
-          messages: [],
-          pollingIntervalMs: 5000
-        }
-      })
-    }));
   });
 
-  await expect(page.getByText('실시간 연결')).toBeVisible();
+  await expect(roomListPanel.getByText('실시간 연결', { exact: true })).toBeVisible();
   await expect(page.getByRole('cell', { name: '방금 추가로 로그를 올렸습니다.' })).toBeVisible();
   await expect(page.getByRole('row', { name: /user-a@example.com/ })).toContainText('5');
 });
@@ -843,6 +827,25 @@ async function pushAdminQueueUpdated(page: Page, contact: Record<string, unknown
       })
     }));
   }, contact);
+}
+
+async function pushAdminQueueReady(page: Page) {
+  await page.evaluate(() => {
+    const sockets = (window as unknown as { __supportChatSockets?: EventTarget[] }).__supportChatSockets ?? [];
+    const urls = (window as unknown as { __supportChatSocketUrls?: string[] }).__supportChatSocketUrls ?? [];
+    let index = -1;
+    for (let i = urls.length - 1; i >= 0; i -= 1) {
+      if (urls[i].includes('/ws/admin/support-chat-queue')) {
+        index = i;
+        break;
+      }
+    }
+    sockets[index]?.dispatchEvent(new MessageEvent('message', {
+      data: JSON.stringify({
+        type: 'SUPPORT_CHAT_QUEUE_READY'
+      })
+    }));
+  });
 }
 
 async function pushAdminQueueRemoved(page: Page, id: string) {
