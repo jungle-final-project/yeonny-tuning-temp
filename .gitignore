@@ -6,6 +6,8 @@ apps/api/.gradle/
 apps/api/bin/
 *.log
 .env
+.env.prod
+.env.prod.local
 .DS_Store
 target/
 __pycache__/

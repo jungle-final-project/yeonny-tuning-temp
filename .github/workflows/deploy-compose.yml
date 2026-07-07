@@ -1,0 +1,136 @@
+name: Deploy EC2 Compose
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: deploy-compose-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    name: deploy
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      EC2_HOST: ${{ secrets.EC2_HOST }}
+      EC2_USER: ${{ secrets.EC2_USER }}
+      EC2_APP_DIR: ${{ secrets.EC2_APP_DIR }}
+      SSH_KEY_PATH: ${{ runner.temp }}/buildgraph-ec2-key
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: apps/web/package-lock.json
+
+      - name: Build web
+        working-directory: apps/web
+        run: |
+          npm ci
+          npm run build
+
+      - name: Set up Java 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Build API
+        working-directory: apps/api
+        run: ./gradlew bootJar --no-daemon
+
+      - name: Validate production compose
+        run: docker compose -f compose.prod.yaml --env-file .env.prod.example config --quiet
+
+      - name: Check deployment secrets
+        id: deploy_config
+        shell: bash
+        run: |
+          set -euo pipefail
+          missing=()
+          [ -n "${EC2_HOST:-}" ] || missing+=("EC2_HOST")
+          [ -n "${EC2_USER:-}" ] || missing+=("EC2_USER")
+          [ -n "${EC2_APP_DIR:-}" ] || missing+=("EC2_APP_DIR")
+          [ -n "${EC2_SSH_KEY:-}" ] || missing+=("EC2_SSH_KEY")
+          if [ "${#missing[@]}" -gt 0 ]; then
+            echo "Missing deployment secrets: ${missing[*]}"
+            if [ "$GITHUB_EVENT_NAME" = "workflow_dispatch" ]; then
+              exit 1
+            fi
+            echo "enabled=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          echo "enabled=true" >> "$GITHUB_OUTPUT"
+        env:
+          EC2_SSH_KEY: ${{ secrets.EC2_SSH_KEY }}
+
+      - name: Prepare SSH
+        if: steps.deploy_config.outputs.enabled == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          : "${EC2_HOST:?EC2_HOST secret is required}"
+          : "${EC2_USER:?EC2_USER secret is required}"
+          : "${EC2_APP_DIR:?EC2_APP_DIR secret is required}"
+          : "${EC2_SSH_KEY:?EC2_SSH_KEY secret is required}"
+          mkdir -p ~/.ssh
+          printf '%s\n' "$EC2_SSH_KEY" > "$SSH_KEY_PATH"
+          chmod 600 "$SSH_KEY_PATH"
+          ssh-keyscan -H "$EC2_HOST" >> ~/.ssh/known_hosts
+        env:
+          EC2_SSH_KEY: ${{ secrets.EC2_SSH_KEY }}
+
+      - name: Prepare remote app directory
+        if: steps.deploy_config.outputs.enabled == 'true'
+        shell: bash
+        run: ssh -i "$SSH_KEY_PATH" "$EC2_USER@$EC2_HOST" "mkdir -p '$EC2_APP_DIR'"
+
+      - name: Sync repository to EC2
+        if: steps.deploy_config.outputs.enabled == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          rsync -az --delete \
+            --exclude '.git' \
+            --exclude '.env' \
+            --exclude '.env.prod' \
+            --exclude '.env.prod.local' \
+            --exclude 'node_modules' \
+            --exclude 'apps/web/node_modules' \
+            --exclude 'apps/web/dist' \
+            --exclude 'apps/web/playwright-report' \
+            --exclude 'apps/web/test-results' \
+            --exclude 'apps/api/build' \
+            --exclude 'apps/api/.gradle' \
+            --exclude '.venv' \
+            --exclude '.cache' \
+            --exclude 'artifacts' \
+            -e "ssh -i $SSH_KEY_PATH" \
+            ./ "$EC2_USER@$EC2_HOST:$EC2_APP_DIR/"
+
+      - name: Restart production compose on EC2
+        if: steps.deploy_config.outputs.enabled == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          ssh -i "$SSH_KEY_PATH" "$EC2_USER@$EC2_HOST" \
+            "cd '$EC2_APP_DIR' && \
+             test -f .env.prod && \
+             docker compose -f compose.prod.yaml --env-file .env.prod config --quiet && \
+             docker compose -f compose.prod.yaml --env-file .env.prod up -d --build --remove-orphans && \
+             docker image prune -f"
