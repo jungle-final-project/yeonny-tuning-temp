@@ -2,6 +2,7 @@ import { FormEvent, useEffect, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { AdminShell, DataTable, Panel, StateMessage, StatusBadge } from '../../../components/ui';
+import { formatSeoulDateTime } from '../../../lib/dateTime';
 import { createAsRecommendationFeedback, getAdminTicket, updateAdminTicket } from '../adminApi';
 import type { AdminAsTicket, AsTicketStatus } from '../adminApi';
 
@@ -549,7 +550,7 @@ function shortId(id: string) {
 }
 
 function formatDateTime(value?: string | null) {
-  return value ? value.replace('T', ' ').slice(0, 19) : '-';
+  return formatSeoulDateTime(value);
 }
 
 function compactJson(value?: Record<string, unknown> | null) {

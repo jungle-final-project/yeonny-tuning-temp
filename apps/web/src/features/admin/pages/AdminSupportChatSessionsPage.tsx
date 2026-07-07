@@ -4,6 +4,7 @@ import { Link } from 'react-router-dom';
 import { CheckCircle2, Send } from 'lucide-react';
 import { AdminShell, DataTable, Panel, StateMessage } from '../../../components/ui';
 import { AUTH_CHANGED_EVENT, getCachedAuthUser } from '../../../lib/api';
+import { formatSeoulDateTime } from '../../../lib/dateTime';
 import { deleteAdminSupportChatSession, deleteAdminSupportChatVisitReservation, getAdminSupportChatSession, getAdminSupportChatSessions, openAdminSupportChatQueueSocket, openSupportChatSocket, postAdminSupportChatMessage, putAdminSupportChatVisitReservation, type SupportChatSocket } from '../../support/supportChatApi';
 import { KoreanStatusBadge } from '../adminDisplay';
 import type { SupportChatContact, SupportChatMessage, SupportChatSessionDto, SupportChatSessionListDto, VisitSupportReservation } from '../../support/types';
@@ -771,7 +772,7 @@ function shortId(id: string) {
 }
 
 function formatDateTime(value?: string) {
-  return value ? value.replace('T', ' ').slice(0, 19) : '-';
+  return formatSeoulDateTime(value);
 }
 
 function pollingLabel(list: SupportChatSessionListDto | undefined) {

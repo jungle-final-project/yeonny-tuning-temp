@@ -1,6 +1,7 @@
 import { useQuery } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
 import { AdminShell, DataTable, Panel, StateMessage, StatusBadge } from '../../../components/ui';
+import { formatSeoulDateTime } from '../../../lib/dateTime';
 import { getAdminTickets } from '../adminApi';
 import type { AdminAsTicket } from '../adminApi';
 
@@ -133,5 +134,5 @@ function shortId(id: string) {
 }
 
 function formatDateTime(value?: string) {
-  return value ? value.replace('T', ' ').slice(0, 19) : '-';
+  return formatSeoulDateTime(value);
 }
