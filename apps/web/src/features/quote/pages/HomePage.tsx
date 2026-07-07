@@ -103,16 +103,16 @@ const promoSlides: PromoSlide[] = [
   {
     src: '/assets/home-banners/battle-ground-build.png',
     alt: '배틀그라운드 조립 PC 광고',
-    title: '배틀그라운드 조립 PC',
-    subtitle: '고주사율 플레이와 빠른 로딩을 위한 실전형 게이밍 구성',
+    title: '배틀그라운드 추천 PC',
+    subtitle: '144Hz로 쾌적한 플레이 환경을 누리세요',
     badge: 'FPS 추천',
     tone: 'from-orange-950 via-slate-950 to-black'
   },
   {
     src: '/assets/home-banners/tactical-fps-build.png',
     alt: '발로란트 조립 PC 광고',
-    title: '발로란트 조립 PC',
-    subtitle: '빠른 반응속도와 안정적인 프레임을 노리는 FPS 특화 구성',
+    title: '발로란트 추천 PC',
+    subtitle: '레이턴시와 프레임 두 마리 토끼를 잡은 FPS 맞춤형 PC입니다',
     badge: 'TACTICAL FPS',
     tone: 'from-red-950 via-slate-950 to-cyan-950'
   },
@@ -120,31 +120,31 @@ const promoSlides: PromoSlide[] = [
     src: '/assets/home-banners/crimson-desert-build.png',
     alt: '붉은사막 조립 PC 광고',
     title: '붉은사막 최적화 PC',
-    subtitle: '고성능 CPU와 그래픽카드로 오픈월드를 부드럽게 즐기세요',
+    subtitle: '고성능 CPU와 그래픽카드로 오픈월드를 자유롭게 누비세요',
     badge: 'RPG 추천',
     tone: 'from-red-950 via-black to-slate-950'
   },
   {
     src: '/assets/home-banners/diablo4-build.png',
     alt: '디아블로4 조립 PC 광고',
-    title: '디아블로4 조립 PC',
-    subtitle: '프리미엄 그래픽과 빠른 저장장치로 몰입감을 높인 구성',
+    title: '디아블로4 추천 PC',
+    subtitle: '압도적인 그래픽으로 몰입감이 MAX!',
     badge: 'HIGH-END',
     tone: 'from-red-950 via-stone-950 to-black'
   },
   {
     src: '/assets/home-banners/league-build.png',
     alt: '리그오브레전드 조립 PC 광고',
-    title: '리그오브레전드 조립 PC',
-    subtitle: '한타는 부드럽게, 랭크는 쾌적하게 즐기는 최적 선택',
+    title: '리그오브레전드 추천 PC',
+    subtitle: '최적의 사양으로 최고의 플레이를 즐겨보세요',
     badge: 'MOBA 추천',
     tone: 'from-blue-950 via-slate-950 to-yellow-950'
   },
   {
     src: '/assets/home-banners/lostark-build.png',
     alt: '로스트아크 조립 PC 광고',
-    title: '로스트아크 조립 PC',
-    subtitle: '레이드와 QHD 플레이까지 고려한 고성능 게이밍 맞춤 견적',
+    title: '로스트아크 추천 PC',
+    subtitle: '대한민국 최고의 MMORPG에 걸맞는 최적의 사양!',
     badge: 'MMORPG 추천',
     tone: 'from-blue-950 via-slate-950 to-black'
   }
@@ -152,15 +152,15 @@ const promoSlides: PromoSlide[] = [
 
 const homePromoTiles: HomePromoTile[] = [
   {
-    title: 'AI 추천 견적',
+    title: 'AI로 견적 맞춰보기',
     body: '예산과 용도를 입력하면 조합 후보를 바로 비교합니다.',
     to: '/requirements/new',
     icon: Bot,
     tone: 'bg-blue-100 text-blue-950'
   },
   {
-    title: '내부 DB 부품 가격',
-    body: '자산화된 부품 정보와 현재가를 기준으로 확인합니다.',
+    title: 'PC 부품 살펴보기',
+    body: '최신 데이터를 기준으로 부품 현황을 살펴봅니다.',
     to: '/self-quote',
     icon: Boxes,
     tone: 'bg-emerald-100 text-emerald-950'
@@ -540,9 +540,9 @@ export function HomePage() {
           <div className="panel home-fit-panel home-recommended-panel p-4 sm:p-5">
             <div className="mb-3 flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
               <div>
-                <div className="text-xs font-black text-brand-blue">Recommended builds</div>
+                <div className="text-xs font-black text-brand-blue"></div>
                 <h2 className="mt-1 text-xl font-black text-commerce-ink">추천상품</h2>
-                <p className="mt-1 text-sm text-slate-500">처음에는 인기상품을 보여주고, 챗봇 질문 후에는 최신 AI 추천상품 3개를 비교합니다.</p>
+                <p className="mt-1 text-sm text-slate-500">우측 토클을 클릭하여 인기상품과 AI 추천을 함께 살펴보세요.</p>
               </div>
               <div role="tablist" aria-label="홈 추천상품 탭" className="inline-flex rounded-lg border border-commerce-line bg-slate-50 p-1">
                 <button
@@ -987,7 +987,7 @@ function PopularPartsSection() {
         <div>
           <div className="text-xs font-black text-brand-blue">Part ranking</div>
           <h2 className="mt-1 text-xl font-black text-commerce-ink">인기 부품 랭킹</h2>
-          <p className="mt-1 text-sm text-slate-500">내부 자산 품질과 사용자 반응을 반영해 추천하는 부품입니다.</p>
+          <p className="mt-1 text-sm text-slate-500">최신 데이터를 반영하여 선정된 인기 부품입니다.</p>
         </div>
         <Link to="/self-quote" aria-label="셀프 견적 전체 보기" className="text-sm font-black text-brand-blue hover:underline">셀프 견적 전체 보기</Link>
       </div>
@@ -1066,13 +1066,13 @@ function homeRecommendedPartPath(item: HomeRecommendedPart) {
 
 function homeReasonLabels(tags: string[]) {
   const labels: Record<string, string> = {
-    benchmark: '성능 근거',
-    fps: '게임 FPS 근거',
-    toolReady: '호환 검증 가능',
+    benchmark: '벤치마크 점수 포함',
+    fps: 'FPS 성능 검증됨',
+    toolReady: '호환성 검증 가능',
     image: '상품 정보 확인',
-    freshPrice: '최근 가격',
-    userReaction: '사용자 반응 반영',
-    internalAsset: '내부 자산'
+    freshPrice: '최근 가격 반영됨',
+    userReaction: '유저 리뷰 포함',
+    internalAsset: '자체 수집 데이터'
   };
   return tags.map((tag) => labels[tag]).filter((label): label is string => Boolean(label));
 }

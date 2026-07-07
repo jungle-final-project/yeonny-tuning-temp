@@ -2,11 +2,10 @@ import { useInfiniteQuery } from '@tanstack/react-query';
 import { Eye, Heart, Search, X } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { partImageUrl, partShortSpec, specRows } from '../../partDisplay';
+import { partImageUrl, specRows } from '../../partDisplay';
 import { listParts } from '../../partsApi';
 import type { PartRow, PartSearchParams, QuoteDraftItem } from '../../types';
 import { openAiAssistant } from '../../../../lib/events';
-import { PriceTrendBadge } from './PriceTrendBadge';
 import { isMultiItemCategory, type SlotConfig } from './slotBoardConfig';
 
 // CPU·GPU만 벤치마크 점수가 있어 교체 성능 비교가 의미 있다 — 그 외 카테고리는 버튼을 숨긴다.
@@ -317,64 +316,53 @@ export function SlotCandidatePanel({
         </div>
       </div>
 
+      {/* 담은 부품: 별도 정보 박스(가격추이·스펙 뱃지) 대신, 후보 리스트 상단에 얇은 관리 행으로 —
+          부품별 수량 ±·교체 지정·제거를 인라인으로 조작한다. 후보 피드와 독립 렌더라 필터/페이지와 무관하게 항상 보인다. */}
       {draftItems.length > 0 ? (
-        <div className="shrink-0 px-4 pt-4">
-          <div className="space-y-2 rounded-md border border-blue-100 bg-blue-50/50 p-3">
-            <div className="text-[11px] font-black text-slate-600">현재 장착 {slot.label} {draftItems.length}개</div>
+        <div className="shrink-0 border-b border-commerce-line px-4 py-3">
+          <div className="mb-1.5 text-[11px] font-black text-slate-500">담은 {slot.label} {draftItems.length}개</div>
+          <div className="space-y-1.5">
             {draftItems.map((item) => (
-              <div key={item.partId} className="rounded-md border border-commerce-line bg-white px-2.5 py-2 text-xs">
-                <div className="flex items-center justify-between gap-2">
-                  <div className="min-w-0">
-                    <div className="truncate font-black text-commerce-ink">{item.name}</div>
-                    <div className="text-[11px] text-slate-500">{partShortSpec(item)}</div>
-                    <div className="text-[11px] text-slate-500">수량 {item.quantity} · {item.lineTotal.toLocaleString()}원</div>
-                    <PriceTrendBadge partId={item.partId} />
-                  </div>
-                  <div className="flex shrink-0 items-center gap-1.5">
-                    {isMulti ? (
-                      <>
-                        <QuantityStepper item={item} disabled={isMutating} onChange={onUpdateQuantity} />
-                        <button
-                          type="button"
-                          aria-label={`${item.name} 교체 대상 선택`}
-                          aria-pressed={replaceTargetId === item.partId}
-                          onClick={() => setReplaceTargetId((current) => current === item.partId ? null : item.partId)}
-                          className={`rounded-md border px-2 py-1 font-black ${
-                            replaceTargetId === item.partId
-                              ? 'border-brand-blue bg-blue-50 text-brand-blue'
-                              : 'border-commerce-line bg-white text-slate-600 hover:border-commerce-ink'
-                          }`}
-                        >
-                          교체
-                        </button>
-                      </>
-                    ) : null}
-                    <button
-                      type="button"
-                      aria-label={`${item.name} 견적에서 제거`}
-                      disabled={isMutating}
-                      onClick={() => onRemoveItem(item.partId)}
-                      className="rounded-md border border-commerce-line bg-white px-2 py-1 font-black text-slate-600 hover:border-commerce-sale hover:text-commerce-sale disabled:cursor-wait"
-                    >
-                      제거
-                    </button>
-                  </div>
+              <div key={item.partId} className="flex items-center justify-between gap-2 rounded-md border border-commerce-line bg-white px-2.5 py-1.5 text-xs">
+                <div className="min-w-0">
+                  <Link to={`/parts/${item.partId}`} className="block truncate font-black text-commerce-ink hover:text-brand-blue hover:underline">{item.name}</Link>
+                  <div className="text-[11px] text-slate-500">수량 {item.quantity} · {item.lineTotal.toLocaleString()}원</div>
                 </div>
-                {specRows(item).length > 0 ? (
-                  <div className="mt-1.5 flex flex-wrap gap-1">
-                    {specRows(item).slice(0, 4).map((row) => (
-                      <span key={row.label} className="rounded bg-slate-100 px-1.5 py-0.5 text-[10px] font-bold text-slate-600">
-                        {row.label} {row.value}
-                      </span>
-                    ))}
-                  </div>
-                ) : null}
+                <div className="flex shrink-0 items-center gap-1.5">
+                  {isMulti ? (
+                    <>
+                      <QuantityStepper item={item} disabled={isMutating} onChange={onUpdateQuantity} />
+                      <button
+                        type="button"
+                        aria-label={`${item.name} 교체 대상 선택`}
+                        aria-pressed={replaceTargetId === item.partId}
+                        onClick={() => setReplaceTargetId((current) => current === item.partId ? null : item.partId)}
+                        className={`rounded-md border px-2 py-1 font-black ${
+                          replaceTargetId === item.partId
+                            ? 'border-brand-blue bg-blue-50 text-brand-blue'
+                            : 'border-commerce-line bg-white text-slate-600 hover:border-commerce-ink'
+                        }`}
+                      >
+                        교체
+                      </button>
+                    </>
+                  ) : null}
+                  <button
+                    type="button"
+                    aria-label={`${item.name} 견적에서 제거`}
+                    disabled={isMutating}
+                    onClick={() => onRemoveItem(item.partId)}
+                    className="rounded-md border border-commerce-line bg-white px-2 py-1 font-black text-slate-600 hover:border-commerce-sale hover:text-commerce-sale disabled:cursor-wait"
+                  >
+                    제거
+                  </button>
+                </div>
               </div>
             ))}
-            {replaceTarget ? (
-              <div className="text-[11px] font-bold text-brand-blue">아래 후보를 선택하면 {replaceTarget.name}와(과) 교체합니다.</div>
-            ) : null}
           </div>
+          {replaceTarget ? (
+            <div className="mt-1.5 text-[11px] font-bold text-brand-blue">아래 후보를 선택하면 {replaceTarget.name}와(과) 교체합니다.</div>
+          ) : null}
         </div>
       ) : null}
 

@@ -1528,7 +1528,7 @@ test('keeps attach and remove flows working with reduced motion', async ({ page 
   await expect(gpuSlot).toContainText('+ 부품 선택');
 });
 
-test('shows current item spec details in the panel for a single-part slot', async ({ page }) => {
+test('keeps the installed item as a manageable row without the info panel', async ({ page }) => {
   await loginAsUser(page);
   const deleteRequests: string[] = [];
   const gpuItem = {
@@ -1581,12 +1581,14 @@ test('shows current item spec details in the panel for a single-part slot', asyn
   await page.goto('/self-quote?category=GPU');
 
   const panel = page.getByTestId('slot-candidate-panel');
-  await expect(panel.getByText('현재 장착')).toBeVisible();
+  // 장착 부품은 관리 행(이름·수량·제거)으로 후보 리스트에 남는다.
   await expect(panel.getByText('상세 스펙 RTX GPU')).toBeVisible();
-  await expect(panel.getByText('QHD 게임용 GPU 스펙')).toBeVisible();
-  await expect(panel.getByText('VRAM 16GB')).toBeVisible();
-  await expect(panel.getByText('사용전력 220W')).toBeVisible();
-  await expect(panel.getByText('직전 기록 대비 -10,000원 (-1.11%)')).toBeVisible();
+  // 리디자인 지시(칸 전체 삭제, 부품 리스트만): 정보 박스의 가격추이·스펙 뱃지·짧은 스펙은 제거됐다.
+  await expect(panel.getByText('현재 장착')).toHaveCount(0);
+  await expect(panel.getByText('직전 기록 대비')).toHaveCount(0);
+  await expect(panel.getByText('VRAM 16GB')).toHaveCount(0);
+  await expect(panel.getByText('사용전력 220W')).toHaveCount(0);
+  await expect(panel.getByText('QHD 게임용 GPU 스펙')).toHaveCount(0);
 
   await panel.getByRole('button', { name: '상세 스펙 RTX GPU 견적에서 제거' }).click();
   await expect.poll(() => deleteRequests).toEqual(['part-gpu-detail']);

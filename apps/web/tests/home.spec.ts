@@ -758,12 +758,12 @@ test('renders a single shopping home without the old hero prompt flow', async ({
 
   await expect(main.getByRole('textbox', { name: '원하는 PC 사양 입력' })).toHaveCount(0);
   await expect(main.getByRole('img', { name: '배틀그라운드 조립 PC 광고' })).toBeVisible();
-  await expect(main.getByRole('button', { name: /배틀그라운드 조립 PC/ })).toBeVisible();
+  await expect(main.getByRole('button', { name: /배틀그라운드 추천 PC/ })).toBeVisible();
   for (const label of ['PC 견적', '전체 부품', 'AS 접수', '내 견적함']) {
     await expect(main.getByRole('link', { name: new RegExp(label) }).first()).toBeVisible();
   }
-  await expect(main.getByRole('link', { name: /AI 추천 견적/ })).toBeVisible();
-  await expect(main.getByRole('link', { name: /내부 DB 부품 가격/ })).toHaveAttribute('href', '/self-quote');
+  await expect(main.getByRole('link', { name: /AI로 견적 맞춰보기/ })).toBeVisible();
+  await expect(main.getByRole('link', { name: /PC 부품 살펴보기/ })).toHaveAttribute('href', '/self-quote');
   await expect(main.getByRole('link', { name: /전체 부품/ }).first()).toHaveAttribute('href', '/parts');
   await expect(main.getByRole('heading', { name: '추천상품' })).toBeVisible();
   await expect(main.getByRole('tab', { name: '인기상품' })).toHaveAttribute('aria-selected', 'true');
@@ -778,7 +778,7 @@ test('renders a single shopping home without the old hero prompt flow', async ({
   await expect(main.getByRole('heading', { name: '인기 부품 랭킹' })).toBeVisible();
   await expect(main.getByRole('img', { name: /Home RTX 5070 GPU/ })).toBeVisible();
   const firstPartCard = main.getByRole('link', { name: '인기 부품 1번 보기' });
-  await expect(firstPartCard.getByText('성능 근거')).toBeVisible();
+  await expect(firstPartCard.getByText('벤치마크 점수 포함')).toBeVisible();
   await expect(firstPartCard.getByText('상품 정보 확인')).toBeVisible();
   await expect(firstPartCard).toHaveAttribute(
     'href',
