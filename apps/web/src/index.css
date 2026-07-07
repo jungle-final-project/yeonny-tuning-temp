@@ -69,6 +69,11 @@ background:
   text-align: center;
 }
 
+.buildgraph-node-wide {
+  border-radius: 999px;
+  padding-inline: 22px;
+}
+
 .buildgraph-node-category-label {
   max-width: 100%;
   overflow: hidden;

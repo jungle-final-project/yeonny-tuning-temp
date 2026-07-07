@@ -360,7 +360,7 @@ public class AsChatService {
             StageTimings stageTimings
     ) {
         long startedAt = System.nanoTime();
-        LlmResponseResult llmResult = null;
+        LLMresponseDto llmResult = null;
         try {
             llmResult = structuredLlmClientRouter.createStructuredJsonResult(
                     aiProfile,

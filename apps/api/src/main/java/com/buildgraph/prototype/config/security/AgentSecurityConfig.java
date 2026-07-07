@@ -33,9 +33,10 @@ public class AgentSecurityConfig {
                 errorResponseWriter
         );
     }
-
+ 
     @Bean
     @Order(1)
+    @SuppressWarnings("null")
     SecurityFilterChain securityFilterChain(
             HttpSecurity http,
             AgentAccessTokenFilter agentAccessTokenFilter,

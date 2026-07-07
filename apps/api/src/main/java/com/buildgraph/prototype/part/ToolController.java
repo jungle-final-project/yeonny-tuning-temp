@@ -34,19 +34,15 @@ public class ToolController {
             @RequestParam(value = "maxPrice", required = false) Integer maxPrice,
             @RequestParam(value = "page", required = false) Integer page,
             @RequestParam(value = "size", required = false) Integer size,
-            @RequestParam(value = "sort", required = false) String sort,
-            @RequestHeader(value = "Authorization", required = false) String authorization
+            @RequestParam(value = "sort", required = false) String sort
     ) {
-        currentUserService.requireUser(authorization);
         return partQueryService.parts(category, query, manufacturer, status, minPrice, maxPrice, page, size, sort);
     }
 
     @GetMapping("/parts/{id}")
     Map<String, Object> part(
-            @PathVariable String id,
-            @RequestHeader(value = "Authorization", required = false) String authorization
+            @PathVariable String id
     ) {
-        currentUserService.requireUser(authorization);
         return partQueryService.part(id);
     }
 
@@ -55,10 +51,8 @@ public class ToolController {
             @PathVariable String id,
             @RequestParam(value = "days", required = false) Integer days,
             @RequestParam(value = "source", required = false) String source,
-            @RequestParam(value = "limit", required = false) Integer limit,
-            @RequestHeader(value = "Authorization", required = false) String authorization
+            @RequestParam(value = "limit", required = false) Integer limit
     ) {
-        currentUserService.requireUser(authorization);
         return partQueryService.priceHistory(id, days, source, limit);
     }
 

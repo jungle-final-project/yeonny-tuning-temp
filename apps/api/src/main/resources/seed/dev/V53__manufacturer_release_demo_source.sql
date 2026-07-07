@@ -16,7 +16,7 @@ VALUES (
   'BuildGraph Demo',
   'GPU',
   'RSS',
-  'http://localhost:8080/api/demo/manufacturer-release-feed.xml',
+  'http://localhost:8081/api/demo/manufacturer-release-feed.xml',
   false,
   1440,
   '{

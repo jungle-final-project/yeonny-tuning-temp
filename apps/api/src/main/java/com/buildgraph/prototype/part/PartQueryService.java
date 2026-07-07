@@ -364,6 +364,7 @@ public class PartQueryService {
 
     private static String orderBy(String sort) {
         return switch (sort) {
+            case "compatibility" -> "coalesce((p.attributes->>'toolReady')::boolean, false) DESC, p.price ASC, p.id ASC";
             case "price_asc" -> "p.price ASC, p.id ASC";
             case "price_desc" -> "p.price DESC, p.id ASC";
             case "name" -> "p.name ASC, p.id ASC";
@@ -497,7 +498,7 @@ public class PartQueryService {
         if (normalized == null) {
             return "category";
         }
-        if (Set.of("category", "price_asc", "price_desc", "name").contains(normalized)) {
+        if (Set.of("category", "compatibility", "price_asc", "price_desc", "name").contains(normalized)) {
             return normalized;
         }
         throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "지원하지 않는 sort입니다.");

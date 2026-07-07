@@ -3,7 +3,6 @@ package com.buildgraph.prototype.quoteagent.chat;
 import com.buildgraph.prototype.quoteagent.query.AiChatSessionState;
 import com.buildgraph.prototype.quoteagent.query.AiChatSessionStore;
 import com.buildgraph.prototype.quoteagent.llm.AiChatClient;
-import com.buildgraph.prototype.quoteagent.retrieval.*;
 import com.buildgraph.prototype.quoteagent.tools.*;
 import com.buildgraph.prototype.opsagent.profile.*;
 
@@ -15,7 +14,6 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
 
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
@@ -46,7 +44,7 @@ public class AiChatEngine {
     );
 
     private final JdbcTemplate jdbcTemplate;
-    private final AiChatClient openAiResponsesClient;
+    private final AiChatClient aiChatClient;
     private final AiProfileConfig aiProfileConfig;
     private final PartReplacementRanker partReplacementRanker;
     private final AiChatSessionStore aiChatSessionStore;
@@ -56,17 +54,12 @@ public class AiChatEngine {
        request: 사용자 메시지 + 화면 맥락
        selectedAi: 선택된 Ai 모델 */
     public AiChatResponseDto respondLlmRequired(AiChatRequestDto request, String selectedAi) {
-        String message = requireText(request == null ? null : request.message(), "챗봇 메시지가 필요합니다.");
-        if (!openAiResponsesClient.isConfigured()) {
+        if (!aiChatClient.isConfigured()) {
             throw new ResponseStatusException(HttpStatus.PRECONDITION_REQUIRED, "OPENAI_API_KEY가 필요합니다.");
         }
         
-        /* 파싱된 객체들: 수정 필요 */
+        /* llm 응답 준비 */
         AiProfileDefinition buildProfile = requireBuildChatProfile(selectedAi);
-        Map<String, Object> context = Map.of();
-        Map<String, Object> fallbackContext = deterministicParsedContext(context, message);
-
-        /* LLM 응답 객체 */
         Map<String, Object> llmResponse;
 
         /* LLM으로 요청: 실제 모델에 접근 시행 */
@@ -75,7 +68,7 @@ public class AiChatEngine {
         } catch (ResponseStatusException error) {
             throw error;
         } catch (RuntimeException error) {
-            throw new ResponseStatusException(HttpStatus.BAD_GATEWAY, "LLM 응답 JSON을 처리할 수 없습니다.", error);
+            throw new ResponseStatusException(HttpStatus.BAD_GATEWAY, "LLM 런타임 에러: ", error);
         }
 
         /* LLM 응답 결과 파싱 */
@@ -85,25 +78,23 @@ public class AiChatEngine {
         /* 행동 모드 진입 여부 결정하기 */  
         if(conversationMode){
             Map<String, Object> contextPatch = objectMap(llmResponse.get("contextPatch"));
-            return conversationResponse(replyMessage, contextPatch);
+            return conversationResponse(replyMessage, contextPatch, request);
         }
         
         /* 요청 분석을 통해 응답 분기를 결정 */
         Map<String, Object> actionMap = objectMap(llmResponse.get("action"));
         AiChatIntent action = AiChatIntent.valueOf(text(actionMap.get("type")));
         
-        AiChatResponseDto base = switch (action) {
-            case FULL_BUILD_RECOMMEND -> fullBuildResponse(replyMessage, actionMap);
-            case PART_RECOMMEND -> partRecommendResponse(replyMessage, actionMap);
-            case BUILD_MODIFY -> buildModifyResponse(replyMessage, actionMap);
-            case PRICE_ALERT_HELP -> priceAlertResponse(replyMessage, actionMap);
+        return switch (action) {
+            case FULL_BUILD_RECOMMEND -> fullBuildResponse(replyMessage, actionMap, request.sessionId());
+            case PART_RECOMMEND -> partRecommendResponse(replyMessage, text(actionMap.get("selectedCategory")), request.sessionId());
+            case BUILD_MODIFY -> buildModifyResponse(replyMessage, text(actionMap.get("selectedCategory")), Map.of(), actionMap, request.sessionId());
+            case PRICE_ALERT_HELP -> priceAlertResponse(replyMessage, text(actionMap.get("selectedCategory")), request.sessionId());
         };
-
-        return null;
     }
 
     /* 풀 견적 생성 */
-    private AiChatResponseDto fullBuildResponse(String message, Map<String, Object> parsedContext) {
+    private AiChatResponseDto fullBuildResponse(String message, Map<String, Object> parsedContext, String sessionId) {
         /* 견적 생성 함수 호출 */
         List<AiChatResponseDto.BuildRecommendation> recommendations = buildRecommendations(message, parsedContext);
         List<AiChatAction> actions = new ArrayList<>();
@@ -120,18 +111,17 @@ public class AiChatEngine {
                     )
             ));
         }
-        return response(
+        return new AiChatResponseDto(
                 "요청하신 조건으로 추천 PC 3개를 준비했습니다. 원하는 조합은 셀프 견적에서 그대로 담아 비교할 수 있습니다.",
-                AiChatIntent.FULL_BUILD_RECOMMEND,
-                actions,
+                sessionId,
+                AiChatIntent.FULL_BUILD_RECOMMEND.name(),
                 recommendations,
-                List.of(),
-                parsedContext
+                List.of()
         );
     }
 
     /* 일부 장비 추천 */
-    private AiChatResponseDto partRecommendResponse(String message, String selectedCategory) {
+    private AiChatResponseDto partRecommendResponse(String message, String selectedCategory, String sessionId) {
         String category = categoryFrom(firstText(selectedCategory, message));
 
         List<AiChatResponseDto.PartRecommendation> parts = partRecommendations(category, 3);
@@ -143,17 +133,16 @@ public class AiChatEngine {
                 ))
                 .toList();
         
-        return response(
+        return new AiChatResponseDto(
                 categoryLabel(category) + " 후보를 내부 자산 기준으로 골랐습니다. 담기 버튼은 기존 셀프 견적 장바구니 API로 연결하면 됩니다.",
-                AiChatIntent.PART_RECOMMEND,
-                actions,
+                sessionId,
+                AiChatIntent.PART_RECOMMEND.name(),
                 List.of(),
-                parts,
-                MockData.map("category", category)
+                parts
         );
     }
 
-    private AiChatResponseDto buildModifyResponse(String message, String selectedCategory, Map<String, Object> context, Map<String, Object> draftEdit) {
+    private AiChatResponseDto buildModifyResponse(String message, String selectedCategory, Map<String, Object> context, Map<String, Object> draftEdit, String sessionId) {
         Map<String, Object> normalizedDraftEdit = normalizeDraftEdit(draftEdit, message, selectedCategory, context);
         String category = categoryFrom(firstText(selectedCategory, message));
         String effectiveCategory = firstText(categoryFrom(text(normalizedDraftEdit.get("category"))), category);
@@ -193,17 +182,16 @@ public class AiChatEngine {
         if (!selection.warnings().isEmpty()) {
             parsedContext.put("warnings", selection.warnings());
         }
-        return response(
+        return new AiChatResponseDto(
                 buildModifyMessage(effectiveCategory, priceDirection, currentItem, candidates),
-                AiChatIntent.BUILD_MODIFY,
-                List.of(new AiChatAction(AiChatActionType.REPLACE_DRAFT_PART, "견적 부품 교체", payload)),
+                sessionId,
+                AiChatIntent.BUILD_MODIFY.name(),
                 List.of(),
-                candidates,
-                parsedContext
+                candidates
         );
     }
 
-    private AiChatResponseDto priceAlertResponse(String message, String selectedCategory) {
+    private AiChatResponseDto priceAlertResponse(String message, String selectedCategory, String sessionId) {
         String category = categoryFrom(firstText(selectedCategory, message));
         /* 추후 수정 필요 */
         Integer targetPrice = null;
@@ -211,48 +199,34 @@ public class AiChatEngine {
         payload.put("category", category);
         payload.put("targetPrice", targetPrice);
         payload.put("source", "AI_CHAT_ENGINE");
-        return response(
+        return new AiChatResponseDto(
                 targetPrice == null
                         ? "목표가 알림을 만들려면 원하는 가격을 함께 알려주세요."
                         : "목표가 알림에 필요한 가격 조건을 추출했습니다.",
-                targetPrice == null ? AiChatIntent.CONVERSATION : AiChatIntent.PRICE_ALERT_HELP,
-                List.of(new AiChatAction(targetPrice == null ? AiChatActionType.ASK_FOLLOW_UP : AiChatActionType.CREATE_PRICE_ALERT, "목표가 알림 설정", payload)),
+                sessionId,
+                targetPrice == null ? "CONVERSATION" : AiChatIntent.PRICE_ALERT_HELP.name(),
                 List.of(),
-                category == null ? List.of() : partRecommendations(category, 3),
-                MockData.map("category", category, "targetPrice", targetPrice)
+                category == null ? List.of() : partRecommendations(category, 3)
         );
     }
 
-    private AiChatResponseDto conversationResponse(String replyMessage, Map<String, Object> contextPatch) {
-        return response(
-                "추천 근거는 예산, 내부 자산 현재가, 주요 부품 스펙, RAG 근거, Tool 검증 결과를 기준으로 설명합니다.",
-                AiChatIntent.CONVERSATION,
-                List.of(new AiChatAction(AiChatActionType.OPEN_SELF_QUOTE, "견적에서 근거 보기", Map.of("route", "/self-quote"))),
-                List.of(),
-                List.of(),
-                MockData.map("question", message)
-        );
-    }
+    /* 저장 후 반환 */
+    private AiChatResponseDto conversationResponse(
+            String replyMessage, 
+            Map<String, Object> newContextPatch, 
+            AiChatRequestDto request) {
+        
+        /* Spring에 context를 update */
+        aiChatSessionStore.updateSession(request.sessionId(), newContextPatch);
 
-    private AiChatResponseDto response(
-            String assistantMessage,
-            AiChatIntent intent,
-            List<AiChatAction> actions,
-            List<AiChatResponseDto.BuildRecommendation> recommendations,
-            List<AiChatResponseDto.PartRecommendation> partRecommendations,
-            Map<String, Object> parsedContext
-    ) {
+        /* Dto로 감싸서 반환 */
         return new AiChatResponseDto(
-                assistantMessage,
-                intent,
-                actions,
-                recommendations,
-                partRecommendations,
-                parsedContext,
-                List.of(),
-                List.of(),
-                null
-        );
+            replyMessage,
+            request.sessionId(),
+            "CONVERSATION",
+            List.of(),
+            List.of()
+        );    
     }
 
     private List<AiChatResponseDto.BuildRecommendation> buildRecommendations(String message, Map<String, Object> parsedContext) {
@@ -547,7 +521,7 @@ public class AiChatEngine {
            5. 사용할 모델
            6. 이성 수준 설정
            7. 출력 토큰 제한 */
-        LlmResponseResult result = openAiResponsesClient.createStructuredJsonResult(
+        LLMresponseDto result = aiChatClient.generateLLMresponse(
                 BUILD_CHAT_SYSTEM_PROMPT,
                 json(MockData.map(
                     "rawMessage", message,
@@ -580,7 +554,12 @@ public class AiChatEngine {
                                     "BUILD_MODIFY",
                                     "PRICE_ALERT_HELP"
                                 )),
-                                "ragQuery", MockData.map("type", "object","additionalProperties", true)
+                                "ragQuery", MockData.map(
+                                                "type", "object",
+                                                "additionalProperties", false,
+                                                "properties", MockData.map(),
+                                                "required", List.of()
+                                            )
                             ),
                             "required", List.of("type", "ragQuery")
                         ),

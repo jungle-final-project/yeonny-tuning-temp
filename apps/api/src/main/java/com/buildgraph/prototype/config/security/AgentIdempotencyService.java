@@ -7,6 +7,7 @@ import java.time.Duration;
 import java.time.Instant;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.lang.NonNull;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -46,7 +47,7 @@ public class AgentIdempotencyService {
     }
 
     @Transactional
-    public void complete(Long recordId, Integer responseStatus, String responseBody, String responseContentType) {
+    public void complete(@NonNull Long recordId, Integer responseStatus, String responseBody, String responseContentType) {
         repository.findById(recordId)
                 .ifPresent(record -> record.complete(responseStatus, responseBody, responseContentType, Instant.now(clock)));
     }

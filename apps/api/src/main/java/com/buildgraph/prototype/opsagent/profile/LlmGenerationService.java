@@ -8,9 +8,6 @@ import com.buildgraph.prototype.opsagent.profile.*;
 import com.buildgraph.prototype.opsagent.trace.*;
 import com.buildgraph.prototype.opsagent.runner.*;
 
-import com.buildgraph.prototype.quoteagent.chat.*;
-import com.buildgraph.prototype.quoteagent.retrieval.*;
-import com.buildgraph.prototype.quoteagent.tools.*;
 
 import com.buildgraph.prototype.common.DbValueMapper;
 import com.buildgraph.prototype.common.MockData;
@@ -31,7 +28,7 @@ public class LlmGenerationService {
             Long agentSessionId,
             AiProfileDefinition profile,
             String schemaName,
-            LlmResponseResult result
+            LLMresponseDto result
     ) {
         return recordSuccess(agentSessionId, profile, schemaName, result, Map.of());
     }
@@ -40,7 +37,7 @@ public class LlmGenerationService {
             Long agentSessionId,
             AiProfileDefinition profile,
             String schemaName,
-            LlmResponseResult result,
+            LLMresponseDto result,
             Map<String, Object> stageTimings
     ) {
         return recordSuccess(agentSessionId, profile, "AS_CHAT", schemaName, result, stageTimings);
@@ -51,7 +48,7 @@ public class LlmGenerationService {
             AiProfileDefinition profile,
             String useCase,
             String schemaName,
-            LlmResponseResult result,
+            LLMresponseDto result,
             Map<String, Object> stageTimings
     ) {
         return record(
@@ -62,9 +59,9 @@ public class LlmGenerationService {
                 schemaName,
                 true,
                 result.latencyMs(),
-                result.inputTokens(),
-                result.outputTokens(),
-                result.totalTokens(),
+                null,
+                null,
+                null,
                 null,
                 null,
                 stageTimings

@@ -2,7 +2,7 @@ import { expect, test, type APIRequestContext, type Page } from '@playwright/tes
 import { existsSync, readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 
-const apiBaseUrl = process.env.MVP_API_BASE_URL ?? 'http://127.0.0.1:8080';
+const apiBaseUrl = process.env.MVP_API_BASE_URL ?? 'http://127.0.0.1:8081';
 const userEmail = process.env.MVP_USER_EMAIL ?? 'user@example.com';
 const adminEmail = process.env.MVP_ADMIN_EMAIL ?? 'admin@example.com';
 const password = process.env.MVP_PASSWORD ?? 'passw0rd!';

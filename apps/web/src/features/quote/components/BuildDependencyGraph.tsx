@@ -46,6 +46,7 @@ type CandidateContext = NonNullable<BuildDependencyGraphProps['candidateContext'
 
 const categoryOrder = ['CPU', 'MOTHERBOARD', 'RAM', 'GPU', 'PSU', 'CASE', 'COOLER', 'STORAGE', 'PRICE'];
 const DEFAULT_NODE_DIAMETER = 140;
+const GPU_NODE_SIZE = { width: 210, height: DEFAULT_NODE_DIAMETER };
 const FLOATING_GRAPH_DEFAULT_SIZE = { width: 500, graphHeight: 480 };
 const FLOATING_GRAPH_MIN_SIZE = { width: 300, graphHeight: 200 };
 const FLOATING_GRAPH_MAX_SIZE = { width: 760, graphHeight: 640 };
@@ -547,10 +548,13 @@ function toFlowElements(graph?: BuildGraphResolveResponse | null): { nodes: Node
   const nodes = graph.nodes.map((node, index) => {
     const category = String(node.category ?? node.id).toUpperCase();
     const isPriceNode = isPriceGraphNode(node);
-    const basePosition = categoryPositions[category] ?? {
+    const defaultPosition = categoryPositions[category] ?? {
       x: 20 + (index % 3) * 300,
       y: 80 + Math.floor(index / 3) * 210
     };
+    const basePosition = category === 'GPU'
+      ? { ...defaultPosition, x: defaultPosition.x + DEFAULT_NODE_DIAMETER - GPU_NODE_SIZE.width }
+      : defaultPosition;
     return {
       id: node.id,
       type: isPriceNode ? 'priceTotal' : undefined,
@@ -621,8 +625,9 @@ function withDisplayTotalPrice(
 
 function nodeLabel(node: BuildGraphResolveResponse['nodes'][number]) {
   const priceLabel = nodePriceLabel(node);
+  const category = String(node.category ?? node.id).toUpperCase();
   return (
-    <div className="buildgraph-node-card buildgraph-node-circle">
+    <div className={`buildgraph-node-card buildgraph-node-circle ${category === 'GPU' ? 'buildgraph-node-wide' : ''}`}>
       <div className="buildgraph-node-category-label">{nodeCategoryLabel(node)}</div>
       <div className="buildgraph-node-main-label">{node.label}</div>
       {priceLabel ? <div className="buildgraph-node-price-label">{priceLabel}</div> : null}
@@ -650,17 +655,20 @@ function nodeCategoryLabel(node: BuildGraphResolveResponse['nodes'][number]) {
 
 function nodeStyle(node: BuildGraphResolveResponse['nodes'][number]) {
   const status = node.status;
+  const category = String(node.category ?? node.id).toUpperCase();
   const diameter = nodeDiameter(node);
+  const width = category === 'GPU' ? GPU_NODE_SIZE.width : diameter;
+  const height = category === 'GPU' ? GPU_NODE_SIZE.height : diameter;
   const base = {
-    borderRadius: '50%',
+    borderRadius: category === 'GPU' ? 999 : '50%',
     borderWidth: status === 'WARN' ? 4 : 3,
     borderStyle: 'solid',
     padding: 0,
-    width: diameter,
-    height: diameter,
-    minWidth: diameter,
-    minHeight: diameter,
-    aspectRatio: '1 / 1',
+    width,
+    height,
+    minWidth: width,
+    minHeight: height,
+    aspectRatio: category === 'GPU' ? 'auto' : '1 / 1',
     boxShadow: status === 'WARN'
       ? '0 14px 30px rgba(245, 158, 11, 0.14)'
       : '0 14px 30px rgba(15, 23, 42, 0.08)'
@@ -877,7 +885,7 @@ function CandidateThumbnail({ part, onPreview }: { part: PartRow; onPreview: (pa
       <div
         role="img"
         aria-label={`${part.name} 사진 없음`}
-        className="grid h-16 w-16 shrink-0 place-items-center rounded-md border border-dashed border-slate-300 bg-white text-[11px] font-black text-slate-400"
+        className="grid h-16 w-24 shrink-0 place-items-center rounded-md border border-dashed border-slate-300 bg-white text-[11px] font-black text-slate-400"
       >
         {categoryLabel}
       </div>
@@ -888,7 +896,7 @@ function CandidateThumbnail({ part, onPreview }: { part: PartRow; onPreview: (pa
       type="button"
       aria-label={`${part.name} 사진 확대`}
       onClick={() => onPreview(part)}
-      className="h-16 w-16 shrink-0 overflow-hidden rounded-md border border-commerce-line bg-white p-1 transition hover:border-brand-blue hover:shadow-product focus:outline-none focus:ring-2 focus:ring-brand-blue"
+      className="h-16 w-24 shrink-0 overflow-hidden rounded-md border border-commerce-line bg-white p-1 transition hover:border-brand-blue hover:shadow-product focus:outline-none focus:ring-2 focus:ring-brand-blue"
     >
       <img src={imageUrl} alt={`${part.name} 제품 사진`} className="h-full w-full object-contain" />
     </button>

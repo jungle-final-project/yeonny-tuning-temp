@@ -8,6 +8,8 @@ import java.util.List;
 import java.util.Map;
 
 import org.springframework.jdbc.core.JdbcTemplate;
+
+import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.core.type.TypeReference;
 
 import lombok.RequiredArgsConstructor;
@@ -58,16 +60,23 @@ public class AiChatSessionStore {
     }
 
     /* 기존 session 업데이트 */
-    public void updateSession(String sessionId, String jsonContext){
-        jdbcTemplate.update("""
-                UPDATE ai_chat_sessions
-                SET context = ?::jsonb
-                WHERE session_id = ?::uuid
-                """,
-                jsonContext, sessionId);
+    public void updateSession(String sessionId, Map<String, Object> newContext){
+        try{
+            String jsonContext = objectMapper.writeValueAsString(newContext);
+            jdbcTemplate.update("""
+                    UPDATE ai_chat_sessions
+                    SET context = ?::jsonb
+                    WHERE session_id = ?::uuid
+                    """,
+                    jsonContext, sessionId);
+
+        }catch(JsonProcessingException e){
+            throw new IllegalArgumentException("contextPatch JSON 변환 오류: ", e);
+        }
     }
 
-    /* helper 함수들 */
+
+    /* helper 함수 1 */
     private Map<String, Object> parseContext(String contextJson) {
     try {
         if (contextJson == null || contextJson.isBlank()) {

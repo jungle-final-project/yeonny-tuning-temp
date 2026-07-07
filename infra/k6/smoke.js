@@ -15,7 +15,7 @@ export const options = {
   }
 };
 
-const BASE_URL = __ENV.BASE_URL || 'http://localhost:8080';
+const BASE_URL = __ENV.BASE_URL || 'http://localhost:8081';
 
 export default function () {
   const health = http.get(`${BASE_URL}/api/health`);

@@ -424,7 +424,7 @@ test('renders manufacturer release demo intake on admin parts page', async ({ pa
             manufacturer: 'BuildGraph Demo',
             categoryScope: 'GPU',
             sourceType: 'RSS',
-            sourceUrl: 'http://localhost:8080/api/demo/manufacturer-release-feed.xml',
+            sourceUrl: 'http://localhost:8081/api/demo/manufacturer-release-feed.xml',
             enabled: false,
             pollIntervalMinutes: 1440,
             lastCheckedAt: null,
@@ -443,7 +443,7 @@ test('renders manufacturer release demo intake on admin parts page', async ({ pa
           {
             id: '00000000-0000-4000-8000-000000009511',
             manufacturer: 'BuildGraph Demo',
-            externalUrl: 'http://localhost:8080/api/demo/manufacturer-release-post/rtx-5090-oc-32gb',
+            externalUrl: 'http://localhost:8081/api/demo/manufacturer-release-post/rtx-5090-oc-32gb',
             title: 'ASUS launches ROG Astral GeForce RTX 5090 OC 32GB graphics card',
             classificationStatus: 'PRODUCT_CANDIDATE',
             detectedCategory: 'GPU',
@@ -668,7 +668,7 @@ test('renders manufacturer release demo intake on admin parts page', async ({ pa
   await page.getByRole('button', { name: '제조사 신제품 감지 운영 펼치기' }).click();
   await expect(page.locator('main')).toContainText('BuildGraph Demo');
   await expect(page.locator('main')).toContainText('활성 source 전체 scan');
-  await expect(page.getByRole('link', { name: '열기' })).toHaveAttribute('href', 'http://localhost:8080/api/demo/manufacturer-release-feed.xml');
+  await expect(page.getByRole('link', { name: '열기' })).toHaveAttribute('href', 'http://localhost:8081/api/demo/manufacturer-release-feed.xml');
   await page.getByRole('button', { name: 'BuildGraph Demo' }).click();
   await expect(page.locator('main')).toContainText('Source 수정');
 

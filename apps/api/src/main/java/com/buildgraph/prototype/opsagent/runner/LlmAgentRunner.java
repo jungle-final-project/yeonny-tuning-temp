@@ -65,7 +65,7 @@ public class LlmAgentRunner implements AgentRunner {
 
         Long agentInternalId = agentInternalId(sessionId);
         try {
-            LlmResponseResult llmResult = openAiResponsesClient.createSummaryResult(
+            LLMresponseDto llmResult = openAiResponsesClient.createSummaryResult(
                     SYSTEM_PROMPT,
                     userPrompt(root, profile, evidenceIds, evidenceSet, toolInvocationIds, toolDrafts)
             );

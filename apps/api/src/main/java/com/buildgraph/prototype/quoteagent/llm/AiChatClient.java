@@ -17,6 +17,7 @@ import org.springframework.web.client.RestClientResponseException;
 import org.springframework.web.server.ResponseStatusException;
 
 @Component
+/* LLM 직접 접속부 */
 public class AiChatClient {
     private static final ParameterizedTypeReference<Map<String, Object>> MAP_RESPONSE =
             new ParameterizedTypeReference<>() {
@@ -27,6 +28,7 @@ public class AiChatClient {
     private final String model;
     private final String reasoningEffort;
 
+    /* implement 하는 과정 */
     public AiChatClient(
             @Value("${openai.base-url:https://api.openai.com/v1}") String baseUrl,
             @Value("${openai.api-key:}") String apiKey,
@@ -53,8 +55,8 @@ public class AiChatClient {
         return createSummaryResult(systemPrompt, userPrompt).text();
     }
 
-    public LlmResponseResult createSummaryResult(String systemPrompt, String userPrompt) {
-        return createResponse(systemPrompt, userPrompt, Map.of());
+    public LLMresponseDto createSummaryResult(String systemPrompt, String userPrompt) {
+        return null;
     }
 
     public String createStructuredJson(
@@ -66,7 +68,7 @@ public class AiChatClient {
         return createStructuredJsonResult(systemPrompt, userPrompt, schemaName, jsonSchema, model, reasoningEffort).text();
     }
 
-    public LlmResponseResult createStructuredJsonResult(
+    public LLMresponseDto createStructuredJsonResult(
             String systemPrompt,
             String userPrompt,
             String schemaName,
@@ -74,11 +76,12 @@ public class AiChatClient {
             String requestedModel,
             String requestedReasoningEffort
     ) {
-        return createStructuredJsonResult(systemPrompt, userPrompt, schemaName, jsonSchema, requestedModel, requestedReasoningEffort, null);
+        return generateLLMresponse(systemPrompt, userPrompt, schemaName, jsonSchema, requestedModel, requestedReasoningEffort, null);
     }
 
-    /* 일단 이것을 사용한다고 함: 이해 필요 */
-    public LlmResponseResult createStructuredJsonResult(
+    /* AiChat에서 호출하는 LLM 접합부 */
+    @SuppressWarnings("null")
+    public LLMresponseDto generateLLMresponse(
             String systemPrompt,
             String userPrompt,
             String schemaName,
@@ -87,37 +90,23 @@ public class AiChatClient {
             String requestedReasoningEffort,
             Integer requestedMaxOutputTokens
     ) {
-        Map<String, Object> structuredOutput = MockData.map(
-                "text", MockData.map(
-                        "format", MockData.map(
-                                "type", "json_schema",
-                                "name", schemaName,
-                                "schema", jsonSchema,
-                                "strict", true
-                        )
-                )
-        );
-        return createResponse(systemPrompt, userPrompt, structuredOutput, requestedModel, requestedReasoningEffort, requestedMaxOutputTokens);
-    }
-
-    private LlmResponseResult createResponse(String systemPrompt, String userPrompt, Map<String, Object> extraRequestFields) {
-        return createResponse(systemPrompt, userPrompt, extraRequestFields, model, reasoningEffort, null);
-    }
-
-    private LlmResponseResult createResponse(
-            String systemPrompt,
-            String userPrompt,
-            Map<String, Object> extraRequestFields,
-            String requestedModel,
-            String requestedReasoningEffort,
-            Integer requestedMaxOutputTokens
-    ) {
         if (!isConfigured()) {
             throw new ResponseStatusException(HttpStatus.PRECONDITION_REQUIRED, "OPENAI_API_KEY가 필요합니다.");
         }
+
+        /* 요청 및 응답 객체 만들기 */
         String effectiveModel = blankToNull(requestedModel) == null ? model : requestedModel.trim();
         String effectiveReasoningEffort = blankToNull(requestedReasoningEffort) == null ? reasoningEffort : requestedReasoningEffort.trim();
-        Map<String, Object> request = requestBody(systemPrompt, userPrompt, extraRequestFields, effectiveModel, effectiveReasoningEffort, requestedMaxOutputTokens);
+        Map<String, Object> request = aiChatRequestBody(
+                                        systemPrompt,
+                                        userPrompt,
+                                        schemaName,
+                                        jsonSchema,
+                                        effectiveModel,
+                                        requestedMaxOutputTokens
+                                    );
+        
+        /* LLM 모델에 실제 접근해서 사용 + 시작 */
         long startedAt = System.nanoTime();
         Map<String, Object> response;
         try {
@@ -130,114 +119,92 @@ public class AiChatClient {
         } catch (RestClientResponseException error) {
             throw new ResponseStatusException(
                     HttpStatus.BAD_GATEWAY,
-                    "OpenAI 호출 실패: HTTP " + error.getStatusCode().value(),
+                    "OpenAI 호출 실패: HTTP " + error.getStatusCode().value() + safeErrorBody(error),
                     error
             );
         }
+
+        /* 응답시간 기록 */
         long latencyMs = Math.max(0L, (System.nanoTime() - startedAt) / 1_000_000L);
         String output = extractOutputText(response);
-        if (output == null || output.isBlank()) {
-            throw new ResponseStatusException(HttpStatus.BAD_GATEWAY, "OpenAI 응답에서 summary text를 찾을 수 없습니다.");
-        }
-        return new LlmResponseResult(
-                output.trim(),
-                LlmProvider.OPENAI,
-                effectiveModel,
-                effectiveReasoningEffort,
-                latencyMs,
-                usageValue(response, "input_tokens"),
-                usageValue(response, "output_tokens"),
-                usageValue(response, "total_tokens")
+        
+        return new LLMresponseDto(
+            output.trim(),
+            LlmProvider.OPENAI,
+            effectiveModel,
+            effectiveReasoningEffort,
+            latencyMs
         );
     }
 
-    public Map<String, Object> requestBody(String systemPrompt, String userPrompt, Map<String, Object> extraRequestFields) {
-        return requestBody(systemPrompt, userPrompt, extraRequestFields, model, reasoningEffort);
-    }
-
-    public Map<String, Object> requestBody(
+    /* AiChat용 Java Map 조립 함수 */
+    private Map<String, Object> aiChatRequestBody(
             String systemPrompt,
             String userPrompt,
-            Map<String, Object> extraRequestFields,
-            String requestedModel,
-            String requestedReasoningEffort
-    ) {
-        return requestBody(systemPrompt, userPrompt, extraRequestFields, requestedModel, requestedReasoningEffort, null);
-    }
-
-    public Map<String, Object> requestBody(
-            String systemPrompt,
-            String userPrompt,
-            Map<String, Object> extraRequestFields,
-            String requestedModel,
-            String requestedReasoningEffort,
+            String schemaName,
+            Map<String, Object> jsonSchema,
+            String effectiveModel,
             Integer requestedMaxOutputTokens
     ) {
-        String effectiveModel = blankToNull(requestedModel) == null ? model : requestedModel.trim();
-        String effectiveReasoningEffort = blankToNull(requestedReasoningEffort) == null ? reasoningEffort : requestedReasoningEffort.trim();
         Map<String, Object> request = new LinkedHashMap<>();
+
         request.put("model", effectiveModel);
-        if (supportsReasoningEffort(effectiveModel)) {
-            request.put("reasoning", Map.of("effort", effectiveReasoningEffort));
-        }
         request.put("instructions", systemPrompt);
         request.put("input", userPrompt);
+        request.put("text", MockData.map(
+                "format", MockData.map(
+                        "type", "json_schema",
+                        "name", schemaName,
+                        "schema", jsonSchema,
+                        "strict", true
+                )
+        ));
         if (requestedMaxOutputTokens != null && requestedMaxOutputTokens > 0) {
             request.put("max_output_tokens", requestedMaxOutputTokens);
         }
-        request.putAll(extraRequestFields);
+
         return request;
     }
 
-    @SuppressWarnings("unchecked")
-    private static Integer usageValue(Map<String, Object> response, String key) {
-        Object usage = response == null ? null : response.get("usage");
-        if (!(usage instanceof Map<?, ?> usageMap)) {
-            return null;
-        }
-        Object value = usageMap.get(key);
-        if (value instanceof Number number) {
-            return number.intValue();
-        }
-        return null;
-    }
-
-    private static boolean supportsReasoningEffort(String model) {
-        String normalized = model == null ? "" : model.toLowerCase();
-        return normalized.startsWith("gpt-5") || normalized.startsWith("o");
-    }
-
+    /* 특정 부분 텍스트 추출하여 전송 */
     @SuppressWarnings("unchecked")
     private static String extractOutputText(Map<String, Object> response) {
-        Object directOutput = response == null ? null : response.get("output_text");
-        if (directOutput instanceof String text && !text.isBlank()) {
+        if (response == null || response.isEmpty()) {
+            throw new ResponseStatusException(HttpStatus.BAD_GATEWAY, "OpenAI 응답이 비어 있습니다.");
+        }
+
+        Object outputText = response.get("output_text");
+        if (outputText instanceof String text) {
             return text;
         }
-        Object output = response == null ? null : response.get("output");
-        if (!(output instanceof List<?> outputItems)) {
-            return null;
+
+        List<Map<String, Object>> output = (List<Map<String, Object>>) response.get("output");
+        if (output == null || output.isEmpty()) {
+            throw new ResponseStatusException(HttpStatus.BAD_GATEWAY, "OpenAI 응답 output을 찾을 수 없습니다.");
         }
-        StringBuilder builder = new StringBuilder();
-        for (Object outputItem : outputItems) {
-            if (!(outputItem instanceof Map<?, ?> item)) {
-                continue;
-            }
-            Object content = item.get("content");
-            if (!(content instanceof List<?> contentItems)) {
-                continue;
-            }
-            for (Object contentItem : contentItems) {
-                if (!(contentItem instanceof Map<?, ?> contentMap)) {
-                    continue;
-                }
-                Object type = contentMap.get("type");
-                Object text = contentMap.get("text");
-                if ("output_text".equals(type) && text instanceof String textValue) {
-                    builder.append(textValue);
-                }
-            }
+        Map<String, Object> message = output.get(0);
+
+        List<Map<String, Object>> content = (List<Map<String, Object>>) message.get("content");
+        if (content == null || content.isEmpty()) {
+            throw new ResponseStatusException(HttpStatus.BAD_GATEWAY, "OpenAI 응답 content를 찾을 수 없습니다.");
         }
-        return builder.isEmpty() ? null : builder.toString();
+        Map<String, Object> textBlock = content.get(0);
+
+        Object text = textBlock.get("text");
+        if (text instanceof String value && !value.isBlank()) {
+            return value;
+        }
+        throw new ResponseStatusException(HttpStatus.BAD_GATEWAY, "OpenAI 응답 text를 찾을 수 없습니다.");
+    }
+
+    private static String safeErrorBody(RestClientResponseException error) {
+        String body = error.getResponseBodyAsString();
+        if (body == null || body.isBlank()) {
+            return "";
+        }
+        String compact = body.replaceAll("\\s+", " ").trim();
+        String truncated = compact.length() > 500 ? compact.substring(0, 500) + "..." : compact;
+        return ": " + truncated;
     }
 
     private static String trimTrailingSlash(String value) {
@@ -248,5 +215,4 @@ public class AiChatClient {
     private static String blankToNull(String value) {
         return value == null || value.isBlank() ? null : value.trim();
     }
-
 }

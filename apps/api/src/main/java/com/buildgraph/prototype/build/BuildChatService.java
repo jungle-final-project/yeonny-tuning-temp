@@ -137,24 +137,24 @@ public class BuildChatService {
     private Map<String, Object> responseMap(AiChatResponseDto engineResponse, Map<String, Object> request) {
         List<String> warnings = new ArrayList<>();
         List<AiChatResponseDto.PartRecommendation> safePartRecommendations = failSafePartRecommendations(engineResponse.partRecommendations(), request, warnings);
-        List<Map<String, Object>> builds = switch (engineResponse.intent()) {
+        AiChatIntent intent = intentFrom(engineResponse.respondType());
+        List<Map<String, Object>> builds = intent == null ? engineBuilds(engineResponse, warnings) : switch (intent) {
             case FULL_BUILD_RECOMMEND -> engineBuilds(engineResponse, warnings);
             case PART_RECOMMEND, BUILD_MODIFY -> changedCurrentBuilds(engineResponse, request, safePartRecommendations, warnings);
-            default -> engineBuilds(engineResponse, warnings);
+            case PRICE_ALERT_HELP -> engineBuilds(engineResponse, warnings);
         };
         Map<String, Object> partRecommendation = partRecommendation(safePartRecommendations);
         List<Map<String, Object>> actions = draftActions(engineResponse, request, safePartRecommendations);
         warnings.addAll(buildWarnings(builds));
-        warnings.addAll(stringList(engineResponse.parsedContext().get("warnings")));
         return MockData.map(
-                "answerType", answerType(engineResponse.intent()),
-                "message", engineResponse.assistantMessage(),
+                "answerType", answerType(intent),
+                "message", engineResponse.replyMessage(),
                 "builds", builds,
                 "partRecommendation", partRecommendation,
                 "actions", actions,
                 "warnings", distinct(warnings),
-                "evidenceIds", engineResponse.evidenceIds(),
-                "agentSessionId", engineResponse.agentSessionId()
+                "evidenceIds", List.of(),
+                "agentSessionId", engineResponse.sessionId()
         );
     }
 
@@ -186,11 +186,12 @@ public class BuildChatService {
                 .map(this::partCandidate)
                 .toList();
         int totalPrice = totalPrice(parts);
-        Integer userBudget = numberValue(engineResponse.parsedContext().get("budget"));
+        Map<String, Object> parsedContext = parsedContext(engineResponse);
+        Integer userBudget = numberValue(parsedContext.get("budget"));
         int toolBudget = userBudget == null || userBudget <= 0 ? totalPrice : userBudget;
         List<Map<String, Object>> toolResults = toolResults(parts, toolBudget, warnings);
         List<String> buildWarnings = new ArrayList<>(toolWarnings(toolResults));
-        if (userBudget != null && totalPrice > userBudget && hasHardConstraint(engineResponse.parsedContext())) {
+        if (userBudget != null && totalPrice > userBudget && hasHardConstraint(parsedContext)) {
             buildWarnings.add("명시한 부품 조건을 지키기 위해 예산을 초과했습니다.");
         }
         List<Map<String, Object>> items = parts.stream()
@@ -204,7 +205,7 @@ public class BuildChatService {
                 "summary", recommendation.summary(),
                 "recommendedFor", recommendation.recommendedFor(),
                 "totalPrice", totalPrice,
-                "badges", badges(tier.title(), engineResponse.parsedContext()),
+                "badges", badges(tier.title(), parsedContext),
                 "budgetWon", toolBudget,
                 "budgetLabel", userBudget == null ? "예산 미지정" : formatBudgetLabel(userBudget),
                 "tierLabel", tier.title(),
@@ -213,7 +214,7 @@ public class BuildChatService {
                 "toolResults", toolResults,
                 "warnings", distinct(buildWarnings),
                 "confidence", firstText(recommendation.confidence(), confidence(toolResults, buildWarnings)),
-                "evidenceIds", engineResponse.evidenceIds()
+                "evidenceIds", List.of()
         );
     }
 
@@ -272,7 +273,7 @@ public class BuildChatService {
         }
         String message = text(request.get("message"));
         List<Map<String, Object>> draftItems = objectMaps(currentQuoteDraft.get("items"));
-        Map<String, Object> parsedContext = engineResponse.parsedContext() == null ? Map.of() : engineResponse.parsedContext();
+        Map<String, Object> parsedContext = parsedContext(engineResponse);
         Map<String, Object> draftEdit = objectMap(parsedContext.get("draftEdit"));
         String category = firstText(text(draftEdit.get("category")), firstText(detectPartCategory(message), firstRecommendedCategory(engineResponse)));
         String operation = text(draftEdit.get("operation"));
@@ -717,11 +718,29 @@ public class BuildChatService {
     }
 
     private static String answerType(AiChatIntent intent) {
+        if (intent == null) {
+            return "GENERAL";
+        }
         return switch (intent) {
             case FULL_BUILD_RECOMMEND -> "BUDGET";
             case PART_RECOMMEND, BUILD_MODIFY -> "PART";
-            case PRICE_ALERT_HELP, CONVERSATION -> "GENERAL";
+            case PRICE_ALERT_HELP -> "GENERAL";
         };
+    }
+
+    private static AiChatIntent intentFrom(String respondType) {
+        if (respondType == null || respondType.isBlank() || "CONVERSATION".equals(respondType)) {
+            return null;
+        }
+        try {
+            return AiChatIntent.valueOf(respondType);
+        } catch (IllegalArgumentException ignored) {
+            return null;
+        }
+    }
+
+    private static Map<String, Object> parsedContext(AiChatResponseDto engineResponse) {
+        return Map.of();
     }
 
     private static int defaultQuantity(String category) {

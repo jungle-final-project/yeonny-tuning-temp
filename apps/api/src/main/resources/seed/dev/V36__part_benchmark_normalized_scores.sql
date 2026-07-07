@@ -40,9 +40,9 @@ WITH active_parts AS (
              + COALESCE(thread_count, COALESCE(core_count, 6) * 2) * 0.55
              + CASE WHEN lower_name ~ 'x3d' THEN 8 ELSE 0 END
              + CASE WHEN attributes->>'architecture' ~* 'Zen 5|Arrow Lake' THEN 8 ELSE 4 END
-             + CASE WHEN lower_name ~ '9950|285k|ultra9|라이젠9' THEN 6
-                    WHEN lower_name ~ '9900|265k|ultra7|라이젠7' THEN 4
-                    WHEN lower_name ~ '245k|ultra5|라이젠5' THEN 1
+             + CASE WHEN lower_name ~ '9950|285k|ultra9' OR lower_name LIKE '%라이젠9%' THEN 6
+                    WHEN lower_name ~ '9900|265k|ultra7' OR lower_name LIKE '%라이젠7%' THEN 4
+                    WHEN lower_name ~ '245k|ultra5' OR lower_name LIKE '%라이젠5%' THEN 1
                     ELSE 0 END
            )), 2)
            WHEN 'GPU' THEN round(LEAST(100::numeric, GREATEST(45::numeric,

@@ -1,2 +1,2 @@
--- Runtime DB schema is managed by Flyway migrations under db/migration.
+-- Runtime DB schema is not initialized automatically.
 -- This file intentionally contains no DDL to avoid diverging from docs/DB_SCHEMA.md.

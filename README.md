@@ -76,8 +76,8 @@ docker compose up --build
 
 | 서비스 | 주소 |
 | --- | --- |
-| 웹 | http://localhost:5173 |
-| API health | http://localhost:8080/api/health |
+| 웹 | http://localhost:5175 |
+| API health | http://localhost:8081/api/health |
 | RabbitMQ 관리 화면 | http://localhost:15672 |
 | Mailpit | http://localhost:8025 |
 
@@ -85,10 +85,10 @@ docker compose up --build
 
 | 화면 | 주소 | 확인할 내용 |
 | --- | --- | --- |
-| 홈 | http://localhost:5173 | 로그인 진입, 주요 쇼핑몰 메뉴 |
-| 셀프 견적 | http://localhost:5173/self-quote | 내부 자산 부품 목록, 카테고리 선택, 견적 담기 |
-| AS Chat | http://localhost:5173/support/ai-chat | 로그인 후 AS AI 챗봇 화면. 실제 답변 생성은 `OPENAI_API_KEY` 필요 |
-| API health | http://localhost:8080/api/health | API와 DB 연결 상태 |
+| 홈 | http://localhost:5175 | 로그인 진입, 주요 쇼핑몰 메뉴 |
+| 셀프 견적 | http://localhost:5175/self-quote | 내부 자산 부품 목록, 카테고리 선택, 견적 담기 |
+| AS Chat | http://localhost:5175/support/ai-chat | 로그인 후 AS AI 챗봇 화면. 실제 답변 생성은 `OPENAI_API_KEY` 필요 |
+| API health | http://localhost:8081/api/health | API와 DB 연결 상태 |
 
 중지와 초기화:
 
@@ -120,11 +120,11 @@ bash scripts/backfill-rag-embeddings.sh
 기본 seed 관리자 계정(`admin@example.com` / `passw0rd!`)으로 로그인해 `POST /api/admin/rag-embeddings/backfill`을 호출합니다. 다른 환경에서는 아래처럼 바꿀 수 있습니다.
 
 ```powershell
-.\scripts\backfill-rag-embeddings.ps1 -ApiBaseUrl "http://localhost:8080" -AdminEmail "admin@example.com" -AdminPassword "passw0rd!" -Limit 200
+.\scripts\backfill-rag-embeddings.ps1 -ApiBaseUrl "http://localhost:8081" -AdminEmail "admin@example.com" -AdminPassword "passw0rd!" -Limit 200
 ```
 
 ```bash
-API_BASE_URL=http://localhost:8080 ADMIN_EMAIL=admin@example.com ADMIN_PASSWORD='passw0rd!' LIMIT=200 bash scripts/backfill-rag-embeddings.sh
+API_BASE_URL=http://localhost:8081 ADMIN_EMAIL=admin@example.com ADMIN_PASSWORD='passw0rd!' LIMIT=200 bash scripts/backfill-rag-embeddings.sh
 ```
 
 성공 예시:
@@ -313,14 +313,14 @@ PART_PRICE_REFRESH_ZONE=Asia/Seoul
 캐시 갱신:
 
 ```powershell
-$login = Invoke-RestMethod -Method Post "http://localhost:8080/api/auth/login" `
+$login = Invoke-RestMethod -Method Post "http://localhost:8081/api/auth/login" `
   -ContentType "application/json" `
   -Body (@{ email = "admin@example.com"; password = "passw0rd!" } | ConvertTo-Json)
 $headers = @{ Authorization = "Bearer $($login.accessToken)" }
 
 Invoke-RestMethod -Method Post `
   -Headers $headers `
-  "http://localhost:8080/api/admin/parts/external-offers/refresh?category=GPU&limit=20"
+  "http://localhost:8081/api/admin/parts/external-offers/refresh?category=GPU&limit=20"
 ```
 
 내부 자산 후보 대량 수집:
@@ -328,7 +328,7 @@ Invoke-RestMethod -Method Post `
 ```powershell
 Invoke-RestMethod -Method Post `
   -Headers $headers `
-  "http://localhost:8080/api/admin/parts/catalog/refresh?category=GPU&limitPerQuery=3"
+  "http://localhost:8081/api/admin/parts/catalog/refresh?category=GPU&limitPerQuery=3"
 ```
 
 후보를 바로 내부 자산으로 게시하면서 수집:
@@ -336,7 +336,7 @@ Invoke-RestMethod -Method Post `
 ```powershell
 Invoke-RestMethod -Method Post `
   -Headers $headers `
-  "http://localhost:8080/api/admin/parts/catalog/refresh?category=GPU&limitPerQuery=3&publish=true"
+  "http://localhost:8081/api/admin/parts/catalog/refresh?category=GPU&limitPerQuery=3&publish=true"
 ```
 
 `catalog/refresh`는 category별 query pack을 사용합니다. GPU는 RTX 5090/5080/5070 Ti/5070/5060 Ti/5060을 ASUS, MSI, GIGABYTE, ZOTAC, PNY 등 제조사 검색어로 나누어 수십 개 후보를 모읍니다. MOTHERBOARD, PSU도 주요 제조사와 최신 규격 검색어 묶음을 사용합니다.

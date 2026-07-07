@@ -482,6 +482,7 @@ public class ToolService {
     }
 
     /** Converts arbitrary values into trimmed string lists. */
+    @SuppressWarnings("null")
     private static List<String> stringList(Object value) {
         if (value instanceof List<?> list) {
             return list.stream().map(String::valueOf).map(String::trim).filter(item -> !item.isBlank()).toList();

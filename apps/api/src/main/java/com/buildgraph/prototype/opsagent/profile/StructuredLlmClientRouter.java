@@ -24,7 +24,7 @@ public class StructuredLlmClientRouter {
         };
     }
 
-    public LlmResponseResult createStructuredJsonResult(
+    public LLMresponseDto createStructuredJsonResult(
             AiProfileDefinition profile,
             String systemPrompt,
             String userPrompt,
@@ -32,7 +32,7 @@ public class StructuredLlmClientRouter {
             Map<String, Object> jsonSchema
     ) {
         return switch (profile.provider()) {
-            case OPENAI -> openAiResponsesClient.createStructuredJsonResult(
+            case OPENAI -> openAiResponsesClient.generateLLMresponse(
                     systemPrompt,
                     userPrompt,
                     schemaName,

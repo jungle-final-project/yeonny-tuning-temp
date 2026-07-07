@@ -47,10 +47,11 @@ export function SelfQuotePage() {
   const [page, setPage] = useState(() => normalizePage(searchParams.get('page')));
   const [aiBuild, setAiBuild] = useState<AiSelectedBuild | null>(() => readSelectedAiBuild());
   const [pendingPartActionId, setPendingPartActionId] = useState<string | null>(null);
-  const hasToken = Boolean(getToken());
+  const [authToken, setAuthToken] = useState(() => getToken());
+  const hasToken = Boolean(authToken);
   const compatibilitySource = category ? 'QUOTE_DRAFT_CURRENT' : undefined;
   const { data, isError, isFetching, isLoading, isPlaceholderData } = useQuery({
-    queryKey: ['parts', 'self-quote', category, query, sort, compatibilitySource, page],
+    queryKey: ['parts', 'self-quote', hasToken, category, query, sort, compatibilitySource, page],
     queryFn: () => listParts({ category, q: query, page, size: PAGE_SIZE, sort, compatibilitySource }),
     placeholderData: keepPreviousData,
     refetchInterval: 30_000,
@@ -169,15 +170,25 @@ export function SelfQuotePage() {
 
   useEffect(() => {
     const syncSelectedBuild = () => setAiBuild(readSelectedAiBuild());
+    const syncAuth = () => {
+      setAuthToken(getToken());
+      queryClient.invalidateQueries({ queryKey: ['parts', 'self-quote'] });
+      queryClient.invalidateQueries({ queryKey: ['quote-draft', 'current'] });
+      queryClient.invalidateQueries({ queryKey: ['build-graph', 'quote-draft-current'] });
+    };
+    const syncPageState = () => {
+      syncSelectedBuild();
+      syncAuth();
+    };
     window.addEventListener(AI_SELECTED_BUILD_CHANGED_EVENT, syncSelectedBuild);
-    window.addEventListener(AUTH_CHANGED_EVENT, syncSelectedBuild);
-    window.addEventListener('storage', syncSelectedBuild);
+    window.addEventListener(AUTH_CHANGED_EVENT, syncPageState);
+    window.addEventListener('storage', syncPageState);
     return () => {
       window.removeEventListener(AI_SELECTED_BUILD_CHANGED_EVENT, syncSelectedBuild);
-      window.removeEventListener(AUTH_CHANGED_EVENT, syncSelectedBuild);
-      window.removeEventListener('storage', syncSelectedBuild);
+      window.removeEventListener(AUTH_CHANGED_EVENT, syncPageState);
+      window.removeEventListener('storage', syncPageState);
     };
-  }, []);
+  }, [queryClient]);
 
   const addPart = (part: PartRow) => {
     if (!hasToken) {

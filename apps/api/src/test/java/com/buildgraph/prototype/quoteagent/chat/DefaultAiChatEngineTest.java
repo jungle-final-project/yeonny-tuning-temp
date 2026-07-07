@@ -2,7 +2,7 @@ package com.buildgraph.prototype.quoteagent.chat;
 
 import com.buildgraph.prototype.opsagent.profile.AiProfileConfigTest;
 import com.buildgraph.prototype.opsagent.profile.LlmProvider;
-import com.buildgraph.prototype.opsagent.profile.LlmResponseResult;
+import com.buildgraph.prototype.opsagent.profile.LLMresponseDto;
 import com.buildgraph.prototype.quoteagent.llm.AiChatClient;
 import com.buildgraph.prototype.quoteagent.query.AiChatSessionState;
 import com.buildgraph.prototype.quoteagent.query.AiChatSessionStore;
@@ -73,7 +73,7 @@ class DefaultAiChatEngineTest {
     @Test
     void llmRequiredBuildChatUsesMessageAndSessionRequestShape() {
         when(openAiResponsesClient.isConfigured()).thenReturn(true);
-        when(openAiResponsesClient.createStructuredJsonResult(
+        when(openAiResponsesClient.generateLLMresponse(
                 anyString(),
                 anyString(),
                 eq("buildgraph_ai_build_chat_plan"),
@@ -82,54 +82,32 @@ class DefaultAiChatEngineTest {
                 eq("low"),
                 eq(900)
         ))
-                .thenReturn(new LlmResponseResult("""
+                .thenReturn(new LLMresponseDto("""
                         {
-                          "intent": "FULL_BUILD_RECOMMEND",
-                          "assistantMessage": "RTX 5090 조건을 유지해 추천 조합을 만들겠습니다.",
-                          "selectedCategory": null,
-                          "parsedContext": {
+                          "conversationMode": false,
+                          "replyMessage": "RTX 5090 조건을 유지해 추천 조합을 만들겠습니다.",
+                          "action": {
+                            "type": "FULL_BUILD_RECOMMEND",
+                            "ragQuery": {
+                              "requiredGpuClasses": ["RTX_5090"]
+                            }
+                          },
+                          "contextPatch": {
                             "budget": null,
                             "usageTags": ["GAMING"],
-                            "resolution": null,
-                            "preferredVendors": ["NVIDIA"],
-                            "priority": null,
-                            "performanceTier": "ENTHUSIAST",
-                            "budgetPolicy": "OPEN_BUDGET",
-                            "mustHave": [],
-                            "requiredGpuClasses": ["RTX_5090"],
-                            "requiredPartKeywords": [],
-                            "hardConstraintPolicy": "MUST_INCLUDE",
-                            "confidence": {
-                              "usageTags": "HIGH",
-                              "budget": "LOW",
-                              "resolution": "LOW",
-                              "preferredVendors": "HIGH",
-                              "mustHave": "LOW",
-                              "requiredGpuClasses": "HIGH",
-                              "requiredPartKeywords": "LOW"
-                            },
-                            "parseNotes": "사용자가 RTX 5090을 명시했습니다."
-                          },
-                          "draftEdit": {
-                            "operation": "NONE",
-                            "category": null,
-                            "priceDirection": "ANY",
-                            "targetMaxPrice": null,
-                            "targetQuantity": null,
-                            "reason": null
+                            "missingSlots": []
                           }
                         }
-                        """, LlmProvider.OPENAI, "gpt-5.5", "low", 1234, 100, 80, 180));
+                        """, LlmProvider.OPENAI, "gpt-5.5", "low", 1234));
 
         AiChatResponseDto response = engine.respondLlmRequired(new AiChatRequestDto(
                 "5090 글카가 들어간 PC 추천해줘",
                 "session-5090"
         ), null);
 
-        assertThat(response.intent()).isEqualTo(AiChatIntent.FULL_BUILD_RECOMMEND);
-        assertThat(response.assistantMessage()).contains("추천 PC");
-        assertThat(response.evidenceIds()).isEmpty();
-        assertThat(response.parsedContext().get("requiredGpuClasses")).asList().containsExactly("RTX_5090");
+        assertThat(response.respondType()).isEqualTo(AiChatIntent.FULL_BUILD_RECOMMEND.name());
+        assertThat(response.replyMessage()).contains("추천 PC 3개");
+        assertThat(response.sessionId()).isEqualTo("session-5090");
         assertThat(response.recommendations()).hasSize(3);
         verifyNoJdbcWrites();
     }

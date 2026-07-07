@@ -31,10 +31,12 @@ dependencies {
     implementation 'org.springframework.boot:spring-boot-starter-validation'
     implementation 'org.springframework.boot:spring-boot-starter-web'
     implementation 'org.springframework.security:spring-security-crypto'
-    implementation 'org.springframework.security:spring-security-oauth2-jose'
-    implementation 'org.flywaydb:flyway-core'
-    runtimeOnly 'org.flywaydb:flyway-database-postgresql'
-    runtimeOnly 'org.postgresql:postgresql'
+    implementation 'org.springframework.security:spring-security-oauth2-jose' 
+    /* L1 캐시 적용용 의존성*/
+    implementation 'org.springframework.boot:spring-boot-starter-cache'
+    implementation 'com.github.ben-manes.caffeine:caffeine'
+    
+    runtimeOnly 'org.postgresql:postgresql' 
     /* lombok 추가 */
     compileOnly 'org.projectlombok:lombok'
     annotationProcessor 'org.projectlombok:lombok'
@@ -81,5 +83,25 @@ tasks.named('test') {
                 new File(root, 'main-classes'),
                 new File(root, 'main-resources')
         ) + (classpath - projectOutput)
+    }
+}
+
+tasks.named('bootRun') {
+    doFirst {
+        def envFile = rootProject.file("../../.env")
+        if (envFile.exists()) {
+            envFile.eachLine { line ->
+                def trimmed = line.trim()
+                if (!trimmed || trimmed.startsWith("#") || !trimmed.contains("=")) return
+
+                def index = trimmed.indexOf("=")
+                def key = trimmed.substring(0, index).trim()
+                def value = trimmed.substring(index + 1).trim()
+
+                if (!System.getenv(key)) {
+                    environment key, value
+                }
+            }
+        }
     }
 }
