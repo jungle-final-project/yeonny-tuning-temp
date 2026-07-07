@@ -37,6 +37,13 @@ export function SlotCandidatePanel({
   const [sort, setSort] = useState<PartSearchParams['sort']>('price_asc');
   const [searchInput, setSearchInput] = useState('');
   const [q, setQ] = useState('');
+  const [manufacturer, setManufacturer] = useState('');
+  const [manufacturerOptions, setManufacturerOptions] = useState<string[]>([]);
+  const [minPriceInput, setMinPriceInput] = useState('');
+  const [maxPriceInput, setMaxPriceInput] = useState('');
+  const [minPrice, setMinPrice] = useState<number | undefined>(undefined);
+  const [maxPrice, setMaxPrice] = useState<number | undefined>(undefined);
+  const [hideFail, setHideFail] = useState(false);
   const [replaceTargetId, setReplaceTargetId] = useState<string | null>(null);
 
   // 검색어 디바운스(입력마다 요청하지 않는다) — 300ms 후 확정 검색어(q)를 갱신한다.
@@ -45,10 +52,30 @@ export function SlotCandidatePanel({
     return () => clearTimeout(timer);
   }, [searchInput]);
 
-  // 다른 슬롯(카테고리)으로 넘어가면 검색어를 초기화한다.
+  // 가격 범위 디바운스 — 숫자만 추출해 300ms 후 확정한다.
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      const parse = (value: string) => {
+        const digits = value.replace(/[^0-9]/g, '');
+        return digits ? Number(digits) : undefined;
+      };
+      setMinPrice(parse(minPriceInput));
+      setMaxPrice(parse(maxPriceInput));
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [minPriceInput, maxPriceInput]);
+
+  // 다른 슬롯(카테고리)으로 넘어가면 검색·필터를 초기화한다.
   useEffect(() => {
     setSearchInput('');
     setQ('');
+    setManufacturer('');
+    setManufacturerOptions([]);
+    setMinPriceInput('');
+    setMaxPriceInput('');
+    setMinPrice(undefined);
+    setMaxPrice(undefined);
+    setHideFail(false);
   }, [slot.category]);
   const isMulti = isMultiItemCategory(slot.category);
   const selectedPartIds = new Set(draftItems.map((item) => item.partId));
@@ -61,13 +88,16 @@ export function SlotCandidatePanel({
   // (REPLACE = 교체-전체)이 담기/교체 실행과 의미가 같아 파라미터를 생략한다.
   const compatibilityMode = replaceTargetId ? undefined : isMulti ? 'ADD' as const : undefined;
   const { data, isLoading, isError, isFetchingNextPage, hasNextPage, fetchNextPage } = useInfiniteQuery({
-    queryKey: ['parts', 'slot-candidates', slot.category, sort, q, compatibilityMode ?? 'REPLACE', replaceTargetId],
+    queryKey: ['parts', 'slot-candidates', slot.category, sort, q, manufacturer, minPrice, maxPrice, compatibilityMode ?? 'REPLACE', replaceTargetId],
     queryFn: ({ pageParam }) => listParts({
       category: slot.category,
       page: pageParam,
       size: CANDIDATE_PAGE_SIZE,
       sort,
       q: q || undefined,
+      manufacturer: manufacturer || undefined,
+      minPrice,
+      maxPrice,
       compatibilitySource: 'QUOTE_DRAFT_CURRENT',
       compatibilityMode,
       replaceTargetPartId: replaceTargetId ?? undefined
@@ -80,6 +110,28 @@ export function SlotCandidatePanel({
   // 멘토 피드백: 비호환 후보를 숨기지 않는다 — 전부 보여주되 FAIL은 회색 비활성 + 사유를 표시해
   // 사용자가 "왜 안 되는지"를 알 수 있게 한다.
   const visibleParts = useMemo(() => pages.flatMap((page) => page.items), [pages]);
+
+  // 제조사 필터 옵션: 공개 목록 API가 없어 로드된 후보에서 누적 수집한다(필터로 좁혀도 줄지 않게 누적).
+  useEffect(() => {
+    setManufacturerOptions((prev) => {
+      const next = new Set(prev);
+      let grew = false;
+      for (const part of visibleParts) {
+        const name = part.manufacturer;
+        if (name && !next.has(name)) {
+          next.add(name);
+          grew = true;
+        }
+      }
+      return grew ? [...next].sort((a, b) => a.localeCompare(b, 'ko')) : prev;
+    });
+  }, [visibleParts]);
+
+  // '장착 불가 숨기기' 토글: 기본은 전부 표시(멘토 룰), 켜면 FAIL만 client-side로 감춘다.
+  const renderedParts = useMemo(
+    () => (hideFail ? visibleParts.filter((part) => part.compatibility?.status !== 'FAIL') : visibleParts),
+    [visibleParts, hideFail]
+  );
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
@@ -182,6 +234,56 @@ export function SlotCandidatePanel({
         </div>
       </div>
 
+      {/* 필터: 제조사·가격대(기존 GET /api/parts 파라미터 재사용) + 장착 불가 숨기기(client-side, 기본 꺼짐). */}
+      <div className="shrink-0 border-b border-commerce-line px-4 py-2.5">
+        <div className="flex flex-wrap items-center gap-x-2 gap-y-2">
+          <select
+            aria-label="제조사 필터"
+            data-testid="candidate-manufacturer"
+            value={manufacturer}
+            onChange={(event) => setManufacturer(event.target.value)}
+            className="h-8 max-w-[150px] rounded-md border border-commerce-line bg-white px-2 text-xs font-bold text-slate-700 outline-none focus:border-brand-blue"
+          >
+            <option value="">전체 제조사</option>
+            {manufacturerOptions.map((name) => (
+              <option key={name} value={name}>{name}</option>
+            ))}
+          </select>
+          <div className="flex items-center gap-1">
+            <input
+              inputMode="numeric"
+              aria-label="최소 가격"
+              data-testid="candidate-min-price"
+              value={minPriceInput}
+              onChange={(event) => setMinPriceInput(event.target.value)}
+              placeholder="최소"
+              className="h-8 w-[68px] rounded-md border border-commerce-line bg-white px-2 text-right text-xs font-bold text-commerce-ink outline-none placeholder:font-semibold placeholder:text-slate-400 focus:border-brand-blue"
+            />
+            <span className="text-xs font-bold text-slate-400">~</span>
+            <input
+              inputMode="numeric"
+              aria-label="최대 가격"
+              data-testid="candidate-max-price"
+              value={maxPriceInput}
+              onChange={(event) => setMaxPriceInput(event.target.value)}
+              placeholder="최대"
+              className="h-8 w-[68px] rounded-md border border-commerce-line bg-white px-2 text-right text-xs font-bold text-commerce-ink outline-none placeholder:font-semibold placeholder:text-slate-400 focus:border-brand-blue"
+            />
+            <span className="text-xs font-bold text-slate-400">원</span>
+          </div>
+          <label className="ml-auto flex cursor-pointer select-none items-center gap-1.5 text-xs font-bold text-slate-600">
+            <input
+              type="checkbox"
+              data-testid="candidate-hide-fail"
+              checked={hideFail}
+              onChange={(event) => setHideFail(event.target.checked)}
+              className="h-3.5 w-3.5 accent-brand-blue"
+            />
+            장착 불가 숨기기
+          </label>
+        </div>
+      </div>
+
       {draftItems.length > 0 ? (
         <div className="shrink-0 px-4 pt-4">
           <div className="space-y-2 rounded-md border border-blue-100 bg-blue-50/50 p-3">
@@ -254,7 +356,7 @@ export function SlotCandidatePanel({
         ) : null}
 
         <div className="space-y-2">
-          {visibleParts.map((part) => {
+          {renderedParts.map((part) => {
             const isSelected = selectedPartIds.has(part.id);
             const isFail = part.compatibility?.status === 'FAIL';
             const failReason = isFail
@@ -339,9 +441,13 @@ export function SlotCandidatePanel({
           })}
         </div>
 
-        {!isLoading && visibleParts.length === 0 && !hasNextPage ? (
+        {!isLoading && renderedParts.length === 0 && !hasNextPage ? (
           <div className="mt-2 rounded-md border border-dashed border-slate-300 p-4 text-center text-xs font-bold text-slate-500">
-            {q ? `'${q}' 검색 결과가 없습니다.` : '표시할 후보가 없습니다.'}
+            {q
+              ? `'${q}' 검색 결과가 없습니다.`
+              : hideFail && visibleParts.length > 0
+                ? '장착 가능한 후보가 없습니다. 필터를 조정해 보세요.'
+                : '표시할 후보가 없습니다.'}
           </div>
         ) : null}
 

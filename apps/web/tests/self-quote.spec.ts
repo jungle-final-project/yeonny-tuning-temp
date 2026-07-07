@@ -1141,6 +1141,64 @@ test('filters candidates by search keyword and offers compatibility-first sort',
   await expect.poll(() => partRequests.some((request) => request.sort === 'compatibility')).toBe(true);
 });
 
+test('filters candidates by manufacturer, price range, and hides incompatible', async ({ page }) => {
+  await loginAsUser(page);
+  const partRequests: Array<Record<string, string | null>> = [];
+
+  await page.route('**/api/quote-drafts/current**', async (route) => {
+    await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(emptyDraft) });
+  });
+  await page.route('**/api/parts**', async (route) => {
+    const url = new URL(route.request().url());
+    partRequests.push({
+      manufacturer: url.searchParams.get('manufacturer'),
+      minPrice: url.searchParams.get('minPrice'),
+      maxPrice: url.searchParams.get('maxPrice')
+    });
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        items: [
+          { ...candidatePart('gpu-asus', 'GPU', 'ASUS RTX 5070'), manufacturer: 'ASUS' },
+          {
+            ...candidatePart('gpu-msi', 'GPU', 'MSI RTX 5080', {
+              compatibility: { status: 'FAIL', statusLabel: '안 맞음', summary: '파워 용량이 부족합니다.' }
+            }),
+            manufacturer: 'MSI'
+          }
+        ],
+        page: 0,
+        size: 20,
+        total: 2
+      })
+    });
+  });
+
+  await page.goto('/self-quote');
+  await page.getByRole('button', { name: 'GPU 슬롯 열기' }).click();
+  const panel = page.getByTestId('slot-candidate-panel');
+  await expect(panel).toBeVisible();
+  await expect(panel.locator('[data-compat="FAIL"]')).toHaveCount(1);
+
+  // 장착 불가 숨기기(client-side): FAIL 후보만 사라지고, 다시 끄면 돌아온다.
+  await panel.getByTestId('candidate-hide-fail').check();
+  await expect(panel.locator('[data-compat="FAIL"]')).toHaveCount(0);
+  await expect(panel.getByText('ASUS RTX 5070')).toBeVisible();
+  await panel.getByTestId('candidate-hide-fail').uncheck();
+  await expect(panel.locator('[data-compat="FAIL"]')).toHaveCount(1);
+
+  // 제조사 필터: 로드된 후보에서 누적된 옵션을 골라 manufacturer 파라미터를 보낸다.
+  await expect(panel.locator('[data-testid="candidate-manufacturer"] option', { hasText: 'ASUS' })).toHaveCount(1);
+  await panel.getByTestId('candidate-manufacturer').selectOption('ASUS');
+  await expect.poll(() => partRequests.some((request) => request.manufacturer === 'ASUS')).toBe(true);
+
+  // 가격대 필터: 최소/최대 입력 → 디바운스 후 minPrice/maxPrice 파라미터.
+  await panel.getByTestId('candidate-min-price').fill('500000');
+  await panel.getByTestId('candidate-max-price').fill('900000');
+  await expect.poll(() => partRequests.some((request) => request.minPrice === '500000' && request.maxPrice === '900000')).toBe(true);
+});
+
 test('adds a candidate part into an empty slot from the panel', async ({ page }) => {
   await loginAsUser(page);
   const putRequests: Array<{ partId: string; quantity: number }> = [];
