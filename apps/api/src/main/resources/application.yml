@@ -44,6 +44,11 @@ management:
 buildgraph:
   cors:
     allowed-origins: ${BUILDGRAPH_CORS_ALLOWED_ORIGINS:}
+  scheduling:
+    # 모든 @Scheduled 잡 on/off 단일 스위치(SchedulingConfig). 기본 true(로컬/단일 배포 불변).
+    # 다중 인스턴스 배포에서 web-facing(스케일) 태스크는 false로 스케줄러를 끄고 worker 단일 태스크만 true.
+    # (프리웜·티어스냅샷은 advisory lock이 없어 스케일 시 OpenAI N배 과금 → web-facing에서 반드시 off)
+    enabled: ${BUILDGRAPH_SCHEDULING_ENABLED:true}
 
 support-chat:
   ws-ticket:
