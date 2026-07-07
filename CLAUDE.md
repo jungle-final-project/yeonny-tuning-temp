@@ -77,6 +77,7 @@ cd apps/api && ./gradlew test --tests "com.buildgraph.prototype.user.UserControl
 - Reuse existing `GET /api/parts`.
 - Include `compatibilitySource=QUOTE_DRAFT_CURRENT`.
 - Load candidates in 20 item pages.
+- **검색·정렬은 기존 `GET /api/parts` 파라미터를 재사용한다(백엔드 무변경)**: 이름·제조사 검색은 `q`(입력 디바운스 300ms), 정렬은 `sort=compatibility`(호환 가능 우선 — 서버가 PASS→WARN→FAIL 후 가격순)·`price_asc`·`price_desc`·`name`. 기본 정렬은 `price_asc`(패널 오픈 속도).
 - **Show ALL candidates**: PASS/WARN/FAIL 전부 담을 수 있다. FAIL(장착 불가) 후보는 숨기지 말고 빨강 경고 스타일(빨간 테두리 버튼 + '장착 불가' 뱃지 + 사유)로 표시하되 담기 자체는 허용한다 — 담으면 보드에서 빨강으로 보고 교체하는 UX다(구매는 여전히 호환 FAIL이면 차단). "왜 안 되는지"를 눈으로 확인할 수 있어야 함.
 - WARN candidates are selectable and keep `간섭 주의`.
 - 버튼 문구: 빈 슬롯 = `담기`, 채워진 단일 슬롯 = `교체`, 교체 대상 지정 시 = `이걸로 교체`.

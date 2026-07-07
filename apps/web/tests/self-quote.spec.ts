@@ -1096,6 +1096,51 @@ test('opens the candidate panel from a slot and requests QUOTE_DRAFT_CURRENT com
   await expect(page.getByTestId('slot-GPU')).toHaveAttribute('data-selected', 'false');
 });
 
+test('filters candidates by search keyword and offers compatibility-first sort', async ({ page }) => {
+  await loginAsUser(page);
+  const partRequests: Array<{ q: string | null; sort: string | null }> = [];
+
+  await page.route('**/api/quote-drafts/current**', async (route) => {
+    await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(emptyDraft) });
+  });
+  await page.route('**/api/parts**', async (route) => {
+    const url = new URL(route.request().url());
+    const q = url.searchParams.get('q');
+    partRequests.push({ q, sort: url.searchParams.get('sort') });
+    // 서버 검색 시뮬레이션: q가 있으면 이름에 포함된 후보만 돌려준다.
+    const all = [
+      candidatePart('part-gpu-5070', 'GPU', 'RTX 5070 게이밍'),
+      candidatePart('part-gpu-5080', 'GPU', 'RTX 5080 울트라', {
+        compatibility: { status: 'FAIL', statusLabel: '안 맞음', summary: '파워 용량이 부족합니다.' }
+      })
+    ];
+    const items = q ? all.filter((part) => part.name.includes(q)) : all;
+    await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ items, page: 0, size: 20, total: items.length }) });
+  });
+
+  await page.goto('/self-quote');
+  await page.getByRole('button', { name: 'GPU 슬롯 열기' }).click();
+  const panel = page.getByTestId('slot-candidate-panel');
+  await expect(panel).toBeVisible();
+  await expect(panel.getByText('RTX 5070 게이밍')).toBeVisible();
+  await expect(panel.getByText('RTX 5080 울트라')).toBeVisible();
+
+  // 검색: '5080' 입력 → 디바운스 후 q=5080 요청이 나가고 결과가 좁혀진다.
+  await panel.getByTestId('candidate-search').fill('5080');
+  await expect.poll(() => partRequests.some((request) => request.q === '5080')).toBe(true);
+  await expect(panel.getByText('RTX 5080 울트라')).toBeVisible();
+  await expect(panel.getByText('RTX 5070 게이밍')).toHaveCount(0);
+
+  // 검색어 지우기 → 다시 전체 후보.
+  await panel.getByRole('button', { name: '검색어 지우기' }).click();
+  await expect(panel.getByTestId('candidate-search')).toHaveValue('');
+  await expect(panel.getByText('RTX 5070 게이밍')).toBeVisible();
+
+  // 호환 가능 우선 정렬 → sort=compatibility 요청이 나간다(백엔드가 PASS→WARN→FAIL 순 정렬).
+  await panel.getByLabel('후보 정렬 기준').selectOption('compatibility');
+  await expect.poll(() => partRequests.some((request) => request.sort === 'compatibility')).toBe(true);
+});
+
 test('adds a candidate part into an empty slot from the panel', async ({ page }) => {
   await loginAsUser(page);
   const putRequests: Array<{ partId: string; quantity: number }> = [];

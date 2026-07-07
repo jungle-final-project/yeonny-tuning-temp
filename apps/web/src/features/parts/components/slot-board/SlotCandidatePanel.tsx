@@ -1,5 +1,5 @@
 import { useInfiniteQuery } from '@tanstack/react-query';
-import { X } from 'lucide-react';
+import { Search, X } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { partImageUrl, partShortSpec, specRows } from '../../partDisplay';
 import { listParts } from '../../partsApi';
@@ -35,7 +35,21 @@ export function SlotCandidatePanel({
   isMutating
 }: SlotCandidatePanelProps) {
   const [sort, setSort] = useState<PartSearchParams['sort']>('price_asc');
+  const [searchInput, setSearchInput] = useState('');
+  const [q, setQ] = useState('');
   const [replaceTargetId, setReplaceTargetId] = useState<string | null>(null);
+
+  // 검색어 디바운스(입력마다 요청하지 않는다) — 300ms 후 확정 검색어(q)를 갱신한다.
+  useEffect(() => {
+    const timer = setTimeout(() => setQ(searchInput.trim()), 300);
+    return () => clearTimeout(timer);
+  }, [searchInput]);
+
+  // 다른 슬롯(카테고리)으로 넘어가면 검색어를 초기화한다.
+  useEffect(() => {
+    setSearchInput('');
+    setQ('');
+  }, [slot.category]);
   const isMulti = isMultiItemCategory(slot.category);
   const selectedPartIds = new Set(draftItems.map((item) => item.partId));
   // 교체 성능 비교: CPU·GPU 슬롯에 현재 부품이 있으면, 후보로 바꿨을 때 성능 변화를 챗봇에 물어본다.
@@ -47,12 +61,13 @@ export function SlotCandidatePanel({
   // (REPLACE = 교체-전체)이 담기/교체 실행과 의미가 같아 파라미터를 생략한다.
   const compatibilityMode = replaceTargetId ? undefined : isMulti ? 'ADD' as const : undefined;
   const { data, isLoading, isError, isFetchingNextPage, hasNextPage, fetchNextPage } = useInfiniteQuery({
-    queryKey: ['parts', 'slot-candidates', slot.category, sort, compatibilityMode ?? 'REPLACE', replaceTargetId],
+    queryKey: ['parts', 'slot-candidates', slot.category, sort, q, compatibilityMode ?? 'REPLACE', replaceTargetId],
     queryFn: ({ pageParam }) => listParts({
       category: slot.category,
       page: pageParam,
       size: CANDIDATE_PAGE_SIZE,
       sort,
+      q: q || undefined,
       compatibilitySource: 'QUOTE_DRAFT_CURRENT',
       compatibilityMode,
       replaceTargetPartId: replaceTargetId ?? undefined
@@ -123,6 +138,7 @@ export function SlotCandidatePanel({
               onChange={(event) => setSort(event.target.value as PartSearchParams['sort'])}
               className="bg-transparent text-xs font-bold text-slate-700 outline-none"
             >
+              <option value="compatibility">호환 가능 우선</option>
               <option value="price_asc">가격 낮은순</option>
               <option value="price_desc">가격 높은순</option>
               <option value="name">이름순</option>
@@ -136,6 +152,33 @@ export function SlotCandidatePanel({
           >
             <X size={15} />
           </button>
+        </div>
+      </div>
+
+      {/* 검색: 이름·제조사로 후보를 좁힌다(디바운스 300ms, 호환 검사·정렬은 그대로 유지). */}
+      <div className="shrink-0 border-b border-commerce-line px-4 py-2.5">
+        <div className="relative">
+          <Search size={14} className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400" />
+          <input
+            type="text"
+            inputMode="search"
+            data-testid="candidate-search"
+            aria-label={`${slot.label} 부품 검색`}
+            value={searchInput}
+            onChange={(event) => setSearchInput(event.target.value)}
+            placeholder={`${slot.label} 이름·제조사 검색`}
+            className="h-9 w-full rounded-md border border-commerce-line bg-white pl-8 pr-8 text-xs font-bold text-commerce-ink placeholder:font-semibold placeholder:text-slate-400 focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-blue-100"
+          />
+          {searchInput ? (
+            <button
+              type="button"
+              aria-label="검색어 지우기"
+              onClick={() => setSearchInput('')}
+              className="absolute right-1.5 top-1/2 grid h-6 w-6 -translate-y-1/2 place-items-center rounded text-slate-400 hover:bg-slate-100 hover:text-slate-600"
+            >
+              <X size={13} />
+            </button>
+          ) : null}
         </div>
       </div>
 
@@ -298,7 +341,7 @@ export function SlotCandidatePanel({
 
         {!isLoading && visibleParts.length === 0 && !hasNextPage ? (
           <div className="mt-2 rounded-md border border-dashed border-slate-300 p-4 text-center text-xs font-bold text-slate-500">
-            표시할 후보가 없습니다.
+            {q ? `'${q}' 검색 결과가 없습니다.` : '표시할 후보가 없습니다.'}
           </div>
         ) : null}
 
