@@ -46,8 +46,8 @@ type BuildDependencyGraphProps = {
 };
 type CandidateContext = NonNullable<BuildDependencyGraphProps['candidateContext']>;
 type BuildGraphInsight = BuildGraphResolveResponse['insights'][number];
+type GraphLayoutVariant = 'default' | 'preview';
 
-const categoryOrder = ['CPU', 'MOTHERBOARD', 'RAM', 'GPU', 'PSU', 'CASE', 'COOLER', 'STORAGE', 'PRICE'];
 const DEFAULT_NODE_SIZE = { width: 220, height: 108 };
 const WIDE_NODE_SIZE = { width: 250, height: 112 };
 const PRICE_NODE_SIZE = { width: 220, height: 88 };
@@ -83,6 +83,35 @@ const categoryPositions: Record<string, { x: number; y: number }> = {
   STORAGE: { x: 20, y: 650 },
   PRICE: { x: 300, y: 660 }
 };
+const previewNodePositions = [
+  { x: 340, y: 240 },
+  { x: 55, y: 190 },
+  { x: 625, y: 190 },
+  { x: 340, y: 42 },
+  { x: 340, y: 438 },
+  { x: 55, y: 420 },
+  { x: 625, y: 420 },
+  { x: 55, y: 44 },
+  { x: 625, y: 44 },
+  { x: 55, y: 610 },
+  { x: 625, y: 610 }
+];
+const previewPricePositions = [
+  { x: 340, y: 620 },
+  { x: 55, y: 620 },
+  { x: 625, y: 620 }
+];
+const previewCategoryPositions: Record<string, { x: number; y: number }> = {
+  CPU: { x: 55, y: 170 },
+  MOTHERBOARD: { x: 340, y: 210 },
+  RAM: { x: 625, y: 80 },
+  GPU: { x: 55, y: 330 },
+  PSU: { x: 625, y: 330 },
+  CASE: { x: 340, y: 455 },
+  COOLER: { x: 55, y: 495 },
+  STORAGE: { x: 55, y: 62 },
+  PRICE: { x: 625, y: 500 }
+};
 
 export function BuildDependencyGraph({
   graph,
@@ -105,14 +134,15 @@ export function BuildDependencyGraph({
   const [issueFocusNodeIds, setIssueFocusNodeIds] = useState<Set<string>>(new Set());
   const [isDesktopViewport, setIsDesktopViewport] = useState(false);
   const [showFloatingGraph, setShowFloatingGraph] = useState(false);
+  const [previewNodePositionOverrides, setPreviewNodePositionOverrides] = useState<Record<string, { x: number; y: number }>>({});
   const mainFlowInstanceRef = useRef<ReactFlowInstance | null>(null);
   const graphCanvasRef = useRef<HTMLDivElement | null>(null);
   const hasSeenGraphRef = useRef(false);
   const issueFocusTimeoutRef = useRef<number | null>(null);
+  const isPreviewVariant = variant === 'preview';
   const displayGraph = useMemo(() => withDisplayTotalPrice(graph, totalPrice), [graph, totalPrice]);
   const graphModel = useMemo(() => buildGraphDisplayModel(displayGraph), [displayGraph]);
   const issueInsight = useMemo(() => selectRepresentativeIssue(displayGraph), [displayGraph]);
-  const isPreviewVariant = variant === 'preview';
   const activeNode = graphModel.nodes.find((node) => node.id === activeNodeId) ?? null;
   const activeNodeCategory = activeNode && typeof activeNode.category === 'string' && isPartCategory(activeNode.category)
     ? activeNode.category
@@ -135,19 +165,25 @@ export function BuildDependencyGraph({
     enabled: Boolean(candidateContext && activeNodeCategory)
   });
   const flowElements = useMemo(
-    () => toFlowElements(displayGraph, graphModel.nodes, graphModel.edges),
-    [displayGraph, graphModel]
+    () => toFlowElements(displayGraph, graphModel.nodes, graphModel.edges, isPreviewVariant ? 'preview' : 'default'),
+    [displayGraph, graphModel, isPreviewVariant]
+  );
+  const flowNodePositionSignature = useMemo(
+    () => flowElements.nodes.map((node) => `${node.id}:${Math.round(node.position.x)}:${Math.round(node.position.y)}`).join('|'),
+    [flowElements.nodes]
   );
   const nodes = useMemo<Node[]>(() => flowElements.nodes.map((node) => {
     const originalNodeId = typeof node.data.originalId === 'string' ? node.data.originalId : String(node.id);
+    const previewPosition = isPreviewVariant ? previewNodePositionOverrides[String(node.id)] : undefined;
     return {
       ...node,
+      position: previewPosition ?? node.position,
       className: [
         node.className,
         issueFocusNodeIds.has(originalNodeId) ? 'buildgraph-flow-node--issue-focus' : ''
       ].filter(Boolean).join(' ')
     };
-  }), [flowElements.nodes, issueFocusNodeIds]);
+  }), [flowElements.nodes, isPreviewVariant, issueFocusNodeIds, previewNodePositionOverrides]);
   const edges = flowElements.edges;
   const canShowFloatingGraph = !isPreviewVariant && Boolean(displayGraph && graphModel.nodes.length > 0 && !isLoading && !isError);
   const canShowGraphOverlays = !isPreviewVariant;
@@ -159,6 +195,12 @@ export function BuildDependencyGraph({
       }
     };
   }, []);
+
+  useEffect(() => {
+    if (isPreviewVariant) {
+      setPreviewNodePositionOverrides({});
+    }
+  }, [flowNodePositionSignature, isPreviewVariant]);
 
   useEffect(() => {
     const mediaQuery = window.matchMedia('(min-width: 1024px)');
@@ -203,6 +245,14 @@ export function BuildDependencyGraph({
     setActiveNodeId(null);
     setActiveEdge(graphEdge ?? null);
     setIsEdgeGuideVisible(true);
+  };
+
+  const handlePreviewNodeDragStop = (_event: unknown, node: Node) => {
+    if (!isPreviewVariant) return;
+    setPreviewNodePositionOverrides((current) => ({
+      ...current,
+      [String(node.id)]: { x: node.position.x, y: node.position.y }
+    }));
   };
 
   const focusIssueNodes = () => {
@@ -307,13 +357,14 @@ export function BuildDependencyGraph({
                   zoomOnPinch={isPreviewVariant}
                   panOnScroll={false}
                   panOnDrag={isPreviewVariant}
-                  nodesDraggable={false}
+                  nodesDraggable={isPreviewVariant}
                   nodesConnectable={false}
                   proOptions={{ hideAttribution: true }}
                   onInit={(instance) => {
                     mainFlowInstanceRef.current = instance;
                   }}
                   onNodeClick={(_, node: Node) => handleNodeClick(node)}
+                  onNodeDragStop={handlePreviewNodeDragStop}
                   onEdgeClick={(_, edge: Edge) => handleEdgeClick(edge)}
                   onPaneClick={() => {
                     // 빈 캔버스를 클릭하면 노드/엣지 선택과 후보 패널을 해제해 선택을 취소할 수 있게 한다.
@@ -853,13 +904,17 @@ function isBudgetGraphNode(node: Pick<BuildGraphNode, 'id' | 'label'>) {
 function toFlowElements(
   graph?: BuildGraphResolveResponse | null,
   graphNodes: BuildGraphNode[] = graph?.nodes ?? [],
-  graphEdges: BuildGraphEdge[] = graph?.edges ?? []
+  graphEdges: BuildGraphEdge[] = graph?.edges ?? [],
+  layoutVariant: GraphLayoutVariant = 'default'
 ): { nodes: Node[]; edges: Edge[] } {
   if (!graph) return { nodes: [], edges: [] };
   const focusNodeIds = new Set(graph.focusNodeIds);
   const nodeIdCounts = new Map<string, number>();
   const firstFlowNodeIdByGraphNodeId = new Map<string, string>();
   const placedNodeRects: Array<{ x: number; y: number; width: number; height: number }> = [];
+  const previewPositions = layoutVariant === 'preview'
+    ? previewLayoutPositions(graphNodes)
+    : new Map<string, { x: number; y: number }>();
   const nodes = graphNodes.map((node, index) => {
     const graphNodeId = String(node.id);
     const currentCount = nodeIdCounts.get(graphNodeId) ?? 0;
@@ -870,7 +925,7 @@ function toFlowElements(
     }
     const category = String(node.category ?? node.id).toUpperCase();
     const isPriceNode = isPriceGraphNode(node);
-    const basePosition = graphNodePosition(node.position) ?? categoryPositions[category] ?? {
+    const basePosition = previewPositions.get(graphNodeId) ?? graphNodePosition(node.position) ?? categoryPositions[category] ?? {
       x: 20 + (index % 3) * 300,
       y: 80 + Math.floor(index / 3) * 210
     };
@@ -902,7 +957,7 @@ function toFlowElements(
     label: edge.label,
     // React Flow 내장 엣지 타입에 'bezier'는 없다. 'default'가 곧 bezier 곡선이다.
     // ('bezier' 지정 시 매 엣지마다 "Edge type bezier not found" 경고 후 default로 폴백)
-    type: 'default',
+    type: layoutVariant === 'preview' ? 'smoothstep' : 'default',
     animated: false,
     className: `buildgraph-flow-edge buildgraph-flow-edge--${edge.status.toLowerCase()}`,
     interactionWidth: 20,
@@ -932,6 +987,43 @@ function toFlowElements(
     labelBgBorderRadius: 8
   } satisfies Edge));
   return { nodes, edges };
+}
+
+function previewLayoutPositions(
+  graphNodes: BuildGraphNode[]
+) {
+  const positions = new Map<string, { x: number; y: number }>();
+  let partIndex = 0;
+  let priceIndex = 0;
+
+  for (const node of graphNodes) {
+    const category = String(node.category ?? node.id).toUpperCase();
+    if (isPriceGraphNode(node)) {
+      positions.set(String(node.id), previewCategoryPositions.PRICE ?? previewPricePositions[priceIndex] ?? fallbackPreviewPricePosition(priceIndex));
+      priceIndex += 1;
+      continue;
+    }
+    positions.set(String(node.id), previewCategoryPositions[category] ?? previewNodePositions[partIndex] ?? fallbackPreviewPosition(partIndex));
+    partIndex += 1;
+  }
+
+  return positions;
+}
+
+function fallbackPreviewPosition(index: number) {
+  const adjustedIndex = Math.max(0, index - previewNodePositions.length);
+  return {
+    x: 55 + (adjustedIndex % 3) * 285,
+    y: 780 + Math.floor(adjustedIndex / 3) * 180
+  };
+}
+
+function fallbackPreviewPricePosition(index: number) {
+  const adjustedIndex = Math.max(0, index - previewPricePositions.length);
+  return {
+    x: 340,
+    y: 780 + adjustedIndex * 120
+  };
 }
 
 function graphNodePosition(position: BuildGraphNode['position']) {

@@ -58,6 +58,10 @@ export function HomeFeaturedBuildPreview({
     category: search.category,
     quantity: 1
   })) ?? [];
+  const selectedGraphSignature = selectedGraphItems
+    .map((item) => `${item.category}:${item.partId}:${item.quantity}`)
+    .sort()
+    .join('|');
   const isSelectedBuildComplete = Boolean(selectedItem && selectedGraphItems.length === selectedItem.build.partSearches.length);
 
   if (!selectedItem) {
@@ -100,6 +104,7 @@ export function HomeFeaturedBuildPreview({
 
       <div className="home-featured-preview-graph">
         <BuildDependencyGraph
+          key={`${selectedItem.build.id}:${selectedGraphSignature}`}
           variant="preview"
           graph={graph}
           isLoading={isGraphLoading}
