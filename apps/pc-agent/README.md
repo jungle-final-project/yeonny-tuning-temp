@@ -115,7 +115,7 @@ registration: REGISTERED
 logDir: C:\...\apps\pc-agent\out\logs
 logFile: out\logs\agent-metrics.jsonl
 logBytes: 412
-agentVersion: 0.1.6
+agentVersion: 0.1.7
 policyVersion: policy-v1
 agentToken: present
 ```

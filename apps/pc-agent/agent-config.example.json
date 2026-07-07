@@ -3,7 +3,7 @@
   "activationToken": "demo-agent-activation-token",
   "deviceFingerprintHash": "replace-with-stable-device-fingerprint-hash",
   "osVersion": "Windows 11",
-  "agentVersion": "0.1.6",
+  "agentVersion": "0.1.7",
   "policyVersion": "policy-v1",
   "agentToken": null,
   "logDir": "./out/logs",

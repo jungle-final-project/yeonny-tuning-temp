@@ -1233,7 +1233,11 @@ class AgentGoal1112Test(unittest.TestCase):
     def test_log_readers_include_non_system_rows(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / "agent-metrics.jsonl"
-            now = datetime.now(agent.KST)
+            base = datetime.now(agent.KST)
+            if base.minute < 10:
+                now = (base - timedelta(hours=1)).replace(minute=55, second=0, microsecond=0)
+            else:
+                now = base.replace(minute=10, second=0, microsecond=0)
             demo_at = now - timedelta(minutes=5)
             system_at = now - timedelta(minutes=4)
             rows = [
@@ -1707,6 +1711,28 @@ class AgentGoal1112Test(unittest.TestCase):
             self.assertEqual(installed.read_bytes(), b"pca-agent-exe")
             self.assertEqual(startup_path.name, f"{agent.APP_NAME}.cmd")
             self.assertIn(f'"{installed}" run-background', startup_path.read_text(encoding="utf-8"))
+
+    def test_register_startup_removes_legacy_startup_commands(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            appdata = root / "AppData" / "Roaming"
+            startup = appdata / "Microsoft" / "Windows" / "Start Menu" / "Programs" / "Startup"
+            startup.mkdir(parents=True)
+            legacy = startup / "BuildGraphAgent.cmd"
+            legacy.write_text('@echo off\nstart "" "C:\\Users\\me\\Downloads\\BuildGraphAgent-token.exe" run-background\n', encoding="utf-8")
+            spaced_legacy = startup / "PC Agent.cmd"
+            spaced_legacy.write_text("@echo off\n", encoding="utf-8")
+            unrelated = startup / "Unrelated.cmd"
+            unrelated.write_text("@echo off\n", encoding="utf-8")
+
+            with patch.dict("os.environ", {"APPDATA": str(appdata)}):
+                startup_path = agent.register_startup()
+
+            self.assertEqual(startup_path, startup / "PCAgent.cmd")
+            self.assertFalse(legacy.exists())
+            self.assertFalse(spaced_legacy.exists())
+            self.assertTrue(unrelated.exists())
+            self.assertTrue(startup_path.exists())
 
     def test_compare_versions_uses_numeric_parts(self) -> None:
         self.assertGreater(agent.compare_versions("0.10.0", "0.2.0"), 0)

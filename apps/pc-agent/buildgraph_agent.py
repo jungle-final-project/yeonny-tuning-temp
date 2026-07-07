@@ -93,7 +93,7 @@ AGENT_ICON_PNG = "specup-agent.png"
 AGENT_ICON_ICO = "specup-agent.ico"
 BACKGROUND_INSTANCE_MUTEX_NAME = r"Local\SpecUpPcAgentBackground"
 VIEWER_INSTANCE_MUTEX_NAME = r"Local\SpecUpPcAgentViewer"
-DEFAULT_AGENT_VERSION = "0.1.6"
+DEFAULT_AGENT_VERSION = "0.1.7"
 DEFAULT_POLICY_VERSION = "policy-v1"
 STATUS_HOME_SIGNAL_LIMIT = 3
 LOG_TABLE_LIMIT = 500
@@ -2698,9 +2698,28 @@ def executable_command() -> str:
     return f'"{sys.executable}" "{script}" run-background'
 
 
+def cleanup_legacy_startup_commands(directory: Path) -> list[Path]:
+    removed: list[Path] = []
+    current_name = f"{APP_NAME}.cmd".casefold()
+    for name in LEGACY_DISPLAY_APP_NAMES:
+        if not name:
+            continue
+        legacy_path = directory / f"{name}.cmd"
+        if legacy_path.name.casefold() == current_name:
+            continue
+        try:
+            if legacy_path.exists() and legacy_path.is_file():
+                legacy_path.unlink()
+                removed.append(legacy_path)
+        except OSError:
+            continue
+    return removed
+
+
 def register_startup() -> Path:
     directory = startup_dir()
     directory.mkdir(parents=True, exist_ok=True)
+    cleanup_legacy_startup_commands(directory)
     path = directory / f"{APP_NAME}.cmd"
     path.write_text(f"@echo off\nstart \"\" {executable_command()}\n", encoding="utf-8")
     return path
