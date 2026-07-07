@@ -1,6 +1,7 @@
 import { useInfiniteQuery } from '@tanstack/react-query';
 import { Eye, Heart, Search, X } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { Link } from 'react-router-dom';
 import { partImageUrl, partShortSpec, specRows } from '../../partDisplay';
 import { listParts } from '../../partsApi';
 import type { PartRow, PartSearchParams, QuoteDraftItem } from '../../types';
@@ -409,13 +410,18 @@ export function SlotCandidatePanel({
                   isFail ? 'border-red-200 bg-red-50/40' : 'border-commerce-line bg-white'
                 }`}
               >
-                <img
-                  src={partImageUrl(part)}
-                  alt={`${part.name} 제품 사진`}
-                  className="h-12 w-12 shrink-0 rounded-md border border-commerce-line bg-slate-100 object-cover"
-                />
+                {/* 제품 사진·이름을 누르면 상세 페이지로 이동한다(담기와 구분되는 진입점 — 살아있던 상세 페이지 재연결). */}
+                <Link to={`/parts/${part.id}`} aria-label={`${part.name} 상세 페이지 보기`} className="shrink-0">
+                  <img
+                    src={partImageUrl(part)}
+                    alt={`${part.name} 제품 사진`}
+                    className="h-12 w-12 rounded-md border border-commerce-line bg-slate-100 object-cover transition hover:opacity-90"
+                  />
+                </Link>
                 <div className="min-w-0 flex-1 text-xs">
-                  <div className="line-clamp-2 font-black leading-4 text-commerce-ink">{part.name}</div>
+                  <Link to={`/parts/${part.id}`} className="line-clamp-2 font-black leading-4 text-commerce-ink hover:text-brand-blue hover:underline">
+                    {part.name}
+                  </Link>
                   <div className="mt-0.5 text-[11px] text-slate-500">
                     {part.manufacturer ?? '-'}
                     {part.externalOffer?.supplierName ? ` · ${part.externalOffer.supplierName}` : ''}

@@ -1077,6 +1077,8 @@ test('opens the candidate panel from a slot and requests QUOTE_DRAFT_CURRENT com
   });
 
   await expect(panel.getByText('패스 GPU 후보')).toBeVisible();
+  // 제품명은 상세 페이지(/parts/:id)로 가는 링크다(담기와 구분되는 진입점).
+  await expect(panel.getByRole('link', { name: '패스 GPU 후보', exact: true })).toHaveAttribute('href', '/parts/part-gpu-pass');
   await expect(panel.getByText('간섭 GPU 후보')).toBeVisible();
   await expect(panel.getByText('간섭 주의')).toBeVisible();
   await expect(panel.getByRole('button', { name: '간섭 GPU 후보 담기' })).toBeEnabled();
