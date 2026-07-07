@@ -21,7 +21,10 @@ public class CorsConfig {
             public void addCorsMappings(@NonNull CorsRegistry registry) {
                 registry.addMapping("/api/**")
                         .allowedOrigins(corsProperties.allowedOrigins())
-                        .allowedMethods("GET", "POST", "PATCH", "DELETE", "OPTIONS")
+                        // PUT 누락 시 담기(PUT /quote-drafts/current/apply-ai-build, /items/{partId})가
+                        // cross-origin 배포(CloudFront가 Origin 전달)에서 403 "Invalid CORS request"로 막힌다.
+                        // 앱이 쓰는 전 메서드를 명시한다.
+                        .allowedMethods("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS")
                         .allowedHeaders("*");
             }
         };
