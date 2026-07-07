@@ -90,7 +90,7 @@ export function AppHeader() {
             </div>
             <div>
               <div className="text-xl font-black leading-5 tracking-tight text-commerce-ink">스펙업</div>
-              <div className="text-xs font-semibold text-slate-500">PC build shopping assistant</div>
+              <div className="text-xs font-semibold text-slate-500">당신만을 위한 PC 견적 플랫폼</div>
             </div>
           </Link>
           <div className="col-span-2 row-start-2 flex h-12 w-full min-w-0 items-center rounded-md border border-commerce-ink bg-white px-3 shadow-sm xl:col-span-1 xl:col-start-2 xl:row-start-1">
