@@ -6,6 +6,7 @@ import { API_BASE_URL, ApiError, getCachedAuthUser } from '../../lib/api';
 import { formatSeoulTime } from '../../lib/dateTime';
 import { AS_CHAT_DEFAULT_TICKET_ID, getAsChat, sendAsChat, streamAsChat } from './asChatApi';
 import type { AsChatEvidence, AsChatResponse, AsChatToolResult } from './asChatApi';
+import { prepareSupportLogFile } from './logFileProcessing';
 import { createSupportTicket, getSupportDraft, getSupportTicket, issueAgentActivationToken, previewAgentLogRag, requestRemoteSupport, submitSupportFeedback, uploadAgentLog } from './supportApi';
 import { getCurrentSupportChat } from './supportChatApi';
 import type { AsRagAnalysisDto, AsTicketDraftDto, AsTicketDto, CauseCandidate, SupportChatContact } from './types';
@@ -282,7 +283,7 @@ export function SupportNewPage() {
   const [consentAccepted, setConsentAccepted] = useState(false);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [draftLogUploadId, setDraftLogUploadId] = useState('');
-  const [logPreview, setLogPreview] = useState('');
+  const [logFileNotice, setLogFileNotice] = useState('');
   const [asRagPreview, setAsRagPreview] = useState<AsRagAnalysisDto | null>(null);
   const [asRagPreviewState, setAsRagPreviewState] = useState<AsRagPreviewState>('idle');
   const [asRagPreviewError, setAsRagPreviewError] = useState('');
@@ -320,7 +321,7 @@ export function SupportNewPage() {
     if (draftEndedAt) setWindowEndedAt(draftEndedAt);
     setConsentAccepted(true);
     setSelectedFile(null);
-    setLogPreview('PCAgent가 감지 시점 기준 선택 구간 로그를 gzip으로 이미 업로드했습니다.');
+    setLogFileNotice('');
     setAsRagPreview(null);
     setAsRagPreviewState('idle');
     setAsRagPreviewError('');
@@ -355,11 +356,11 @@ export function SupportNewPage() {
     URL.revokeObjectURL(url);
   }
 
-  function handleFileChange(event: ChangeEvent<HTMLInputElement>) {
+  async function handleFileChange(event: ChangeEvent<HTMLInputElement>) {
     const file = event.target.files?.[0] ?? null;
     setError('');
     setSelectedFile(null);
-    setLogPreview('');
+    setLogFileNotice('');
     setAsRagPreview(null);
     setAsRagPreviewState('idle');
     setAsRagPreviewError('');
@@ -367,16 +368,21 @@ export function SupportNewPage() {
 
     if (!file) return;
 
-    const lowerName = file.name.toLowerCase();
-    if (!lowerName.endsWith('.jsonl') && !lowerName.endsWith('.ndjson')) {
+    let preparedFile: File;
+    try {
+      const prepared = await prepareSupportLogFile(file);
+      preparedFile = prepared.file;
+      setSelectedFile(prepared.file);
+      setLogFileNotice(prepared.notice);
+    } catch (cause) {
       setSubmitState('validation_error');
-      setError('로그 파일 확장자는 .jsonl 또는 .ndjson만 사용할 수 있습니다.');
+      setError(cause instanceof Error && cause.message ? cause.message : '로그 파일을 확인하지 못했습니다.');
+      event.target.value = '';
       return;
     }
 
-    setSelectedFile(file);
     setAsRagPreviewState('loading');
-    previewAgentLogRag(incidentRangeMinutes(windowStartedAt, windowEndedAt), file)
+    previewAgentLogRag(incidentRangeMinutes(windowStartedAt, windowEndedAt), preparedFile)
       .then((analysis) => {
         setAsRagPreview(analysis);
         setAsRagPreviewState('ready');
@@ -384,14 +390,8 @@ export function SupportNewPage() {
       })
       .catch((cause) => {
         setAsRagPreviewState('error');
-        setAsRagPreviewError(cause instanceof Error && cause.message ? cause.message : 'AS RAG 추천을 불러오지 못했습니다.');
+        setAsRagPreviewError(ragPreviewFailureMessage(cause));
       });
-    file.text()
-      .then((text) => {
-        const lines = text.split(/\r?\n/).filter(Boolean).slice(0, 8);
-        setLogPreview(lines.join('\n') || '선택한 파일에 표시할 로그 라인이 없습니다.');
-      })
-      .catch(() => setLogPreview('로그 미리보기를 읽지 못했습니다. 파일은 그대로 제출할 수 있습니다.'));
   }
 
   async function downloadPcAgent() {
@@ -666,10 +666,8 @@ export function SupportNewPage() {
                 onChange={handleFileChange}
               />
               {selectedFile ? <p className="mt-2 text-xs text-slate-500">{selectedFile.name} · {selectedFile.size.toLocaleString()} bytes</p> : null}
+              {logFileNotice ? <p className="mt-2 text-xs font-semibold text-emerald-700">{logFileNotice}</p> : null}
               {draftLogUploadId && !selectedFile ? <p className="mt-2 text-xs font-semibold text-brand-blue">Agent 업로드 로그 ID: {draftLogUploadId}</p> : null}
-            </div>
-            <div className="min-h-32 rounded bg-slate-900 p-4 font-mono text-xs leading-6 text-slate-200">
-              {logPreview ? <pre className="whitespace-pre-wrap">{logPreview}</pre> : '선택한 로그 파일의 일부가 여기에 표시됩니다.'}
             </div>
             {asRagPreviewState === 'loading' ? <StateMessage type="info" title="AS RAG 분석 중" body="업로드한 로그를 바탕으로 적절한 지원 방식을 찾고 있습니다." /> : null}
             {asRagPreviewState === 'error' ? <StateMessage type="warn" title="AS RAG 추천 실패" body={asRagPreviewError || '추천 결과를 불러오지 못했습니다. AS 접수는 계속 진행할 수 있습니다.'} /> : null}
@@ -781,10 +779,26 @@ function supportKindFromRecommendation(value?: string): SupportRequestKind {
 }
 
 function uploadFailureMessage(cause: unknown) {
+  if (cause instanceof ApiError && cause.status === 413) {
+    return '로그 파일이 너무 큽니다. agent-metrics.jsonl을 선택하면 브라우저에서 최신 기록 기준 최근 30분만 추출해 업로드합니다.';
+  }
   if (cause instanceof ApiError && cause.status === 400) {
+    if (cause.code === 'FILE_VALIDATION_ERROR') {
+      return '로그 파일 검증에 실패했습니다. JSONL/NDJSON 형식, 10MiB 이하 크기, 최대 20000라인 기준을 확인해 주세요.';
+    }
     return '로그 업로드가 거부되었습니다. 선택 구간, JSONL/NDJSON 파일 형식 또는 내용 검증에 실패했을 수 있습니다.';
   }
   return '로그 업로드에 실패했습니다. 파일을 다시 선택하거나 잠시 후 다시 시도해 주세요.';
+}
+
+function ragPreviewFailureMessage(cause: unknown) {
+  if (cause instanceof ApiError && cause.status === 413) {
+    return '파일이 너무 커서 RAG 미리보기를 만들 수 없습니다. agent-metrics.jsonl은 최신 기록 기준 최근 30분만 추출해 다시 분석합니다.';
+  }
+  if (cause instanceof ApiError && cause.status === 400 && cause.code === 'FILE_VALIDATION_ERROR') {
+    return 'AS RAG 추천을 만들 수 없습니다. JSONL/NDJSON 형식, 10MiB 이하 크기, 최대 20000라인 기준을 확인해 주세요.';
+  }
+  return cause instanceof Error && cause.message ? cause.message : 'AS RAG 추천을 불러오지 못했습니다.';
 }
 
 export function SupportTicketPage() {

@@ -6,16 +6,19 @@ import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.contains;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 import com.buildgraph.prototype.common.ApiException;
+import com.buildgraph.prototype.support.AsLogRagAnalysisService;
 import com.buildgraph.prototype.user.CurrentUserService;
 import java.nio.charset.StandardCharsets;
 import java.util.Map;
 import org.junit.jupiter.api.Test;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.mock.web.MockMultipartFile;
+import org.mockito.ArgumentCaptor;
 
 class AgentLogQueryServiceTest {
     private static final CurrentUserService.CurrentUser USER = new CurrentUserService.CurrentUser(
@@ -28,7 +31,8 @@ class AgentLogQueryServiceTest {
     );
 
     private final JdbcTemplate jdbcTemplate = mock(JdbcTemplate.class);
-    private final AgentLogQueryService service = new AgentLogQueryService(jdbcTemplate);
+    private final AsLogRagAnalysisService asLogRagAnalysisService = mock(AsLogRagAnalysisService.class);
+    private final AgentLogQueryService service = new AgentLogQueryService(jdbcTemplate, asLogRagAnalysisService);
 
     @Test
     void uploadStoresRowAfterJsonlValidation() {
@@ -142,6 +146,37 @@ class AgentLogQueryServiceTest {
                 .contains("[REDACTED_ACCESS_TOKEN]")
                 .contains("[REDACTED_EMAIL]")
                 .contains("[REDACTED_PHONE]");
+    }
+
+    @Test
+    void previewValidatesAndMasksLogBeforeRagAnalysis() {
+        MockMultipartFile file = file("agent-log.jsonl", "application/x-ndjson", """
+                {"timestamp":"2026-07-02T10:00:00Z","message":"user@example.com display driver reset"}
+                """);
+        when(asLogRagAnalysisService.analyzeText(eq("agent-log.jsonl"), anyString(), eq(30)))
+                .thenReturn(Map.of("recommendedService", "DIAGNOSIS_ONLY"));
+
+        Map<String, Object> result = service.previewAsRag(file, null);
+
+        ArgumentCaptor<String> logText = ArgumentCaptor.forClass(String.class);
+        verify(asLogRagAnalysisService).analyzeText(eq("agent-log.jsonl"), logText.capture(), eq(30));
+        assertThat(logText.getValue())
+                .contains("[REDACTED_EMAIL]")
+                .doesNotContain("user@example.com");
+        assertThat(result).containsEntry("recommendedService", "DIAGNOSIS_ONLY");
+        verifyNoInteractions(jdbcTemplate);
+    }
+
+    @Test
+    void previewRejectsInvalidFileBeforeRagAnalysis() {
+        MockMultipartFile file = file("agent-log.log", "text/plain", "{}\n");
+
+        assertThatThrownBy(() -> service.previewAsRag(file, 30))
+                .isInstanceOfSatisfying(ApiException.class, exception -> {
+                    assertThat(exception.code()).isEqualTo("FILE_VALIDATION_ERROR");
+                    assertThat(exception.details()).containsEntry("reason", "INVALID_EXTENSION");
+                });
+        verifyNoInteractions(jdbcTemplate, asLogRagAnalysisService);
     }
 
     private static MockMultipartFile file(String name, String contentType, String content) {

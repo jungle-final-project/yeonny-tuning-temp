@@ -66,7 +66,11 @@ public class AgentLogQueryService {
         }
         ValidatedLogFile validated = validateLogFile(file);
         Integer minutes = rangeMinutes == null ? 30 : rangeMinutes;
-        Map<String, Object> asRagAnalysis = asLogRagAnalysisService.analyze(file, minutes);
+        Map<String, Object> asRagAnalysis = asLogRagAnalysisService.analyzeText(
+                validated.fileName(),
+                validated.sanitizedContent(),
+                minutes
+        );
         Map<String, Object> row = jdbcTemplate.queryForMap("""
                 INSERT INTO agent_log_uploads (
                   user_id,
@@ -144,8 +148,9 @@ public class AgentLogQueryService {
     }
 
     public Map<String, Object> previewAsRag(MultipartFile file, Integer rangeMinutes) {
+        ValidatedLogFile validated = validateLogFile(file);
         Integer minutes = rangeMinutes == null ? 30 : rangeMinutes;
-        return asLogRagAnalysisService.analyze(file, minutes);
+        return asLogRagAnalysisService.analyzeText(validated.fileName(), validated.sanitizedContent(), minutes);
     }
 
     public Map<String, Object> detail(String id) {

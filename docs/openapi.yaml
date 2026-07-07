@@ -2248,6 +2248,37 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/AgentLogUploadDto"
+        "400":
+          description: 로그 파일 검증 실패 또는 업로드 동의 누락
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+  /api/agent-logs/as-rag-preview:
+    post:
+      summary: AS 접수 로그 RAG 미리보기
+      description: AS 접수 화면에서 사용자 JWT로 JSONL/NDJSON 로그를 검증하고, DB row 생성 없이 지원 방식 추천 미리보기를 반환한다.
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              $ref: "#/components/schemas/AgentLogRagPreviewRequest"
+      responses:
+        "200":
+          description: AS RAG 추천 미리보기
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AsRagAnalysisDto"
+        "400":
+          description: 로그 파일 검증 실패
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
   /api/agent/devices/register:
     post:
       summary: PC Agent 데모 디바이스 등록
@@ -6454,6 +6485,15 @@ components:
           type: integer
         consentAccepted:
           type: boolean
+    AgentLogRagPreviewRequest:
+      type: object
+      required: [file, rangeMinutes]
+      properties:
+        file:
+          type: string
+          format: binary
+        rangeMinutes:
+          type: integer
     AgentLogUploadDto:
       type: object
       required: [id, status, fileName, rangeMinutes, deleteAfter]
@@ -6475,6 +6515,43 @@ components:
           type: string
           format: date-time
         deleteAfter:
+          type: string
+          format: date-time
+    AsRagAnalysisDto:
+      type: object
+      properties:
+        analysisVersion:
+          type: string
+        retrievalMode:
+          type: string
+        recommendedService:
+          type: string
+        recommendedServiceLabel:
+          type: string
+        supportDecision:
+          type: string
+        supportDecisionLabel:
+          type: string
+        recommendationMessage:
+          type: string
+        confidence:
+          type: string
+        summaryText:
+          type: string
+        evidence:
+          type: array
+          items:
+            type: object
+            additionalProperties: true
+        supportRouting:
+          type: object
+          additionalProperties: true
+        rawSamples:
+          type: array
+          items:
+            type: object
+            additionalProperties: true
+        createdAt:
           type: string
           format: date-time
     PcAgentLogUploadRequest:

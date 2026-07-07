@@ -45,6 +45,10 @@ public class AsLogRagAnalysisService {
         return analyze(fileName, logText, rangeMinutes == null ? 30 : rangeMinutes);
     }
 
+    public Map<String, Object> analyzeText(String fileName, String logText, int rangeMinutes) {
+        return analyze(fileName, logText, rangeMinutes);
+    }
+
     Map<String, Object> analyze(String fileName, String logText, int rangeMinutes) {
         String safeLogText = truncate(logText == null ? "" : logText, MAX_ANALYSIS_CHARS);
         String indexText = normalize(safeLogText);

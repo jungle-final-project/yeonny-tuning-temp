@@ -480,6 +480,106 @@ test('support intake allows a new ticket when deleted chat is absent from curren
   expect(payload.symptom).toContain('[지원 신청]');
 });
 
+test('support intake extracts the latest 30 minutes from cumulative PCAgent logs before preview and upload', async ({ page }) => {
+  let previewBody = '';
+  let uploadBody = '';
+  await mockLoggedInUser(page);
+  await mockEmptyChat(page);
+  await page.route('**/api/agent-logs/as-rag-preview', async (route) => {
+    previewBody = route.request().postDataBuffer()?.toString('utf8') ?? '';
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        recommendedService: 'REMOTE_SUPPORT',
+        recommendedServiceLabel: '원격지원 신청',
+        supportDecision: 'REMOTE_POSSIBLE',
+        recommendationMessage: '최근 로그 기준 원격지원 신청이 적합합니다.'
+      })
+    });
+  });
+  await page.route('**/api/agent-logs/upload', async (route) => {
+    uploadBody = route.request().postDataBuffer()?.toString('utf8') ?? '';
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        id: '00000000-0000-4000-8000-000000005002',
+        status: 'UPLOADED',
+        fileName: 'agent-metrics-recent-30m.jsonl',
+        rangeMinutes: 30,
+        deleteAfter: '2026-08-05T00:00:00Z'
+      })
+    });
+  });
+  await page.route('**/api/as-tickets', async (route) => {
+    if (route.request().method() === 'POST') {
+      await route.fulfill({
+        status: 201,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          id: '00000000-0000-4000-8000-000000006100',
+          status: 'OPEN',
+          symptom: '누적 로그 접수',
+          logUploadId: '00000000-0000-4000-8000-000000005002',
+          supportChatRoomId: '00000000-0000-4000-8000-000000009100',
+          causeCandidates: [],
+          upgradeCandidates: []
+        })
+      });
+      return;
+    }
+    await route.fallback();
+  });
+  await page.route('**/api/as-tickets/00000000-0000-4000-8000-000000006100', async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        id: '00000000-0000-4000-8000-000000006100',
+        status: 'OPEN',
+        symptom: '누적 로그 접수',
+        supportChatRoomId: '00000000-0000-4000-8000-000000009100',
+        causeCandidates: [],
+        upgradeCandidates: []
+      })
+    });
+  });
+
+  await page.goto('/support/new');
+  await page.getByLabel('증상 제목').fill('누적 로그 접수');
+  await page.getByLabel('증상 상세').fill('agent-metrics.jsonl 누적 파일에서 최근 로그만 접수합니다.');
+  await page.locator('#support-log-file').evaluate((input) => {
+    const body = [
+      { timestamp: '2026-07-06T10:00:00Z', marker: 'old-marker' },
+      { timestamp: '2026-07-06T10:45:00Z', marker: 'recent-marker' },
+      { timestamp: '2026-07-06T11:00:00Z', marker: 'latest-marker' }
+    ].map((line) => JSON.stringify(line)).join('\n') + '\n';
+    const file = new File([body], 'agent-metrics.jsonl', { type: 'application/x-ndjson' });
+    const dataTransfer = new DataTransfer();
+    dataTransfer.items.add(file);
+    const element = input as HTMLInputElement;
+    element.files = dataTransfer.files;
+    element.dispatchEvent(new Event('change', { bubbles: true }));
+  });
+
+  await expect(page.getByText(/최근 30분 2개 라인만 추출/)).toBeVisible();
+  await expect(page.getByText('agent-metrics-recent-30m.jsonl')).toBeVisible();
+  await expect(page.getByText('old-marker')).toHaveCount(0);
+  await expect(page.getByText('recent-marker')).toHaveCount(0);
+  await expect(page.getByText('latest-marker')).toHaveCount(0);
+  await expect.poll(() => previewBody).toContain('recent-marker');
+  expect(previewBody).toContain('latest-marker');
+  expect(previewBody).not.toContain('old-marker');
+
+  await page.getByLabel('선택한 구간의 로그 업로드와 30일 보관 후 삭제 정책에 동의합니다.').check();
+  await page.getByRole('button', { name: 'AS 접수하기' }).click();
+
+  await expect.poll(() => uploadBody).toContain('recent-marker');
+  expect(uploadBody).toContain('latest-marker');
+  expect(uploadBody).not.toContain('old-marker');
+});
+
 test('support intake shows the existing chat CTA when stale submit receives a conflict', async ({ page }) => {
   let createTicketCalls = 0;
   await mockLoggedInUser(page);
