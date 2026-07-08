@@ -7,7 +7,7 @@ import com.buildgraph.prototype.opsagent.trace.*;
 
 
 import com.buildgraph.prototype.common.MockData;
-import com.buildgraph.prototype.part.ToolCheckService;
+import com.buildgraph.prototype.part.ToolService;
 import java.util.List;
 import java.util.Map;
 import org.springframework.http.HttpStatus;
@@ -26,7 +26,7 @@ public class LlmAgentRunner implements AgentRunner {
     private final AgentTraceService agentTraceService;
     private final AgentRagRetrievalService agentRagRetrievalService;
     private final AiChatClient openAiResponsesClient;
-    private final ToolCheckService toolCheckService;
+    private final ToolService toolCheckService;
     private final LlmGenerationService llmGenerationService;
     private final AiProfileDefinition aiProfile;
     private final JdbcTemplate jdbcTemplate;
@@ -35,7 +35,7 @@ public class LlmAgentRunner implements AgentRunner {
             AgentTraceService agentTraceService,
             AgentRagRetrievalService agentRagRetrievalService,
             AiChatClient openAiResponsesClient,
-            ToolCheckService toolCheckService,
+            ToolService toolCheckService,
             LlmGenerationService llmGenerationService,
             AiProfileDefinition aiProfile,
             JdbcTemplate jdbcTemplate

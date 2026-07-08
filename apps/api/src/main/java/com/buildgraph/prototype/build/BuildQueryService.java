@@ -10,7 +10,7 @@ import com.buildgraph.prototype.quoteagent.chat.AiChatEngine;
 import com.buildgraph.prototype.common.DbValueMapper;
 import com.buildgraph.prototype.common.MockData;
 import com.buildgraph.prototype.part.ToolBuildPart;
-import com.buildgraph.prototype.part.ToolCheckService;
+import com.buildgraph.prototype.part.ToolService;
 import com.buildgraph.prototype.user.CurrentUserService;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.util.ArrayList;
@@ -60,14 +60,14 @@ public class BuildQueryService {
     private final AgentTraceService agentTraceService;
     private final AgentJobPublisher agentJobPublisher;
     private final AiChatEngine aiChatEngine;
-    private final ToolCheckService toolCheckService;
+    private final ToolService toolCheckService;
 
     public BuildQueryService(
             JdbcTemplate jdbcTemplate,
             AgentTraceService agentTraceService,
             AgentJobPublisher agentJobPublisher,
             AiChatEngine aiChatEngine,
-            ToolCheckService toolCheckService
+            ToolService toolCheckService
     ) {
         this.jdbcTemplate = jdbcTemplate;
         this.agentTraceService = agentTraceService;

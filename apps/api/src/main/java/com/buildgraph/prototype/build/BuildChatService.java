@@ -7,7 +7,7 @@ import com.buildgraph.prototype.quoteagent.chat.AiChatEngine;
 import com.buildgraph.prototype.common.DbValueMapper;
 import com.buildgraph.prototype.common.MockData;
 import com.buildgraph.prototype.part.ToolBuildPart;
-import com.buildgraph.prototype.part.ToolCheckService;
+import com.buildgraph.prototype.part.ToolService;
 import com.buildgraph.prototype.user.CurrentUserService;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -51,12 +51,12 @@ public class BuildChatService {
     private static final List<String> BLOCKING_FAIL_TOOLS = List.of("compatibility", "power", "size");
 
     private final JdbcTemplate jdbcTemplate;
-    private final ToolCheckService toolCheckService;
+    private final ToolService toolCheckService;
     private final AiChatEngine aiChatEngine;
     private final BuildChatCacheService buildChatCacheService;
 
     @Autowired
-    public BuildChatService(JdbcTemplate jdbcTemplate, ToolCheckService toolCheckService, AiChatEngine aiChatEngine, BuildChatCacheService buildChatCacheService) {
+    public BuildChatService(JdbcTemplate jdbcTemplate, ToolService toolCheckService, AiChatEngine aiChatEngine, BuildChatCacheService buildChatCacheService) {
         this.jdbcTemplate = jdbcTemplate;
         this.toolCheckService = toolCheckService;
         this.aiChatEngine = aiChatEngine;

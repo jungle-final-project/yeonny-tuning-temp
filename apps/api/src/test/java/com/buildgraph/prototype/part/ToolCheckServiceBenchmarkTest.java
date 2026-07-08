@@ -21,10 +21,11 @@ class ToolCheckServiceBenchmarkTest {
                 .thenReturn(List.of(
                         Map.of("part_id", 1L, "score", 86.5, "summary", "CPU category-local normalized score"),
                         Map.of("part_id", 2L, "score", 92.0, "summary", "GPU category-local normalized score")
-                ));
+        ));
         ToolRepository toolRepository = mock(ToolRepository.class);
+        ToolQuery toolQuery = mock(ToolQuery.class);
         PerformaceRule performaceRule = new PerformaceRule(jdbcTemplate);
-        ToolService service = new ToolService(jdbcTemplate, toolRepository, performaceRule);
+        ToolService service = new ToolService(jdbcTemplate, toolRepository, performaceRule, toolQuery);
 
         List<Map<String, Object>> results = service.checkBuild(List.of(
                 new ToolBuildPart(1L, "cpu-public-id", "CPU", "Ryzen 9", "AMD", 800000, Map.of("socket", "AM5")),

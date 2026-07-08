@@ -20,7 +20,7 @@ import com.buildgraph.prototype.quoteagent.tools.*;
 
 import com.buildgraph.prototype.common.DbValueMapper;
 import com.buildgraph.prototype.common.MockData;
-import com.buildgraph.prototype.part.ToolCheckService;
+import com.buildgraph.prototype.part.ToolService;
 import com.buildgraph.prototype.user.CurrentUserService;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -55,7 +55,7 @@ public class AsChatService {
     private final AgentTraceService agentTraceService;
     private final AgentRagRetrievalService agentRagRetrievalService;
     private final StructuredLlmClientRouter structuredLlmClientRouter;
-    private final ToolCheckService toolCheckService;
+    private final ToolService toolCheckService;
     private final AiProfileConfig aiProfileConfig;
     private final AsChatProfilePolicy asChatProfilePolicy;
     private final LlmGenerationService llmGenerationService;
@@ -65,7 +65,7 @@ public class AsChatService {
             AgentTraceService agentTraceService,
             AgentRagRetrievalService agentRagRetrievalService,
             StructuredLlmClientRouter structuredLlmClientRouter,
-            ToolCheckService toolCheckService,
+            ToolService toolCheckService,
             AiProfileConfig aiProfileConfig,
             AsChatProfilePolicy asChatProfilePolicy,
             LlmGenerationService llmGenerationService

@@ -1,6 +1,5 @@
 package com.buildgraph.prototype.part;
 
-import com.buildgraph.prototype.common.DbValueMapper;
 import com.buildgraph.prototype.common.MockData;
 import com.buildgraph.prototype.part.util.PerformaceRule;
 import com.buildgraph.prototype.part.util.PowerRule;
@@ -8,16 +7,17 @@ import com.buildgraph.prototype.part.util.PowerRule;
 import lombok.RequiredArgsConstructor;
 
 import java.util.ArrayList;
-import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 
 import static com.buildgraph.prototype.part.util.RuleValueReader.intAttr;
 import static com.buildgraph.prototype.part.util.RuleValueReader.name;
+import static com.buildgraph.prototype.part.util.RuleValueReader.objectMap;
 
 @Service
 @RequiredArgsConstructor
@@ -27,6 +27,7 @@ public class ToolService {
     private final JdbcTemplate jdbcTemplate;
     private final ToolRepository toolRepository;
     private final PerformaceRule performaceRule;
+    private final ToolQuery toolQuery;
 
     /* 서버 내부 견적 추천 로직: 해당 견적을 검증 */
     public List<Map<String, Object>> checkBuild(List<ToolBuildPart> parts, int budget) {
@@ -41,7 +42,7 @@ public class ToolService {
         return results;
     }
 
-    /* 모든 Tool 호출이 거치는 입구? 함수 */
+    /* 모든 Tool 호출이 거치는 입구 */
     public Map<String, Object> checkTool(String toolName, Map<String, Object> request) {
         /* 1. toolName 정규화
            2. request에서 body 추출 => DB 조회 => parts 객체 가져오기
@@ -338,7 +339,7 @@ public class ToolService {
             return toolRepository.partsByBuildId(buildId);
         }
         List<String> partIds = stringList(request.get("partIds"));
-        return partIds.isEmpty() ? List.of() : partsByPublicIds(partIds);
+        return partIds.isEmpty() ? List.of() : toolQuery.partsByPublicIds(partIds);
     }
 
     /** Resolves the concrete build parts that an Agent root can validate: 추후 이해 필요 */
@@ -391,42 +392,6 @@ public class ToolService {
         return rows.isEmpty() ? null : rows.get(0);
     }
 
-    /** Loads explicit partIds as Tool-ready part DTOs. */
-    private List<ToolBuildPart> partsByPublicIds(List<String> partIds) {
-        String placeholders = String.join(", ", Collections.nCopies(partIds.size(), "?"));
-        return jdbcTemplate.queryForList("""
-                        SELECT id AS internal_id,
-                               public_id::text AS id,
-                               category,
-                               name,
-                               manufacturer,
-                               price,
-                               attributes
-                        FROM parts
-                        WHERE public_id::text IN (
-                        """ + placeholders + """
-                        )
-                          AND deleted_at IS NULL
-                        ORDER BY category, id
-                        """, partIds.toArray())
-                .stream()
-                .map(this::part)
-                .toList();
-    }
-
-    /** Converts a DB row into the shared Tool part DTO. */
-    private ToolBuildPart part(Map<String, Object> row) {
-        return new ToolBuildPart(
-                numberLong(row.get("internal_id")),
-                DbValueMapper.string(row, "id"),
-                DbValueMapper.string(row, "category"),
-                DbValueMapper.string(row, "name"),
-                DbValueMapper.string(row, "manufacturer"),
-                DbValueMapper.integer(row, "price"),
-                objectMap(DbValueMapper.json(row, "attributes", Map.of()))
-        );
-    }
-
     /** Indexes selected parts by category. */
     private static Map<String, ToolBuildPart> byCategory(List<ToolBuildPart> parts) {
         Map<String, ToolBuildPart> result = new LinkedHashMap<>();
@@ -472,14 +437,14 @@ public class ToolService {
     }
 
     /** Converts arbitrary map values into a string-keyed map. */
-    private static Map<String, Object> objectMap(Object value) {
-        if (value instanceof Map<?, ?> map) {
-            Map<String, Object> result = new LinkedHashMap<>();
-            map.forEach((key, mapValue) -> result.put(String.valueOf(key), mapValue));
-            return result;
-        }
-        return new LinkedHashMap<>();
-    }
+    // private static Map<String, Object> objectMap(Object value) {
+    //     if (value instanceof Map<?, ?> map) {
+    //         Map<String, Object> result = new LinkedHashMap<>();
+    //         map.forEach((key, mapValue) -> result.put(String.valueOf(key), mapValue));
+    //         return result;
+    //     }
+    //     return new LinkedHashMap<>();
+    // }
 
     /** Converts arbitrary values into trimmed string lists. */
     @SuppressWarnings("null")
@@ -524,14 +489,6 @@ public class ToolService {
             return null;
         }
         return Integer.valueOf(text.replace(",", ""));
-    }
-
-    /** Parses a long-like value. */
-    private static Long numberLong(Object value) {
-        if (value instanceof Number number) {
-            return number.longValue();
-        }
-        return Long.valueOf(String.valueOf(value));
     }
 
     private record AgentRootParts(List<ToolBuildPart> parts, Integer budget) {

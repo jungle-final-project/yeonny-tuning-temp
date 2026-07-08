@@ -1,5 +1,8 @@
 package com.buildgraph.prototype.part.util;
 
+import java.util.LinkedHashMap;
+import java.util.Map;
+
 import com.buildgraph.prototype.part.ToolBuildPart;
 
 public final class RuleValueReader {
@@ -57,5 +60,14 @@ public final class RuleValueReader {
 
     public static String name(ToolBuildPart part) {
         return part == null ? null : part.name();
+    }
+
+    public static Map<String, Object> objectMap(Object value) {
+        if (value instanceof Map<?, ?> map) {
+            Map<String, Object> result = new LinkedHashMap<>();
+            map.forEach((key, mapValue) -> result.put(String.valueOf(key), mapValue));
+            return result;
+        }
+        return new LinkedHashMap<>();
     }
 }

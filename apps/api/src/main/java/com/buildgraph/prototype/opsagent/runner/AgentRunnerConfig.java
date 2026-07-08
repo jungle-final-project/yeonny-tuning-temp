@@ -6,7 +6,7 @@ import com.buildgraph.prototype.quoteagent.retrieval.*;
 import com.buildgraph.prototype.opsagent.profile.*;
 import com.buildgraph.prototype.opsagent.trace.*;
 
-import com.buildgraph.prototype.part.ToolCheckService;
+import com.buildgraph.prototype.part.ToolService;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -19,7 +19,7 @@ public class AgentRunnerConfig {
             AgentTraceService agentTraceService,
             AgentRagRetrievalService agentRagRetrievalService,
             AiChatClient openAiResponsesClient,
-            ToolCheckService toolCheckService,
+            ToolService toolCheckService,
             LlmGenerationService llmGenerationService,
             AiProfileConfig aiProfileConfig,
             JdbcTemplate jdbcTemplate,

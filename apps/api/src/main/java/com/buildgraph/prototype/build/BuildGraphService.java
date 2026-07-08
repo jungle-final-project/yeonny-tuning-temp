@@ -3,7 +3,7 @@ package com.buildgraph.prototype.build;
 import com.buildgraph.prototype.common.DbValueMapper;
 import com.buildgraph.prototype.common.MockData;
 import com.buildgraph.prototype.part.ToolBuildPart;
-import com.buildgraph.prototype.part.ToolCheckService;
+import com.buildgraph.prototype.part.ToolService;
 import com.buildgraph.prototype.user.CurrentUserService;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -22,10 +22,10 @@ import org.springframework.web.server.ResponseStatusException;
 public class BuildGraphService {
     private static final Set<String> CATEGORIES = Set.of("CPU", "MOTHERBOARD", "RAM", "GPU", "STORAGE", "PSU", "CASE", "COOLER");
     private final JdbcTemplate jdbcTemplate;
-    private final ToolCheckService toolCheckService;
+    private final ToolService toolCheckService;
     private final CurrentUserService currentUserService;
 
-    public BuildGraphService(JdbcTemplate jdbcTemplate, ToolCheckService toolCheckService, CurrentUserService currentUserService) {
+    public BuildGraphService(JdbcTemplate jdbcTemplate, ToolService toolCheckService, CurrentUserService currentUserService) {
         this.jdbcTemplate = jdbcTemplate;
         this.toolCheckService = toolCheckService;
         this.currentUserService = currentUserService;

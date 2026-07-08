@@ -467,10 +467,6 @@ public class PartQueryService {
             }
         }
 
-        static PartSearch defaults() {
-            return new PartSearch(null, null, null, null, null, null, Integer.valueOf(0), Integer.valueOf(20), null);
-        }
-
         int offset() {
             return page * size;
         }

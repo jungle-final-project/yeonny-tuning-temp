@@ -12,19 +12,19 @@ import com.buildgraph.prototype.quoteagent.chat.*;
 import com.buildgraph.prototype.quoteagent.retrieval.*;
 import com.buildgraph.prototype.quoteagent.tools.*;
 
-import com.buildgraph.prototype.part.ToolCheckService;
+import com.buildgraph.prototype.part.ToolService;
 import java.util.List;
 import org.springframework.transaction.annotation.Transactional;
 
 public class DeterministicAgentRunner implements AgentRunner {
     private final AgentTraceService agentTraceService;
     private final AgentRagRetrievalService agentRagRetrievalService;
-    private final ToolCheckService toolCheckService;
+    private final ToolService toolCheckService;
 
     public DeterministicAgentRunner(
             AgentTraceService agentTraceService,
             AgentRagRetrievalService agentRagRetrievalService,
-            ToolCheckService toolCheckService
+            ToolService toolCheckService
     ) {
         this.agentTraceService = agentTraceService;
         this.agentRagRetrievalService = agentRagRetrievalService;
