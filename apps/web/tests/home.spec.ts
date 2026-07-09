@@ -644,8 +644,9 @@ async function mockHomePartsApi(page: Page) {
   });
 }
 
-async function openHomeAsUser(page: Page) {
-  await page.addInitScript(() => {
+async function openHomeAsUser(page: Page, options: { dismissHomeChoice?: boolean } = {}) {
+  const { dismissHomeChoice = true } = options;
+  await page.addInitScript(({ dismissHomeChoice }) => {
     localStorage.setItem('buildgraph.token', 'jwt-user-token');
     localStorage.setItem('buildgraph.authUser', JSON.stringify({
       id: 'user-1004',
@@ -653,8 +654,13 @@ async function openHomeAsUser(page: Page) {
       name: '테스트 사용자',
       role: 'USER'
     }));
+    if (dismissHomeChoice) {
+      localStorage.setItem('buildgraph.homeLoginChoice.dismissed', 'true');
+    } else {
+      localStorage.removeItem('buildgraph.homeLoginChoice.dismissed');
+    }
     sessionStorage.clear();
-  });
+  }, { dismissHomeChoice });
   await page.route('**/api/auth/me', async (route) => {
     await route.fulfill({
       status: 200,
@@ -815,6 +821,24 @@ async function mockSelfQuoteApis(
 
   return { applyRequests };
 }
+
+test('shows the login choice prompt before dismissed and opens AI flow choices', async ({ page }) => {
+  await openHomeAsUser(page, { dismissHomeChoice: false });
+
+  const firstChoiceDialog = page.getByTestId('home-login-choice-dialog');
+  await expect(firstChoiceDialog).toBeVisible();
+  await expect(firstChoiceDialog.getByTestId('home-login-choice-ai')).toBeVisible();
+  await expect(firstChoiceDialog.getByTestId('home-login-choice-parts')).toBeVisible();
+
+  await firstChoiceDialog.getByTestId('home-login-choice-ai').click();
+  await expect(firstChoiceDialog).toHaveCount(0);
+
+  const aiFlowDialog = page.getByTestId('home-ai-flow-choice-dialog');
+  await expect(aiFlowDialog).toBeVisible();
+  await expect(aiFlowDialog.getByTestId('home-ai-flow-choice-ai')).toBeVisible();
+  await expect(aiFlowDialog.getByTestId('home-ai-flow-choice-self-quote')).toBeVisible();
+  await expect(aiFlowDialog.getByTestId('home-ai-flow-choice-all-parts')).toBeVisible();
+});
 
 test('renders a single shopping home without the old hero prompt flow', async ({ page }) => {
   await openHomeAsUser(page);
@@ -1057,6 +1081,7 @@ test('chatbot only shows the current user scoped assistant session', async ({ pa
       name: '테스트 사용자 B',
       role: 'USER'
     }));
+    localStorage.setItem('buildgraph.homeLoginChoice.dismissed', 'true');
     sessionStorage.setItem('buildgraph.ai.assistantSession:user-a', otherUserSession);
     sessionStorage.setItem('buildgraph.ai.assistantSession', legacySession);
   }, {

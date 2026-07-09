@@ -382,6 +382,19 @@ export function clearAssistantSession(ownerKey: string | null = getAiStorageOwne
   window.dispatchEvent(new Event(AI_ASSISTANT_SESSION_CHANGED_EVENT));
 }
 
+export function resetAssistantConversation(ownerKey: string | null = getAiStorageOwnerKey()) {
+  const session = readAssistantSession(ownerKey);
+  const nextSession: AiAssistantSession = {
+    ...session,
+    messages: [initialAssistantMessage],
+    latestGraphFocus: undefined,
+    latestActiveBuildId: undefined,
+    updatedAt: new Date().toISOString()
+  };
+  saveAssistantSession(nextSession, ownerKey);
+  return nextSession;
+}
+
 export function normalizeAiRecommendedBuild(build: AiRecommendedBuild): AiRecommendedBuild {
   const items = build.items.map((item) => ({
     ...item,
