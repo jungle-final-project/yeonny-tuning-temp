@@ -1,9 +1,9 @@
-package com.buildgraph.prototype.verification.util;
+package com.buildgraph.prototype.parts.util;
 
 import java.util.LinkedHashMap;
 import java.util.Map;
 
-import com.buildgraph.prototype.verification.tool.ToolBuildPart;
+import com.buildgraph.prototype.parts.tool.ToolBuildPart;
 
 public final class RuleValueReader {
 

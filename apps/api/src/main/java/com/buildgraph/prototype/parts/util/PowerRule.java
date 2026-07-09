@@ -1,10 +1,10 @@
-package com.buildgraph.prototype.verification.util;
+package com.buildgraph.prototype.parts.util;
 
-import static com.buildgraph.prototype.verification.util.RuleValueReader.intAttr;
+import static com.buildgraph.prototype.parts.util.RuleValueReader.intAttr;
 
 import java.util.List;
 
-import com.buildgraph.prototype.verification.tool.ToolBuildPart;
+import com.buildgraph.prototype.parts.tool.ToolBuildPart;
 
 /* 전력 산출하는 util 함수들 */
 public class PowerRule {

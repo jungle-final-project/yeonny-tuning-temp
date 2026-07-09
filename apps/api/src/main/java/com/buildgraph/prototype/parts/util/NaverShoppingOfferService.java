@@ -1,4 +1,4 @@
-package com.buildgraph.prototype.verification.util;
+package com.buildgraph.prototype.parts.util;
 
 import com.buildgraph.prototype.common.MockData;
 import com.fasterxml.jackson.databind.ObjectMapper;

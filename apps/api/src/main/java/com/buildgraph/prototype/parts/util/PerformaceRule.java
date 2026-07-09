@@ -1,7 +1,7 @@
-package com.buildgraph.prototype.verification.util;
+package com.buildgraph.prototype.parts.util;
 
-import static com.buildgraph.prototype.verification.util.RuleValueReader.decimalValue;
-import static com.buildgraph.prototype.verification.util.RuleValueReader.numberLong;
+import static com.buildgraph.prototype.parts.util.RuleValueReader.decimalValue;
+import static com.buildgraph.prototype.parts.util.RuleValueReader.numberLong;
 
 import java.util.Collections;
 import java.util.LinkedHashMap;
@@ -12,7 +12,7 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Component;
 
 import com.buildgraph.prototype.common.DbValueMapper;
-import com.buildgraph.prototype.verification.tool.ToolBuildPart;
+import com.buildgraph.prototype.parts.tool.ToolBuildPart;
 
 import lombok.RequiredArgsConstructor;
 

@@ -2,9 +2,9 @@ package com.buildgraph.prototype.opsagent.runner;
 
 import com.buildgraph.prototype.quoteagent.llm.AiChatClient;
 import com.buildgraph.prototype.quoteagent.retrieval.*;
-import com.buildgraph.prototype.verification.tool.ToolService;
 import com.buildgraph.prototype.opsagent.profile.*;
 import com.buildgraph.prototype.opsagent.trace.*;
+import com.buildgraph.prototype.parts.tool.ToolService;
 
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;

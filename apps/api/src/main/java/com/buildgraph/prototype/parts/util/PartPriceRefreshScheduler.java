@@ -1,4 +1,4 @@
-package com.buildgraph.prototype.verification.util;
+package com.buildgraph.prototype.parts.util;
 
 import java.util.Map;
 import org.slf4j.Logger;

@@ -11,11 +11,11 @@ import java.util.Map;
 import org.junit.jupiter.api.Test;
 import org.springframework.jdbc.core.JdbcTemplate;
 
-import com.buildgraph.prototype.verification.tool.ToolBuildPart;
-import com.buildgraph.prototype.verification.tool.ToolQuery;
-import com.buildgraph.prototype.verification.tool.ToolRepository;
-import com.buildgraph.prototype.verification.tool.ToolService;
-import com.buildgraph.prototype.verification.util.PerformaceRule;
+import com.buildgraph.prototype.parts.tool.ToolBuildPart;
+import com.buildgraph.prototype.parts.tool.ToolQuery;
+import com.buildgraph.prototype.parts.tool.ToolRepository;
+import com.buildgraph.prototype.parts.tool.ToolService;
+import com.buildgraph.prototype.parts.util.PerformaceRule;
 
 class ToolCheckServiceBenchmarkTest {
         

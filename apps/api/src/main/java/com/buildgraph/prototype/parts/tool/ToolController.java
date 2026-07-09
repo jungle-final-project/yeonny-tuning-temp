@@ -1,8 +1,8 @@
-package com.buildgraph.prototype.verification.tool;
+package com.buildgraph.prototype.parts.tool;
 
+import com.buildgraph.prototype.parts.part.PartQueryService;
+import com.buildgraph.prototype.parts.util.NaverShoppingOfferService;
 import com.buildgraph.prototype.user.CurrentUserService;
-import com.buildgraph.prototype.verification.part.PartQueryService;
-import com.buildgraph.prototype.verification.util.NaverShoppingOfferService;
 
 import lombok.RequiredArgsConstructor;
 

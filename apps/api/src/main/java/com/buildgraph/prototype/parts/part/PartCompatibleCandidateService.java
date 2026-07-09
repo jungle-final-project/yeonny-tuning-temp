@@ -1,10 +1,11 @@
-package com.buildgraph.prototype.verification.part;
+package com.buildgraph.prototype.parts.part;
 
 import com.buildgraph.prototype.common.DbValueMapper;
 import com.buildgraph.prototype.common.MockData;
+import com.buildgraph.prototype.parts.tool.ToolBuildPart;
+import com.buildgraph.prototype.parts.tool.ToolQuery;
+import com.buildgraph.prototype.parts.tool.ToolService;
 import com.buildgraph.prototype.user.CurrentUserService;
-import com.buildgraph.prototype.verification.tool.ToolBuildPart;
-import com.buildgraph.prototype.verification.tool.ToolService;
 
 import lombok.RequiredArgsConstructor;
 
@@ -26,6 +27,7 @@ public class PartCompatibleCandidateService {
 
     private final JdbcTemplate jdbcTemplate;
     private final ToolService toolService;
+    private final ToolQuery toolQuery;
 
     /* 추가된 함수: 후보호환평가 */
     public List<Map<String, Object>> partRowsWithCompatibility(
@@ -64,17 +66,17 @@ public class PartCompatibleCandidateService {
                 .toList();
     }
 
-    /* 추가된 함수: 현재견적부품 */
+    /* List 형태 parts 가져오기: draftId(사용자 장바구니) 기준 */
     private List<ToolBuildPart> currentQuoteDraftParts(CurrentUserService.CurrentUser user) {
         List<Map<String, Object>> drafts = jdbcTemplate.queryForList("""
                 SELECT id AS internal_id,
-                       public_id::text AS id,
-                       status,
-                       name
+                        public_id::text AS id,
+                        status,
+                        name
                 FROM quote_drafts
                 WHERE user_id = ?
-                  AND status = 'ACTIVE'
-                  AND deleted_at IS NULL
+                    AND status = 'ACTIVE'
+                    AND deleted_at IS NULL
                 ORDER BY created_at DESC, id DESC
                 LIMIT 1
                 """, user.internalId());
@@ -82,27 +84,32 @@ public class PartCompatibleCandidateService {
             return List.of();
         }
         Long draftId = longValue(drafts.get(0).get("internal_id"));
-        return jdbcTemplate.queryForList("""
-                        SELECT p.id AS internal_id,
-                               p.public_id::text AS part_id,
-                               p.public_id::text AS id,
-                               p.category,
-                               p.name,
-                               p.manufacturer,
-                               p.price AS current_price,
-                               p.price,
-                               qdi.quantity,
-                               p.attributes
-                        FROM quote_draft_items qdi
-                        JOIN parts p ON p.id = qdi.part_id
-                        WHERE qdi.quote_draft_id = ?
-                          AND qdi.deleted_at IS NULL
-                          AND p.deleted_at IS NULL
-                        ORDER BY qdi.created_at ASC, qdi.id ASC
-                        """, draftId)
-                .stream()
-                .map(this::toolPart)
-                .toList();
+
+        /* draftId 기반 part 정보 가져오기*/
+        return toolQuery.partsByDraftIds(draftId);
+
+        /* 레거시(한꺼번에 List 가져오는 쿼리문): Trad-Off 테스트 가능 */
+        // return jdbcTemplate.queryForList("""
+        //                 SELECT p.id AS internal_id,
+        //                         p.public_id::text AS part_id,
+        //                         p.public_id::text AS id,
+        //                         p.category,
+        //                         p.name,
+        //                         p.manufacturer,
+        //                         p.price AS current_price,
+        //                         p.price,
+        //                         qdi.quantity,
+        //                         p.attributes
+        //                 FROM quote_draft_items qdi
+        //                 JOIN parts p ON p.id = qdi.part_id
+        //                 WHERE qdi.quote_draft_id = ?
+        //                     AND qdi.deleted_at IS NULL
+        //                     AND p.deleted_at IS NULL
+        //                 ORDER BY qdi.created_at ASC, qdi.id ASC
+        //                 """, draftId)
+        //         .stream()
+        //         .map(this::toolPart)
+        //         .toList();
     }
 
     /* 추가된 함수: 후보검증실행 */

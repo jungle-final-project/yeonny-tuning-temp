@@ -2,9 +2,12 @@ package com.buildgraph.prototype.build;
 
 import com.buildgraph.prototype.common.DbValueMapper;
 import com.buildgraph.prototype.common.MockData;
+import com.buildgraph.prototype.parts.tool.ToolBuildPart;
+import com.buildgraph.prototype.parts.tool.ToolQuery;
+import com.buildgraph.prototype.parts.tool.ToolService;
 import com.buildgraph.prototype.user.CurrentUserService;
-import com.buildgraph.prototype.verification.tool.ToolBuildPart;
-import com.buildgraph.prototype.verification.tool.ToolService;
+
+import lombok.RequiredArgsConstructor;
 
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -20,17 +23,14 @@ import org.springframework.stereotype.Service;
 import org.springframework.web.server.ResponseStatusException;
 
 @Service
+@RequiredArgsConstructor
 public class BuildGraphService {
     private static final Set<String> CATEGORIES = Set.of("CPU", "MOTHERBOARD", "RAM", "GPU", "STORAGE", "PSU", "CASE", "COOLER");
+    
     private final JdbcTemplate jdbcTemplate;
     private final ToolService toolCheckService;
     private final CurrentUserService currentUserService;
-
-    public BuildGraphService(JdbcTemplate jdbcTemplate, ToolService toolCheckService, CurrentUserService currentUserService) {
-        this.jdbcTemplate = jdbcTemplate;
-        this.toolCheckService = toolCheckService;
-        this.currentUserService = currentUserService;
-    }
+    private final ToolQuery toolQuery;
 
     public Map<String, Object> resolve(String authorization, Map<String, Object> request) {
         Map<String, Object> body = request == null ? Map.of() : request;
@@ -82,16 +82,16 @@ public class BuildGraphService {
     private ToolBuildPart partByPublicId(String publicId) {
         return jdbcTemplate.queryForList("""
                         SELECT id AS internal_id,
-                               public_id::text AS id,
-                               category,
-                               name,
-                               manufacturer,
-                               price,
-                               attributes
+                                public_id::text AS id,
+                                category,
+                                name,
+                                manufacturer,
+                                price,
+                                attributes
                         FROM parts
                         WHERE public_id::text = ?
-                          AND status = 'ACTIVE'
-                          AND deleted_at IS NULL
+                            AND status = 'ACTIVE'
+                            AND deleted_at IS NULL
                         """, publicId)
                 .stream()
                 .findFirst()
@@ -99,17 +99,18 @@ public class BuildGraphService {
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "활성 부품을 찾을 수 없습니다."));
     }
 
+    /* List 형태 parts 가져오기: dratf 기준 */
     private List<ToolBuildPart> currentQuoteDraftParts(String authorization) {
         CurrentUserService.CurrentUser user = currentUserService.requireUser(authorization);
         List<Map<String, Object>> drafts = jdbcTemplate.queryForList("""
                 SELECT id AS internal_id,
-                       public_id::text AS id,
-                       status,
-                       name
+                        public_id::text AS id,
+                        status,
+                        name
                 FROM quote_drafts
                 WHERE user_id = ?
-                  AND status = 'ACTIVE'
-                  AND deleted_at IS NULL
+                    AND status = 'ACTIVE'
+                    AND deleted_at IS NULL
                 ORDER BY created_at DESC, id DESC
                 LIMIT 1
                 """, user.internalId());
@@ -117,34 +118,9 @@ public class BuildGraphService {
             return List.of();
         }
         Long draftId = longValue(drafts.get(0).get("internal_id"));
-        return jdbcTemplate.queryForList("""
-                        SELECT p.id AS internal_id,
-                               p.public_id::text AS part_id,
-                               qdi.public_id::text AS id,
-                               p.category,
-                               p.name,
-                               p.manufacturer,
-                               p.price AS current_price,
-                               qdi.quantity,
-                               p.attributes
-                        FROM quote_draft_items qdi
-                        JOIN parts p ON p.id = qdi.part_id
-                        WHERE qdi.quote_draft_id = ?
-                          AND qdi.deleted_at IS NULL
-                          AND p.deleted_at IS NULL
-                        ORDER BY qdi.id
-                        """, draftId)
-                .stream()
-                .map(row -> new ToolBuildPart(
-                        longValue(row.get("internal_id")),
-                        DbValueMapper.string(row, "part_id"),
-                        DbValueMapper.string(row, "category"),
-                        DbValueMapper.string(row, "name"),
-                        DbValueMapper.string(row, "manufacturer"),
-                        numberValue(row.get("current_price")),
-                        objectMap(row.get("attributes"))
-                ))
-                .toList();
+        
+        /* draftId 기반 part 정보 가져오기*/
+        return toolQuery.partsByDraftIds(draftId);
     }
 
     private GraphDraft buildGraph(

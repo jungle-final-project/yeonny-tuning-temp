@@ -1,8 +1,8 @@
 package com.buildgraph.prototype.build;
 
 import com.buildgraph.prototype.common.MockData;
-import com.buildgraph.prototype.verification.part.PartSeed;
-import com.buildgraph.prototype.verification.tool.ToolSeed;
+import com.buildgraph.prototype.parts.part.PartSeed;
+import com.buildgraph.prototype.parts.tool.ToolSeed;
 
 import java.util.List;
 import java.util.Map;

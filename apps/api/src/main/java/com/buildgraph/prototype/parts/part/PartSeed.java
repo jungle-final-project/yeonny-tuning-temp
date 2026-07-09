@@ -1,4 +1,4 @@
-package com.buildgraph.prototype.verification.part;
+package com.buildgraph.prototype.parts.part;
 
 import com.buildgraph.prototype.common.MockData;
 import java.util.List;

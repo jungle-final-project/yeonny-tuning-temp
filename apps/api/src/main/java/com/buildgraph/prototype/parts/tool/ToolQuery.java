@@ -1,7 +1,7 @@
-package com.buildgraph.prototype.verification.tool;
+package com.buildgraph.prototype.parts.tool;
 
-import static com.buildgraph.prototype.verification.util.RuleValueReader.numberLong;
-import static com.buildgraph.prototype.verification.util.RuleValueReader.objectMap;
+import static com.buildgraph.prototype.parts.util.RuleValueReader.numberLong;
+import static com.buildgraph.prototype.parts.util.RuleValueReader.objectMap;
 
 import java.sql.ResultSet;
 import java.sql.SQLException;
@@ -22,21 +22,28 @@ public class ToolQuery {
     
     private final JdbcTemplate jdbcTemplate;
 
-    /* DB에서 특정 부품 정보를 "리스트"로 가져오는 함수 => 개별 List로 호출 */
+    /* DB에서 특정 카테고리 부품 정보를 "리스트"로 가져오는 함수 */
     public List<ToolBuildPart> partsByPublicIds(List<String> partIds) {
         return partIds.stream()
-                .map(this::partsByPublicId)
+                .map(this::partByPublicId)
+                .toList();
+    }
+
+    /* draftId => partIds 목록 => parts 객체 리스트(캐싱) */
+    public List<ToolBuildPart> partsByDraftIds(Long draftId) {
+        return partIdsByDraftId(draftId).stream()
+                .map(this::partByPublicId)
                 .toList();
     }
 
     /* 부품을 개별 항목으로 가져오는 함수
-       : 여기서 캐싱을 적용.. id기반 단일 DB 품목 정보 */
+       : 캐싱 적용.. id기반 단일 품목 정보 */
     @Cacheable(
         cacheNames = "tool-part",
         key = "#partId",
         unless = "#result == null"
     )
-    public ToolBuildPart partsByPublicId(String partId){
+    public ToolBuildPart partByPublicId(String partId){
         return jdbcTemplate.queryForObject("""
                         SELECT id AS internal_id,
                             public_id::text AS id,
@@ -64,5 +71,21 @@ public class ToolQuery {
                 rs.getInt("price"),
                 objectMap(DbValueMapper.json(Map.of("attributes", rs.getObject("attributes")), "attributes", Map.of()))
         );
+    }
+
+    /* draftId 기반 partIds 가져오기 */
+    private List<String> partIdsByDraftId(Long draftId) {
+        return jdbcTemplate.queryForList("""
+                SELECT p.public_id::text
+                FROM quote_draft_items qdi
+                JOIN parts p ON p.id = qdi.part_id
+                WHERE qdi.quote_draft_id = ?
+                    AND qdi.deleted_at IS NULL
+                    AND p.deleted_at IS NULL
+                ORDER BY qdi.created_at ASC, qdi.id ASC
+                """,
+                String.class,
+                draftId
+            );
     }
 }

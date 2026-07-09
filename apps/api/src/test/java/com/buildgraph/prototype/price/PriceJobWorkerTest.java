@@ -11,7 +11,7 @@ import java.util.Map;
 import org.junit.jupiter.api.Test;
 import org.springframework.jdbc.core.JdbcTemplate;
 
-import com.buildgraph.prototype.verification.util.NaverShoppingOfferService;
+import com.buildgraph.prototype.parts.util.NaverShoppingOfferService;
 
 class PriceJobWorkerTest {
     private final JdbcTemplate jdbcTemplate = mock(JdbcTemplate.class);

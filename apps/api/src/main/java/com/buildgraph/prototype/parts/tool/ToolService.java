@@ -1,14 +1,14 @@
-package com.buildgraph.prototype.verification.tool;
+package com.buildgraph.prototype.parts.tool;
 
 import com.buildgraph.prototype.common.MockData;
-import com.buildgraph.prototype.verification.util.PerformaceRule;
-import com.buildgraph.prototype.verification.util.PowerRule;
+import com.buildgraph.prototype.parts.util.PerformaceRule;
+import com.buildgraph.prototype.parts.util.PowerRule;
 
 import lombok.RequiredArgsConstructor;
 
-import static com.buildgraph.prototype.verification.util.RuleValueReader.intAttr;
-import static com.buildgraph.prototype.verification.util.RuleValueReader.name;
-import static com.buildgraph.prototype.verification.util.RuleValueReader.objectMap;
+import static com.buildgraph.prototype.parts.util.RuleValueReader.intAttr;
+import static com.buildgraph.prototype.parts.util.RuleValueReader.name;
+import static com.buildgraph.prototype.parts.util.RuleValueReader.objectMap;
 
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -29,7 +29,7 @@ public class ToolService {
     private final PerformaceRule performaceRule;
     private final ToolQuery toolQuery;
 
-    /* 서버 내부 견적 추천 로직: 해당 견적을 검증 */
+    /* 프론트 "셀프견적"이 호출하는 검증 Tool: 해당 견적을 검증 */
     public List<Map<String, Object>> checkBuild(List<ToolBuildPart> parts, int budget) {
         List<Map<String, Object>> results = new ArrayList<>();
 
@@ -42,7 +42,7 @@ public class ToolService {
         return results;
     }
 
-    /* 모든 Tool 호출이 거치는 입구 */
+    /* 모든 Tool 호출이 거치는 입구: "셀프견적"과 다른 분기 */
     public Map<String, Object> checkTool(String toolName, Map<String, Object> request) {
         /* 1. toolName 정규화
            2. request에서 body 추출 => DB 조회 => parts 객체 가져오기
@@ -102,7 +102,8 @@ public class ToolService {
         ToolBuildPart cooler = byCategory.get("COOLER");
 
         boolean socketMatched = same(stringAttr(cpu, "socket"), stringAttr(motherboard, "socket"));
-        boolean memoryMatched = same(firstText(stringAttr(ram, "memoryType"), "DDR5"), firstText(stringAttr(motherboard, "memoryType"), "DDR5"));
+        boolean memoryMatched = same(firstText(stringAttr(ram, "memoryType"), "DDR5"), 
+                                     firstText(stringAttr(motherboard, "memoryType"), "DDR5"));
         boolean coolerMatched = socketSupported(cooler, stringAttr(cpu, "socket"));
         boolean pass = socketMatched && memoryMatched && coolerMatched;
 

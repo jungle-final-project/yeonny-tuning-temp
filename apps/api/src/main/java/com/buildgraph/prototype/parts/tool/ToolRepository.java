@@ -1,4 +1,4 @@
-package com.buildgraph.prototype.verification.tool;
+package com.buildgraph.prototype.parts.tool;
 
 import java.util.List;
 import java.util.Map;
