@@ -42,14 +42,14 @@ export type SlotIsoArt = {
 // 씬의 소켓 프린트 위치(CPU 소켓, RAM 슬롯, PCIe, M.2, PSU 베이)에 맞춘 고정 좌표.
 // 관리자 드래그 좌표는 콜아웃 카드에만 적용되고, 이 물리 위치는 바뀌지 않는다.
 export const SLOT_ISO_ART: Record<PartCategory, SlotIsoArt> = {
-  CASE: { src: '/slot-board/iso/case.svg', x: 69, y: 30, w: 20, mount: 'fade', z: 1 },
-  MOTHERBOARD: { src: '/slot-board/iso/motherboard.svg', x: 15, y: 26.2, w: 57.5, mount: 'fade', z: 2 },
-  CPU: { src: '/slot-board/iso/cpu.svg', x: 31.2, y: 31.7, w: 15, mount: 'drop', z: 3 },
-  STORAGE: { src: '/slot-board/iso/ssd.svg', x: 49.6, y: 48.9, w: 15, mount: 'drop', z: 3 },
-  RAM: { src: '/slot-board/iso/ram.svg', x: 52.9, y: 29.8, w: 13.75, mount: 'drop', z: 4 },
-  PSU: { src: '/slot-board/iso/psu.svg', x: 66.6, y: 61.3, w: 20, mount: 'slide', z: 4 },
-  GPU: { src: '/slot-board/iso/gpu.svg', x: 29.7, y: 48.9, w: 22.5, mount: 'drop', z: 5 },
-  COOLER: { src: '/slot-board/iso/cooler.svg', x: 30.6, y: 25, w: 16.25, mount: 'drop', z: 6 }
+  CASE: { src: '/slot-board/iso-hd/case.svg', x: 69, y: 30, w: 20, mount: 'fade', z: 1 },
+  MOTHERBOARD: { src: '/slot-board/iso-hd/motherboard.svg', x: 15, y: 26.2, w: 57.5, mount: 'fade', z: 2 },
+  CPU: { src: '/slot-board/iso-hd/cpu.svg', x: 31.2, y: 31.7, w: 15, mount: 'drop', z: 3 },
+  STORAGE: { src: '/slot-board/iso-hd/ssd.svg', x: 49.6, y: 48.9, w: 15, mount: 'drop', z: 3 },
+  RAM: { src: '/slot-board/iso-hd/ram.svg', x: 52.9, y: 29.8, w: 13.75, mount: 'drop', z: 4 },
+  PSU: { src: '/slot-board/iso-hd/psu.svg', x: 66.6, y: 61.3, w: 20, mount: 'slide', z: 4 },
+  GPU: { src: '/slot-board/iso-hd/gpu.svg', x: 29.7, y: 48.9, w: 22.5, mount: 'drop', z: 5 },
+  COOLER: { src: '/slot-board/iso-hd/cooler.svg', x: 30.6, y: 25, w: 16.25, mount: 'drop', z: 6 }
 };
 
 // SelfQuote 3D 관계도 전용 콜아웃 좌표. AdminBuildGraphLayoutsPage의 편집 좌표와 분리한다.

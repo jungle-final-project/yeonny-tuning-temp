@@ -1,0 +1,84 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 240 160" fill="none">
+  <!-- CPU (iso-hd): 다층 PCB + 브러시드 IHS 스페큘러 + 골드 콘택트. 상단면 꼭짓점(120,40)(220,90)(120,140)(20,90)은 iso/cpu.svg와 동일 -->
+  <defs>
+    <linearGradient id="hdCpuPcb" x1="30" y1="50" x2="210" y2="132" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#2f507c"/>
+      <stop offset="52%" stop-color="#233f66"/>
+      <stop offset="100%" stop-color="#152a49"/>
+    </linearGradient>
+    <linearGradient id="hdCpuPcbL" x1="20" y1="90" x2="120" y2="148" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#152a49"/>
+      <stop offset="100%" stop-color="#0e1f38"/>
+    </linearGradient>
+    <linearGradient id="hdCpuPcbR" x1="120" y1="148" x2="220" y2="90" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#132540"/>
+      <stop offset="100%" stop-color="#1c3557"/>
+    </linearGradient>
+    <linearGradient id="hdCpuIhs" x1="70" y1="58" x2="176" y2="112" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#fbfdff"/>
+      <stop offset="30%" stop-color="#e6ecf4"/>
+      <stop offset="62%" stop-color="#cbd6e4"/>
+      <stop offset="100%" stop-color="#a9b8cd"/>
+    </linearGradient>
+    <linearGradient id="hdCpuIhsL" x1="56" y1="84" x2="120" y2="122" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#9cadc3"/>
+      <stop offset="100%" stop-color="#7d90aa"/>
+    </linearGradient>
+    <linearGradient id="hdCpuIhsR" x1="184" y1="84" x2="120" y2="122" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#c2ccdb"/>
+      <stop offset="100%" stop-color="#aab6c9"/>
+    </linearGradient>
+    <linearGradient id="hdCpuSpec" x1="80" y1="62" x2="150" y2="104" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#ffffff" stop-opacity="0.85"/>
+      <stop offset="100%" stop-color="#ffffff" stop-opacity="0"/>
+    </linearGradient>
+  </defs>
+  <!-- PCB 본체 (윗면 + 두께 2면) -->
+  <polygon points="120,40 220,90 120,140 20,90" fill="url(#hdCpuPcb)"/>
+  <polygon points="20,90 120,140 120,148 20,98" fill="url(#hdCpuPcbL)"/>
+  <polygon points="220,90 120,140 120,148 220,98" fill="url(#hdCpuPcbR)"/>
+  <polygon points="120,40 220,90 120,140 20,90" stroke="#3d6098" stroke-width="1.4"/>
+  <polyline points="20,90 120,40 220,90" stroke="#5678ad" stroke-width="1.1" opacity="0.85"/>
+  <!-- 기판 SMD 저항/캐패시터 스캐터 -->
+  <g fill="#f59e0b" opacity="0.5">
+    <rect x="106" y="126" width="7" height="4" transform="rotate(26 106 126)"/>
+    <rect x="128" y="122" width="7" height="4" transform="rotate(-26 128 122)"/>
+    <rect x="96" y="118" width="5" height="3" transform="rotate(26 96 118)"/>
+  </g>
+  <g fill="#94a3b8" opacity="0.45">
+    <rect x="150" y="120" width="6" height="3.5" transform="rotate(-26 150 120)"/>
+    <rect x="86" y="112" width="6" height="3.5" transform="rotate(26 86 112)"/>
+  </g>
+  <!-- 기판 가장자리 골드 콘택트 패드 (두 변) -->
+  <g fill="#eab308" opacity="0.9">
+    <circle cx="60" cy="92" r="2.4"/><circle cx="76" cy="100" r="2.4"/><circle cx="92" cy="108" r="2.4"/>
+    <circle cx="180" cy="92" r="2.4"/><circle cx="164" cy="100" r="2.4"/><circle cx="148" cy="108" r="2.4"/>
+    <circle cx="68" cy="80" r="2.4"/><circle cx="84" cy="72" r="2.4"/><circle cx="100" cy="64" r="2.4"/>
+    <circle cx="172" cy="80" r="2.4"/><circle cx="156" cy="72" r="2.4"/><circle cx="140" cy="64" r="2.4"/>
+  </g>
+  <g fill="#fde68a" opacity="0.8">
+    <circle cx="59" cy="91" r="0.9"/><circle cx="75" cy="99" r="0.9"/><circle cx="91" cy="107" r="0.9"/>
+    <circle cx="179" cy="91" r="0.9"/><circle cx="163" cy="99" r="0.9"/><circle cx="147" cy="107" r="0.9"/>
+  </g>
+  <!-- IHS (히트스프레더) 윗면 + 베벨 2면 -->
+  <polygon points="120,52 184,84 120,116 56,84" fill="url(#hdCpuIhs)"/>
+  <polygon points="56,84 120,116 120,122 56,90" fill="url(#hdCpuIhsL)"/>
+  <polygon points="184,84 120,116 120,122 184,90" fill="url(#hdCpuIhsR)"/>
+  <polygon points="120,52 184,84 120,116 56,84" stroke="#8598b0" stroke-width="1.1"/>
+  <!-- IHS 상단 컷 노치 -->
+  <polygon points="120,52 132,58 120,64 108,58" fill="#d7e0ec"/>
+  <polygon points="120,52 132,58 120,64 108,58" stroke="#aebccf" stroke-width="0.7"/>
+  <!-- 브러시드 각인 라인 (제조 문양) -->
+  <g stroke="#93a4bb" stroke-width="1.5" opacity="0.7">
+    <polyline points="96,72 144,96"/>
+    <polyline points="104,68 152,92"/>
+    <polyline points="112,64 160,88"/>
+    <polyline points="88,76 128,96"/>
+  </g>
+  <!-- specular 밴드 (금속 반사) -->
+  <polygon points="86,66 128,88 118,94 76,72" fill="url(#hdCpuSpec)"/>
+  <polygon points="140,92 158,101 150,105 132,96" fill="#ffffff" opacity="0.35"/>
+  <!-- 1번 핀 마커 (모서리) -->
+  <circle cx="44" cy="90" r="3.4" fill="#eab308"/>
+  <circle cx="43" cy="89" r="1.2" fill="#fef08a"/>
+</svg>
