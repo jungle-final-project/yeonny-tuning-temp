@@ -23,6 +23,7 @@ import {
   type BuildGraphStatus,
   type PartCategory
 } from '../aiSelection';
+import { CompositeScoreGauge } from './CompositeScoreGauge';
 import { listCompatiblePartCandidates } from '../../parts/partsApi';
 import type { CompatiblePartCandidate, PartRow } from '../../parts/types';
 
@@ -1431,34 +1432,11 @@ function partPhotoUrl(part: PartRow) {
 }
 
 function CompositeScoreMeter({ score }: { score: NonNullable<BuildGraphResolveResponse['compositeScore']> }) {
-  const percent = Math.max(0, Math.min(100, Math.round((score.score / Math.max(1, score.maxScore)) * 100)));
-  const topComponents = [...score.components]
-    .sort((left, right) => right.maxScore - left.maxScore)
-    .slice(0, 3);
   return (
     <div data-testid="build-composite-score" className="rounded-md border border-commerce-line bg-slate-50 p-3 text-left shadow-sm sm:min-w-[260px]">
-      <div className="flex items-start justify-between gap-3">
-        <div>
-          <div className="text-[11px] font-black uppercase text-slate-400">종합 점수</div>
-          <div className={`mt-0.5 text-2xl font-black ${scoreTone(score.score)}`}>
-            {score.score.toLocaleString('ko-KR')}<span className="text-sm text-slate-400"> / {score.maxScore.toLocaleString('ko-KR')}</span>
-          </div>
-        </div>
-        <div className="rounded bg-white px-2 py-1 text-right text-[11px] font-black text-commerce-ink ring-1 ring-commerce-line">
-          <div>{score.grade}</div>
-          <div className="text-slate-500">{score.label}</div>
-        </div>
-      </div>
-      <div className="mt-2 h-2 rounded-full bg-slate-200">
-        <div className={`h-2 rounded-full ${score.score <= 0 ? 'bg-red-500' : 'bg-brand-blue'}`} style={{ width: `${percent}%` }} />
-      </div>
-      <div className="mt-2 grid gap-1">
-        {topComponents.map((component) => (
-          <div key={component.key} className="flex items-center justify-between gap-3 text-[11px] font-bold text-slate-600">
-            <span>{component.label}</span>
-            <span className="text-commerce-ink">{component.score}/{component.maxScore}</span>
-          </div>
-        ))}
+      <div className="text-[11px] font-black uppercase text-slate-400">종합 점수</div>
+      <div className="mt-1">
+        <CompositeScoreGauge score={score} size="medium" className="mx-auto" gaugeTestId="build-composite-score-gauge" />
       </div>
       {score.requestFit ? (
         <div className={`mt-2 rounded px-2 py-1 text-[11px] font-black ${requestFitTone(score.requestFit.status)}`}>
@@ -1485,14 +1463,6 @@ function requestFitTone(status?: string) {
   if (status === 'WARN') return 'bg-amber-50 text-amber-700';
   if (status === 'PASS') return 'bg-emerald-50 text-emerald-700';
   return 'bg-slate-100 text-slate-500';
-}
-
-function scoreTone(score: number) {
-  if (score >= 930) return 'text-brand-blue';
-  if (score >= 850) return 'text-commerce-green';
-  if (score >= 750) return 'text-commerce-ink';
-  if (score >= 600) return 'text-amber-600';
-  return 'text-red-600';
 }
 
 function GraphStat({ label, value, tone = 'default' }: { label: string; value: number; tone?: 'default' | 'warn' }) {

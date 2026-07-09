@@ -5,9 +5,10 @@ import { BellRing, Check, CheckCircle2, Copy, FileText, GitBranch, Pencil, Penci
 import { Panel, Screen, StateMessage } from '../../../components/ui';
 import { applyAiBuildToQuoteDraft } from '../../parts/partsApi';
 import { QuotePerformancePanel } from '../../parts/components/slot-board/QuotePerformancePanel';
-import type { PartCategory } from '../aiSelection';
+import type { BuildCompositeScore, PartCategory } from '../aiSelection';
 import { BuildDependencyGraph } from '../components/BuildDependencyGraph';
-import { checkBuildPerformance, createQuotePriceAlert, deleteBuild, duplicateBuild, getBuildHistory, getPriceAlerts, renameBuild, resolveBuildGraph, type PriceAlert } from '../quoteApi';
+import { CompositeScoreGauge } from '../components/CompositeScoreGauge';
+import { createQuotePriceAlert, deleteBuild, duplicateBuild, getBuildHistory, getPriceAlerts, renameBuild, resolveBuildGraph, type PriceAlert } from '../quoteApi';
 import type { BuildItem, BuildSummary } from '../types';
 
 type SavedPartOption = {
@@ -552,15 +553,8 @@ function SavedBuildCard({
 
 // 저장 견적 비교: 비교할 견적을 직접 고르고, 고른 견적의 CPU·GPU 등 모든 카테고리 부품과
 // 성능을 열(견적)×행(항목)으로 좌우 나열한다(사용자 피드백 — 전 카테고리 부품 대 부품 비교).
-// 성능 점수는 그래프 resolve(무거움) 대신 performance 툴만 부르는 경량 엔드포인트를 견적별로 병렬 조회한다.
+// 성능 점수는 그래프 resolve의 compositeScore(0~1000)만 사용한다. CPU/GPU 평균 점수는 더 이상 대표 점수로 쓰지 않는다.
 const COMPARE_CATEGORY_ORDER = ['CPU', 'MOTHERBOARD', 'RAM', 'GPU', 'STORAGE', 'PSU', 'CASE', 'COOLER'];
-
-function perfPartIdsForBuild(build: BuildSummary): string[] {
-  return (build.items ?? [])
-    .filter((item) => item.category === 'CPU' || item.category === 'GPU')
-    .map((item) => resolvePartId(item))
-    .filter((id): id is string => Boolean(id));
-}
 
 function itemsForCategory(build: BuildSummary, category: string): BuildItem[] {
   return (build.items ?? []).filter((item) => item.category === category);
@@ -587,11 +581,15 @@ function SavedBuildsComparison({ builds }: { builds: BuildSummary[] }) {
 
   const perfResults = useQueries({
     queries: selectedBuilds.map((build) => {
-      const partIds = perfPartIdsForBuild(build);
+      const graphItems = quoteDraftItemsForBuild(build);
       return {
-        queryKey: ['saved-build-performance', build.id, partIds.join(',')],
-        queryFn: () => checkBuildPerformance({ partIds }),
-        enabled: partIds.length > 0,
+        queryKey: ['saved-build-composite-score', build.id, graphBuildSignature(graphItems), build.totalPrice],
+        queryFn: () => resolveBuildGraph({
+          source: 'AI_BUILD',
+          items: graphItems,
+          budgetWon: build.totalPrice
+        }),
+        enabled: graphItems.length > 0,
         staleTime: 5 * 60 * 1000
       };
     })
@@ -612,14 +610,8 @@ function SavedBuildsComparison({ builds }: { builds: BuildSummary[] }) {
   }
 
   const columns = selectedBuilds.map((build, index) => {
-    const details = (perfResults[index]?.data?.details ?? {}) as {
-      cpuBenchmarkScore?: number;
-      gpuBenchmarkScore?: number;
-    };
-    const cpu = toPerfScore(details.cpuBenchmarkScore);
-    const gpu = toPerfScore(details.gpuBenchmarkScore);
-    const overall = cpu !== null && gpu !== null ? Math.round((cpu + gpu) / 2) : cpu ?? gpu;
-    return { build, cpu, gpu, overall, isLoading: perfResults[index]?.isLoading ?? false };
+    const compositeScore = perfResults[index]?.data?.compositeScore ?? null;
+    return { build, compositeScore, isLoading: perfResults[index]?.isLoading ?? false };
   });
 
   const comparing = columns.length > 1;
@@ -628,12 +620,6 @@ function SavedBuildsComparison({ builds }: { builds: BuildSummary[] }) {
   const categories = COMPARE_CATEGORY_ORDER.filter((category) =>
     selectedBuilds.some((build) => itemsForCategory(build, category).length > 0)
   );
-
-  const perfRows: { key: string; label: string; hint: string; pick: (col: (typeof columns)[number]) => number | null }[] = [
-    { key: 'overall', label: '종합', hint: 'CPU·GPU 평균', pick: (col) => col.overall },
-    { key: 'cpu', label: 'CPU', hint: '연산 성능', pick: (col) => col.cpu },
-    { key: 'gpu', label: 'GPU', hint: '그래픽 성능', pick: (col) => col.gpu }
-  ];
 
   const colCount = columns.length + 1;
   const lowestTotal = columns.length ? Math.min(...columns.map((col) => col.build.totalPrice)) : null;
@@ -645,10 +631,10 @@ function SavedBuildsComparison({ builds }: { builds: BuildSummary[] }) {
           <p className="text-xs font-black tracking-wide text-brand-blue">견적 비교</p>
           <h2 className="mt-1 text-lg font-black text-commerce-ink">견적 골라 부품·성능 비교</h2>
           <p className="mt-1 break-keep text-xs leading-5 text-slate-500">
-            비교할 견적을 고르면 CPU·GPU 등 모든 카테고리 부품과 성능을 좌우로 나열합니다.
+            비교할 견적을 고르면 전 카테고리 부품과 1000점 종합 점수를 좌우로 나열합니다.
           </p>
         </div>
-        <p className="text-[11px] font-bold text-slate-400">성능은 공개 벤치마크 참고값 · 실제 FPS·체감과 다를 수 있음</p>
+        <p className="text-[11px] font-bold text-slate-400">종합 점수는 성능·호환·여유 참고값 · 실제 FPS·체감과 다를 수 있음</p>
       </div>
 
       {/* 비교할 견적 선택 칩 */}
@@ -731,34 +717,27 @@ function SavedBuildsComparison({ builds }: { builds: BuildSummary[] }) {
                 );
               })}
 
-              {/* 성능 섹션 (공개 벤치마크 참고) */}
-              <SectionRow label="성능 (공개 벤치마크 참고)" colSpan={colCount} />
-              {perfRows.map((row) => {
-                const values = columns.map(row.pick);
-                const numeric = values.filter((value): value is number => value !== null);
-                const best = numeric.length ? Math.max(...numeric) : null;
-                return (
-                  <tr key={row.key} className="border-t border-slate-100">
-                    <th scope="row" className="sticky left-0 z-10 bg-white py-3 pr-3 align-middle">
-                      <div className="text-xs font-black text-slate-700">{row.label}</div>
-                      <div className="text-[10px] font-bold text-slate-400">{row.hint}</div>
-                    </th>
-                    {columns.map((col, index) => {
-                      const score = values[index];
-                      const isBest = comparing && score !== null && best !== null && score === best;
-                      return (
-                        <td key={col.build.id} className="px-2 py-3 align-middle">
-                          {col.isLoading ? (
-                            <div className="h-7 animate-pulse rounded bg-slate-200" />
-                          ) : (
-                            <PerfCompareCell score={score} highlight={isBest} />
-                          )}
-                        </td>
-                      );
-                    })}
-                  </tr>
-                );
-              })}
+              {/* 성능 섹션 (1000점 종합 점수) */}
+              <SectionRow label="종합 점수 (1000점)" colSpan={colCount} />
+              <tr className="border-t border-slate-100">
+                <th scope="row" className="sticky left-0 z-10 bg-white py-3 pr-3 align-middle">
+                  <div className="text-xs font-black text-slate-700">종합</div>
+                  <div className="text-[10px] font-bold text-slate-400">성능·호환·여유</div>
+                </th>
+                {columns.map((col) => {
+                  const bestScore = Math.max(...columns.map((item) => item.compositeScore?.score ?? -1));
+                  const isBest = comparing && col.compositeScore !== null && col.compositeScore.score === bestScore;
+                  return (
+                    <td key={col.build.id} className="px-2 py-3 align-middle">
+                      {col.isLoading ? (
+                        <div className="h-10 animate-pulse rounded bg-slate-200" />
+                      ) : (
+                        <CompositeCompareCell score={col.compositeScore} highlight={isBest} />
+                      )}
+                    </td>
+                  );
+                })}
+              </tr>
             </tbody>
           </table>
         </div>
@@ -794,38 +773,22 @@ function PartCompareCell({ items }: { items: BuildItem[] }) {
   );
 }
 
-function PerfCompareCell({ score, highlight }: { score: number | null; highlight: boolean }) {
+function CompositeCompareCell({ score, highlight }: { score: BuildCompositeScore | null; highlight: boolean }) {
   if (score === null) {
     return <div className="text-[11px] font-bold text-slate-400">자료 없음</div>;
   }
-  const tone = score >= 80 ? 'bg-emerald-500' : score >= 55 ? 'bg-brand-blue' : 'bg-amber-500';
   return (
-    <div className={highlight ? 'rounded-md bg-emerald-50/70 px-1.5 py-1' : ''}>
-      <div className="flex items-baseline justify-between gap-1">
-        <span className={`text-sm font-black ${highlight ? 'text-emerald-600' : 'text-slate-700'}`}>
-          {Math.round(score)}
-          {highlight ? <span className="ml-0.5 text-[11px]">▲</span> : null}
-        </span>
-        <span className="text-[10px] font-bold text-slate-400">{perfTier(score)}</span>
-      </div>
-      <div className="mt-1 h-1.5 overflow-hidden rounded-full bg-slate-200">
-        <div className={`h-full rounded-full ${tone}`} style={{ width: `${Math.min(100, Math.max(4, score))}%` }} />
-      </div>
+    <div className={highlight ? 'rounded-md bg-emerald-50/70 px-1.5 py-1' : 'px-1.5 py-1'}>
+      <CompositeScoreGauge
+        score={score}
+        size="mini"
+        highlight={highlight}
+        className="mx-auto"
+        gaugeTestId="quote-compare-composite-gauge"
+      />
+      {highlight ? <div className="mt-0.5 text-center text-[10px] font-black text-emerald-600">최고점 ▲</div> : null}
     </div>
   );
-}
-
-function toPerfScore(value: unknown): number | null {
-  const num = Number(value);
-  return Number.isFinite(num) && num > 0 ? num : null;
-}
-
-function perfTier(score: number): string {
-  if (score >= 85) return '최상위급';
-  if (score >= 70) return '상위급';
-  if (score >= 55) return '중상위급';
-  if (score >= 40) return '중급';
-  return '입문급';
 }
 
 function PriceAlertRow({ alert }: { alert: PriceAlert }) {
