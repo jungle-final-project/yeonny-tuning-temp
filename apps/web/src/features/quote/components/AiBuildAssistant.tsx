@@ -32,6 +32,8 @@ type AiBuildAssistantProps = {
   surface?: 'home' | 'self-quote';
 };
 
+type AiChatMessageSize = 'default' | 'large';
+
 type CenterScrollbarState = {
   canScroll: boolean;
   visible: boolean;
@@ -434,27 +436,27 @@ export function AiBuildAssistant({ surface = 'home' }: AiBuildAssistantProps) {
     const centeredMessages = session.messages.filter((message) => message.id !== 'ai-intro');
     const hasMessages = centeredMessages.length > 0;
     const centeredPromptForm = (
-      <form onSubmit={submitPrompt} className="mx-auto w-full max-w-[640px]">
+      <form onSubmit={submitPrompt} className="mx-auto w-full max-w-[896px]">
         {submitError ? (
-          <div role="alert" className="mb-2 rounded-lg bg-red-50 px-3 py-2 text-xs font-bold text-red-700">
+          <div role="alert" className="mb-3 rounded-xl bg-red-50 px-4 py-3 text-base font-bold text-red-700">
             {submitError}
           </div>
         ) : null}
         {applyError ? (
-          <div role="alert" className="mb-2 flex flex-col gap-2 rounded-lg bg-red-50 px-3 py-2 text-xs font-bold text-red-700 sm:flex-row sm:items-center sm:justify-between">
+          <div role="alert" className="mb-3 flex flex-col gap-3 rounded-xl bg-red-50 px-4 py-3 text-base font-bold text-red-700 sm:flex-row sm:items-center sm:justify-between">
             <span>{applyError}</span>
             <button
               type="button"
               onClick={() => failedBuild && selectBuild(failedBuild)}
               disabled={!failedBuild || Boolean(applyingBuildId)}
-              className="min-h-8 rounded bg-red-600 px-3 text-white disabled:bg-red-200"
+              className="min-h-11 rounded bg-red-600 px-4 text-white disabled:bg-red-200"
             >
               재시도
             </button>
           </div>
         ) : null}
         <label className="sr-only" htmlFor="ai-build-chat-input">AI에게 PC 견적 질문</label>
-        <div className="flex min-h-14 items-center gap-2 rounded-full border border-slate-200 bg-white px-4 py-2 shadow-[0_18px_55px_rgba(15,23,42,0.12)] focus-within:border-slate-400 focus-within:ring-4 focus-within:ring-slate-100">
+        <div className="flex min-h-[78px] items-center gap-3 rounded-full border border-slate-200 bg-white px-5 py-3 shadow-[0_22px_70px_rgba(15,23,42,0.14)] focus-within:border-slate-400 focus-within:ring-4 focus-within:ring-slate-100">
           <input
             id="ai-build-chat-input"
             aria-label="AI에게 PC 견적 질문"
@@ -462,15 +464,15 @@ export function AiBuildAssistant({ surface = 'home' }: AiBuildAssistantProps) {
             onChange={(event) => setPrompt(event.target.value)}
             disabled={isSending}
             placeholder="예산, 용도, 원하는 게임을 입력해 주세요"
-            className="min-w-0 flex-1 bg-transparent px-2 text-sm font-medium text-slate-900 outline-none placeholder:text-slate-400"
+            className="min-w-0 flex-1 bg-transparent px-3 text-[20px] font-medium leading-8 text-slate-900 outline-none placeholder:text-slate-400"
           />
           <button
             type="submit"
             aria-label="질문 보내기"
             disabled={!prompt.trim() || isSending}
-            className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-commerce-ink text-white transition hover:bg-slate-700 disabled:bg-slate-300"
+            className="grid h-14 w-14 shrink-0 place-items-center rounded-full bg-commerce-ink text-white transition hover:bg-slate-700 disabled:bg-slate-300"
           >
-            <Send size={17} />
+            <Send size={24} />
           </button>
         </div>
       </form>
@@ -481,9 +483,9 @@ export function AiBuildAssistant({ surface = 'home' }: AiBuildAssistantProps) {
         data-testid="ai-chat-close-button"
         aria-label="AI 견적 어시스턴트 닫기"
         onClick={() => setOpen(false)}
-        className="absolute right-0 -top-14 z-10 grid h-10 w-10 place-items-center rounded-full bg-white text-slate-600 shadow-lg transition hover:bg-slate-100 hover:text-commerce-ink focus:outline-none focus:ring-4 focus:ring-blue-100 sm:-right-12 sm:top-0"
+        className="absolute right-0 -top-16 z-10 grid h-14 w-14 place-items-center rounded-full bg-white text-slate-600 shadow-lg transition hover:bg-slate-100 hover:text-commerce-ink focus:outline-none focus:ring-4 focus:ring-blue-100 sm:-right-16 sm:top-0"
       >
-        <X size={18} />
+        <X size={25} />
       </button>
     );
 
@@ -497,16 +499,16 @@ export function AiBuildAssistant({ surface = 'home' }: AiBuildAssistantProps) {
         onWheel={(event) => event.stopPropagation()}
         onTouchMove={(event) => event.stopPropagation()}
       >
-        <div data-testid="ai-chatbot-panel" className="relative mx-auto flex h-[calc(100dvh-3rem)] w-full max-w-[760px] flex-col">
+        <div data-testid="ai-chatbot-panel" className="relative mx-auto flex h-[calc(100dvh-3rem)] w-full max-w-[1064px] flex-col">
           {hasMessages ? (
             <div className="flex h-full min-h-0 items-center justify-center">
-              <div className="relative flex max-h-full min-h-0 w-full max-w-[640px] flex-col">
+              <div className="relative flex max-h-full min-h-0 w-full max-w-[896px] flex-col">
                 {centeredCloseButton}
                 <div className="relative min-h-0">
                   <div
                     ref={centerMessagesScrollRef}
                     data-testid="ai-chat-messages"
-                    className="scrollbar-hidden max-h-[calc(100dvh-10rem)] space-y-4 overflow-y-auto pb-3 pt-2"
+                    className="scrollbar-hidden max-h-[calc(100dvh-14rem)] space-y-6 overflow-y-auto pb-4 pt-3"
                     onWheel={(event) => {
                       event.stopPropagation();
                       revealCenterScrollbar();
@@ -524,10 +526,11 @@ export function AiBuildAssistant({ surface = 'home' }: AiBuildAssistantProps) {
                         onSelectBuild={selectBuild}
                         onQuickReply={handleQuickReply}
                         applyingBuildId={applyingBuildId}
+                        size="large"
                       />
                     ))}
                     {isSending ? (
-                      <div className="rounded-2xl bg-slate-50 px-3 py-2 text-sm font-bold text-slate-500">
+                      <div className="rounded-[22px] bg-slate-50 px-5 py-4 text-[20px] font-bold leading-8 text-slate-500">
                         서버에서 추천 조합을 계산하는 중입니다.
                       </div>
                     ) : null}
@@ -538,7 +541,7 @@ export function AiBuildAssistant({ surface = 'home' }: AiBuildAssistantProps) {
                     <div
                       aria-hidden="true"
                       data-testid="ai-chat-custom-scrollbar"
-                      className="pointer-events-none absolute -right-5 w-2 rounded-full bg-white/10"
+                      className="pointer-events-none absolute -right-7 w-[11px] rounded-full bg-white/10"
                       style={{
                         bottom: CENTER_SCROLLBAR_TRACK_BOTTOM,
                         opacity: centerScrollbar.visible ? 1 : 0,
@@ -565,15 +568,15 @@ export function AiBuildAssistant({ surface = 'home' }: AiBuildAssistantProps) {
             </div>
           ) : (
             <div className="flex h-full items-center justify-center px-0 py-12 text-center">
-              <div className="relative mx-auto flex w-full max-w-[640px] -translate-y-3 flex-col items-center">
+              <div className="relative mx-auto flex w-full max-w-[896px] -translate-y-3 flex-col items-center">
                 {centeredCloseButton}
-                <h2 className="text-2xl font-black leading-8 text-white sm:text-3xl">
+                <h2 className="text-[34px] font-black leading-[42px] text-white">
                   어떤 PC를 맞춰볼까요?
                 </h2>
-                <p className="mt-2 max-w-[520px] break-keep text-sm font-semibold leading-6 text-white/75">
+                <p className="mt-3 max-w-[728px] break-keep text-[20px] font-semibold leading-8 text-white/75">
                   예산, 주로 하는 게임이나 작업, 선호 브랜드를 편하게 입력해 주세요.
                 </p>
-                <div className="mt-5 w-full">
+                <div className="mt-7 w-full">
                   {centeredPromptForm}
                 </div>
               </div>
@@ -749,36 +752,39 @@ const ChatMessage = memo(function ChatMessage({
   message,
   onSelectBuild,
   onQuickReply,
-  applyingBuildId
+  applyingBuildId,
+  size = 'default'
 }: {
   message: AiChatMessage;
   onSelectBuild: (build: AiRecommendedBuild) => void;
   onQuickReply: (reply: string) => void;
   applyingBuildId: string | null;
+  size?: AiChatMessageSize;
 }) {
   const isUser = message.role === 'user';
+  const isLarge = size === 'large';
 
   return (
     <div className={`flex ${isUser ? 'justify-end' : 'justify-start'}`}>
       <div className={`max-w-full ${isUser ? 'w-fit max-w-[86%]' : 'w-full'}`}>
-        <div className={`rounded-2xl px-3 py-2 text-sm leading-6 shadow-sm ${isUser ? 'bg-brand-blue text-white' : 'border border-slate-200 bg-white text-slate-700'}`}>
+        <div className={`${isLarge ? 'rounded-[22px] px-5 py-4 text-[20px] leading-8' : 'rounded-2xl px-3 py-2 text-sm leading-6'} shadow-sm ${isUser ? 'bg-brand-blue text-white' : 'border border-slate-200 bg-white text-slate-700'}`}>
           {!isUser ? (
-            <div className="mb-1 flex items-center gap-2 text-[11px] font-black text-brand-blue">
-              <span className="grid h-5 w-5 place-items-center rounded-full bg-blue-50 text-brand-blue">
-                <Sparkles size={12} />
+            <div className={`${isLarge ? 'mb-2 gap-3 text-[15px]' : 'mb-1 gap-2 text-[11px]'} flex items-center font-black text-brand-blue`}>
+              <span className={`${isLarge ? 'h-7 w-7' : 'h-5 w-5'} grid place-items-center rounded-full bg-blue-50 text-brand-blue`}>
+                <Sparkles size={isLarge ? 17 : 12} />
               </span>
               {message.simulation ? '성능 시뮬레이션' : 'AI 견적 어시스턴트'}
             </div>
           ) : null}
           <p className="break-keep">{message.text}</p>
           {!isUser && message.quickReplies?.length ? (
-            <div data-testid="ai-quick-replies" className="mt-2 flex flex-wrap gap-2">
+            <div data-testid="ai-quick-replies" className={`${isLarge ? 'mt-3 gap-3' : 'mt-2 gap-2'} flex flex-wrap`}>
               {message.quickReplies.map((reply) => (
                 <button
                   key={reply}
                   type="button"
                   onClick={() => onQuickReply(reply)}
-                  className="rounded-full border border-slate-200 bg-white px-3 py-1.5 text-[11px] font-black text-slate-600 shadow-sm transition hover:border-brand-blue hover:text-brand-blue focus:outline-none focus:ring-4 focus:ring-blue-100"
+                  className={`${isLarge ? 'px-4 py-2 text-[15px]' : 'px-3 py-1.5 text-[11px]'} rounded-full border border-slate-200 bg-white font-black text-slate-600 shadow-sm transition hover:border-brand-blue hover:text-brand-blue focus:outline-none focus:ring-4 focus:ring-blue-100`}
                 >
                   {reply}
                 </button>
@@ -788,13 +794,13 @@ const ChatMessage = memo(function ChatMessage({
         </div>
 
         {message.simulation ? (
-          <SimulationResultCard simulation={message.simulation} />
+          <SimulationResultCard simulation={message.simulation} size={size} />
         ) : null}
 
         {message.builds ? (
-          <div className="mt-2 grid gap-2">
+          <div className={`${isLarge ? 'mt-4 gap-3' : 'mt-2 gap-2'} grid`}>
             {message.builds.map((build) => (
-              <CompactBuildCard key={`${message.id}-${build.id}`} build={build} onSelectBuild={onSelectBuild} applyingBuildId={applyingBuildId} />
+              <CompactBuildCard key={`${message.id}-${build.id}`} build={build} onSelectBuild={onSelectBuild} applyingBuildId={applyingBuildId} size={size} />
             ))}
           </div>
         ) : null}
@@ -809,9 +815,11 @@ const ChatMessage = memo(function ChatMessage({
   && prev.onSelectBuild === next.onSelectBuild
   && prev.onQuickReply === next.onQuickReply
   && prev.applyingBuildId === next.applyingBuildId
+  && prev.size === next.size
 ));
 
-function SimulationResultCard({ simulation }: { simulation: AiPerformanceSimulation }) {
+function SimulationResultCard({ simulation, size = 'default' }: { simulation: AiPerformanceSimulation; size?: AiChatMessageSize }) {
+  const isLarge = size === 'large';
   const fpsRows = simulation.fpsComparisons ?? [];
   const specRows = simulation.specComparisons ?? [];
   const score = simulation.scoreComparison;
@@ -821,50 +829,50 @@ function SimulationResultCard({ simulation }: { simulation: AiPerformanceSimulat
   );
 
   return (
-    <section className="mt-2 rounded-lg border border-blue-100 bg-blue-50 p-3">
-      <div className="flex flex-wrap items-start justify-between gap-2">
+    <section className={`${isLarge ? 'mt-4 rounded-xl p-5' : 'mt-2 rounded-lg p-3'} border border-blue-100 bg-blue-50`}>
+      <div className={`${isLarge ? 'gap-3' : 'gap-2'} flex flex-wrap items-start justify-between`}>
         <div className="min-w-0">
-          <div className="flex items-center gap-2 text-xs font-black text-brand-blue">
-            <BarChart3 size={14} />
+          <div className={`${isLarge ? 'gap-3 text-base' : 'gap-2 text-xs'} flex items-center font-black text-brand-blue`}>
+            <BarChart3 size={isLarge ? 20 : 14} />
             성능 시뮬레이션
           </div>
-          <div className="mt-1 break-keep text-sm font-black text-commerce-ink">
+          <div className={`${isLarge ? 'mt-2 text-[20px] leading-8' : 'mt-1 text-sm'} break-keep font-black text-commerce-ink`}>
             {simulation.currentPart.name} → {simulation.targetPart.name}
           </div>
         </div>
-        <span className="rounded bg-white px-2 py-1 text-[11px] font-black text-slate-600">
+        <span className={`${isLarge ? 'px-3 py-1.5 text-[15px]' : 'px-2 py-1 text-[11px]'} rounded bg-white font-black text-slate-600`}>
           {PART_CATEGORY_LABELS[simulation.category]}
         </span>
       </div>
 
       {score ? (
-        <div className="mt-3 rounded-md bg-white p-3">
-          <div className="flex items-center justify-between gap-2 text-xs">
+        <div className={`${isLarge ? 'mt-4 rounded-lg p-4' : 'mt-3 rounded-md p-3'} bg-white`}>
+          <div className={`${isLarge ? 'gap-3 text-base' : 'gap-2 text-xs'} flex items-center justify-between`}>
             <span className="font-black text-slate-700">{score.label}</span>
             <span className={`font-black ${score.delta && score.delta > 0 ? 'text-commerce-green' : score.delta && score.delta < 0 ? 'text-commerce-sale' : 'text-slate-500'}`}>
               {formatSigned(score.delta, '점')}
             </span>
           </div>
-          <div className="mt-2 grid gap-2">
-            <ComparisonBar label="현재" value={score.currentScore} max={100} tone="slate" />
-            <ComparisonBar label="변경 후" value={score.targetScore} max={100} tone="blue" />
+          <div className={`${isLarge ? 'mt-3 gap-3' : 'mt-2 gap-2'} grid`}>
+            <ComparisonBar label="현재" value={score.currentScore} max={100} tone="slate" size={size} />
+            <ComparisonBar label="변경 후" value={score.targetScore} max={100} tone="blue" size={size} />
           </div>
         </div>
       ) : null}
 
       {fpsRows.length ? (
-        <div className="mt-3 overflow-hidden rounded-md border border-blue-100 bg-white">
-          <div className="grid grid-cols-[1.2fr_0.8fr_1.2fr] gap-2 border-b border-blue-50 px-3 py-2 text-[11px] font-black text-slate-500">
+        <div className={`${isLarge ? 'mt-4 rounded-lg' : 'mt-3 rounded-md'} overflow-hidden border border-blue-100 bg-white`}>
+          <div className={`${isLarge ? 'gap-3 px-4 py-3 text-[15px]' : 'gap-2 px-3 py-2 text-[11px]'} grid grid-cols-[1.2fr_0.8fr_1.2fr] border-b border-blue-50 font-black text-slate-500`}>
             <span>게임/해상도</span>
             <span className="text-right">FPS 변화</span>
             <span>비교 막대</span>
           </div>
           <div className="divide-y divide-blue-50">
             {fpsRows.map((row) => (
-              <div key={`${row.gameTitle}-${row.resolution}-${row.graphicsPreset ?? ''}`} className="grid grid-cols-[1.2fr_0.8fr_1.2fr] gap-2 px-3 py-2 text-xs">
+              <div key={`${row.gameTitle}-${row.resolution}-${row.graphicsPreset ?? ''}`} className={`${isLarge ? 'gap-3 px-4 py-3 text-base' : 'gap-2 px-3 py-2 text-xs'} grid grid-cols-[1.2fr_0.8fr_1.2fr]`}>
                 <div className="min-w-0">
                   <div className="break-keep font-black text-commerce-ink">{row.gameTitle}</div>
-                  <div className="mt-0.5 text-[11px] font-bold text-slate-500">{row.resolution}{row.graphicsPreset ? ` · ${row.graphicsPreset}` : ''}</div>
+                  <div className={`${isLarge ? 'mt-1 text-[15px]' : 'mt-0.5 text-[11px]'} font-bold text-slate-500`}>{row.resolution}{row.graphicsPreset ? ` · ${row.graphicsPreset}` : ''}</div>
                 </div>
                 <div className="text-right font-black text-slate-700">
                   <div>{formatFps(row.currentFps)} → {formatFps(row.targetFps)}</div>
@@ -873,8 +881,8 @@ function SimulationResultCard({ simulation }: { simulation: AiPerformanceSimulat
                   </div>
                 </div>
                 <div className="grid content-center gap-1">
-                  <MiniBar value={row.currentFps} max={maxFps} className="bg-slate-300" />
-                  <MiniBar value={row.targetFps} max={maxFps} className="bg-brand-blue" />
+                  <MiniBar value={row.currentFps} max={maxFps} className="bg-slate-300" size={size} />
+                  <MiniBar value={row.targetFps} max={maxFps} className="bg-brand-blue" size={size} />
                 </div>
               </div>
             ))}
@@ -883,27 +891,27 @@ function SimulationResultCard({ simulation }: { simulation: AiPerformanceSimulat
       ) : null}
 
       {specRows.length ? (
-        <div className="mt-3 grid gap-2 sm:grid-cols-2">
+        <div className={`${isLarge ? 'mt-4 gap-3' : 'mt-3 gap-2'} grid sm:grid-cols-2`}>
           {specRows.map((row) => (
-            <div key={row.label} className="rounded-md border border-blue-100 bg-white p-2 text-xs">
+            <div key={row.label} className={`${isLarge ? 'rounded-lg p-3 text-base' : 'rounded-md p-2 text-xs'} border border-blue-100 bg-white`}>
               <div className="font-black text-commerce-ink">{row.label}</div>
               <div className="mt-1 flex items-center justify-between gap-2 text-slate-600">
                 <span className="truncate">{row.currentValue ?? '-'}</span>
                 <span className="font-black text-slate-400">→</span>
                 <span className="truncate font-black text-brand-blue">{row.targetValue ?? '-'}</span>
               </div>
-              {row.deltaText ? <div className="mt-1 text-[11px] font-bold text-commerce-green">{row.deltaText}</div> : null}
+              {row.deltaText ? <div className={`${isLarge ? 'mt-2 text-[15px]' : 'mt-1 text-[11px]'} font-bold text-commerce-green`}>{row.deltaText}</div> : null}
             </div>
           ))}
         </div>
       ) : null}
 
       {simulation.warnings?.length ? (
-        <div className="mt-3 rounded-md bg-amber-50 px-3 py-2 text-xs font-bold leading-5 text-amber-700">
+        <div className={`${isLarge ? 'mt-4 rounded-lg px-4 py-3 text-base leading-7' : 'mt-3 rounded-md px-3 py-2 text-xs leading-5'} bg-amber-50 font-bold text-amber-700`}>
           {simulation.warnings[0]}
         </div>
       ) : null}
-      <p className="mt-3 break-keep text-[11px] font-bold leading-5 text-slate-500">
+      <p className={`${isLarge ? 'mt-4 text-[15px] leading-7' : 'mt-3 text-[11px] leading-5'} break-keep font-bold text-slate-500`}>
         {simulation.disclaimer
           ?? '본 수치는 내부 벤치마크 DB 기준 참고용 추정치입니다. 실제 성능은 게임 버전, 그래픽 옵션, 드라이버, 해상도, 냉각·전원 환경에 따라 달라질 수 있습니다.'}
       </p>
@@ -911,20 +919,21 @@ function SimulationResultCard({ simulation }: { simulation: AiPerformanceSimulat
   );
 }
 
-function ComparisonBar({ label, value, max, tone }: { label: string; value?: number | null; max: number; tone: 'slate' | 'blue' }) {
+function ComparisonBar({ label, value, max, tone, size = 'default' }: { label: string; value?: number | null; max: number; tone: 'slate' | 'blue'; size?: AiChatMessageSize }) {
+  const isLarge = size === 'large';
   return (
-    <div className="grid grid-cols-[48px_1fr_44px] items-center gap-2 text-[11px] font-bold text-slate-500">
+    <div className={`${isLarge ? 'grid-cols-[68px_1fr_62px] gap-3 text-[15px]' : 'grid-cols-[48px_1fr_44px] gap-2 text-[11px]'} grid items-center font-bold text-slate-500`}>
       <span>{label}</span>
-      <MiniBar value={value} max={max} className={tone === 'blue' ? 'bg-brand-blue' : 'bg-slate-300'} />
+      <MiniBar value={value} max={max} className={tone === 'blue' ? 'bg-brand-blue' : 'bg-slate-300'} size={size} />
       <span className="text-right text-commerce-ink">{formatPlainNumber(value)}</span>
     </div>
   );
 }
 
-function MiniBar({ value, max, className }: { value?: number | null; max: number; className: string }) {
+function MiniBar({ value, max, className, size = 'default' }: { value?: number | null; max: number; className: string; size?: AiChatMessageSize }) {
   const width = Math.max(4, Math.min(100, Math.round(((value ?? 0) / Math.max(1, max)) * 100)));
   return (
-    <div className="h-2 overflow-hidden rounded-full bg-slate-100">
+    <div className={`${size === 'large' ? 'h-3' : 'h-2'} overflow-hidden rounded-full bg-slate-100`}>
       <div className={`h-full rounded-full ${className}`} style={{ width: `${width}%` }} />
     </div>
   );
@@ -933,53 +942,56 @@ function MiniBar({ value, max, className }: { value?: number | null; max: number
 function CompactBuildCard({
   build,
   onSelectBuild,
-  applyingBuildId
+  applyingBuildId,
+  size = 'default'
 }: {
   build: AiRecommendedBuild;
   onSelectBuild: (build: AiRecommendedBuild) => void;
   applyingBuildId: string | null;
+  size?: AiChatMessageSize;
 }) {
   const primaryItems = build.items.slice(0, 5);
+  const isLarge = size === 'large';
   // 이 카드가 적용 중이면 로딩 표시, 다른 카드가 적용 중이면 클릭이 조용히 무시되지 않도록 함께 비활성화한다.
   const isApplyingThis = applyingBuildId === build.id;
   const isApplyDisabled = Boolean(applyingBuildId);
 
   return (
-    <article className="rounded-2xl border border-slate-200 bg-white p-3 shadow-sm">
-      <div className="flex flex-wrap items-center gap-2">
-        <span className="rounded-full bg-brand-blue px-2.5 py-1 text-[11px] font-black text-white">{build.label}</span>
+    <article className={`${isLarge ? 'rounded-[22px] p-5' : 'rounded-2xl p-3'} border border-slate-200 bg-white shadow-sm`}>
+      <div className={`${isLarge ? 'gap-3' : 'gap-2'} flex flex-wrap items-center`}>
+        <span className={`${isLarge ? 'px-3 py-1.5 text-[15px]' : 'px-2.5 py-1 text-[11px]'} rounded-full bg-brand-blue font-black text-white`}>{build.label}</span>
         {build.appliedPartCategories.map((category) => (
-          <span key={category} className="rounded-full bg-emerald-50 px-2.5 py-1 text-[11px] font-black text-emerald-700">
+          <span key={category} className={`${isLarge ? 'px-3 py-1.5 text-[15px]' : 'px-2.5 py-1 text-[11px]'} rounded-full bg-emerald-50 font-black text-emerald-700`}>
             {PART_CATEGORY_LABELS[category]} 반영됨
           </span>
         ))}
       </div>
-      <div className="mt-3 flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+      <div className={`${isLarge ? 'mt-4 gap-3' : 'mt-3 gap-2'} flex flex-col sm:flex-row sm:items-start sm:justify-between`}>
         <div className="min-w-0">
-          <h3 className="text-sm font-black leading-5 text-commerce-ink">{build.title}</h3>
-          <p className="mt-1 line-clamp-2 break-keep text-xs leading-5 text-slate-500">{build.summary}</p>
+          <h3 className={`${isLarge ? 'text-[20px] leading-8' : 'text-sm leading-5'} font-black text-commerce-ink`}>{build.title}</h3>
+          <p className={`${isLarge ? 'mt-2 text-base leading-7' : 'mt-1 text-xs leading-5'} line-clamp-2 break-keep text-slate-500`}>{build.summary}</p>
         </div>
         <div className="shrink-0 text-left sm:text-right">
-          <div className="text-base font-black text-brand-blue">{build.totalPrice.toLocaleString()}원</div>
-          <div className="text-[11px] font-bold text-slate-500">{build.items.length}개 부품</div>
+          <div className={`${isLarge ? 'text-[22px] leading-8' : 'text-base'} font-black text-brand-blue`}>{build.totalPrice.toLocaleString()}원</div>
+          <div className={`${isLarge ? 'text-[15px]' : 'text-[11px]'} font-bold text-slate-500`}>{build.items.length}개 부품</div>
         </div>
       </div>
       {build.toolResults?.length ? (
-        <div className="mt-3 flex flex-wrap gap-1.5" aria-label="검증 결과">
+        <div className={`${isLarge ? 'mt-4 gap-2' : 'mt-3 gap-1.5'} flex flex-wrap`} aria-label="검증 결과">
           {build.toolResults.map((result) => (
             <span
               key={`${result.tool}-${result.status}`}
               title={result.summary}
-              className={`rounded-full border px-2 py-1 text-[11px] font-black ${toolStatusChipClass(result.status)}`}
+              className={`${isLarge ? 'px-3 py-1.5 text-[15px]' : 'px-2 py-1 text-[11px]'} rounded-full border font-black ${toolStatusChipClass(result.status)}`}
             >
               {toolDisplayLabel(result.tool)} {toolStatusLabel(result.status)}
             </span>
           ))}
         </div>
       ) : null}
-      <div className="mt-3 grid gap-1.5 text-xs">
+      <div className={`${isLarge ? 'mt-4 gap-2 text-base' : 'mt-3 gap-1.5 text-xs'} grid`}>
         {primaryItems.map((item) => (
-          <div key={item.partId} className="grid grid-cols-[56px_minmax(0,1fr)] gap-2 rounded-lg bg-slate-50 px-2.5 py-1.5">
+          <div key={item.partId} className={`${isLarge ? 'grid-cols-[78px_minmax(0,1fr)] gap-3 rounded-xl px-4 py-2.5' : 'grid-cols-[56px_minmax(0,1fr)] gap-2 rounded-lg px-2.5 py-1.5'} grid bg-slate-50`}>
             <span className="font-black text-brand-blue">{PART_CATEGORY_LABELS[item.category]}</span>
             <span className="truncate font-semibold text-slate-700">{item.name}</span>
           </div>
@@ -989,9 +1001,9 @@ function CompactBuildCard({
         type="button"
         onClick={() => onSelectBuild(build)}
         disabled={isApplyDisabled}
-        className="mt-3 flex w-full min-h-10 items-center justify-center gap-2 rounded-full border border-blue-200 bg-white px-3 text-xs font-black text-brand-blue transition hover:border-brand-blue hover:bg-blue-50 focus:outline-none focus:ring-4 focus:ring-blue-100 disabled:border-slate-200 disabled:bg-slate-50 disabled:text-slate-400"
+        className={`${isLarge ? 'mt-4 min-h-14 gap-3 px-4 text-base' : 'mt-3 min-h-10 gap-2 px-3 text-xs'} flex w-full items-center justify-center rounded-full border border-blue-200 bg-white font-black text-brand-blue transition hover:border-brand-blue hover:bg-blue-50 focus:outline-none focus:ring-4 focus:ring-blue-100 disabled:border-slate-200 disabled:bg-slate-50 disabled:text-slate-400`}
       >
-        <ShoppingCart size={15} />
+        <ShoppingCart size={isLarge ? 21 : 15} />
         {isApplyingThis ? '셀프 견적에 적용 중...' : '이 조합으로 셀프 견적 보기'}
       </button>
     </article>

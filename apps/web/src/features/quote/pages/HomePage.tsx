@@ -813,65 +813,65 @@ function HomeLoginChoiceDialog({
         aria-labelledby="home-login-choice-title"
         aria-describedby="home-login-choice-description"
         data-testid="home-login-choice-dialog"
-        className="relative w-full max-w-[760px]"
+        className="relative w-full max-w-[1064px]"
       >
         <button
           type="button"
           aria-label="선택지 닫기"
           onClick={onClose}
-          className="absolute -top-12 right-0 grid h-10 w-10 place-items-center rounded-full bg-white text-slate-600 shadow-lg transition hover:bg-slate-100 hover:text-commerce-ink focus:outline-none focus:ring-4 focus:ring-blue-100"
+          className="absolute -top-12 right-0 grid h-11 w-11 place-items-center rounded-full bg-white text-slate-600 shadow-lg transition hover:bg-slate-100 hover:text-commerce-ink focus:outline-none focus:ring-4 focus:ring-blue-100"
         >
-          <X size={18} />
+          <X size={20} />
         </button>
-        <div className="mx-auto flex max-w-[620px] items-start gap-3 rounded-2xl bg-white p-6 shadow-lg sm:p-7">
-          <div className="grid h-11 w-11 shrink-0 place-items-center rounded-xl bg-commerce-ink text-white" aria-hidden="true">
-            <Bot size={23} strokeWidth={2.3} />
+        <div className="mx-auto flex max-w-[868px] items-start gap-4 rounded-2xl bg-white p-8 shadow-lg sm:p-9">
+          <div className="grid h-[62px] w-[62px] shrink-0 place-items-center rounded-xl bg-commerce-ink text-white" aria-hidden="true">
+            <Bot size={31} strokeWidth={2.3} />
           </div>
           <div>
-            <h2 id="home-login-choice-title" className="text-xl font-black leading-7 text-commerce-ink">
+            <h2 id="home-login-choice-title" className="text-[28px] font-black leading-9 text-commerce-ink">
               어떤 방식으로 PC를 맞춰볼까요?
             </h2>
-            <p id="home-login-choice-description" className="mt-1 break-keep text-sm leading-6 text-slate-600">
+            <p id="home-login-choice-description" className="mt-2 break-keep text-[20px] leading-8 text-slate-600">
               처음이라면 AI 추천으로 빠르게 시작하거나, 전체 부품 목록에서 직접 비교할 수 있습니다.
             </p>
           </div>
         </div>
 
-        <div className="mt-5 grid gap-4 sm:grid-cols-2">
+        <div className="mt-7 grid gap-5 sm:grid-cols-2">
           <button
             type="button"
             autoFocus
             onClick={onChooseAi}
             data-testid="home-login-choice-ai"
-            className="group flex min-h-[178px] flex-col items-start rounded-2xl bg-white p-5 text-left shadow-lg transition hover:-translate-y-0.5 hover:bg-blue-50 focus:outline-none focus:ring-4 focus:ring-blue-100"
+            className="group flex min-h-[249px] flex-col items-start rounded-2xl bg-white p-7 text-left shadow-lg transition hover:-translate-y-0.5 hover:bg-blue-50 focus:outline-none focus:ring-4 focus:ring-blue-100"
           >
-            <span className="grid h-11 w-11 place-items-center rounded-lg bg-brand-blue text-white transition group-hover:bg-blue-700" aria-hidden="true">
-              <Bot size={22} strokeWidth={2.3} />
+            <span className="grid h-[62px] w-[62px] place-items-center rounded-xl bg-brand-blue text-white transition group-hover:bg-blue-700" aria-hidden="true">
+              <Bot size={31} strokeWidth={2.3} />
             </span>
-            <span className="mt-4 text-base font-black text-commerce-ink">AI로 부품 맞춰보기</span>
-            <span className="mt-1 break-keep text-sm leading-5 text-slate-600">예산과 용도를 말하면 추천 조합을 바로 만들어줍니다.</span>
+            <span className="mt-6 text-[22px] font-black leading-8 text-commerce-ink">AI로 부품 맞춰보기</span>
+            <span className="mt-2 break-keep text-[20px] leading-8 text-slate-600">예산과 용도를 말하면 추천 조합을 바로 만들어줍니다.</span>
           </button>
 
           <button
             type="button"
             onClick={onChooseParts}
             data-testid="home-login-choice-parts"
-            className="group flex min-h-[178px] flex-col items-start rounded-2xl bg-white p-5 text-left shadow-lg transition hover:-translate-y-0.5 hover:bg-emerald-50 focus:outline-none focus:ring-4 focus:ring-emerald-100"
+            className="group flex min-h-[249px] flex-col items-start rounded-2xl bg-white p-7 text-left shadow-lg transition hover:-translate-y-0.5 hover:bg-emerald-50 focus:outline-none focus:ring-4 focus:ring-emerald-100"
           >
-            <span className="grid h-11 w-11 place-items-center rounded-lg bg-emerald-600 text-white transition group-hover:bg-emerald-700" aria-hidden="true">
-              <Boxes size={22} strokeWidth={2.3} />
+            <span className="grid h-[62px] w-[62px] place-items-center rounded-xl bg-emerald-600 text-white transition group-hover:bg-emerald-700" aria-hidden="true">
+              <Boxes size={31} strokeWidth={2.3} />
             </span>
-            <span className="mt-4 text-base font-black text-commerce-ink">부품 보러가기</span>
-            <span className="mt-1 break-keep text-sm leading-5 text-slate-600">전체 부품 페이지에서 카테고리와 가격을 직접 살펴봅니다.</span>
+            <span className="mt-6 text-[22px] font-black leading-8 text-commerce-ink">부품 보러가기</span>
+            <span className="mt-2 break-keep text-[20px] leading-8 text-slate-600">전체 부품 페이지에서 카테고리와 가격을 직접 살펴봅니다.</span>
           </button>
         </div>
 
-        <label className="mx-auto mt-4 flex w-fit items-center gap-2 rounded-2xl bg-white px-4 py-3 text-sm font-bold text-slate-700 shadow-lg">
+        <label className="mx-auto mt-6 flex w-fit items-center gap-3 rounded-2xl bg-white px-5 py-4 text-[20px] font-bold text-slate-700 shadow-lg">
           <input
             type="checkbox"
             checked={neverShow}
             onChange={(event) => onNeverShowChange(event.currentTarget.checked)}
-            className="h-4 w-4 accent-blue-600"
+            className="h-5 w-5 accent-blue-600"
           />
           다시는 표시하지 않기
         </label>
@@ -906,69 +906,69 @@ function HomeAiFlowChoiceDialog({
         aria-labelledby="home-ai-flow-choice-title"
         aria-describedby="home-ai-flow-choice-description"
         data-testid="home-ai-flow-choice-dialog"
-        className="relative w-full max-w-[940px]"
+        className="relative w-full max-w-[1316px]"
       >
         <button
           type="button"
           aria-label="선택지 닫기"
           onClick={onClose}
-          className="absolute -top-12 right-0 grid h-10 w-10 place-items-center rounded-full bg-white text-slate-600 shadow-lg transition hover:bg-slate-100 hover:text-commerce-ink focus:outline-none focus:ring-4 focus:ring-blue-100"
+          className="absolute -top-12 right-0 grid h-11 w-11 place-items-center rounded-full bg-white text-slate-600 shadow-lg transition hover:bg-slate-100 hover:text-commerce-ink focus:outline-none focus:ring-4 focus:ring-blue-100"
         >
-          <X size={18} />
+          <X size={20} />
         </button>
-        <div className="mx-auto flex max-w-[620px] items-start gap-3 rounded-2xl bg-white p-6 shadow-lg sm:p-7">
-          <div className="grid h-11 w-11 shrink-0 place-items-center rounded-xl bg-brand-blue text-white" aria-hidden="true">
-            <Bot size={23} strokeWidth={2.3} />
+        <div className="mx-auto flex max-w-[868px] items-start gap-4 rounded-2xl bg-white p-8 shadow-lg sm:p-9">
+          <div className="grid h-[62px] w-[62px] shrink-0 place-items-center rounded-xl bg-brand-blue text-white" aria-hidden="true">
+            <Bot size={31} strokeWidth={2.3} />
           </div>
           <div>
-            <h2 id="home-ai-flow-choice-title" className="text-xl font-black leading-7 text-commerce-ink">
+            <h2 id="home-ai-flow-choice-title" className="text-[28px] font-black leading-9 text-commerce-ink">
               견적을 어떤 방식으로 시작할까요?
             </h2>
-            <p id="home-ai-flow-choice-description" className="mt-1 break-keep text-sm leading-6 text-slate-600">
+            <p id="home-ai-flow-choice-description" className="mt-2 break-keep text-[20px] leading-8 text-slate-600">
               AI에게 바로 맡기거나, 직접 담아보면서 비교할 수 있습니다.
             </p>
           </div>
         </div>
 
-        <div className="mt-5 grid gap-4 md:grid-cols-3">
+        <div className="mt-7 grid gap-5 md:grid-cols-3">
           <button
             type="button"
             autoFocus
             onClick={onChooseAi}
             data-testid="home-ai-flow-choice-ai"
-            className="group flex min-h-[178px] flex-col items-start rounded-2xl bg-white p-5 text-left shadow-lg transition hover:-translate-y-0.5 hover:bg-blue-50 focus:outline-none focus:ring-4 focus:ring-blue-100"
+            className="group flex min-h-[249px] flex-col items-start rounded-2xl bg-white p-7 text-left shadow-lg transition hover:-translate-y-0.5 hover:bg-blue-50 focus:outline-none focus:ring-4 focus:ring-blue-100"
           >
-            <span className="grid h-11 w-11 place-items-center rounded-lg bg-brand-blue text-white transition group-hover:bg-blue-700" aria-hidden="true">
-              <Bot size={22} strokeWidth={2.3} />
+            <span className="grid h-[62px] w-[62px] place-items-center rounded-xl bg-brand-blue text-white transition group-hover:bg-blue-700" aria-hidden="true">
+              <Bot size={31} strokeWidth={2.3} />
             </span>
-            <span className="mt-4 text-base font-black text-commerce-ink">AI로 맞춰보기</span>
-            <span className="mt-1 break-keep text-sm leading-5 text-slate-600">예산과 용도를 말하면 중앙 창에서 추천을 시작합니다.</span>
+            <span className="mt-6 text-[22px] font-black leading-8 text-commerce-ink">AI로 맞춰보기</span>
+            <span className="mt-2 break-keep text-[20px] leading-8 text-slate-600">예산과 용도를 말하면 중앙 창에서 추천을 시작합니다.</span>
           </button>
 
           <button
             type="button"
             onClick={onChooseSelfQuote}
             data-testid="home-ai-flow-choice-self-quote"
-            className="group flex min-h-[178px] flex-col items-start rounded-2xl bg-white p-5 text-left shadow-lg transition hover:-translate-y-0.5 hover:bg-slate-50 focus:outline-none focus:ring-4 focus:ring-blue-100"
+            className="group flex min-h-[249px] flex-col items-start rounded-2xl bg-white p-7 text-left shadow-lg transition hover:-translate-y-0.5 hover:bg-slate-50 focus:outline-none focus:ring-4 focus:ring-blue-100"
           >
-            <span className="grid h-11 w-11 place-items-center rounded-lg bg-commerce-ink text-white transition group-hover:bg-slate-700" aria-hidden="true">
-              <FileText size={22} strokeWidth={2.3} />
+            <span className="grid h-[62px] w-[62px] place-items-center rounded-xl bg-commerce-ink text-white transition group-hover:bg-slate-700" aria-hidden="true">
+              <FileText size={31} strokeWidth={2.3} />
             </span>
-            <span className="mt-4 text-base font-black text-commerce-ink">셀프견적</span>
-            <span className="mt-1 break-keep text-sm leading-5 text-slate-600">견적판에서 부품을 직접 담고 조합을 확인합니다.</span>
+            <span className="mt-6 text-[22px] font-black leading-8 text-commerce-ink">셀프견적</span>
+            <span className="mt-2 break-keep text-[20px] leading-8 text-slate-600">견적판에서 부품을 직접 담고 조합을 확인합니다.</span>
           </button>
 
           <button
             type="button"
             onClick={onChooseAllParts}
             data-testid="home-ai-flow-choice-all-parts"
-            className="group flex min-h-[178px] flex-col items-start rounded-2xl bg-white p-5 text-left shadow-lg transition hover:-translate-y-0.5 hover:bg-emerald-50 focus:outline-none focus:ring-4 focus:ring-emerald-100"
+            className="group flex min-h-[249px] flex-col items-start rounded-2xl bg-white p-7 text-left shadow-lg transition hover:-translate-y-0.5 hover:bg-emerald-50 focus:outline-none focus:ring-4 focus:ring-emerald-100"
           >
-            <span className="grid h-11 w-11 place-items-center rounded-lg bg-emerald-600 text-white transition group-hover:bg-emerald-700" aria-hidden="true">
-              <Boxes size={22} strokeWidth={2.3} />
+            <span className="grid h-[62px] w-[62px] place-items-center rounded-xl bg-emerald-600 text-white transition group-hover:bg-emerald-700" aria-hidden="true">
+              <Boxes size={31} strokeWidth={2.3} />
             </span>
-            <span className="mt-4 text-base font-black text-commerce-ink">전체부품</span>
-            <span className="mt-1 break-keep text-sm leading-5 text-slate-600">전체 부품 목록에서 카테고리별로 먼저 살펴봅니다.</span>
+            <span className="mt-6 text-[22px] font-black leading-8 text-commerce-ink">전체부품</span>
+            <span className="mt-2 break-keep text-[20px] leading-8 text-slate-600">전체 부품 목록에서 카테고리별로 먼저 살펴봅니다.</span>
           </button>
         </div>
       </section>
