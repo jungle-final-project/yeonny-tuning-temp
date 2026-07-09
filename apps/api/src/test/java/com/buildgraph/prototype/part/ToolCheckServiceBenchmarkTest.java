@@ -6,11 +6,16 @@ import static org.mockito.ArgumentMatchers.contains;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
-import com.buildgraph.prototype.part.util.PerformaceRule;
 import java.util.List;
 import java.util.Map;
 import org.junit.jupiter.api.Test;
 import org.springframework.jdbc.core.JdbcTemplate;
+
+import com.buildgraph.prototype.verification.tool.ToolBuildPart;
+import com.buildgraph.prototype.verification.tool.ToolQuery;
+import com.buildgraph.prototype.verification.tool.ToolRepository;
+import com.buildgraph.prototype.verification.tool.ToolService;
+import com.buildgraph.prototype.verification.util.PerformaceRule;
 
 class ToolCheckServiceBenchmarkTest {
         

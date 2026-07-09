@@ -1,11 +1,26 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { useEffect, useState } from 'react';
+import { ExternalLink } from 'lucide-react';
+import { useEffect, useMemo, useRef, useState, type SyntheticEvent } from 'react';
 import { Link, useLocation, useNavigate, useParams } from 'react-router-dom';
 import { Panel, Screen, StateMessage } from '../../../components/ui';
 import { getToken } from '../../../lib/api';
 import { partImageUrl, partShortSpec, specRows } from '../partDisplay';
-import { getPart, getPartPriceHistory, putQuoteDraftItem } from '../partsApi';
+import { getPart, getPartPriceHistory, putQuoteDraftItem, recordRecommendationEvent } from '../partsApi';
 import type { PartPriceHistory, PartPriceHistoryPoint } from '../types';
+
+// 부품 이미지 로드 실패 시 보여줄 대체 이미지(partImageUrl의 placeholder SVG와 동일 톤).
+const PART_IMAGE_PLACEHOLDER = `data:image/svg+xml;utf8,${encodeURIComponent(
+  '<svg xmlns="http://www.w3.org/2000/svg" width="112" height="112" viewBox="0 0 112 112"><rect width="112" height="112" rx="14" fill="#f8fafc"/><rect x="12" y="20" width="88" height="56" rx="10" fill="#334155" opacity="0.92"/><rect x="20" y="28" width="72" height="40" rx="6" fill="#ffffff" opacity="0.16"/><text x="56" y="54" text-anchor="middle" font-family="Arial, sans-serif" font-size="16" font-weight="700" fill="#ffffff">NO IMAGE</text><rect x="24" y="84" width="64" height="6" rx="3" fill="#cbd5e1"/></svg>'
+)}`;
+
+// onError 재귀 방지 가드: 대체 이미지 자체가 실패해도 무한 루프를 돌지 않도록 dataset으로 1회만 교체한다.
+function handlePartImageError(event: SyntheticEvent<HTMLImageElement>) {
+  const target = event.currentTarget;
+  if (!target.dataset.fallback) {
+    target.dataset.fallback = '1';
+    target.src = PART_IMAGE_PLACEHOLDER;
+  }
+}
 
 export function PartDetailPage() {
   const { partId = '' } = useParams();
@@ -15,6 +30,8 @@ export function PartDetailPage() {
   const [quantity, setQuantity] = useState(1);
   const [added, setAdded] = useState(false);
   const hasToken = Boolean(getToken());
+  const recommendationContext = useMemo(() => readRecommendationContext(location.search), [location.search]);
+  const detailViewRecorded = useRef(false);
   const { data: part, isLoading, isError } = useQuery({
     queryKey: ['parts', partId],
     queryFn: () => getPart(partId),
@@ -31,12 +48,27 @@ export function PartDetailPage() {
     onSuccess: () => {
       setAdded(true);
       queryClient.invalidateQueries({ queryKey: ['quote-draft', 'current'] });
+      if (recommendationContext && part) {
+        void recordRecommendationEvent({
+          eventType: 'ADD_PART_TO_DRAFT',
+          sourceSurface: recommendationContext.surface,
+          recommendationId: recommendationContext.recommendationId,
+          partId,
+          category: part.category,
+          rankPosition: recommendationContext.rankPosition,
+          idempotencyKey: `${recommendationContext.surface}:${recommendationContext.recommendationId}:add:${partId}`,
+          eventPayload: {
+            quantity,
+            source: 'PART_DETAIL'
+          }
+        }).catch(() => undefined);
+      }
     }
   });
 
   const addToDraft = () => {
     if (!hasToken) {
-      navigate(`/login?redirect=${encodeURIComponent(location.pathname)}`);
+      navigate(`/login?redirect=${encodeURIComponent(location.pathname + location.search)}`);
       return;
     }
     setAdded(false);
@@ -46,6 +78,25 @@ export function PartDetailPage() {
   useEffect(() => {
     setQuantity((value) => Math.min(value, maxQuantity));
   }, [maxQuantity]);
+
+  useEffect(() => {
+    if (!part || !hasToken || !recommendationContext || detailViewRecorded.current) {
+      return;
+    }
+    detailViewRecorded.current = true;
+    void recordRecommendationEvent({
+      eventType: 'DETAIL_VIEW',
+      sourceSurface: recommendationContext.surface,
+      recommendationId: recommendationContext.recommendationId,
+      partId,
+      category: part.category,
+      rankPosition: recommendationContext.rankPosition,
+      idempotencyKey: `${recommendationContext.surface}:${recommendationContext.recommendationId}:detail:${partId}`,
+      eventPayload: {
+        source: 'PART_DETAIL'
+      }
+    }).catch(() => undefined);
+  }, [hasToken, part, partId, recommendationContext]);
 
   if (isLoading) {
     return (
@@ -75,9 +126,9 @@ export function PartDetailPage() {
         <span className="rounded border border-slate-200 bg-slate-50 px-3 py-1 text-xs font-bold text-slate-500">{part.category}</span>
       </div>
 
-      <div className="grid grid-cols-[620px_1fr] gap-6">
+      <div className="grid gap-6 lg:grid-cols-[minmax(0,620px)_minmax(0,1fr)]">
         <section className="rounded border border-slate-200 bg-white p-6">
-          <img src={partImageUrl(part)} alt={`${part.name} 제품 사진`} className="h-[520px] w-full object-contain" />
+          <img src={partImageUrl(part)} alt={`${part.name} 제품 사진`} onError={handlePartImageError} className="h-[320px] w-full object-contain sm:h-[420px] lg:h-[520px]" />
         </section>
 
         <section className="rounded border border-slate-200 bg-white p-6">
@@ -88,6 +139,11 @@ export function PartDetailPage() {
           <div className="mt-6 border-t border-slate-200 pt-5">
             <div className="text-sm text-slate-500">현재가</div>
             <div className="mt-1 text-3xl font-extrabold text-red-600">{part.price.toLocaleString()}원</div>
+            {priceHistory?.summary && priceHistory.summary.minPrice > 0 && priceHistory.summary.sampleCount > 1 ? (
+              <div className="mt-1 text-xs font-bold text-slate-500">
+                기록된 최저가 {priceHistory.summary.minPrice.toLocaleString()}원 대비 {priceDiffLabel(part.price, priceHistory.summary.minPrice)}
+              </div>
+            ) : null}
             <div className="mt-3 grid grid-cols-[96px_1fr] gap-y-2 text-sm">
               <div className="text-slate-500">공급처</div>
               <div className="font-bold text-slate-800">{part.externalOffer?.supplierName ?? '저장된 공급처 없음'}</div>
@@ -125,8 +181,9 @@ export function PartDetailPage() {
               {addMutation.isPending ? '담는 중' : '견적에 담기'}
             </button>
             {offerUrl ? (
-              <a href={offerUrl} target="_blank" rel="noreferrer" className="flex h-12 items-center justify-center rounded border border-slate-300 text-sm font-bold text-slate-800 hover:border-brand-blue hover:text-brand-blue">
+              <a href={offerUrl} target="_blank" rel="noreferrer" className="flex h-12 items-center justify-center gap-1.5 rounded border border-slate-300 text-sm font-bold text-slate-800 hover:border-brand-blue hover:text-brand-blue">
                 구매처 홈페이지로 이동
+                <ExternalLink size={14} />
               </a>
             ) : (
               <button type="button" disabled className="h-12 rounded border border-slate-200 text-sm font-bold text-slate-300">
@@ -141,7 +198,7 @@ export function PartDetailPage() {
       </div>
 
       <div className="mt-6 grid gap-6 lg:grid-cols-[minmax(280px,420px)_minmax(0,1fr)]">
-        <Panel title="주요 스펙" subtitle="내부 자산 attributes 기준">
+        <Panel title="주요 스펙" subtitle="내부 자산 attributes 기준 · 성능 관련 수치는 참고용이며 실제 성능은 사용 환경에 따라 달라질 수 있습니다">
           {rows.length === 0 ? (
             <div className="rounded border border-dashed border-slate-300 p-5 text-sm text-slate-500">표시할 세부 스펙이 없습니다.</div>
           ) : (
@@ -168,6 +225,32 @@ export function PartDetailPage() {
       </div>
     </Screen>
   );
+}
+
+function priceDiffLabel(current: number, min: number) {
+  const diff = current - min;
+  if (diff === 0) {
+    return '동일';
+  }
+  const sign = diff > 0 ? '+' : '';
+  const percent = (diff / min) * 100;
+  return `${sign}${diff.toLocaleString()}원 (${sign}${percent.toFixed(1)}%)`;
+}
+
+function readRecommendationContext(search: string) {
+  const params = new URLSearchParams(search);
+  const recommendationId = params.get('recId');
+  const surface = params.get('recSurface');
+  const rank = params.get('rank');
+  if (!recommendationId || surface !== 'HOME_RECOMMENDED_PARTS') {
+    return null;
+  }
+  const parsedRank = rank === null ? undefined : Number(rank);
+  return {
+    recommendationId,
+    surface,
+    rankPosition: Number.isFinite(parsedRank) ? parsedRank : undefined
+  };
 }
 
 function formatDate(value: string) {

@@ -1,0 +1,76 @@
+<svg width="1000" height="560" viewBox="0 0 1000 560" fill="none" xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="title desc">
+  <title id="title">Abstract motherboard topology background</title>
+  <desc id="desc">A pale motherboard-inspired topology background for a PC parts relationship board. It contains no product text or prices.</desc>
+  <defs>
+    <pattern id="grid" width="32" height="32" patternUnits="userSpaceOnUse">
+      <path d="M32 0H0V32" stroke="#DCE9F6" stroke-width="1" opacity="0.65"/>
+    </pattern>
+    <linearGradient id="fade" x1="0" y1="0" x2="1000" y2="560" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#F8FBFF"/>
+      <stop offset="0.48" stop-color="#F3F8FD"/>
+      <stop offset="1" stop-color="#EFF6FC"/>
+    </linearGradient>
+    <filter id="softShadow" x="-5%" y="-5%" width="110%" height="110%" color-interpolation-filters="sRGB">
+      <feDropShadow dx="0" dy="8" stdDeviation="10" flood-color="#246B8F" flood-opacity="0.08"/>
+    </filter>
+  </defs>
+
+  <rect x="1" y="1" width="998" height="558" rx="28" fill="url(#fade)" stroke="#D6E4F0" stroke-width="2"/>
+  <rect x="24" y="24" width="952" height="512" rx="22" fill="url(#grid)" opacity="0.88"/>
+
+  <!-- board silhouette -->
+  <rect x="78" y="66" width="824" height="422" rx="18" fill="#FFFFFF" fill-opacity="0.45" stroke="#CBD9E7" stroke-width="2" filter="url(#softShadow)"/>
+  <path d="M118 102H370C392 102 408 118 408 140V210C408 232 424 248 446 248H650C672 248 688 264 688 286V412C688 434 704 450 726 450H858" stroke="#C9D9E8" stroke-width="2" opacity="0.38"/>
+  <path d="M118 422H286C314 422 336 400 336 372V292C336 264 358 242 386 242H584C612 242 634 220 634 192V116" stroke="#C9D9E8" stroke-width="2" opacity="0.34"/>
+  <path d="M146 158H306C330 158 348 176 348 200V356" stroke="#D5E3EF" stroke-width="1.5" opacity="0.48"/>
+  <path d="M482 118V192C482 214 500 232 522 232H832" stroke="#D5E3EF" stroke-width="1.5" opacity="0.5"/>
+  <path d="M214 464H568C590 464 608 446 608 424V366C608 344 626 326 648 326H864" stroke="#D5E3EF" stroke-width="1.5" opacity="0.45"/>
+
+  <!-- socket / chipset / component hints, intentionally label-free -->
+  <rect x="152" y="114" width="112" height="112" rx="16" stroke="#B8CADB" stroke-width="2" opacity="0.62"/>
+  <rect x="178" y="140" width="60" height="60" rx="8" stroke="#B8CADB" stroke-width="2" opacity="0.66"/>
+  <g opacity="0.42" stroke="#B8CADB" stroke-width="2">
+    <path d="M138 128H118M138 154H118M138 180H118M138 206H118"/>
+    <path d="M278 128H298M278 154H298M278 180H298M278 206H298"/>
+    <path d="M168 100V80M194 100V80M220 100V80M246 100V80"/>
+    <path d="M168 240V260M194 240V260M220 240V260M246 240V260"/>
+  </g>
+
+  <g opacity="0.48">
+    <rect x="468" y="104" width="20" height="176" rx="8" stroke="#B8CADB" stroke-width="2" stroke-dasharray="7 8"/>
+    <rect x="510" y="104" width="20" height="176" rx="8" stroke="#B8CADB" stroke-width="2" stroke-dasharray="7 8"/>
+    <rect x="552" y="104" width="20" height="176" rx="8" stroke="#B8CADB" stroke-width="2" stroke-dasharray="7 8"/>
+    <rect x="594" y="104" width="20" height="176" rx="8" stroke="#B8CADB" stroke-width="2" stroke-dasharray="7 8"/>
+  </g>
+
+  <rect x="702" y="118" width="74" height="74" rx="12" fill="#D5E0EA" opacity="0.36"/>
+  <path d="M712 128L766 182M730 120L776 166M704 146L748 190" stroke="#9FB4C8" stroke-width="5" opacity="0.22"/>
+
+  <g opacity="0.45">
+    <rect x="182" y="336" width="564" height="10" rx="5" fill="#AFC2D5"/>
+    <rect x="182" y="360" width="520" height="8" rx="4" fill="#D0DDE9"/>
+    <rect x="182" y="384" width="460" height="8" rx="4" fill="#D0DDE9"/>
+  </g>
+
+  <g opacity="0.46" stroke="#B8CADB" stroke-width="2">
+    <rect x="812" y="248" width="52" height="86" rx="10"/>
+    <rect x="826" y="264" width="24" height="36" rx="4"/>
+    <path d="M820 318H856"/>
+  </g>
+
+  <g opacity="0.36" fill="#AFC2D5">
+    <circle cx="104" cy="92" r="5"/>
+    <circle cx="884" cy="92" r="5"/>
+    <circle cx="104" cy="468" r="5"/>
+    <circle cx="884" cy="468" r="5"/>
+  </g>
+
+  <g opacity="0.32">
+    <rect x="78" y="70" width="24" height="126" rx="8" stroke="#AFC2D5" stroke-width="2"/>
+    <rect x="78" y="214" width="24" height="98" rx="8" stroke="#AFC2D5" stroke-width="2"/>
+    <rect x="78" y="330" width="24" height="122" rx="8" stroke="#AFC2D5" stroke-width="2"/>
+    <rect x="832" y="82" width="42" height="10" rx="5" fill="#AFC2D5"/>
+    <rect x="832" y="104" width="42" height="10" rx="5" fill="#AFC2D5"/>
+    <rect x="832" y="126" width="42" height="10" rx="5" fill="#AFC2D5"/>
+  </g>
+</svg>

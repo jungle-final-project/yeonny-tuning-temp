@@ -2,6 +2,7 @@ import { useMutation, useQuery } from '@tanstack/react-query';
 import { useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { DataTable, Panel, Screen, StateMessage, StatusBadge } from '../../../components/ui';
+import { BENCHMARK_REFERENCE_NOTICE } from '../../../lib/disclaimers';
 import { listParts } from '../../parts/partsApi';
 import type { PartRow } from '../../parts/types';
 import { changePart, getBuild } from '../quoteApi';
@@ -96,6 +97,7 @@ export function ChangePartPage() {
                 body={comparison.warnings[0]?.message ?? '변경 후 구성도 주요 Tool 검증을 통과했습니다.'}
               />
               <DataTable columns={['tool', 'status', 'confidence', 'summary']} rows={toolRows(comparison.toolResults)} />
+              <p className="break-keep text-[11px] font-bold leading-5 text-slate-500">{BENCHMARK_REFERENCE_NOTICE}</p>
               <StateMessage type="info" title="Agent 설명" body={comparison.agentSummary ?? 'Agent 설명은 실행 환경에 따라 비어 있을 수 있습니다.'} />
               <div className="space-y-3">
                 <Link to={`/builds/${buildId}`} className="block rounded bg-brand-blue px-4 py-3 text-center text-sm font-bold text-white">상세로 돌아가기</Link>

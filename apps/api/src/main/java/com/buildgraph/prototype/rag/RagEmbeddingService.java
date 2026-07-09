@@ -56,11 +56,11 @@ public class RagEmbeddingService {
         int limit = requestedLimit == null ? 200 : Math.max(1, Math.min(requestedLimit, 500));
         List<Map<String, Object>> rows = jdbcTemplate.queryForList("""
                 SELECT public_id::text AS id,
-                       source_id,
-                       chunk_text,
-                       summary,
-                       score,
-                       metadata
+                        source_id,
+                        chunk_text,
+                        summary,
+                        score,
+                        metadata
                 FROM rag_evidence
                 WHERE agent_session_id IS NULL
                 ORDER BY id

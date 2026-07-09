@@ -6,9 +6,10 @@ import com.buildgraph.prototype.quoteagent.chat.AiChatIntent;
 import com.buildgraph.prototype.quoteagent.chat.AiChatEngine;
 import com.buildgraph.prototype.common.DbValueMapper;
 import com.buildgraph.prototype.common.MockData;
-import com.buildgraph.prototype.part.ToolBuildPart;
-import com.buildgraph.prototype.part.ToolService;
 import com.buildgraph.prototype.user.CurrentUserService;
+import com.buildgraph.prototype.verification.tool.ToolBuildPart;
+import com.buildgraph.prototype.verification.tool.ToolService;
+
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;

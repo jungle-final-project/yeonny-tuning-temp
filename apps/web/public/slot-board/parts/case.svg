@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 168 100" fill="none" role="img" aria-label="CASE">
+  <rect x="4" y="4" width="160" height="88" rx="8" fill="#e2e8f0" stroke="#cbd5e1" stroke-width="3"/>
+  <rect x="14" y="12" width="104" height="58" rx="4" fill="#f8fafc" stroke="#cbd5e1" stroke-width="2.5"/>
+  <circle cx="19" cy="17" r="1.6" fill="#cbd5e1"/>
+  <circle cx="113" cy="17" r="1.6" fill="#cbd5e1"/>
+  <circle cx="19" cy="65" r="1.6" fill="#cbd5e1"/>
+  <circle cx="113" cy="65" r="1.6" fill="#cbd5e1"/>
+  <circle cx="34" cy="30" r="10" stroke="#cbd5e1" stroke-width="2.5"/>
+  <circle cx="34" cy="54" r="10" stroke="#cbd5e1" stroke-width="2.5"/>
+  <circle cx="34" cy="30" r="3" fill="#cbd5e1"/>
+  <circle cx="34" cy="54" r="3" fill="#cbd5e1"/>
+  <rect x="14" y="74" width="104" height="11" rx="2" fill="#eef2f7" stroke="#cbd5e1" stroke-width="2"/>
+  <rect x="126" y="12" width="32" height="73" rx="3" fill="#eef2f7" stroke="#cbd5e1" stroke-width="2.5"/>
+  <circle cx="142" cy="24" r="4.5" stroke="#94a3b8" stroke-width="2.5"/>
+  <circle cx="142" cy="38" r="2" fill="#cbd5e1"/>
+  <circle cx="142" cy="48" r="2" fill="#cbd5e1"/>
+  <line x1="134" y1="60" x2="150" y2="60" stroke="#cbd5e1" stroke-width="2.5"/>
+  <line x1="134" y1="70" x2="150" y2="70" stroke="#cbd5e1" stroke-width="2.5"/>
+</svg>

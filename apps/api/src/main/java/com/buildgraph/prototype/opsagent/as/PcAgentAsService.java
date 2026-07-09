@@ -22,6 +22,8 @@ import com.buildgraph.prototype.common.DbValueMapper;
 import com.buildgraph.prototype.common.MockData;
 import com.buildgraph.prototype.config.security.AgentPrincipal;
 import com.buildgraph.prototype.config.security.AgentTokenHasher;
+import com.buildgraph.prototype.user.CurrentUserService;
+import java.sql.Timestamp;
 import java.security.SecureRandom;
 import java.time.Clock;
 import java.time.Duration;
@@ -63,6 +65,33 @@ public class PcAgentAsService {
         this.tokenHasher = tokenHasher;
         this.clock = clock;
         this.tokenGenerator = tokenGenerator;
+    }
+
+    /* 새롭게 추가됨: 활성 토큰 발급 */
+    @Transactional
+    public Map<String, Object> issueActivationTokenForUser(CurrentUserService.CurrentUser user) {
+        String rawActivationToken = tokenGenerator.get();
+        String tokenHash = tokenHasher.sha256Hex(rawActivationToken);
+        Instant expiresAt = Instant.now(clock).plus(Duration.ofDays(1));
+        Map<String, Object> row = jdbcTemplate.queryForMap("""
+                INSERT INTO agent_activation_tokens (
+                  user_id,
+                  token_hash,
+                  expires_at
+                )
+                VALUES (?, ?, ?)
+                RETURNING public_id::text AS id, expires_at
+                """,
+                user.internalId(),
+                tokenHash,
+                Timestamp.from(expiresAt)
+        );
+        return MockData.map(
+                "id", DbValueMapper.string(row, "id"),
+                "activationToken", rawActivationToken,
+                "tokenType", "Activation",
+                "expiresAt", DbValueMapper.timestamp(row, "expires_at")
+        );
     }
 
     @Transactional

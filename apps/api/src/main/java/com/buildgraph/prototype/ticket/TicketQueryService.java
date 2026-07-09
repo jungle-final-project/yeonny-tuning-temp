@@ -36,12 +36,12 @@ public class TicketQueryService {
         Long logUploadInternalId = logUploadId == null ? null : logUploadInternalId(logUploadId, user.internalId());
         Map<String, Object> row = jdbcTemplate.queryForMap("""
                 INSERT INTO as_tickets (
-                  user_id,
-                  log_upload_id,
-                  symptom,
-                  status,
-                  cause_candidates,
-                  upgrade_candidates
+                    user_id,
+                    log_upload_id,
+                    symptom,
+                    status,
+                    cause_candidates,
+                    upgrade_candidates
                 )
                 VALUES (?, ?, ?, 'OPEN', '[]'::jsonb, '[]'::jsonb)
                 RETURNING public_id::text AS id
@@ -52,8 +52,8 @@ public class TicketQueryService {
     public Map<String, Object> ticket(String id, CurrentUserService.CurrentUser user) {
         return jdbcTemplate.queryForList(ticketSql() + """
                         WHERE t.deleted_at IS NULL
-                          AND t.public_id = ?::uuid
-                          AND t.user_id = ?
+                            AND t.public_id = ?::uuid
+                            AND t.user_id = ?
                         """, id, user.internalId())
                 .stream()
                 .findFirst()
@@ -67,6 +67,56 @@ public class TicketQueryService {
                 .findFirst()
                 .map(this::ticketMap)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "AS 티켓을 찾을 수 없습니다."));
+    }
+
+    /* 새롭게 추가됨: 원격지원 생성 */
+    public Map<String, Object> requestRemoteSupport(
+            String id,
+            Map<String, Object> request,
+            CurrentUserService.CurrentUser user
+    ) {
+        String reason = stringOrNull(request == null ? null : request.get("reason"));
+        if (reason == null) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "reason 값이 필요합니다.");
+        }
+        String contactPhone = stringOrNull(request.get("contactPhone"));
+        Map<String, Object> row = userTicketInternalRow(id, user.internalId());
+        Long ticketInternalId = numberLong(row.get("internal_id"));
+        Integer activeRequests = jdbcTemplate.queryForObject("""
+                SELECT COUNT(*)
+                FROM remote_support_sessions
+                WHERE as_ticket_id = ?
+                    AND status IN ('REQUESTED', 'LINK_SENT', 'IN_PROGRESS')
+                """, Integer.class, ticketInternalId);
+        if (activeRequests != null && activeRequests > 0) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "이미 진행 중인 원격지원 요청이 있습니다.");
+        }
+        jdbcTemplate.update("""
+                INSERT INTO remote_support_sessions (
+                    as_ticket_id,
+                    device_id,
+                    provider,
+                    status,
+                    requested_by_user_id,
+                    request_reason,
+                    contact_phone_snapshot,
+                    user_requested_at
+                )
+                VALUES (?, ?, 'EXTERNAL_LINK', 'REQUESTED', ?, ?, ?, now())
+                """,
+                ticketInternalId,
+                numberLong(row.get("device_id")),
+                user.internalId(),
+                reason,
+                contactPhone
+        );
+        jdbcTemplate.update("""
+                UPDATE as_tickets
+                SET review_status = 'REQUIRED',
+                    updated_at = now()
+                WHERE id = ?
+                """, ticketInternalId);
+        return ticket(id, user);
     }
 
     public Map<String, Object> update(String id, Map<String, Object> request, CurrentUserService.CurrentUser admin) {
@@ -107,12 +157,12 @@ public class TicketQueryService {
                     risk_level = COALESCE(?, risk_level),
                     auto_response_allowed = COALESCE(?, auto_response_allowed),
                     resolved_at = CASE
-                      WHEN ? = 'RESOLVED' AND resolved_at IS NULL THEN now()
-                      ELSE resolved_at
+                        WHEN ? = 'RESOLVED' AND resolved_at IS NULL THEN now()
+                        ELSE resolved_at
                     END,
                     updated_at = now()
                 WHERE public_id = ?::uuid
-                  AND deleted_at IS NULL
+                    AND deleted_at IS NULL
                 """,
                 nextStatus,
                 assignedAdminInternalId,
@@ -165,6 +215,22 @@ public class TicketQueryService {
 
     private Map<String, Object> rawTicket(String id) {
         return jdbcTemplate.queryForList(ticketSql() + " WHERE t.deleted_at IS NULL AND t.public_id = ?::uuid", id)
+                .stream()
+                .findFirst()
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "AS 티켓을 찾을 수 없습니다."));
+    }
+
+    /* 새롭게 추가됨: 티켓 내부조회 */
+    private Map<String, Object> userTicketInternalRow(String id, Long userInternalId) {
+        return jdbcTemplate.queryForList("""
+                        SELECT t.id AS internal_id,
+                               lu.device_id
+                        FROM as_tickets t
+                        LEFT JOIN agent_log_uploads lu ON lu.id = t.log_upload_id
+                        WHERE t.deleted_at IS NULL
+                          AND t.public_id = ?::uuid
+                          AND t.user_id = ?
+                        """, id, userInternalId)
                 .stream()
                 .findFirst()
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "AS 티켓을 찾을 수 없습니다."));

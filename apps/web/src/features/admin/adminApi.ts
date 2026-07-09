@@ -8,6 +8,177 @@ export type AdminDashboard = {
   generatedAt?: string;
 };
 
+export type RecommendationModelSummary = {
+  latestModel?: {
+    id?: string;
+    modelName?: string;
+    modelVersion?: string;
+    algorithm?: string;
+    status?: string;
+    artifactPath?: string | null;
+    createdAt?: string | null;
+  } | null;
+  homeParts: {
+    windowDays: number;
+    impressions: number;
+    clicks: number;
+    ctr: number;
+    recentShadowScores: number;
+    scoreSources: Array<{
+      scoreSource: string;
+      count: number;
+      share: number;
+    }>;
+    recentCandidates: Array<{
+      partId: string;
+      category: string;
+      name: string;
+      manufacturer?: string | null;
+      price?: number | null;
+      score?: number | string | null;
+      rankPosition?: number | null;
+      modelVersion?: string | null;
+      createdAt?: string | null;
+    }>;
+  };
+  generatedAt?: string;
+};
+
+export type HomePartRecommendationFeedbackPayload = {
+  partId: string;
+  label: 'PROMOTE' | 'DEMOTE';
+  reason?: string;
+  recommendationId?: string;
+  category?: string;
+  rankPosition?: number | null;
+};
+
+export type RecommendationTrainingOverview = {
+  eligibleEvents: number;
+  trainedDistinctEvents: number;
+  untrainedEligibleEvents: number;
+  excludedDatasetItems: number;
+  recentSevenDayEvents: number;
+  asFeedbackEvents?: number;
+  untrainedAsFeedbackEvents?: number;
+  activeModel?: RecommendationModelVersion | null;
+  latestJob?: RecommendationTrainingJob | null;
+  generatedAt?: string;
+};
+
+export type RecommendationTrainingDataset = {
+  id: string;
+  name: string;
+  sourceSurface: string;
+  filters?: Record<string, unknown>;
+  status: string;
+  eligibleCount: number;
+  includedCount: number;
+  excludedCount: number;
+  lockedAt?: string | null;
+  createdAt?: string | null;
+  updatedAt?: string | null;
+  updatedItems?: number;
+};
+
+export type RecommendationTrainingDatasetsResponse = {
+  items: RecommendationTrainingDataset[];
+  page?: number;
+  size?: number;
+  total?: number;
+};
+
+export type RecommendationTrainingDatasetItem = {
+  id: string;
+  eventId: string;
+  eventType: string;
+  sourceSurface: string;
+  category?: string | null;
+  rankPosition?: number | null;
+  included: boolean;
+  excludedReason?: string | null;
+  labelScoreSnapshot: number | string;
+  eventCreatedAt?: string | null;
+};
+
+export type RecommendationTrainingDatasetItemsResponse = {
+  items: RecommendationTrainingDatasetItem[];
+  page?: number;
+  size?: number;
+  total?: number;
+};
+
+export type RecommendationTrainingJob = {
+  id: string;
+  datasetId: string;
+  datasetName?: string;
+  status: string;
+  workerId?: string | null;
+  modelVersion?: string | null;
+  artifactPath?: string | null;
+  metrics?: Record<string, unknown>;
+  logSummary?: string | null;
+  createdAt?: string | null;
+  startedAt?: string | null;
+  finishedAt?: string | null;
+};
+
+export type RecommendationTrainingJobsResponse = {
+  items: RecommendationTrainingJob[];
+  page?: number;
+  size?: number;
+  total?: number;
+};
+
+export type RecommendationModelVerdict =
+  | 'CHALLENGER_BETTER'
+  | 'CHAMPION_BETTER'
+  | 'INCONCLUSIVE'
+  | 'INSUFFICIENT_DATA';
+
+// M1 champion-challenger 비교 결과(워커가 metrics.comparison에 기록). 소표본 None 경로가 있어
+// spearman/ndcg는 null 가능.
+export type RecommendationModelComparison = {
+  champion?: string | null;
+  holdoutRows?: number;
+  holdoutPositives?: number;
+  holdoutOverlapWithChampion?: number;
+  challengerSpearman?: number | null;
+  championSpearman?: number | null;
+  spearmanCi95?: [number, number] | null;
+  challengerNdcgAt4?: number | null;
+  championNdcgAt4?: number | null;
+  verdict?: RecommendationModelVerdict;
+  verdictReason?: string;
+};
+
+export type RecommendationModelVersion = {
+  id: string;
+  modelName?: string;
+  modelVersion: string;
+  algorithm?: string;
+  artifactPath?: string | null;
+  status: string;
+  // 새 학습 워커는 holdout(일반화) 지표를 기록한다. mae는 구 모델의 in-sample 지표.
+  metrics?: {
+    mae?: number;
+    holdout?: { mae?: number; rmse?: number; spearman?: number | null; ndcgAt4Global?: number | null };
+    comparison?: RecommendationModelComparison;
+  } & Record<string, unknown>;
+  featureSchema?: Record<string, unknown>;
+  activatedAt?: string | null;
+  createdAt?: string | null;
+  // 활성화 응답에서만: 승급 근거가 약했을 때의 경고(M1).
+  activationWarning?: string | null;
+};
+
+export type RecommendationModelsResponse = {
+  items: RecommendationModelVersion[];
+  page?: number;
+  size?: number;
+  total?: number;
+};
+
 export type AdminAuditLog = {
   action?: string;
   targetType?: string;
@@ -18,6 +189,18 @@ export type AdminAuditLog = {
 
 export type AdminAuditLogsResponse = {
   items: AdminAuditLog[];
+};
+
+export type BuildGraphLayoutPosition = {
+  x: number;
+  y: number;
+};
+
+export type BuildGraphLayout = {
+  layoutKey: 'DEFAULT' | string;
+  source?: 'DEFAULT' | 'SAVED' | string;
+  positions: Record<string, BuildGraphLayoutPosition>;
+  updatedAt?: string | null;
 };
 
 export type AgentTimelineItem = {
@@ -110,7 +293,14 @@ export type RagEvidenceResponse = {
 
 export type AsTicketStatus = 'OPEN' | 'ASSIGNED' | 'IN_PROGRESS' | 'RESOLVED' | 'CLOSED' | 'CANCELLED';
 export type AsReviewStatus = 'NOT_REQUIRED' | 'REQUIRED' | 'IN_REVIEW' | 'APPROVED' | 'REJECTED';
-export type AsSupportDecision = 'SELF_SOLVABLE' | 'REMOTE_POSSIBLE' | 'VISIT_REQUIRED' | 'NEEDS_MORE_INFO';
+export type AsSupportDecision =
+  | 'SELF_SOLVABLE'
+  | 'REMOTE_POSSIBLE'
+  | 'VISIT_REQUIRED'
+  | 'REPAIR_OR_REPLACE'
+  | 'NEEDS_MORE_INFO'
+  | 'MONITOR_ONLY'
+  | 'UNSUPPORTED';
 export type RiskLevel = 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL';
 
 export type AdminAsTicket = {
@@ -127,13 +317,42 @@ export type AdminAsTicket = {
   description?: string | null;
   detailDescription?: string | null;
   logUploadId?: string | null;
-  logSummary?: string | null;
+  incidentWindow?: Record<string, unknown> | null;
+  logSummary?: string | Record<string, unknown> | null;
+  logSummaryText?: string | null;
+  logSummaryId?: string | null;
+  logSummaryPayload?: Record<string, unknown>;
+  logFeaturePayload?: Record<string, unknown>;
+  logRiskFlags?: Record<string, unknown>;
+  supportRouting?: Record<string, unknown> | null;
+  aiDiagnosisRequest?: Record<string, unknown> | null;
+  safetyAdviceLevel?: string | null;
+  safetyNotices?: Record<string, unknown>[] | null;
+  feedbackRating?: number | null;
+  feedbackComment?: string | null;
+  feedbackCreatedAt?: string | null;
+  diagnosticAccuracy?: string | null;
+  asTrainingLabel?: {
+    id: string;
+    failureCategory?: string | null;
+    severity?: string | null;
+    relatedPartId?: string | null;
+    recommendationId?: string | null;
+    useForRecommendationTraining?: boolean | null;
+    note?: string | null;
+  } | null;
   userEmail?: string | null;
   userName?: string | null;
   assignedAdminId?: string | null;
   causeCandidates: Record<string, unknown>[];
   upgradeCandidates: Record<string, unknown>[];
   adminNote?: string | null;
+  remoteSupportLink?: string | null;
+  remoteSupportStatus?: string | null;
+  visitSupportRequired?: boolean | null;
+  visitSupportStatus?: string | null;
+  visitPreferredDate?: string | null;
+  visitTimeSlot?: string | null;
   resolvedAt?: string | null;
   createdAt?: string;
   updatedAt?: string;
@@ -153,9 +372,26 @@ export type AdminAsTicketUpdateRequest = {
   supportDecision?: AsSupportDecision | string | null;
   riskLevel?: RiskLevel | string | null;
   autoResponseAllowed?: boolean | null;
+  diagnosticAccuracy?: string | null;
+  remoteSupportLink?: string | null;
+  visitSupportRequired?: boolean | null;
+  visitPreferredDate?: string | null;
+  visitTimeSlot?: string | null;
 };
 
 export type AdminTicketPayload = AdminAsTicketUpdateRequest;
+
+export type AsRecommendationFeedbackPayload = {
+  failureCategory: string;
+  severity: string;
+  relatedPartId?: string;
+  relatedBuildId?: string;
+  recommendationId?: string;
+  category?: string;
+  useForRecommendationTraining: boolean;
+  note?: string;
+  reason?: string;
+};
 
 export type PriceJob = {
   id: string;
@@ -516,8 +752,151 @@ export function getAdminDashboard() {
   return api<AdminDashboard>('/api/admin/dashboard');
 }
 
+export function getRecommendationModelSummary() {
+  return api<RecommendationModelSummary>('/api/admin/recommendation-models/summary');
+}
+
+// M4 shadow 비교 관측: 실모델 shadow 순위가 baseline 순위를 얼마나 바꾸는가.
+export type RecommendationShadowSummary = {
+  windowDays: number;
+  totalGroups: number;
+  scoredGroups: number;
+  scoredCandidates: number;
+  avgInversionRate: number | null;
+  avgTop4ReplacementRate: number | null;
+  generatedAt?: string;
+};
+
+export function getRecommendationShadowSummary(days = 7) {
+  return api<RecommendationShadowSummary>(`/api/admin/recommendation-shadow/summary?days=${days}`);
+}
+
+// M3 drift 스냅샷. metrics/alerts는 계열 확장에 유연하도록 free-form.
+export type RecommendationDriftAlert = {
+  series?: string;
+  level?: 'WARN' | 'SEVERE';
+  value?: number;
+};
+export type RecommendationDriftSnapshot = {
+  snapshotDate: string;
+  metrics: Record<string, unknown>;
+  alerts: RecommendationDriftAlert[];
+  createdAt?: string | null;
+};
+export type RecommendationDriftResponse = {
+  items: RecommendationDriftSnapshot[];
+  total: number;
+};
+
+export function getRecommendationDriftSnapshots(days = 14) {
+  return api<RecommendationDriftResponse>(`/api/admin/recommendation-drift?days=${days}`);
+}
+
+export function getRecommendationModels() {
+  return api<RecommendationModelsResponse>('/api/admin/recommendation-models');
+}
+
+export function getRecommendationTrainingOverview() {
+  return api<RecommendationTrainingOverview>('/api/admin/recommendation-training/overview');
+}
+
+export function listRecommendationTrainingDatasets() {
+  return api<RecommendationTrainingDatasetsResponse>('/api/admin/recommendation-training-datasets');
+}
+
+export function createRecommendationTrainingDataset(payload: { name?: string; from?: string; to?: string; sourceSurfaces?: string[]; eventTypes?: string[]; categories?: string[] }) {
+  return api<RecommendationTrainingDataset>('/api/admin/recommendation-training-datasets', {
+    method: 'POST',
+    body: JSON.stringify(payload)
+  });
+}
+
+export function updateRecommendationTrainingDataset(datasetId: string, payload: { name?: string }) {
+  return api<RecommendationTrainingDataset>(`/api/admin/recommendation-training-datasets/${datasetId}`, {
+    method: 'PATCH',
+    body: JSON.stringify(payload)
+  });
+}
+
+export function lockRecommendationTrainingDataset(datasetId: string) {
+  return api<RecommendationTrainingDataset>(`/api/admin/recommendation-training-datasets/${datasetId}/lock`, {
+    method: 'POST'
+  });
+}
+
+export function archiveRecommendationTrainingDataset(datasetId: string) {
+  return api<RecommendationTrainingDataset>(`/api/admin/recommendation-training-datasets/${datasetId}/archive`, {
+    method: 'POST'
+  });
+}
+
+export function getRecommendationTrainingDatasetItems(datasetId: string) {
+  return api<RecommendationTrainingDatasetItemsResponse>(`/api/admin/recommendation-training-datasets/${datasetId}/items`);
+}
+
+export function bulkIncludeRecommendationTrainingDatasetItems(datasetId: string, payload: { eventType?: string; category?: string; itemIds?: string[]; reason?: string }) {
+  return api<RecommendationTrainingDataset>(`/api/admin/recommendation-training-datasets/${datasetId}/items/bulk-include`, {
+    method: 'POST',
+    body: JSON.stringify(payload)
+  });
+}
+
+export function bulkExcludeRecommendationTrainingDatasetItems(datasetId: string, payload: { eventType?: string; category?: string; itemIds?: string[]; reason?: string }) {
+  return api<RecommendationTrainingDataset>(`/api/admin/recommendation-training-datasets/${datasetId}/items/bulk-exclude`, {
+    method: 'POST',
+    body: JSON.stringify(payload)
+  });
+}
+
+export function listRecommendationTrainingJobs() {
+  return api<RecommendationTrainingJobsResponse>('/api/admin/recommendation-training-jobs');
+}
+
+export function createRecommendationTrainingJob(payload: { datasetId: string }) {
+  return api<RecommendationTrainingJob>('/api/admin/recommendation-training-jobs', {
+    method: 'POST',
+    body: JSON.stringify(payload)
+  });
+}
+
+export function activateRecommendationModel(modelId: string) {
+  return api<RecommendationModelVersion>(`/api/admin/recommendation-models/${modelId}/activate`, {
+    method: 'POST'
+  });
+}
+
+export function retireRecommendationModel(modelId: string) {
+  return api<RecommendationModelVersion>(`/api/admin/recommendation-models/${modelId}/retire`, {
+    method: 'POST'
+  });
+}
+
+export function createHomePartRecommendationFeedback(payload: HomePartRecommendationFeedbackPayload) {
+  return api('/api/admin/recommendation-feedback/home-parts', {
+    method: 'POST',
+    body: JSON.stringify(payload)
+  });
+}
+
 export function getRecentAdminAuditLogs() {
   return api<AdminAuditLogsResponse>('/api/admin/audit-logs/recent');
+}
+
+export function getDefaultBuildGraphLayout() {
+  return api<BuildGraphLayout>('/api/admin/build-graph-layouts/default');
+}
+
+export function saveDefaultBuildGraphLayout(positions: Record<string, BuildGraphLayoutPosition>) {
+  return api<BuildGraphLayout>('/api/admin/build-graph-layouts/default', {
+    method: 'PUT',
+    body: JSON.stringify({ positions })
+  });
+}
+
+export function resetDefaultBuildGraphLayout() {
+  return api<BuildGraphLayout>('/api/admin/build-graph-layouts/default', {
+    method: 'DELETE'
+  });
 }
 
 export function getAdminAgentSessions() {
@@ -622,12 +1001,35 @@ export function updateAdminTicket(ticketId: string, payload: AdminAsTicketUpdate
   });
 }
 
+export function createAsRecommendationFeedback(ticketId: string, payload: AsRecommendationFeedbackPayload) {
+  return api<Record<string, unknown>>(`/api/admin/recommendation-feedback/as-tickets/${ticketId}`, {
+    method: 'POST',
+    body: JSON.stringify(payload)
+  });
+}
+
 export function listPriceJobs() {
   return api<PriceJobsResponse>('/api/admin/price-jobs');
 }
 
 export function runPriceJob() {
   return api<PriceJob>('/api/admin/price-jobs/run', { method: 'POST' });
+}
+
+export type PipelineJobRun = {
+  id: string;
+  jobName: string;
+  triggerType: string;
+  status: string;
+  resultSummary?: Record<string, unknown> | null;
+  errorSummary?: string | null;
+  startedAt?: string | null;
+  finishedAt?: string | null;
+  durationMs?: number | null;
+};
+
+export function listPipelineJobRuns(limit = 30) {
+  return api<{ items: PipelineJobRun[]; total: number }>(`/api/admin/pipeline-job-runs?limit=${limit}`);
 }
 
 export function listManufacturerSources(includeDeleted = false) {

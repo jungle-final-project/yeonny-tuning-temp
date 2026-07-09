@@ -2,7 +2,7 @@ package com.buildgraph.prototype.price;
 
 import com.buildgraph.prototype.common.DbValueMapper;
 import com.buildgraph.prototype.common.MockData;
-import com.buildgraph.prototype.part.util.NaverShoppingOfferService;
+import com.buildgraph.prototype.verification.util.NaverShoppingOfferService;
 
 import java.util.Map;
 import org.springframework.jdbc.core.JdbcTemplate;

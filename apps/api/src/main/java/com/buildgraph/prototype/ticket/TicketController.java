@@ -41,4 +41,16 @@ public class TicketController {
         CurrentUserService.CurrentUser user = currentUserService.requireUser(authorization);
         return ticketQueryService.ticket(id, user);
     }
+
+    /* 새롭게 추가됨: 원격지원 요청 */
+    @PostMapping("/as-tickets/{id}/remote-support-requests")
+    @ResponseStatus(HttpStatus.CREATED)
+    Map<String, Object> requestRemoteSupport(
+            @PathVariable String id,
+            @RequestBody(required = false) Map<String, Object> request,
+            @RequestHeader(value = "Authorization", required = false) String authorization
+    ) {
+        CurrentUserService.CurrentUser user = currentUserService.requireUser(authorization);
+        return ticketQueryService.requestRemoteSupport(id, request == null ? Map.of() : request, user);
+    }
 }

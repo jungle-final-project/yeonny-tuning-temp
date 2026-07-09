@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 160 100" fill="none" role="img" aria-label="PSU">
+  <rect x="4" y="6" width="152" height="88" rx="8" fill="#e2e8f0" stroke="#cbd5e1" stroke-width="3"/>
+  <circle cx="52" cy="50" r="30" fill="#eef2f7" stroke="#cbd5e1" stroke-width="3"/>
+  <circle cx="52" cy="50" r="7" fill="#cbd5e1"/>
+  <path d="M 52 23 C 67 29 70 43 54 46" stroke="#cbd5e1" stroke-width="3"/>
+  <path d="M 79 50 C 73 65 59 68 56 52" stroke="#cbd5e1" stroke-width="3"/>
+  <path d="M 52 77 C 37 71 34 57 50 54" stroke="#cbd5e1" stroke-width="3"/>
+  <path d="M 25 50 C 31 35 45 32 48 48" stroke="#cbd5e1" stroke-width="3"/>
+  <rect x="106" y="18" width="38" height="27" rx="3" fill="#f8fafc" stroke="#cbd5e1" stroke-width="2.5"/>
+  <rect x="114" y="26" width="4" height="11" rx="1" fill="#cbd5e1"/>
+  <rect x="123" y="26" width="4" height="11" rx="1" fill="#cbd5e1"/>
+  <rect x="132" y="26" width="4" height="11" rx="1" fill="#cbd5e1"/>
+  <rect x="112" y="54" width="17" height="24" rx="2" fill="#eef2f7" stroke="#94a3b8" stroke-width="2.5"/>
+  <line x1="120.5" y1="59" x2="120.5" y2="66" stroke="#94a3b8" stroke-width="2.5"/>
+  <line x1="106" y1="86" x2="144" y2="86" stroke="#cbd5e1" stroke-width="2.5"/>
+  <circle cx="12" cy="14" r="2" fill="#cbd5e1"/>
+  <circle cx="148" cy="14" r="2" fill="#cbd5e1"/>
+  <circle cx="12" cy="86" r="2" fill="#cbd5e1"/>
+</svg>

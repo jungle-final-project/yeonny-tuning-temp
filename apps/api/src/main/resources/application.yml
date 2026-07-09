@@ -12,7 +12,7 @@ spring:
     init:
       mode: never
   cache:
-    type: caffeine
+    type: ${SPRING_CACHE_TYPE:caffeine}
   data:
     redis:
       host: ${SPRING_DATA_REDIS_HOST:localhost}

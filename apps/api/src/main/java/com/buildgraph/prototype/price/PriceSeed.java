@@ -1,7 +1,8 @@
 package com.buildgraph.prototype.price;
 
 import com.buildgraph.prototype.common.MockData;
-import com.buildgraph.prototype.part.PartSeed;
+import com.buildgraph.prototype.verification.part.PartSeed;
+
 import java.util.List;
 import java.util.Map;
 

@@ -3,6 +3,7 @@ package com.buildgraph.prototype.log;
 import com.buildgraph.prototype.common.ApiException;
 import com.buildgraph.prototype.common.DbValueMapper;
 import com.buildgraph.prototype.common.MockData;
+import com.buildgraph.prototype.support.AsLogRagAnalysisService;
 import com.buildgraph.prototype.user.CurrentUserService;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -12,6 +13,7 @@ import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Set;
 import java.util.regex.Pattern;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
@@ -46,9 +48,17 @@ public class AgentLogQueryService {
     );
 
     private final JdbcTemplate jdbcTemplate;
+    private final AsLogRagAnalysisService asLogRagAnalysisService;
 
     public AgentLogQueryService(JdbcTemplate jdbcTemplate) {
+        this(jdbcTemplate, new AsLogRagAnalysisService(jdbcTemplate));
+    }
+
+    /* 새롭게 추가됨: AS RAG 주입 */
+    @Autowired
+    public AgentLogQueryService(JdbcTemplate jdbcTemplate, AsLogRagAnalysisService asLogRagAnalysisService) {
         this.jdbcTemplate = jdbcTemplate;
+        this.asLogRagAnalysisService = asLogRagAnalysisService;
     }
 
     public Map<String, Object> upload(
@@ -102,6 +112,13 @@ public class AgentLogQueryService {
                 .findFirst()
                 .map(this::logMap)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "로그 업로드를 찾을 수 없습니다."));
+    }
+
+    /* 새롭게 추가됨: AS RAG 분석 */
+    public Map<String, Object> previewAsRag(MultipartFile file, Integer rangeMinutes) {
+        ValidatedLogFile validated = validateLogFile(file);
+        Integer minutes = rangeMinutes == null ? 30 : rangeMinutes;
+        return asLogRagAnalysisService.analyzeText(validated.fileName(), validated.sanitizedContent(), minutes);
     }
 
     private Map<String, Object> logMap(Map<String, Object> row) {

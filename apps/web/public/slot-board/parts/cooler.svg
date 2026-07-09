@@ -1,0 +1,25 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 80" fill="none" role="img" aria-label="COOLER">
+  <rect x="4" y="4" width="192" height="72" rx="8" fill="#e2e8f0" stroke="#cbd5e1" stroke-width="3"/>
+  <rect x="14" y="12" width="52" height="56" rx="3" fill="#eef2f7" stroke="#cbd5e1" stroke-width="2.5"/>
+  <line x1="23" y1="12" x2="23" y2="68" stroke="#cbd5e1" stroke-width="2"/>
+  <line x1="32" y1="12" x2="32" y2="68" stroke="#cbd5e1" stroke-width="2"/>
+  <line x1="41" y1="12" x2="41" y2="68" stroke="#cbd5e1" stroke-width="2"/>
+  <line x1="50" y1="12" x2="50" y2="68" stroke="#cbd5e1" stroke-width="2"/>
+  <line x1="59" y1="12" x2="59" y2="68" stroke="#cbd5e1" stroke-width="2"/>
+  <rect x="134" y="12" width="52" height="56" rx="3" fill="#eef2f7" stroke="#cbd5e1" stroke-width="2.5"/>
+  <line x1="143" y1="12" x2="143" y2="68" stroke="#cbd5e1" stroke-width="2"/>
+  <line x1="152" y1="12" x2="152" y2="68" stroke="#cbd5e1" stroke-width="2"/>
+  <line x1="161" y1="12" x2="161" y2="68" stroke="#cbd5e1" stroke-width="2"/>
+  <line x1="170" y1="12" x2="170" y2="68" stroke="#cbd5e1" stroke-width="2"/>
+  <line x1="179" y1="12" x2="179" y2="68" stroke="#cbd5e1" stroke-width="2"/>
+  <circle cx="100" cy="40" r="26" fill="#eef2f7" stroke="#cbd5e1" stroke-width="3"/>
+  <circle cx="100" cy="40" r="6.5" fill="#cbd5e1"/>
+  <path d="M 100 17 C 113 22 115 34 102 36" stroke="#cbd5e1" stroke-width="3"/>
+  <path d="M 123 40 C 118 53 106 55 104 42" stroke="#cbd5e1" stroke-width="3"/>
+  <path d="M 100 63 C 87 58 85 46 98 44" stroke="#cbd5e1" stroke-width="3"/>
+  <path d="M 77 40 C 82 27 94 25 96 38" stroke="#cbd5e1" stroke-width="3"/>
+  <circle cx="12" cy="12" r="2" fill="#cbd5e1"/>
+  <circle cx="188" cy="12" r="2" fill="#cbd5e1"/>
+  <circle cx="12" cy="68" r="2" fill="#cbd5e1"/>
+  <circle cx="188" cy="68" r="2" fill="#cbd5e1"/>
+</svg>

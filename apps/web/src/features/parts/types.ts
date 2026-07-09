@@ -39,6 +39,33 @@ export type PartPage = {
   total: number;
 };
 
+export type HomeRecommendedPart = {
+  recommendationId: string;
+  rankPosition: number;
+  part: PartRow;
+  scoreSource?: string | null;
+  modelVersion?: string | null;
+  reasonTags?: string[];
+};
+
+export type HomeRecommendedPartsResponse = {
+  items: HomeRecommendedPart[];
+  generatedAt: string;
+  fallbackUsed: boolean;
+};
+
+export type RecommendationEventRequest = {
+  eventType: 'IMPRESSION' | 'CLICK' | 'DETAIL_VIEW' | 'SAVE' | 'CHANGE_ADOPTED' | 'ADD_BUILD_TO_DRAFT' | 'ADD_PART_TO_DRAFT' | 'ORDER_INTENT' | 'REJECT' | 'CHANGE_REVERTED';
+  sourceSurface: string;
+  recommendationId?: string;
+  partId?: string;
+  buildId?: string;
+  category?: string;
+  rankPosition?: number;
+  idempotencyKey?: string;
+  eventPayload?: Record<string, unknown>;
+};
+
 export type PartSearchParams = {
   category?: string;
   q?: string;
@@ -50,6 +77,8 @@ export type PartSearchParams = {
   size?: number;
   sort?: 'category' | 'price_asc' | 'price_desc' | 'name' | 'compatibility';
   compatibilitySource?: 'QUOTE_DRAFT_CURRENT';
+  compatibilityMode?: 'ADD' | 'REPLACE';
+  replaceTargetPartId?: string;
 };
 
 export type CompatiblePartCandidateRequest = {
@@ -141,10 +170,6 @@ export type QuoteDraft = {
 export type ToolRow = {
   tool: string;
   status: string;
-  score?: number;
   confidence: string;
   summary: string;
-  warnings?: string[];
-  evidence?: Array<{ source_id?: string; sourceId?: string; summary?: string }>;
-  details?: Record<string, unknown>;
 };

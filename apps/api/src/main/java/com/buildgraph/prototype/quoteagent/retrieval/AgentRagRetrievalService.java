@@ -60,11 +60,13 @@ public class AgentRagRetrievalService {
         RootContext context = withExtraQuery(rootContext(root), extraQuery);
         List<String> queryTokens = tokens(context.queryText());
         List<Map<String, Object>> rows = retrievalRows(context, profile, safeLimit(limit));
+        @SuppressWarnings("null")
         List<RetrievalCandidate> ranked = rows.stream()
                 .map(row -> candidate(row, root, profile, context, queryTokens))
                 .filter(candidate -> candidate.allowed())
                 .sorted(Comparator.comparingDouble(RetrievalCandidate::rank).reversed())
                 .toList();
+        @SuppressWarnings("null")
         List<AgentRagEvidenceDraft> selected = diversify(ranked, safeLimit(limit)).stream()
                 .map(RetrievalCandidate::draft)
                 .toList();

@@ -36,6 +36,17 @@ public class AgentLogController {
         return agentLogQueryService.upload(file, rangeMinutes, consentAccepted, user);
     }
 
+    /* 새롭게 추가됨: AS RAG 미리보기 */
+    @PostMapping("/agent-logs/as-rag-preview")
+    Map<String, Object> asRagPreview(
+            @RequestParam(required = false) MultipartFile file,
+            @RequestParam(required = false) Integer rangeMinutes,
+            @RequestHeader(value = "Authorization", required = false) String authorization
+    ) {
+        currentUserService.requireUser(authorization);
+        return agentLogQueryService.previewAsRag(file, rangeMinutes);
+    }
+
     @GetMapping("/agent-logs/{id}")
     Map<String, Object> log(
             @PathVariable String id,

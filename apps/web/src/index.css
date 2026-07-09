@@ -14,6 +14,30 @@ body {
   background: #f6f7f9;
 }
 
+html.page-scrollbar-hidden,
+html.page-scrollbar-hidden body {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+html.page-scrollbar-hidden::-webkit-scrollbar,
+html.page-scrollbar-hidden body::-webkit-scrollbar {
+  width: 0;
+  height: 0;
+  display: none;
+}
+
+.scrollbar-hidden {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+.scrollbar-hidden::-webkit-scrollbar {
+  width: 0;
+  height: 0;
+  display: none;
+}
+
 button,
 input,
 select,
@@ -34,6 +58,22 @@ background:
   );
 }
 
+@media (min-width: 768px) {
+  .screen-shell {
+    transition: margin-right 180ms ease;
+  }
+
+  .ai-assistant-open .screen-shell {
+    margin-right: 420px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .screen-shell {
+    transition: none;
+  }
+}
+
 .panel {
   border: 1px solid #e4e7ec;
   border-radius: 10px;
@@ -41,10 +81,791 @@ background:
   box-shadow: 0 10px 26px rgba(17, 24, 39, 0.05);
 }
 
+/* 구성 관계도(실장도) 트레이: 흰 페이지에 묻히지 않도록 짙은 그래파이트 작업대 표면으로.
+   라이트 SVG 에셋·흰 슬롯 카드가 그 위에서 강하게 떠오른다. 은은한 도트 그리드 텍스처 +
+   안쪽 프레임(상단 하이라이트/하단 그림자)으로 트레이의 깊이감을 준다. */
+.slot-board-tray {
+  background-color: #171d27;
+  background-image:
+    radial-gradient(rgba(148, 163, 184, 0.09) 1px, transparent 1.4px),
+    radial-gradient(150% 130% at 50% -25%, #2b3444 0%, #1c2431 52%, #131922 100%);
+  background-size: 22px 22px, 100% 100%;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.06),
+    inset 0 0 0 1px rgba(148, 163, 184, 0.14),
+    inset 0 12px 40px rgba(0, 0, 0, 0.34);
+}
+
+/* 구성 관계도 패널을 페이지에서 한 단계 띄운다 — 주변 흰 박스보다 또렷한 테두리·그림자. */
+.slot-board-panel {
+  border-color: #cbd5e1;
+  box-shadow: 0 18px 40px rgba(15, 23, 42, 0.12);
+}
+
+/* 슬롯 보드 장착/교체 애니메이션. 신규 의존성 없이 CSS keyframes만 사용한다. */
+@keyframes slot-attach-flash {
+  0% {
+    border-color: #2563eb;
+    box-shadow: 0 0 0 0 rgba(37, 99, 235, 0.45);
+  }
+  55% {
+    border-color: #16a34a;
+    box-shadow: 0 0 0 10px rgba(22, 163, 74, 0);
+  }
+  100% {
+    box-shadow: 0 0 0 0 rgba(22, 163, 74, 0);
+  }
+}
+
+.slot-attach-flash {
+  animation: slot-attach-flash 600ms cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+/* "메인보드에 꽂힌다": 장착 순간 카드가 보드 바깥에서 허브 방향으로 밀려 들어와 살짝 튕기며 안착한다.
+   방향(--plug-dx/dy)은 카드 위치에서 컴포넌트가 계산해 준다. */
+@keyframes slot-plug-in {
+  0% {
+    transform: translate(var(--plug-dx, 0px), var(--plug-dy, 0px)) scale(0.97);
+    opacity: 0.55;
+  }
+  70% {
+    transform: translate(calc(var(--plug-dx, 0px) * -0.1), calc(var(--plug-dy, 0px) * -0.1)) scale(1.01);
+    opacity: 1;
+  }
+  100% {
+    transform: translate(0px, 0px) scale(1);
+  }
+}
+
+.slot-plug-in {
+  animation: slot-plug-in 480ms cubic-bezier(0.22, 0.9, 0.32, 1.1);
+}
+
+/* 장착 순간 관계선이 부품→포트까지 그려진다. pathLength=1 기준이라 경로 길이와 무관하게 동작. */
+@keyframes slot-edge-draw {
+  from {
+    stroke-dashoffset: 1;
+  }
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+
+.slot-edge-draw {
+  animation: slot-edge-draw 520ms ease-out;
+}
+
+/* 꽂힌 포트가 잠깐 점등되는 펄스. */
+@keyframes slot-port-pulse {
+  0% {
+    transform: scale(1);
+  }
+  40% {
+    transform: scale(1.7);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+
+.slot-port-pulse {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: slot-port-pulse 700ms ease-out;
+}
+
+@keyframes slot-empty-pulse {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 rgba(37, 99, 235, 0.45);
+  }
+  50% {
+    box-shadow: 0 0 0 9px rgba(37, 99, 235, 0);
+  }
+}
+
+.slot-empty-pulse {
+  animation: slot-empty-pulse 2.4s ease-in-out infinite;
+}
+
+/* 상태색 히어로 펄스: 장착된 슬롯을 상태색 링으로 숨쉬게 한다.
+   쉬는 구간(0%/100%)에도 상시 보이는 실선 링 + 소프트 글로우를 유지하고, 50%에 바깥으로 퍼진다
+   — 어두운 트레이 위에서도 색이 확실히 읽히도록 시인성을 높였다.
+   정상=초록, 간섭 주의=주황(더 강함), 장착 불가=빨강(가장 강하고 빠름 — 시선을 끈다). */
+@keyframes slot-pass-pulse {
+  0%,
+  100% {
+    box-shadow: 0 0 0 2px rgba(16, 185, 129, 0.75), 0 0 12px 2px rgba(16, 185, 129, 0.45);
+  }
+  50% {
+    box-shadow: 0 0 0 6px rgba(16, 185, 129, 0), 0 0 16px 4px rgba(16, 185, 129, 0.2);
+  }
+}
+@keyframes slot-warn-pulse {
+  0%,
+  100% {
+    box-shadow: 0 0 0 2px rgba(245, 158, 11, 0.85), 0 0 14px 2px rgba(245, 158, 11, 0.5);
+  }
+  50% {
+    box-shadow: 0 0 0 8px rgba(245, 158, 11, 0), 0 0 18px 5px rgba(245, 158, 11, 0.22);
+  }
+}
+@keyframes slot-fail-pulse {
+  0%,
+  100% {
+    box-shadow: 0 0 0 3px rgba(239, 68, 68, 0.9), 0 0 16px 3px rgba(239, 68, 68, 0.55);
+  }
+  50% {
+    box-shadow: 0 0 0 9px rgba(239, 68, 68, 0), 0 0 22px 6px rgba(239, 68, 68, 0.24);
+  }
+}
+.slot-pass-pulse {
+  animation: slot-pass-pulse 3s ease-in-out infinite;
+}
+.slot-warn-pulse {
+  animation: slot-warn-pulse 2.4s ease-in-out infinite;
+}
+.slot-fail-pulse {
+  animation: slot-fail-pulse 1.8s ease-in-out infinite;
+}
+
+/* "다음 선택" 반짝임: 은은한 광택 띠가 주기적으로 카드를 훑고 지나간다.
+   체크리스트 다음 행과 보드의 다음 실장 지점이 같은 주기로 반짝여 시선을 잇는다. */
+@keyframes slot-hint-shimmer {
+  0% {
+    transform: translateX(-140%) skewX(-18deg);
+  }
+  55%,
+  100% {
+    transform: translateX(240%) skewX(-18deg);
+  }
+}
+
+.slot-hint-shimmer {
+  position: relative;
+  overflow: hidden;
+}
+
+.slot-hint-shimmer::after {
+  content: '';
+  position: absolute;
+  top: -6px;
+  bottom: -6px;
+  left: 0;
+  width: 45%;
+  background: linear-gradient(105deg, transparent, rgba(147, 197, 253, 0.55), transparent);
+  transform: translateX(-140%) skewX(-18deg);
+  animation: slot-hint-shimmer 2.4s ease-in-out infinite;
+  pointer-events: none;
+  z-index: 30;
+}
+
+@keyframes slot-panel-in {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+.slot-panel-in {
+  animation: slot-panel-in 220ms ease-out;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .slot-attach-flash,
+  .slot-plug-in,
+  .slot-edge-draw,
+  .slot-port-pulse,
+  .slot-empty-pulse,
+  .slot-pass-pulse,
+  .slot-warn-pulse,
+  .slot-fail-pulse,
+  .slot-panel-in {
+    animation: none;
+  }
+
+  .slot-hint-shimmer::after {
+    animation: none;
+    opacity: 0;
+  }
+}
+
+.home-screen-main {
+  --home-header-height: 163px;
+  --home-main-padding-y: clamp(10px, 1.6dvh, 18px);
+  --home-page-height: calc(100dvh - var(--home-header-height) - var(--home-main-padding-y) - var(--home-main-padding-y));
+  box-sizing: border-box;
+  height: calc(100dvh - var(--home-header-height)) !important;
+  min-height: 0;
+  overflow: hidden;
+  padding-top: var(--home-main-padding-y);
+  padding-bottom: var(--home-main-padding-y);
+}
+
+.home-fullpage-shell {
+  position: relative;
+  height: var(--home-page-height);
+  min-height: 0;
+  overflow: hidden;
+}
+
+.home-fullpage-shell .fp-watermark {
+  display: none !important;
+}
+
+.home-fullpage-shell .fullpage-wrapper,
+.home-fullpage-shell .fp-section,
+.home-fullpage-shell .section {
+  height: var(--home-page-height) !important;
+}
+
+body.fp-viewing-storefront .home-fullpage-shell .fullpage-wrapper {
+  transform: translate3d(0, 0, 0) !important;
+}
+
+body.fp-viewing-recommended-builds .home-fullpage-shell .fullpage-wrapper {
+  transform: translate3d(0, calc(0px - var(--home-page-height)), 0) !important;
+}
+
+body.fp-viewing-popular-parts .home-fullpage-shell .fullpage-wrapper {
+  transform: translate3d(0, calc(0px - var(--home-page-height) - var(--home-page-height)), 0) !important;
+}
+
+.home-fullpage-shell .fp-overflow {
+  max-height: 100%;
+  overflow: hidden !important;
+}
+
+.home-fullpage-section {
+  display: flex;
+  height: 100%;
+  min-height: 0;
+  flex-direction: column;
+  justify-content: flex-start;
+  overflow: hidden;
+  padding: 0;
+}
+
+.home-storefront-fit,
+.home-fit-panel {
+  width: 100%;
+  max-height: 100%;
+  min-height: 0;
+}
+
+.home-storefront-fit {
+  --home-storefront-gap: clamp(10px, 1.8dvh, 24px);
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+}
+
+.home-storefront-fit > :not([hidden]) ~ :not([hidden]) {
+  margin-top: var(--home-storefront-gap) !important;
+}
+
+.home-promo-stage {
+  height: clamp(250px, calc(var(--home-page-height) - 318px), 600px) !important;
+}
+
+.home-action-grid {
+  gap: clamp(14px, 2dvh, 40px) !important;
+}
+
+.home-action-link {
+  gap: clamp(6px, 0.8dvh, 10px) !important;
+}
+
+.home-action-icon {
+  width: clamp(50px, 6dvh, 64px) !important;
+  height: clamp(50px, 6dvh, 64px) !important;
+  border-radius: 14px !important;
+}
+
+.home-promo-tile-strip {
+  gap: clamp(10px, 1.4dvh, 16px) !important;
+}
+
+.home-promo-tile {
+  min-height: clamp(82px, 12dvh, 118px) !important;
+  padding: clamp(14px, 2dvh, 24px) clamp(18px, 2.4dvh, 28px) !important;
+}
+
+.home-promo-tile-icon {
+  width: clamp(44px, 5.6dvh, 56px) !important;
+  height: clamp(44px, 5.6dvh, 56px) !important;
+}
+
+.home-fit-panel {
+  display: flex;
+  height: 100%;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.home-featured-build-grid,
+.home-ai-build-grid,
+.home-parts-grid {
+  flex: 1 1 auto;
+  min-height: 0;
+  align-content: stretch;
+  grid-auto-rows: minmax(0, 1fr);
+}
+
+.home-featured-build-card,
+.home-ai-build-card,
+.home-part-card {
+  min-height: 0;
+  overflow: hidden;
+}
+
+.home-featured-build-card {
+  padding: clamp(10px, 1.4dvh, 16px) !important;
+}
+
+.home-ai-recommendations {
+  display: flex;
+  flex: 1 1 auto;
+  min-height: 0;
+  flex-direction: column;
+}
+
+.home-featured-build-image {
+  height: clamp(64px, calc((var(--home-page-height) - 450px) / 2), 140px) !important;
+  min-height: 0;
+}
+
+.home-featured-picker-grid {
+  display: grid;
+  flex: 1 1 auto;
+  min-height: 0;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-rows: repeat(2, minmax(0, 1fr));
+  gap: clamp(10px, 1.4dvh, 16px);
+}
+
+.home-ai-picker-grid {
+  grid-template-columns: repeat(var(--home-ai-grid-columns, 3), minmax(0, 1fr));
+  grid-template-rows: repeat(var(--home-ai-grid-rows, 1), minmax(0, 1fr));
+}
+
+.home-featured-preview-layout {
+  display: grid;
+  flex: 1 1 auto;
+  height: 100%;
+  min-height: clamp(420px, calc(var(--home-page-height) - 200px), 640px);
+  grid-template-columns: minmax(270px, 3fr) minmax(0, 7fr);
+  align-items: stretch;
+  gap: clamp(10px, 1.4dvh, 16px);
+}
+
+.home-featured-preview-list {
+  display: grid;
+  min-height: 0;
+  grid-template-rows: repeat(6, minmax(0, 1fr));
+  gap: 0.625rem;
+  overflow-y: auto;
+  padding-right: 0.125rem;
+}
+
+.home-featured-selected-panel {
+  display: flex;
+  height: 100%;
+  min-height: 0;
+  flex-direction: column;
+  align-self: stretch;
+  gap: 0.625rem;
+  overflow: hidden;
+}
+
+.home-featured-preview-card {
+  position: relative;
+  isolation: isolate;
+  display: flex;
+  min-height: 0;
+  cursor: pointer;
+  align-items: center;
+  gap: 0.625rem;
+  overflow: hidden;
+  border: 1px solid #d9e1ec;
+  border-radius: 8px;
+  padding: clamp(8px, 1dvh, 12px);
+  text-align: left;
+  transition: border-color 160ms ease, box-shadow 160ms ease, transform 160ms ease;
+}
+
+.home-featured-preview-body {
+  min-width: 0;
+}
+
+.home-featured-preview-card:hover,
+.home-featured-preview-card:focus-visible,
+.home-featured-preview-card--selected {
+  border-color: #111827;
+  box-shadow: 0 12px 28px rgba(15, 23, 42, 0.12);
+  outline: none;
+}
+
+.home-featured-preview-card--selected {
+  transform: translateY(-1px);
+}
+
+.home-featured-picker-grid .home-featured-preview-card,
+.home-featured-selected-panel .home-featured-preview-card {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  justify-content: space-between;
+  gap: clamp(8px, 1.2dvh, 14px);
+  border-color: #d9e1ec;
+  color: #111827;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.72);
+}
+
+.home-featured-picker-grid .home-featured-preview-card::after,
+.home-featured-selected-panel .home-featured-preview-card::after {
+  position: absolute;
+  inset: auto 0 0;
+  z-index: -1;
+  height: 44%;
+  content: "";
+  background: linear-gradient(180deg, transparent, rgba(37, 99, 235, 0.06));
+  pointer-events: none;
+}
+
+.home-featured-picker-grid .home-featured-preview-card:hover,
+.home-featured-picker-grid .home-featured-preview-card:focus-visible,
+.home-featured-selected-panel .home-featured-preview-card:hover,
+.home-featured-selected-panel .home-featured-preview-card:focus-visible {
+  border-color: rgba(226, 232, 240, 0.82);
+  box-shadow: 0 16px 34px rgba(15, 23, 42, 0.22);
+}
+
+.home-featured-preview-thumb-wrap {
+  display: grid;
+  width: clamp(58px, 7.8dvh, 86px);
+  height: clamp(58px, 7.8dvh, 86px);
+  flex-shrink: 0;
+  place-items: center;
+  overflow: hidden;
+  border: 1px solid #d9e1ec;
+  border-radius: 7px;
+  background: #f8fafc;
+}
+
+.home-featured-picker-grid .home-featured-preview-thumb-wrap {
+  width: 100%;
+  height: clamp(128px, calc((var(--home-page-height) - 420px) / 2), 230px);
+  flex: 1 1 auto;
+  border: 0;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.84), rgba(241, 245, 249, 0.92));
+}
+
+.home-ai-picker-grid .home-featured-preview-thumb-wrap {
+  height: clamp(170px, calc((var(--home-page-height) - 360px) / var(--home-ai-grid-rows, 1)), 340px);
+}
+
+.home-featured-selected-panel .home-featured-preview-thumb-wrap {
+  width: 100%;
+  height: auto;
+  flex: 1 1 0;
+  border: 0;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.86), rgba(241, 245, 249, 0.94));
+}
+
+.home-featured-preview-thumb {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  padding: 0.35rem;
+}
+
+.home-featured-picker-grid .home-featured-preview-thumb,
+.home-featured-selected-panel .home-featured-preview-thumb {
+  padding: clamp(3px, 0.8dvh, 10px);
+  filter: drop-shadow(0 18px 18px rgba(15, 23, 42, 0.16));
+  transform: scale(1.08);
+  transition: transform 160ms ease;
+}
+
+.home-featured-picker-grid .home-featured-preview-card:hover .home-featured-preview-thumb,
+.home-featured-selected-panel .home-featured-preview-card:hover .home-featured-preview-thumb {
+  transform: scale(1.12);
+}
+
+.home-featured-picker-grid .home-featured-preview-body,
+.home-featured-selected-panel .home-featured-preview-body {
+  display: flex;
+  width: 100%;
+  min-height: 0;
+  flex: 0 0 auto;
+  flex-direction: column;
+  gap: clamp(6px, 0.8dvh, 10px);
+}
+
+.home-featured-picker-grid .home-featured-preview-title,
+.home-featured-selected-panel .home-featured-preview-title {
+  color: #111827 !important;
+}
+
+.home-featured-picker-grid .home-featured-preview-spec,
+.home-featured-selected-panel .home-featured-preview-spec {
+  color: #64748b !important;
+}
+
+.home-featured-picker-grid .home-featured-preview-tag,
+.home-featured-selected-panel .home-featured-preview-tag {
+  background: rgba(248, 113, 113, 0.96) !important;
+}
+
+.home-featured-picker-grid .home-featured-preview-actions,
+.home-featured-selected-panel .home-featured-preview-actions {
+  margin-top: 0;
+}
+
+.home-featured-picker-grid .home-featured-preview-price,
+.home-featured-selected-panel .home-featured-preview-price {
+  color: #ff6b6b !important;
+}
+
+.home-featured-picker-grid .home-featured-preview-status,
+.home-featured-selected-panel .home-featured-preview-status {
+  color: #2563eb !important;
+}
+
+.home-featured-selected-panel .home-featured-preview-card {
+  flex: 1 1 auto;
+  height: 100%;
+}
+
+.home-featured-preview-reset {
+  flex: 0 0 auto;
+}
+
+.home-featured-preview-thumb--empty {
+  display: grid;
+  place-items: center;
+  font-size: 0.7rem;
+  font-weight: 900;
+  color: #94a3b8;
+}
+
+.home-featured-preview-graph {
+  min-width: 0;
+  min-height: 0;
+}
+
+.home-featured-preview-graph .buildgraph-preview-mode {
+  display: flex;
+  height: 100%;
+  min-height: 0;
+  flex-direction: column;
+}
+
+.home-featured-preview-graph .buildgraph-preview-mode .buildgraph-header {
+  gap: 0.75rem;
+  padding: clamp(10px, 1.2dvh, 14px) clamp(14px, 1.6dvh, 18px);
+}
+
+.home-featured-preview-graph .buildgraph-preview-mode .buildgraph-header h2 {
+  font-size: clamp(1rem, 1.6dvh, 1.25rem);
+}
+
+.home-featured-preview-graph .buildgraph-preview-mode .buildgraph-header p {
+  display: -webkit-box;
+  max-height: 2.5rem;
+  overflow: hidden;
+  font-size: 0.78rem;
+  line-height: 1.25rem;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+.home-featured-preview-graph .buildgraph-preview-mode .buildgraph-stat-grid {
+  min-width: min(230px, 100%);
+}
+
+.home-featured-preview-graph .buildgraph-preview-mode .buildgraph-content,
+.home-featured-preview-graph .buildgraph-preview-mode .buildgraph-canvas {
+  display: flex;
+  flex: 1 1 auto;
+  min-height: 0;
+  flex-direction: column;
+}
+
+.home-featured-preview-graph .buildgraph-preview-mode .buildgraph-flow-area {
+  flex: 1 1 auto;
+  padding: 0 !important;
+}
+
+.buildgraph-preview-flow .react-flow__pane {
+  cursor: grab;
+}
+
+.buildgraph-preview-flow .react-flow__pane.dragging {
+  cursor: grabbing;
+}
+
+.home-ai-build-image {
+  height: clamp(72px, 12dvh, 140px) !important;
+  aspect-ratio: auto !important;
+  min-height: 0;
+}
+
+.home-build-graph-wrap {
+  min-height: 0;
+  overflow: hidden;
+}
+
+.home-part-card {
+  padding: 0.75rem !important;
+}
+
+.home-part-card h3 {
+  display: -webkit-box;
+  min-height: 0 !important;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+.home-part-image {
+  height: clamp(52px, calc((var(--home-page-height) - 480px) / 2), 108px) !important;
+  min-height: 0;
+}
+
+@media (max-height: 940px) and (min-width: 768px) {
+  .home-recommended-panel {
+    padding: 0.875rem !important;
+  }
+
+  .home-recommended-panel > .mb-3 {
+    margin-bottom: 0.75rem !important;
+  }
+
+  .home-featured-build-card > p,
+  .home-ai-build-card > p {
+    display: none !important;
+  }
+
+  .home-featured-build-card {
+    padding: 0.5rem !important;
+  }
+
+  .home-featured-build-card .mt-3 {
+    margin-top: 0.5rem !important;
+  }
+
+  .home-featured-build-image {
+    height: clamp(58px, 9dvh, 92px) !important;
+  }
+
+  .home-featured-picker-grid,
+  .home-featured-preview-layout {
+    gap: 0.625rem;
+  }
+
+  .home-featured-preview-list {
+    gap: 0.5rem;
+  }
+
+  .home-featured-preview-card {
+    gap: 0.5rem;
+    padding: 0.45rem;
+  }
+
+  .home-featured-preview-thumb-wrap {
+    width: clamp(46px, 6.8dvh, 64px);
+    height: clamp(46px, 6.8dvh, 64px);
+  }
+
+  .home-featured-preview-spec,
+  .home-featured-preview-status {
+    display: none !important;
+  }
+
+  .home-featured-preview-apply {
+    padding: 0.35rem 0.5rem !important;
+  }
+}
+
+@media (min-height: 980px) and (min-width: 1280px) {
+  .home-featured-build-image {
+    height: clamp(120px, 14dvh, 180px) !important;
+  }
+
+  .home-part-image {
+    height: clamp(92px, 10dvh, 126px) !important;
+  }
+}
+
+@media (max-width: 767px) {
+  .home-screen-main {
+    height: auto !important;
+    min-height: 0;
+    overflow: visible;
+    padding-top: 1.5rem;
+    padding-bottom: 1.5rem;
+  }
+
+  .home-fullpage-shell {
+    height: auto;
+    min-height: 0;
+    overflow: visible;
+  }
+
+  .home-fullpage-shell .fullpage-wrapper,
+  .home-fullpage-shell .fp-section,
+  .home-fullpage-shell .section {
+    height: auto !important;
+    transform: none !important;
+  }
+
+  body.fp-viewing-storefront .home-fullpage-shell .fullpage-wrapper,
+  body.fp-viewing-recommended-builds .home-fullpage-shell .fullpage-wrapper,
+  body.fp-viewing-popular-parts .home-fullpage-shell .fullpage-wrapper {
+    transform: none !important;
+  }
+
+  .home-fullpage-section {
+    height: auto;
+    min-height: 0;
+    overflow: visible;
+    padding: 0;
+  }
+
+  .home-storefront-fit,
+  .home-fit-panel {
+    max-height: none;
+    overflow: visible;
+  }
+
+  .home-featured-preview-layout {
+    display: flex;
+    height: auto;
+    min-height: 0;
+    flex-direction: column;
+  }
+
+  .home-featured-picker-grid {
+    display: flex;
+    flex-direction: column;
+  }
+
+  .home-featured-preview-list {
+    overflow: visible;
+  }
+}
+
 .buildgraph-flow-node {
+  box-sizing: border-box;
   overflow: hidden;
   font-family: inherit;
-  border-radius: 50%;
+  border-radius: 10px;
   transition: border-color 160ms ease, box-shadow 160ms ease, transform 160ms ease;
 }
 
@@ -54,8 +875,28 @@ background:
 }
 
 .buildgraph-node-card {
+  box-sizing: border-box;
   width: 100%;
   height: 100%;
+}
+
+.buildgraph-node-card-main {
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  overflow: hidden;
+  padding: 14px 16px;
+  border-radius: 10px;
+  text-align: left;
+}
+
+.buildgraph-node-card-main-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 8px;
+  min-width: 0;
 }
 
 .buildgraph-node-circle {
@@ -64,14 +905,9 @@ background:
   align-items: center;
   justify-content: center;
   gap: 4px;
-  border-radius: 50%;
+  /* border-radius: 50%; */
   padding: 14px;
   text-align: center;
-}
-
-.buildgraph-node-wide {
-  border-radius: 999px;
-  padding-inline: 22px;
 }
 
 .buildgraph-node-category-label {
@@ -89,9 +925,9 @@ background:
   display: -webkit-box;
   overflow: hidden;
   color: #111827;
-  font-size: 13px;
+  font-size: 15px;
   font-weight: 900;
-  line-height: 1.18;
+  line-height: 1.35;
   -webkit-box-orient: vertical;
   -webkit-line-clamp: 2;
   word-break: keep-all;
@@ -109,9 +945,10 @@ background:
 }
 
 .buildgraph-node-status-label {
+  flex: 0 0 auto;
   max-width: 100%;
   border-radius: 999px;
-  padding: 2px 6px;
+  padding: 4px 8px;
   font-size: 9px;
   font-weight: 900;
   line-height: 1.2;
@@ -131,11 +968,18 @@ background:
 }
 
 .buildgraph-flow-node--focus {
-  box-shadow: 0 0 0 5px rgba(37, 99, 235, 0.13), 0 14px 32px rgba(15, 23, 42, 0.14) !important;
+  box-shadow: inset 0 0 0 2px rgba(37, 99, 235, 0.18), 0 14px 28px rgba(15, 23, 42, 0.12) !important;
 }
 
 .buildgraph-flow-node--mini-active {
-  box-shadow: 0 0 0 4px rgba(37, 99, 235, 0.18), 0 12px 28px rgba(15, 23, 42, 0.14) !important;
+  box-shadow: inset 0 0 0 2px rgba(37, 99, 235, 0.18), 0 12px 24px rgba(15, 23, 42, 0.12) !important;
+}
+
+.buildgraph-flow-node--issue-focus {
+  box-shadow:
+    inset 0 0 0 3px rgba(239, 68, 68, 0.34),
+    0 18px 34px rgba(239, 68, 68, 0.18) !important;
+  transform: translateY(-2px);
 }
 
 .react-flow__handle {
@@ -143,4 +987,28 @@ background:
   height: 7px;
   border: 2px solid #ffffff;
   background: #2563eb;
+}
+
+.buildgraph-flow-node .react-flow__handle {
+  width: 1px;
+  height: 1px;
+  border: 0;
+  background: transparent;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.buildgraph-scroll-pass-through .react-flow__pane,
+.buildgraph-scroll-pass-through .react-flow__pane.draggable,
+.buildgraph-scroll-pass-through .react-flow__pane.dragging {
+  cursor: default;
+  touch-action: pan-y;
+}
+
+.compact-build-graph--card-link .react-flow,
+.compact-build-graph--card-link .react-flow__pane,
+.compact-build-graph--card-link .react-flow__renderer,
+.compact-build-graph--card-link .react-flow__viewport,
+.compact-build-graph--card-link .react-flow__node {
+  pointer-events: none;
 }

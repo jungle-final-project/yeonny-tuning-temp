@@ -1,26 +1,27 @@
-import { type FormEvent, useEffect, useRef, useState } from 'react';
+import { type FormEvent, memo, useCallback, useEffect, useRef, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
-import { Bot, CheckCircle2, Cpu, PackageCheck, Send, ShoppingCart, Sparkles, X, Zap } from 'lucide-react';
+import { BarChart3, Bot, CheckCircle2, Send, ShoppingCart, Sparkles, X } from 'lucide-react';
 import { AUTH_CHANGED_EVENT, ApiError, clearToken, getToken } from '../../../lib/api';
-import { applyAiBuildToQuoteDraft, deleteQuoteDraftItem, getCurrentQuoteDraft, patchQuoteDraftItem, putQuoteDraftItem } from '../../parts/partsApi';
+import { AI_BUILD_ASSISTANT_CLOSE_EVENT, AI_BUILD_ASSISTANT_OPEN_EVENT, AI_BUILD_ASSISTANT_TOGGLE_EVENT, SUPPORT_CHAT_CLOSE_EVENT, SUPPORT_CHAT_OPEN_EVENT, type AiAssistantOpenDetail } from '../../../lib/events';
+import { applyAiBuildToQuoteDraft, getCurrentQuoteDraft } from '../../parts/partsApi';
 import {
   AI_ASSISTANT_SESSION_CHANGED_EVENT,
   PART_CATEGORY_LABELS,
   clearLegacyAiStorage,
   createAiMessageId,
   getAiStorageOwnerKey,
+  mergeAiBuildHistory,
   normalizeAiBuilds,
   normalizeAiRecommendedBuild,
   readAssistantSession,
+  recentBuildsForChatContext,
   saveAssistantSession,
   saveSelectedAiBuild,
-  type AiAppliedPartPreference,
-  type AiBuildItem,
   type AiChatMessage,
-  type AiDraftAction,
-  type AiDraftActionStatus,
+  type AiPerformanceSimulation,
   type AiRecommendedBuild,
+  type AiToolResult,
   type BuildGraphFocus
 } from '../aiSelection';
 import { buildChat } from '../quoteApi';
@@ -31,12 +32,22 @@ type AiBuildAssistantProps = {
 
 const LOGIN_REQUIRED_MESSAGE = '로그인이 필요합니다. 다시 로그인해 주세요.';
 const GENERIC_SUBMIT_ERROR_MESSAGE = 'AI 추천 API 호출에 실패했습니다. 잠시 후 다시 시도해 주세요.';
+const COMMON_QUICK_PROMPTS = [
+  { label: '200만원 게이밍 PC', prompt: '200만원으로 게이밍 PC 추천해줘' },
+  { label: '견적 마저 채우기', prompt: '지금 견적 기준으로 나머지 부품 채워줘' },
+  { label: '성능 비교', prompt: 'CPU를 9700X로 바꾸면 성능 어떻게 돼?' }
+];
+
+const ASSISTANT_DESKTOP_QUERY = '(min-width: 768px)';
 
 export function AiBuildAssistant({ surface = 'home' }: AiBuildAssistantProps) {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const messagesEndRef = useRef<HTMLDivElement | null>(null);
   const [open, setOpen] = useState(false);
+  const [isDesktopAssistant, setIsDesktopAssistant] = useState(() => (
+    typeof window === 'undefined' ? true : window.matchMedia(ASSISTANT_DESKTOP_QUERY).matches
+  ));
   const [prompt, setPrompt] = useState('');
   const [session, setSession] = useState(() => readAssistantSession());
   const [isSending, setIsSending] = useState(false);
@@ -44,13 +55,77 @@ export function AiBuildAssistant({ surface = 'home' }: AiBuildAssistantProps) {
   const [applyError, setApplyError] = useState<string | null>(null);
   const [failedBuild, setFailedBuild] = useState<AiRecommendedBuild | null>(null);
   const [applyingBuildId, setApplyingBuildId] = useState<string | null>(null);
-  const [applyingActionId, setApplyingActionId] = useState<string | null>(null);
+  const [pendingSubmit, setPendingSubmit] = useState<string | null>(null);
+  // 직전 응답이 되묻기였다면 다음 전송에 원 요청을 에코해 서버가 두 문장을 합성하게 한다(1회 왕복).
+  const [pendingClarification, setPendingClarification] = useState<{ originalMessage: string } | null>(null);
   const hasToken = Boolean(getToken());
+  // 패널을 실제로 연 뒤에만 현재 견적(드래프트)을 미리 받는다. 전역 렌더라 로그인만으로
+  // 모든 페이지에서 draft API가 선행되던 것을 없앤다. 완성/시뮬레이션 요청은 패널 open 시점에
+  // 이미 prefetch돼 있어 체감 저하가 없고, 예산/미지원/명확화는 draft 없이 즉시 전송된다.
   const quoteDraftQuery = useQuery({
     queryKey: ['quote-draft', 'current'],
     queryFn: getCurrentQuoteDraft,
-    enabled: surface === 'self-quote' && hasToken
+    enabled: hasToken && open
   });
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return undefined;
+    const mediaQuery = window.matchMedia(ASSISTANT_DESKTOP_QUERY);
+    const handleChange = () => setIsDesktopAssistant(mediaQuery.matches);
+    handleChange();
+    mediaQuery.addEventListener('change', handleChange);
+    return () => {
+      mediaQuery.removeEventListener('change', handleChange);
+    };
+  }, []);
+
+  useEffect(() => {
+    const openAssistant = (event: Event) => {
+      const detail = (event as CustomEvent<AiAssistantOpenDetail>).detail;
+      if (!isDesktopAssistant) {
+        window.dispatchEvent(new Event(SUPPORT_CHAT_CLOSE_EVENT));
+      }
+      setOpen(true);
+      if (detail?.prefill) {
+        if (detail.autoSubmit) {
+          setPendingSubmit(detail.prefill);
+        } else {
+          setPrompt(detail.prefill);
+        }
+      }
+    };
+    const toggleAssistant = () => setOpen((current) => {
+      const nextOpen = !current;
+      if (nextOpen && !isDesktopAssistant) {
+        window.dispatchEvent(new Event(SUPPORT_CHAT_CLOSE_EVENT));
+      }
+      return nextOpen;
+    });
+    const closeAssistant = () => setOpen(false);
+    const closeForSupportChat = () => {
+      if (!isDesktopAssistant) {
+        setOpen(false);
+      }
+    };
+    window.addEventListener(AI_BUILD_ASSISTANT_OPEN_EVENT, openAssistant);
+    window.addEventListener(AI_BUILD_ASSISTANT_TOGGLE_EVENT, toggleAssistant);
+    window.addEventListener(AI_BUILD_ASSISTANT_CLOSE_EVENT, closeAssistant);
+    window.addEventListener(SUPPORT_CHAT_OPEN_EVENT, closeForSupportChat);
+    return () => {
+      window.removeEventListener(AI_BUILD_ASSISTANT_OPEN_EVENT, openAssistant);
+      window.removeEventListener(AI_BUILD_ASSISTANT_TOGGLE_EVENT, toggleAssistant);
+      window.removeEventListener(AI_BUILD_ASSISTANT_CLOSE_EVENT, closeAssistant);
+      window.removeEventListener(SUPPORT_CHAT_OPEN_EVENT, closeForSupportChat);
+    };
+  }, [isDesktopAssistant]);
+
+  useEffect(() => {
+    const shouldReserveSpace = open && isDesktopAssistant;
+    document.documentElement.classList.toggle('ai-assistant-open', shouldReserveSpace);
+    return () => {
+      document.documentElement.classList.remove('ai-assistant-open');
+    };
+  }, [open, isDesktopAssistant]);
 
   useEffect(() => {
     const syncSession = () => {
@@ -73,9 +148,21 @@ export function AiBuildAssistant({ surface = 'home' }: AiBuildAssistantProps) {
     messagesEndRef.current?.scrollIntoView({ block: 'end' });
   }, [open, session.messages.length]);
 
+  useEffect(() => {
+    if (!pendingSubmit || isSending) return;
+    const text = pendingSubmit;
+    setPendingSubmit(null);
+    void sendMessage(text);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pendingSubmit, isSending]);
+
   async function submitPrompt(event: FormEvent) {
     event.preventDefault();
-    const nextPrompt = prompt.trim();
+    await sendMessage(prompt);
+  }
+
+  async function sendMessage(rawPrompt: string) {
+    const nextPrompt = rawPrompt.trim();
     if (!nextPrompt || isSending) return;
 
     const ownerKey = getAiStorageOwnerKey();
@@ -105,24 +192,29 @@ export function AiBuildAssistant({ surface = 'home' }: AiBuildAssistantProps) {
     setIsSending(true);
 
     try {
+      // 견적 완성/성능 비교만 현재 견적(드래프트) 문맥이 필요하다. 예산 추천·미지원·명확화는
+      // draft 없이 즉시 서버로 보내 체감 지연을 줄인다. 이미 캐시된 draft는 그대로 활용한다.
+      const currentQuoteDraft = needsDraftContext(nextPrompt)
+        ? quoteDraftQuery.data ?? await queryClient.fetchQuery({
+          queryKey: ['quote-draft', 'current'],
+          queryFn: getCurrentQuoteDraft
+        })
+        : quoteDraftQuery.data;
       const response = await buildChat({
         message: nextPrompt,
-        currentBuilds: baseSession.latestBuilds,
-        appliedPartPreferences: baseSession.appliedPartPreferences,
-        currentQuoteDraft: surface === 'self-quote' ? quoteDraftQuery.data : undefined
+        currentBuilds: recentBuildsForChatContext(baseSession),
+        currentQuoteDraft,
+        clarificationContext: pendingClarification ?? undefined
       });
+      setPendingClarification(
+        response.clarification?.originalMessage
+          ? { originalMessage: response.clarification.originalMessage }
+          : null
+      );
       const responseTime = new Date().toISOString();
       const responseBuilds = response.builds?.length ? normalizeAiBuilds(response.builds) : undefined;
-      const latestBuilds = responseBuilds ?? baseSession.latestBuilds;
+      const latestBuilds = responseBuilds ? mergeAiBuildHistory(responseBuilds, baseSession.latestBuilds) : baseSession.latestBuilds;
       const latestGraphFocus = graphFocusFromResponse(response, nextPrompt);
-      const appliedPartPreferences = response.partRecommendation
-        ? replaceAppliedPartPreference(baseSession.appliedPartPreferences, {
-            category: response.partRecommendation.category,
-            label: response.partRecommendation.label,
-            appliedAt: responseTime,
-            options: response.partRecommendation.options
-          })
-        : baseSession.appliedPartPreferences;
       const assistantMessage: AiChatMessage = {
         id: createAiMessageId(response.answerType.toLowerCase()),
         role: 'assistant',
@@ -130,16 +222,20 @@ export function AiBuildAssistant({ surface = 'home' }: AiBuildAssistantProps) {
         createdAt: responseTime,
         kind: messageKind(response.answerType),
         builds: responseBuilds,
-        partRecommendation: response.partRecommendation ?? undefined,
-        actions: response.actions?.length ? response.actions.map((action) => ({ ...action, status: 'PENDING' })) : undefined,
-        warnings: response.warnings ?? []
+        simulation: response.simulation ?? undefined,
+        warnings: response.warnings ?? [],
+        quickReplies: response.quickReplies ?? undefined
       };
       const nextSession = {
         messages: [...optimisticSession.messages, assistantMessage],
         latestBuilds,
-        appliedPartPreferences,
+        savedBuildIds: baseSession.savedBuildIds,
         latestGraphFocus,
-        latestActiveBuildId: latestBuilds[1]?.id ?? latestBuilds[0]?.id,
+        latestActiveBuildId: responseBuilds?.find((build) => build.tier === 'balanced')?.id
+          ?? responseBuilds?.[0]?.id
+          ?? baseSession.latestActiveBuildId
+          ?? latestBuilds[1]?.id
+          ?? latestBuilds[0]?.id,
         updatedAt: responseTime
       };
       setSession(nextSession);
@@ -158,10 +254,16 @@ export function AiBuildAssistant({ surface = 'home' }: AiBuildAssistantProps) {
     }
   }
 
-  async function selectBuild(build: AiRecommendedBuild) {
+  // 되묻기 칩 클릭 → 기존 pendingSubmit 경로로 자동 전송. setState만 쓰므로 참조가 영구 안정이라
+  // ChatMessage memo를 깨지 않는다.
+  const handleQuickReply = useCallback((reply: string) => {
+    setPendingSubmit(reply);
+  }, []);
+
+  // 새 메시지 추가로 리스트가 리렌더될 때 ChatMessage memo가 유지되도록 참조를 안정화한다.
+  const selectBuild = useCallback(async (build: AiRecommendedBuild) => {
     if (applyingBuildId) return;
     const normalizedBuild = normalizeAiRecommendedBuild(build);
-    saveSelectedAiBuild(normalizedBuild);
     setApplyError(null);
     setFailedBuild(null);
     setApplyingBuildId(normalizedBuild.id);
@@ -175,6 +277,8 @@ export function AiBuildAssistant({ surface = 'home' }: AiBuildAssistantProps) {
           quantity: item.quantity
         }))
       });
+      // 적용이 성공한 뒤에만 선택 빌드를 저장한다. 실패 시 /self-quote 패널이 미적용 빌드를 보여주는 불일치를 막는다.
+      saveSelectedAiBuild(normalizedBuild);
       queryClient.setQueryData(['quote-draft', 'current'], appliedDraft);
       void queryClient.invalidateQueries({ queryKey: ['quote-draft', 'current'] });
       setOpen(false);
@@ -185,56 +289,10 @@ export function AiBuildAssistant({ surface = 'home' }: AiBuildAssistantProps) {
     } finally {
       setApplyingBuildId(null);
     }
-  }
+  }, [applyingBuildId, queryClient, navigate]);
 
-  async function applyDraftAction(action: AiDraftAction, messageId: string) {
-    if (applyingActionId || action.status === 'APPLIED') return;
-    setApplyError(null);
-    setApplyingActionId(action.id);
-    markDraftActionStatus(messageId, action.id, 'APPLYING');
-    try {
-      const partId = typeof action.payload.partId === 'string' ? action.payload.partId : null;
-      const quantity = typeof action.payload.quantity === 'number' ? action.payload.quantity : 1;
-      if (action.type === 'ASK_FOLLOW_UP') {
-        markDraftActionStatus(messageId, action.id, 'APPLIED');
-        return;
-      }
-      if (!partId) {
-        throw new Error('partId is required for draft action');
-      }
-      if (action.type === 'REMOVE_DRAFT_PART') {
-        await deleteQuoteDraftItem(partId);
-      } else if (action.type === 'UPDATE_DRAFT_QUANTITY') {
-        await patchQuoteDraftItem(partId, quantity);
-      } else {
-        await putQuoteDraftItem(partId, quantity);
-      }
-      await queryClient.invalidateQueries({ queryKey: ['quote-draft', 'current'] });
-      markDraftActionStatus(messageId, action.id, 'APPLIED');
-    } catch {
-      markDraftActionStatus(messageId, action.id, 'FAILED');
-      setApplyError('AI 변경안을 견적 장바구니에 적용하지 못했습니다.');
-    } finally {
-      setApplyingActionId(null);
-    }
-  }
-
-  function markDraftActionStatus(messageId: string, actionId: string, status: AiDraftActionStatus) {
-    setSession((current) => {
-      const nextSession = {
-        ...current,
-        messages: current.messages.map((message) => {
-          if (message.id !== messageId || !message.actions) return message;
-          return {
-            ...message,
-            actions: message.actions.map((action) => action.id === actionId ? { ...action, status } : action)
-          };
-        }),
-        updatedAt: new Date().toISOString()
-      };
-      saveAssistantSession(nextSession);
-      return nextSession;
-    });
+  if (!open && isDesktopAssistant) {
+    return null;
   }
 
   if (!open) {
@@ -244,7 +302,7 @@ export function AiBuildAssistant({ surface = 'home' }: AiBuildAssistantProps) {
         aria-label="AI 견적 챗봇 열기"
         data-testid="ai-chatbot-launcher"
         onClick={() => setOpen(true)}
-        className="fixed bottom-5 right-5 z-50 flex h-16 w-16 items-center justify-center rounded-2xl border border-slate-900 bg-slate-950 text-white shadow-2xl transition hover:-translate-y-0.5 hover:bg-slate-800 focus:outline-none focus:ring-4 focus:ring-blue-200"
+        className="fixed bottom-5 right-5 z-50 flex h-16 w-16 items-center justify-center rounded-2xl border border-slate-900 bg-slate-950 text-white shadow-2xl transition hover:-translate-y-0.5 hover:bg-slate-800 focus:outline-none focus:ring-4 focus:ring-blue-200 md:hidden"
       >
         <span className="relative grid h-11 w-11 place-items-center rounded-xl bg-white text-slate-950">
           <Bot size={26} />
@@ -254,68 +312,73 @@ export function AiBuildAssistant({ surface = 'home' }: AiBuildAssistantProps) {
     );
   }
 
+  const panelClassName = isDesktopAssistant
+    ? 'fixed inset-y-0 right-0 z-50 flex h-dvh w-[420px] flex-col overflow-hidden border-l border-slate-200 bg-[#f8fbff] shadow-2xl'
+    : 'fixed bottom-4 right-3 z-50 w-[min(calc(100vw-1.5rem),460px)] overflow-hidden rounded-2xl border border-slate-200 bg-[#f8fbff] shadow-2xl';
+
   return (
     <section
       data-testid="ai-chatbot-panel"
-      className="fixed bottom-4 right-3 z-50 w-[min(calc(100vw-1.5rem),460px)] overflow-hidden rounded-xl border border-slate-900 bg-white shadow-2xl sm:bottom-5 sm:right-4"
+      className={panelClassName}
     >
-      <div className="bg-slate-950 px-4 py-3 text-white">
+      <div className="border-b border-slate-200 bg-white px-4 py-3">
         <div className="flex items-center justify-between gap-3">
           <div className="flex min-w-0 items-center gap-3">
-            <div className="grid h-10 w-10 shrink-0 place-items-center rounded-lg bg-white text-slate-950">
-              <Bot size={22} />
+            <div className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-brand-blue text-white shadow-sm">
+              <Sparkles size={20} />
             </div>
             <div className="min-w-0">
-              <h2 className="truncate text-sm font-black">BuildGraph AI 챗봇</h2>
-              <p className="truncate text-xs text-white/70">{surface === 'home' ? '예산/부품 DB 추천' : '셀프견적 보조 추천'}</p>
+              <h2 className="truncate text-sm font-black text-commerce-ink">AI 견적 어시스턴트</h2>
+              <p className="truncate text-xs font-bold text-slate-500">{surface === 'home' ? '내부 견적 자산 기준 · 호환성 자동 체크' : '현재 견적 기준 · 부품 교체 자동 적용'}</p>
             </div>
           </div>
           <button
             type="button"
             aria-label="AI 견적 챗봇 닫기"
             onClick={() => setOpen(false)}
-            className="grid h-9 w-9 place-items-center rounded-md border border-white/15 text-white/80 hover:bg-white/10 hover:text-white"
+            className="grid h-9 w-9 place-items-center rounded-md border border-slate-200 bg-white text-slate-500 transition hover:border-slate-300 hover:text-commerce-ink focus:outline-none focus:ring-4 focus:ring-blue-100"
           >
             <X size={17} />
           </button>
         </div>
       </div>
 
-      <div className="flex max-h-[78vh] flex-col">
-        <div className="border-b border-commerce-line bg-slate-50 px-4 py-3">
+      <div className={`${isDesktopAssistant ? 'min-h-0 flex-1' : 'max-h-[78vh]'} flex flex-col`}>
+        <div className="border-b border-slate-100 bg-[#f8fbff] px-4 py-3">
+          <div className="mb-2 text-[11px] font-black text-slate-400">이렇게 물어보세요</div>
           <div className="flex flex-wrap gap-2">
-            {['200만원 PC 추천', '300만원 PC 추천', 'GPU 추천해줘', '쿨러 추천해줘'].map((example) => (
+            {COMMON_QUICK_PROMPTS.map((example) => (
               <button
-                key={example}
+                key={example.label}
                 type="button"
-                onClick={() => setPrompt(example)}
-                className="rounded-full border border-commerce-line bg-white px-3 py-1 text-[11px] font-black text-slate-600 hover:border-commerce-ink hover:text-commerce-ink"
+                onClick={() => setPrompt(example.prompt)}
+                className="rounded-full border border-slate-200 bg-white px-3 py-1.5 text-[11px] font-black text-slate-600 shadow-sm transition hover:border-brand-blue hover:text-brand-blue focus:outline-none focus:ring-4 focus:ring-blue-100"
               >
-                {example}
+                {example.label}
               </button>
             ))}
           </div>
         </div>
 
-        <div data-testid="ai-chat-messages" className="min-h-0 flex-1 space-y-3 overflow-y-auto p-4">
+        <div data-testid="ai-chat-messages" className="min-h-0 flex-1 space-y-3 overflow-y-auto px-4 py-4">
           {session.messages.map((message) => (
             <ChatMessage
               key={message.id}
               message={message}
               onSelectBuild={selectBuild}
-              onApplyDraftAction={applyDraftAction}
-              applyingActionId={applyingActionId}
+              onQuickReply={handleQuickReply}
+              applyingBuildId={applyingBuildId}
             />
           ))}
           {isSending ? (
-            <div className="rounded-xl border border-commerce-line bg-white px-3 py-2 text-sm font-bold text-slate-500">
+            <div className="rounded-2xl border border-slate-200 bg-white px-3 py-2 text-sm font-bold text-slate-500 shadow-sm">
               서버 DB에서 추천 조합을 계산하는 중입니다.
             </div>
           ) : null}
           <div ref={messagesEndRef} />
         </div>
 
-        <form onSubmit={submitPrompt} className="border-t border-commerce-line bg-white p-3">
+        <form onSubmit={submitPrompt} className="border-t border-slate-200 bg-white p-3">
           {submitError ? (
             <div role="alert" className="mb-2 rounded-md border border-red-100 bg-red-50 px-3 py-2 text-xs font-bold text-red-700">
               {submitError}
@@ -335,21 +398,21 @@ export function AiBuildAssistant({ surface = 'home' }: AiBuildAssistantProps) {
             </div>
           ) : null}
           <label className="sr-only" htmlFor="ai-build-chat-input">AI 챗봇에게 PC 사양 질문</label>
-          <div className="flex gap-2 rounded-lg border border-commerce-line bg-slate-50 p-2 focus-within:border-commerce-ink focus-within:ring-4 focus-within:ring-blue-100">
+          <div className="flex gap-2 rounded-full border border-slate-200 bg-slate-50 p-1.5 shadow-inner focus-within:border-brand-blue focus-within:ring-4 focus-within:ring-blue-100">
             <input
               id="ai-build-chat-input"
               aria-label="AI 챗봇에게 PC 사양 질문"
               value={prompt}
               onChange={(event) => setPrompt(event.target.value)}
               disabled={isSending}
-              placeholder="예: 200만원 PC 추천, GPU 추천해줘"
-              className="min-w-0 flex-1 bg-transparent px-2 text-sm font-medium text-slate-900 outline-none placeholder:text-slate-400"
+              placeholder="PC 견적을 물어보세요..."
+              className="min-w-0 flex-1 bg-transparent px-3 text-sm font-medium text-slate-900 outline-none placeholder:text-slate-400"
             />
             <button
               type="submit"
               aria-label="질문 보내기"
               disabled={!prompt.trim() || isSending}
-              className="grid h-10 w-10 shrink-0 place-items-center rounded-md bg-commerce-ink text-white transition hover:bg-slate-700 disabled:bg-slate-300"
+              className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-brand-blue text-white transition hover:bg-blue-700 disabled:bg-slate-300"
             >
               <Send size={17} />
             </button>
@@ -364,43 +427,28 @@ export function AiBuildAssistant({ surface = 'home' }: AiBuildAssistantProps) {
   );
 }
 
+// 서버가 현재 견적(드래프트) 문맥을 실제로 쓰는 요청만 draft를 먼저 확보한다.
+// 백엔드 BuildChatIntentRouter의 시뮬레이션/견적완성 판정 어휘와 맞춘다.
+function needsDraftContext(prompt: string) {
+  const normalized = prompt.toLowerCase().replace(/\s+/g, '');
+  const completionLike = /지금|현재|이견적|그래프|나머지|마저|채워|완성/.test(normalized);
+  const simulationLike = /바꾸면|바꿨|교체하면|교체시|넣으면|달면|끼우면|끼면|박으면|올리면|올렸|내리면|내려|낮추면|늘리면|줄이면|갈아|넘어가면|업그레이드하면|다운그레이드하면|프레임|fps|성능|체감|비교/.test(normalized);
+  return completionLike || simulationLike;
+}
+
 function messageKind(answerType: 'BUDGET' | 'PART' | 'GENERAL'): AiChatMessage['kind'] {
   if (answerType === 'BUDGET') return 'budget';
   if (answerType === 'PART') return 'part';
   return 'general';
 }
 
-function replaceAppliedPartPreference(preferences: AiAppliedPartPreference[], nextPreference: AiAppliedPartPreference) {
-  return [
-    ...preferences.filter((preference) => preference.category !== nextPreference.category),
-    nextPreference
-  ];
-}
-
 function graphFocusFromResponse(
   response: {
     answerType: 'BUDGET' | 'PART' | 'GENERAL';
-    partRecommendation?: { category?: BuildGraphFocus['category'] } | null;
-    actions?: AiDraftAction[];
     warnings?: string[];
   },
   prompt: string
 ): BuildGraphFocus {
-  if (response.actions?.length) {
-    const actionCategory = response.actions.find((action) => typeof action.payload.category === 'string')?.payload.category;
-    return {
-      mode: 'DRAFT_ACTION',
-      category: actionCategory,
-      tool: toolFromPrompt(prompt)
-    };
-  }
-  if (response.answerType === 'PART' && response.partRecommendation?.category) {
-    return {
-      mode: 'PART_IMPACT',
-      category: response.partRecommendation.category,
-      tool: toolFromCategory(response.partRecommendation.category)
-    };
-  }
   if (response.answerType === 'BUDGET') {
     return {
       mode: 'BUILD_OVERVIEW',
@@ -413,13 +461,6 @@ function graphFocusFromResponse(
   };
 }
 
-function toolFromCategory(category?: BuildGraphFocus['category']): BuildGraphFocus['tool'] {
-  if (category === 'GPU' || category === 'PSU') return 'power';
-  if (category === 'CASE' || category === 'COOLER') return 'size';
-  if (category === 'CPU' || category === 'MOTHERBOARD' || category === 'RAM') return 'compatibility';
-  return undefined;
-}
-
 function toolFromPrompt(prompt: string): BuildGraphFocus['tool'] {
   if (/파워|전력|w\b|W\b|psu/i.test(prompt)) return 'power';
   if (/케이스|크기|장착|길이|쿨러|높이/.test(prompt)) return 'size';
@@ -429,187 +470,293 @@ function toolFromPrompt(prompt: string): BuildGraphFocus['tool'] {
   return undefined;
 }
 
-function ChatMessage({
+const ChatMessage = memo(function ChatMessage({
   message,
   onSelectBuild,
-  onApplyDraftAction,
-  applyingActionId
+  onQuickReply,
+  applyingBuildId
 }: {
   message: AiChatMessage;
   onSelectBuild: (build: AiRecommendedBuild) => void;
-  onApplyDraftAction: (action: AiDraftAction, messageId: string) => void;
-  applyingActionId: string | null;
+  onQuickReply: (reply: string) => void;
+  applyingBuildId: string | null;
 }) {
   const isUser = message.role === 'user';
 
   return (
     <div className={`flex ${isUser ? 'justify-end' : 'justify-start'}`}>
       <div className={`max-w-full ${isUser ? 'w-fit max-w-[86%]' : 'w-full'}`}>
-        <div className={`rounded-xl px-3 py-2 text-sm leading-6 ${isUser ? 'bg-commerce-ink text-white' : 'border border-commerce-line bg-white text-slate-700'}`}>
+        <div className={`rounded-2xl px-3 py-2 text-sm leading-6 shadow-sm ${isUser ? 'bg-brand-blue text-white' : 'border border-slate-200 bg-white text-slate-700'}`}>
           {!isUser ? (
             <div className="mb-1 flex items-center gap-2 text-[11px] font-black text-brand-blue">
-              <Sparkles size={13} />
-              AI DB 답변
+              <span className="grid h-5 w-5 place-items-center rounded-full bg-blue-50 text-brand-blue">
+                <Sparkles size={12} />
+              </span>
+              {message.simulation ? '성능 시뮬레이션' : 'AI 견적 어시스턴트'}
             </div>
           ) : null}
           <p className="break-keep">{message.text}</p>
+          {!isUser && message.quickReplies?.length ? (
+            <div data-testid="ai-quick-replies" className="mt-2 flex flex-wrap gap-2">
+              {message.quickReplies.map((reply) => (
+                <button
+                  key={reply}
+                  type="button"
+                  onClick={() => onQuickReply(reply)}
+                  className="rounded-full border border-slate-200 bg-white px-3 py-1.5 text-[11px] font-black text-slate-600 shadow-sm transition hover:border-brand-blue hover:text-brand-blue focus:outline-none focus:ring-4 focus:ring-blue-100"
+                >
+                  {reply}
+                </button>
+              ))}
+            </div>
+          ) : null}
         </div>
+
+        {message.simulation ? (
+          <SimulationResultCard simulation={message.simulation} />
+        ) : null}
 
         {message.builds ? (
           <div className="mt-2 grid gap-2">
             {message.builds.map((build) => (
-              <CompactBuildCard key={`${message.id}-${build.id}`} build={build} onSelectBuild={onSelectBuild} />
+              <CompactBuildCard key={`${message.id}-${build.id}`} build={build} onSelectBuild={onSelectBuild} applyingBuildId={applyingBuildId} />
             ))}
           </div>
         ) : null}
-
-        {message.partRecommendation ? (
-          <PartRecommendationCards options={message.partRecommendation.options} label={message.partRecommendation.label} />
-        ) : null}
-
-        {message.actions?.length ? (
-          <DraftActionCards
-            messageId={message.id}
-            actions={message.actions}
-            applyingActionId={applyingActionId}
-            onApplyDraftAction={onApplyDraftAction}
-          />
-        ) : null}
       </div>
+    </div>
+  );
+}, (prev, next) => (
+  // 세션 저장→syncSession이 메시지 객체를 매번 새로 만들기 때문에 참조 비교로는 memo가 무효다.
+  // 메시지는 id당 내용이 불변이므로 id + 콜백 참조로 비교해 기존 메시지 리렌더를 막는다.
+  // applyingBuildId가 바뀌면 카드 버튼의 로딩/비활성 상태가 갱신되도록 비교에 포함한다.
+  prev.message.id === next.message.id
+  && prev.onSelectBuild === next.onSelectBuild
+  && prev.onQuickReply === next.onQuickReply
+  && prev.applyingBuildId === next.applyingBuildId
+));
+
+function SimulationResultCard({ simulation }: { simulation: AiPerformanceSimulation }) {
+  const fpsRows = simulation.fpsComparisons ?? [];
+  const specRows = simulation.specComparisons ?? [];
+  const score = simulation.scoreComparison;
+  const maxFps = Math.max(
+    1,
+    ...fpsRows.flatMap((row) => [row.currentFps ?? 0, row.targetFps ?? 0])
+  );
+
+  return (
+    <section className="mt-2 rounded-lg border border-blue-100 bg-blue-50 p-3">
+      <div className="flex flex-wrap items-start justify-between gap-2">
+        <div className="min-w-0">
+          <div className="flex items-center gap-2 text-xs font-black text-brand-blue">
+            <BarChart3 size={14} />
+            성능 시뮬레이션
+          </div>
+          <div className="mt-1 break-keep text-sm font-black text-commerce-ink">
+            {simulation.currentPart.name} → {simulation.targetPart.name}
+          </div>
+        </div>
+        <span className="rounded bg-white px-2 py-1 text-[11px] font-black text-slate-600">
+          {PART_CATEGORY_LABELS[simulation.category]}
+        </span>
+      </div>
+
+      {score ? (
+        <div className="mt-3 rounded-md bg-white p-3">
+          <div className="flex items-center justify-between gap-2 text-xs">
+            <span className="font-black text-slate-700">{score.label}</span>
+            <span className={`font-black ${score.delta && score.delta > 0 ? 'text-commerce-green' : score.delta && score.delta < 0 ? 'text-commerce-sale' : 'text-slate-500'}`}>
+              {formatSigned(score.delta, '점')}
+            </span>
+          </div>
+          <div className="mt-2 grid gap-2">
+            <ComparisonBar label="현재" value={score.currentScore} max={100} tone="slate" />
+            <ComparisonBar label="변경 후" value={score.targetScore} max={100} tone="blue" />
+          </div>
+        </div>
+      ) : null}
+
+      {fpsRows.length ? (
+        <div className="mt-3 overflow-hidden rounded-md border border-blue-100 bg-white">
+          <div className="grid grid-cols-[1.2fr_0.8fr_1.2fr] gap-2 border-b border-blue-50 px-3 py-2 text-[11px] font-black text-slate-500">
+            <span>게임/해상도</span>
+            <span className="text-right">FPS 변화</span>
+            <span>비교 막대</span>
+          </div>
+          <div className="divide-y divide-blue-50">
+            {fpsRows.map((row) => (
+              <div key={`${row.gameTitle}-${row.resolution}-${row.graphicsPreset ?? ''}`} className="grid grid-cols-[1.2fr_0.8fr_1.2fr] gap-2 px-3 py-2 text-xs">
+                <div className="min-w-0">
+                  <div className="break-keep font-black text-commerce-ink">{row.gameTitle}</div>
+                  <div className="mt-0.5 text-[11px] font-bold text-slate-500">{row.resolution}{row.graphicsPreset ? ` · ${row.graphicsPreset}` : ''}</div>
+                </div>
+                <div className="text-right font-black text-slate-700">
+                  <div>{formatFps(row.currentFps)} → {formatFps(row.targetFps)}</div>
+                  <div className={`${row.deltaFps && row.deltaFps > 0 ? 'text-commerce-green' : row.deltaFps && row.deltaFps < 0 ? 'text-commerce-sale' : 'text-slate-400'}`}>
+                    {formatSigned(row.deltaFps, 'fps')}
+                  </div>
+                </div>
+                <div className="grid content-center gap-1">
+                  <MiniBar value={row.currentFps} max={maxFps} className="bg-slate-300" />
+                  <MiniBar value={row.targetFps} max={maxFps} className="bg-brand-blue" />
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      ) : null}
+
+      {specRows.length ? (
+        <div className="mt-3 grid gap-2 sm:grid-cols-2">
+          {specRows.map((row) => (
+            <div key={row.label} className="rounded-md border border-blue-100 bg-white p-2 text-xs">
+              <div className="font-black text-commerce-ink">{row.label}</div>
+              <div className="mt-1 flex items-center justify-between gap-2 text-slate-600">
+                <span className="truncate">{row.currentValue ?? '-'}</span>
+                <span className="font-black text-slate-400">→</span>
+                <span className="truncate font-black text-brand-blue">{row.targetValue ?? '-'}</span>
+              </div>
+              {row.deltaText ? <div className="mt-1 text-[11px] font-bold text-commerce-green">{row.deltaText}</div> : null}
+            </div>
+          ))}
+        </div>
+      ) : null}
+
+      {simulation.warnings?.length ? (
+        <div className="mt-3 rounded-md bg-amber-50 px-3 py-2 text-xs font-bold leading-5 text-amber-700">
+          {simulation.warnings[0]}
+        </div>
+      ) : null}
+      <p className="mt-3 break-keep text-[11px] font-bold leading-5 text-slate-500">
+        {simulation.disclaimer
+          ?? '본 수치는 내부 벤치마크 DB 기준 참고용 추정치입니다. 실제 성능은 게임 버전, 그래픽 옵션, 드라이버, 해상도, 냉각·전원 환경에 따라 달라질 수 있습니다.'}
+      </p>
+    </section>
+  );
+}
+
+function ComparisonBar({ label, value, max, tone }: { label: string; value?: number | null; max: number; tone: 'slate' | 'blue' }) {
+  return (
+    <div className="grid grid-cols-[48px_1fr_44px] items-center gap-2 text-[11px] font-bold text-slate-500">
+      <span>{label}</span>
+      <MiniBar value={value} max={max} className={tone === 'blue' ? 'bg-brand-blue' : 'bg-slate-300'} />
+      <span className="text-right text-commerce-ink">{formatPlainNumber(value)}</span>
+    </div>
+  );
+}
+
+function MiniBar({ value, max, className }: { value?: number | null; max: number; className: string }) {
+  const width = Math.max(4, Math.min(100, Math.round(((value ?? 0) / Math.max(1, max)) * 100)));
+  return (
+    <div className="h-2 overflow-hidden rounded-full bg-slate-100">
+      <div className={`h-full rounded-full ${className}`} style={{ width: `${width}%` }} />
     </div>
   );
 }
 
 function CompactBuildCard({
   build,
-  onSelectBuild
+  onSelectBuild,
+  applyingBuildId
 }: {
   build: AiRecommendedBuild;
   onSelectBuild: (build: AiRecommendedBuild) => void;
+  applyingBuildId: string | null;
 }) {
+  const primaryItems = build.items.slice(0, 5);
+  // 이 카드가 적용 중이면 로딩 표시, 다른 카드가 적용 중이면 클릭이 조용히 무시되지 않도록 함께 비활성화한다.
+  const isApplyingThis = applyingBuildId === build.id;
+  const isApplyDisabled = Boolean(applyingBuildId);
+
   return (
-    <article className="rounded-lg border border-commerce-line bg-slate-50 p-3">
+    <article className="rounded-2xl border border-slate-200 bg-white p-3 shadow-sm">
       <div className="flex flex-wrap items-center gap-2">
-        <span className="rounded bg-commerce-ink px-2 py-1 text-[11px] font-black text-white">{build.label}</span>
+        <span className="rounded-full bg-brand-blue px-2.5 py-1 text-[11px] font-black text-white">{build.label}</span>
         {build.appliedPartCategories.map((category) => (
-          <span key={category} className="rounded bg-blue-50 px-2 py-1 text-[11px] font-black text-brand-blue">
+          <span key={category} className="rounded-full bg-emerald-50 px-2.5 py-1 text-[11px] font-black text-emerald-700">
             {PART_CATEGORY_LABELS[category]} 반영됨
           </span>
         ))}
       </div>
-      <div className="mt-2 flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+      <div className="mt-3 flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
         <div className="min-w-0">
-          <h3 className="text-sm font-black text-commerce-ink">{build.title}</h3>
+          <h3 className="text-sm font-black leading-5 text-commerce-ink">{build.title}</h3>
           <p className="mt-1 line-clamp-2 break-keep text-xs leading-5 text-slate-500">{build.summary}</p>
         </div>
         <div className="shrink-0 text-left sm:text-right">
-          <div className="text-base font-black text-commerce-sale">{build.totalPrice.toLocaleString()}원</div>
-          <div className="text-[11px] font-bold text-commerce-green">8개 부품</div>
+          <div className="text-base font-black text-brand-blue">{build.totalPrice.toLocaleString()}원</div>
+          <div className="text-[11px] font-bold text-slate-500">{build.items.length}개 부품</div>
         </div>
       </div>
-      <div className="mt-3 grid gap-2 text-xs sm:grid-cols-2">
-        {build.items.slice(0, 4).map((item) => (
-          <div key={item.partId} className="min-w-0 rounded-md bg-white px-2 py-1.5">
-            <span className="font-black text-slate-800">{PART_CATEGORY_LABELS[item.category]}</span>
-            <span className="ml-1 text-slate-500">{item.name}</span>
+      {build.toolResults?.length ? (
+        <div className="mt-3 flex flex-wrap gap-1.5" aria-label="Tool 검증 결과">
+          {build.toolResults.map((result) => (
+            <span
+              key={`${result.tool}-${result.status}`}
+              title={result.summary}
+              className={`rounded-full border px-2 py-1 text-[11px] font-black ${toolStatusChipClass(result.status)}`}
+            >
+              {toolDisplayLabel(result.tool)} {toolStatusLabel(result.status)}
+            </span>
+          ))}
+        </div>
+      ) : null}
+      <div className="mt-3 grid gap-1.5 text-xs">
+        {primaryItems.map((item) => (
+          <div key={item.partId} className="grid grid-cols-[56px_minmax(0,1fr)] gap-2 rounded-lg bg-slate-50 px-2.5 py-1.5">
+            <span className="font-black text-brand-blue">{PART_CATEGORY_LABELS[item.category]}</span>
+            <span className="truncate font-semibold text-slate-700">{item.name}</span>
           </div>
         ))}
       </div>
       <button
         type="button"
         onClick={() => onSelectBuild(build)}
-        className="mt-3 flex w-full min-h-10 items-center justify-center gap-2 rounded-md bg-commerce-ink px-3 text-xs font-black text-white transition hover:bg-slate-700 focus:outline-none focus:ring-4 focus:ring-blue-100"
+        disabled={isApplyDisabled}
+        className="mt-3 flex w-full min-h-10 items-center justify-center gap-2 rounded-full border border-blue-200 bg-white px-3 text-xs font-black text-brand-blue transition hover:border-brand-blue hover:bg-blue-50 focus:outline-none focus:ring-4 focus:ring-blue-100 disabled:border-slate-200 disabled:bg-slate-50 disabled:text-slate-400"
       >
         <ShoppingCart size={15} />
-        이 조합으로 셀프 견적 보기
+        {isApplyingThis ? '셀프 견적에 적용 중...' : '이 조합으로 셀프 견적 보기'}
       </button>
     </article>
   );
 }
 
-function PartRecommendationCards({ options, label }: { options: AiBuildItem[]; label: string }) {
-  return (
-    <div className="mt-2 rounded-lg border border-blue-100 bg-blue-50 p-3">
-      <div className="mb-2 flex items-center gap-2 text-xs font-black text-brand-blue">
-        <PackageCheck size={14} />
-        {label} 추천 후보
-      </div>
-      <div className="grid gap-2">
-        {options.map((option, index) => (
-          <div key={option.partId} className="rounded-lg border border-commerce-line bg-white p-3">
-            <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
-              <span className="rounded bg-slate-100 px-2 py-1 text-[11px] font-black text-slate-700">
-                {index === 0 ? '가성비' : index === 1 ? '균형' : '고성능'}
-              </span>
-              <span className="text-xs font-black text-commerce-sale">{option.price.toLocaleString()}원</span>
-            </div>
-            <div className="font-black text-commerce-ink">{option.name}</div>
-            <div className="mt-1 text-xs text-slate-500">{option.manufacturer} · {option.note}</div>
-          </div>
-        ))}
-      </div>
-      <div className="mt-2 flex items-center gap-2 text-[11px] font-bold text-slate-500">
-        <Cpu size={13} />
-        최신 AI 추천상품 3개에 바로 반영됨
-        <Zap size={13} />
-      </div>
-    </div>
-  );
+function toolDisplayLabel(tool: AiToolResult['tool']) {
+  const labels: Record<string, string> = {
+    compatibility: '호환성',
+    power: '전력',
+    size: '규격',
+    performance: '성능',
+    price: '가격'
+  };
+  return labels[tool] ?? tool;
 }
 
-function DraftActionCards({
-  messageId,
-  actions,
-  applyingActionId,
-  onApplyDraftAction
-}: {
-  messageId: string;
-  actions: AiDraftAction[];
-  applyingActionId: string | null;
-  onApplyDraftAction: (action: AiDraftAction, messageId: string) => void;
-}) {
-  return (
-    <div className="mt-2 rounded-lg border border-emerald-100 bg-emerald-50 p-3">
-      <div className="mb-2 flex items-center gap-2 text-xs font-black text-emerald-700">
-        <ShoppingCart size={14} />
-        견적 장바구니 변경안
-      </div>
-      <div className="grid gap-2">
-        {actions.map((action) => {
-          const applied = action.status === 'APPLIED';
-          const failed = action.status === 'FAILED';
-          const applying = action.status === 'APPLYING' || applyingActionId === action.id;
-          const informational = action.type === 'ASK_FOLLOW_UP';
-          return (
-            <div key={action.id} className="rounded-lg border border-commerce-line bg-white p-3">
-              <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
-                <div className="min-w-0">
-                  <div className="text-sm font-black text-commerce-ink">{action.label}</div>
-                  {action.description ? (
-                    <p className="mt-1 break-keep text-xs leading-5 text-slate-500">{action.description}</p>
-                  ) : null}
-                  {failed ? (
-                    <p className="mt-1 text-xs font-black text-red-600">적용 실패. 다시 시도해 주세요.</p>
-                  ) : null}
-                  {applied ? (
-                    <p className="mt-1 text-xs font-black text-emerald-700">견적 장바구니에 적용됨</p>
-                  ) : null}
-                </div>
-                {!informational ? (
-                  <button
-                    type="button"
-                    disabled={applying || applied || Boolean(applyingActionId)}
-                    onClick={() => onApplyDraftAction(action, messageId)}
-                    className="min-h-9 shrink-0 rounded-md bg-commerce-ink px-3 text-xs font-black text-white transition hover:bg-slate-700 disabled:bg-slate-300"
-                  >
-                    {applied ? '완료' : applying ? '적용 중' : '적용'}
-                  </button>
-                ) : null}
-              </div>
-            </div>
-          );
-        })}
-      </div>
-    </div>
-  );
+function toolStatusLabel(status: AiToolResult['status']) {
+  if (status === 'PASS') return '호환';
+  if (status === 'WARN') return '간섭 주의';
+  return '안 맞음';
+}
+
+function toolStatusChipClass(status: AiToolResult['status']) {
+  if (status === 'PASS') return 'border-emerald-200 bg-emerald-50 text-emerald-700';
+  if (status === 'WARN') return 'border-amber-200 bg-amber-50 text-amber-700';
+  return 'border-red-200 bg-red-50 text-red-700';
+}
+
+function formatPlainNumber(value?: number | null) {
+  if (value === null || value === undefined) return '-';
+  return Math.abs(value - Math.round(value)) < 0.05 ? String(Math.round(value)) : value.toFixed(1);
+}
+
+function formatFps(value?: number | null) {
+  return value === null || value === undefined ? '-' : `${formatPlainNumber(value)}fps`;
+}
+
+function formatSigned(value?: number | null, unit = '') {
+  if (value === null || value === undefined) return '-';
+  const prefix = value > 0 ? '+' : '';
+  return `${prefix}${formatPlainNumber(value)}${unit}`;
 }

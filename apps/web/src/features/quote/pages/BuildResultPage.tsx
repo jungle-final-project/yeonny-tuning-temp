@@ -1,18 +1,42 @@
-import { useQuery } from '@tanstack/react-query';
-import { Link, useParams } from 'react-router-dom';
-import { DataTable, MetricCard, Panel, Screen, StateMessage, StatusBadge } from '../../../components/ui';
+import { useMutation, useQuery } from '@tanstack/react-query';
+import { Link, Navigate, useNavigate, useParams } from 'react-router-dom';
+import { Panel, Screen, StateMessage } from '../../../components/ui';
+import { BuildDetailSections, latestUserMessage, temporaryBuildToBuildSummary } from '../components/BuildDetailSections';
 import { QuoteCard } from '../components/QuoteCard';
-import { getBuild } from '../quoteApi';
-import type { ToolResult } from '../types';
+import { getBuild, saveBuildFromChat } from '../quoteApi';
+import { markAssistantBuildSaved, readAssistantSession, type AiRecommendedBuild } from '../aiSelection';
 
 export function BuildResultPage() {
   const { buildId = '00000000-0000-4000-8000-000000002001' } = useParams();
+  const navigate = useNavigate();
+  const assistantSession = readAssistantSession();
+  const savedBuildId = assistantSession.savedBuildIds[buildId];
+  const temporaryBuild = savedBuildId ? undefined : assistantSession.latestBuilds.find((build) => build.id === buildId);
   const { data: build, isLoading, isError } = useQuery({
     queryKey: ['build', buildId],
-    queryFn: () => getBuild(buildId)
+    queryFn: () => getBuild(buildId),
+    enabled: !savedBuildId && !temporaryBuild
+  });
+  const saveMutation = useMutation({
+    mutationFn: (sourceBuild: AiRecommendedBuild) => saveBuildFromChat({
+      sourceBuildId: sourceBuild.id,
+      lastUserMessage: latestUserMessage(assistantSession),
+      build: sourceBuild
+    }),
+    onSuccess: (response, sourceBuild) => {
+      markAssistantBuildSaved(sourceBuild.id, response.id);
+      navigate(`/builds/${response.id}`, { replace: true });
+    }
   });
 
-  if (isLoading) {
+  if (savedBuildId) {
+    return <Navigate to={`/builds/${savedBuildId}`} replace />;
+  }
+
+  const displayBuild = temporaryBuild ? temporaryBuildToBuildSummary(temporaryBuild) : build;
+  const isTemporaryBuild = Boolean(temporaryBuild);
+
+  if (!temporaryBuild && isLoading) {
     return (
       <Screen>
         <Panel title="추천 Build 결과">
@@ -22,7 +46,7 @@ export function BuildResultPage() {
     );
   }
 
-  if (isError || !build) {
+  if (!displayBuild || (!temporaryBuild && isError)) {
     return (
       <Screen>
         <Panel title="추천 Build 결과">
@@ -34,47 +58,42 @@ export function BuildResultPage() {
 
   return (
     <Screen>
-      <div className="grid grid-cols-[1fr_320px] gap-5">
-        <div className="space-y-5">
-          <Panel title={`추천 Build 결과 / ${build.name}`} subtitle={build.id}>
-            <div className="flex gap-4">
-              <QuoteCard build={build} selected />
+      <div className="space-y-5">
+        <Panel title={`추천 Build 결과 / ${displayBuild.name}`} subtitle={isTemporaryBuild ? `임시 추천 ID ${displayBuild.id.slice(0, 8)}` : `견적 ID ${displayBuild.id.slice(0, 8)}`}>
+          {isTemporaryBuild ? (
+            <div className="mb-3 rounded-md border border-blue-100 bg-blue-50 px-4 py-3 text-sm font-bold text-brand-blue">
+              저장 전 AI 챗봇 추천
             </div>
-          </Panel>
-          <Panel title="구성 부품">
-            <DataTable columns={['category', 'name', 'manufacturer', 'price']} rows={build.items.map((item) => ({
-              category: item.category,
-              name: item.name,
-              manufacturer: item.manufacturer ?? '-',
-              price: `${item.price.toLocaleString()}원`
-            }))} />
-          </Panel>
-          <Panel title="Tool 검증 결과">
-            <DataTable columns={['tool', 'status', 'confidence', 'summary']} rows={toolRows(build.toolResults ?? [])} />
-          </Panel>
-        </div>
-        <Panel title="견적 요약 / 액션">
-          <div className="space-y-4">
-            <MetricCard label="총액" value={`${build.totalPrice.toLocaleString()}원`} />
-            <StateMessage
-              type={build.warnings.length > 0 ? 'warn' : 'success'}
-              title={build.warnings.length > 0 ? '확인 필요' : '주요 조건 충족'}
-              body={build.warnings[0]?.message ?? '현재 구성은 저장된 내부 자산 기준 Tool 검증을 통과했습니다.'}
-            />
-            <Link to={`/builds/${build.id}/change-part`} className="block rounded bg-brand-blue px-4 py-3 text-center text-sm font-bold text-white">부품 변경 비교</Link>
-            <Link to="/my/quotes" className="block rounded border border-slate-300 px-4 py-3 text-center text-sm font-bold">견적 저장</Link>
+          ) : null}
+          <div className="flex gap-4 overflow-x-auto pb-1">
+            <QuoteCard build={displayBuild} selected showActions={!isTemporaryBuild} />
           </div>
         </Panel>
+        <BuildDetailSections
+          displayBuild={displayBuild}
+          conditionBody={isTemporaryBuild ? '저장 버튼을 누르면 서버에서 다시 Tool 검증 후 견적으로 저장합니다.' : '현재 구성은 저장된 내부 자산 기준 Tool 검증을 통과했습니다.'}
+          summaryActions={isTemporaryBuild && temporaryBuild ? (
+            <>
+              <button
+                type="button"
+                onClick={() => saveMutation.mutate(temporaryBuild)}
+                disabled={saveMutation.isPending}
+                className="block w-full rounded bg-brand-blue px-4 py-3 text-center text-sm font-bold text-white hover:bg-blue-700 disabled:cursor-wait disabled:bg-slate-400"
+              >
+                {saveMutation.isPending ? '저장 중' : '견적 저장'}
+              </button>
+              {saveMutation.isError ? (
+                <StateMessage type="warn" title="견적 저장 실패" body="AI 챗봇 추천 견적을 저장하지 못했습니다. 잠시 후 다시 시도해 주세요." />
+              ) : null}
+            </>
+          ) : (
+            <>
+              <Link to="/my/quotes" className="block rounded bg-brand-blue px-4 py-3 text-center text-sm font-bold text-white hover:bg-blue-700">내 견적함 보기</Link>
+              <Link to={`/builds/${displayBuild.id}/change-part`} className="block rounded border border-slate-300 px-4 py-3 text-center text-sm font-bold hover:border-commerce-ink">부품 변경 비교</Link>
+            </>
+          )}
+        />
       </div>
     </Screen>
   );
-}
-
-function toolRows(results: ToolResult[]) {
-  return results.map((row) => ({
-    tool: row.tool,
-    status: <StatusBadge status={row.status} />,
-    confidence: <StatusBadge status={row.confidence} />,
-    summary: row.summary
-  }));
 }

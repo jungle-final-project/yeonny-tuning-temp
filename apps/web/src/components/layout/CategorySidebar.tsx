@@ -8,16 +8,17 @@ type CategorySidebarItem = string | {
 const categoryRoutes: Record<string, string> = {
   'AI 추천': '/requirements/new',
   '셀프 견적': '/self-quote',
-  CPU: '/self-quote?category=CPU',
-  '메인보드': '/self-quote?category=MOTHERBOARD',
-  RAM: '/self-quote?category=RAM',
-  GPU: '/self-quote?category=GPU',
-  SSD: '/self-quote?category=STORAGE',
-  '파워': '/self-quote?category=PSU',
-  '케이스': '/self-quote?category=CASE',
-  '쿨러': '/self-quote?category=COOLER',
+  CPU: '/parts?category=CPU',
+  '메인보드': '/parts?category=MOTHERBOARD',
+  RAM: '/parts?category=RAM',
+  GPU: '/parts?category=GPU',
+  SSD: '/parts?category=STORAGE',
+  '파워': '/parts?category=PSU',
+  '케이스': '/parts?category=CASE',
+  '쿨러': '/parts?category=COOLER',
   '목표가 알림': '/my/quotes',
   'PC Agent': '/support/new',
+  'PCAgent': '/support/new',
   'AS 접수': '/support/new'
 };
 

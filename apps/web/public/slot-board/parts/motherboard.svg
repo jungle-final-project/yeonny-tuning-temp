@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" fill="none" role="img" aria-label="MOTHERBOARD">
+  <rect x="12" y="12" width="104" height="104" rx="8" fill="#eef2f7" stroke="#cbd5e1" stroke-width="4"/>
+  <rect x="26" y="26" width="34" height="34" rx="4" fill="#e2e8f0" stroke="#cbd5e1" stroke-width="3"/>
+  <rect x="72" y="24" width="7" height="42" rx="2" fill="none" stroke="#cbd5e1" stroke-width="3"/>
+  <rect x="86" y="24" width="7" height="42" rx="2" fill="none" stroke="#cbd5e1" stroke-width="3"/>
+  <rect x="24" y="76" width="66" height="9" rx="2" fill="none" stroke="#cbd5e1" stroke-width="3"/>
+  <rect x="24" y="94" width="40" height="7" rx="2" fill="none" stroke="#cbd5e1" stroke-width="3"/>
+  <circle cx="20" cy="20" r="3" fill="#cbd5e1"/>
+  <circle cx="108" cy="20" r="3" fill="#cbd5e1"/>
+  <circle cx="20" cy="108" r="3" fill="#cbd5e1"/>
+  <circle cx="108" cy="108" r="3" fill="#cbd5e1"/>
+</svg>

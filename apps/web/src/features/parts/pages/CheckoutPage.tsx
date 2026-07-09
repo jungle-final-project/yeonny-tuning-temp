@@ -300,7 +300,7 @@ function CheckoutItemCard({ item }: { item: QuoteDraftItem }) {
         </div>
         <div className="mt-3 flex flex-col gap-2 rounded-md bg-slate-50 p-3 sm:flex-row sm:items-center sm:justify-between">
           <div>
-            <div className="text-[11px] font-black uppercase text-slate-400">supplier</div>
+            <div className="text-[11px] font-black text-slate-400">구매처</div>
             <div className="mt-1 text-sm font-black text-commerce-ink">{supplierName}</div>
           </div>
           {offerUrl ? (

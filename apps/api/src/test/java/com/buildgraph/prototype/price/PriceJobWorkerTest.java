@@ -7,10 +7,11 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
-import com.buildgraph.prototype.part.util.NaverShoppingOfferService;
 import java.util.Map;
 import org.junit.jupiter.api.Test;
 import org.springframework.jdbc.core.JdbcTemplate;
+
+import com.buildgraph.prototype.verification.util.NaverShoppingOfferService;
 
 class PriceJobWorkerTest {
     private final JdbcTemplate jdbcTemplate = mock(JdbcTemplate.class);

@@ -2,7 +2,7 @@ import { Link } from 'react-router-dom';
 import { StatusBadge } from '../../../components/feedback/StatusBadge';
 import type { BuildSummary } from '../types';
 
-export function QuoteCard({ build, selected = false, onSelect }: { build: BuildSummary; selected?: boolean; onSelect?: (build: BuildSummary) => void }) {
+export function QuoteCard({ build, selected = false, showActions = true, onSelect }: { build: BuildSummary; selected?: boolean; showActions?: boolean; onSelect?: (build: BuildSummary) => void }) {
   const warnings = build.warnings ?? [];
   const primaryWarning = warnings[0]?.message;
   const mainItems = (build.items ?? []).slice(0, 5);
@@ -28,10 +28,12 @@ export function QuoteCard({ build, selected = false, onSelect }: { build: BuildS
           ))}
         </div>
       </button>
-      <div className="mt-4 flex gap-2">
-        <Link to={`/builds/${build.id}`} className="rounded bg-brand-blue px-3 py-2 text-xs font-semibold text-white">상세 보기</Link>
-        <Link to={`/builds/${build.id}/change-part`} className="rounded border border-slate-300 px-3 py-2 text-xs font-semibold">부품 변경</Link>
-      </div>
+      {showActions ? (
+        <div className="mt-4 flex gap-2">
+          <Link to={`/builds/${build.id}`} className="rounded bg-brand-blue px-3 py-2 text-xs font-semibold text-white">상세 보기</Link>
+          <Link to={`/builds/${build.id}/change-part`} className="rounded border border-slate-300 px-3 py-2 text-xs font-semibold">부품 변경</Link>
+        </div>
+      ) : null}
     </div>
   );
 }

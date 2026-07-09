@@ -8,5 +8,5 @@ export { DataTable } from './display/DataTable';
 export { MetricCard } from './display/MetricCard';
 export { Panel } from './display/Panel';
 export { StateMessage } from './feedback/StateMessage';
-export { StatusBadge } from './feedback/StatusBadge';
+export { StatusBadge, statusLabel } from './feedback/StatusBadge';
 export { Database, Settings, UserPlus } from 'lucide-react';

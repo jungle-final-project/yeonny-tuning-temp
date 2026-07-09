@@ -29,6 +29,21 @@ export type AuthChangedDetail = {
 
 let refreshPromise: Promise<boolean> | null = null;
 
+// AppHeader가 페이지 이동마다 리마운트되어 /api/auth/me를 재요청하는 문제를 막기 위한 짧은 TTL 캐시.
+const AUTH_ME_PATH = '/api/auth/me';
+const AUTH_ME_TTL_MS = 30_000;
+let authMeCache: { value: unknown; expiresAt: number } | null = null;
+let authMeInflight: Promise<unknown> | null = null;
+// 로그인/로그아웃/토큰-클리어 시점을 세대 번호로 표시한다. 이전 세대(예: 로그아웃 전 사용자의
+// 토큰으로 이미 나간 요청)가 뒤늦게 도착해 캐시를 덮어쓰는 사용자 간 staleness를 막는다.
+let authMeGeneration = 0;
+
+function invalidateAuthMeCache() {
+  authMeCache = null;
+  authMeInflight = null;
+  authMeGeneration += 1;
+}
+
 export class ApiError extends Error {
   constructor(
     public readonly status: number,
@@ -43,6 +58,15 @@ export class ApiError extends Error {
 }
 
 export async function api<T>(path: string, init?: RequestInit): Promise<T> {
+  // /api/auth/me GET는 헤더 리마운트마다 재요청되므로 TTL 캐시로 중복 네트워크 호출을 제거한다.
+  if (isCacheableAuthMeRequest(path, init)) {
+    return getCachedAuthMe<T>(path, init);
+  }
+
+  return apiRequest<T>(path, init);
+}
+
+async function apiRequest<T>(path: string, init?: RequestInit): Promise<T> {
   const response = await fetchApi(path, init);
 
   if (!response.ok) {
@@ -68,6 +92,34 @@ export async function api<T>(path: string, init?: RequestInit): Promise<T> {
   }
 
   return parseSuccessResponse<T>(response);
+}
+
+function isCacheableAuthMeRequest(path: string, init?: RequestInit) {
+  const method = (init?.method ?? 'GET').toUpperCase();
+  return method === 'GET' && path.split('?')[0] === AUTH_ME_PATH;
+}
+
+async function getCachedAuthMe<T>(path: string, init?: RequestInit): Promise<T> {
+  const now = Date.now();
+  if (authMeCache && authMeCache.expiresAt > now) {
+    return authMeCache.value as T;
+  }
+  // 동시 리마운트로 인한 병렬 요청도 하나로 합친다.
+  const requestGeneration = authMeGeneration;
+  authMeInflight ??= apiRequest<unknown>(path, init)
+    .then((value) => {
+      // 요청이 나간 뒤 로그인/로그아웃으로 세대가 바뀌었다면(다른 사용자 컨텍스트) 캐시에 쓰지 않는다.
+      if (requestGeneration === authMeGeneration) {
+        authMeCache = { value, expiresAt: Date.now() + AUTH_ME_TTL_MS };
+      }
+      return value;
+    })
+    .finally(() => {
+      if (requestGeneration === authMeGeneration) {
+        authMeInflight = null;
+      }
+    });
+  return authMeInflight as Promise<T>;
 }
 
 async function fetchApi(path: string, init?: RequestInit) {
@@ -180,6 +232,8 @@ function toErrorDetails(value: unknown) {
 }
 
 function dispatchAuthChanged(detail?: AuthChangedDetail) {
+  // 로그인/로그아웃/토큰 초기화 시 auth-me 캐시를 무효화해 오래된 사용자 정보가 남지 않게 한다.
+  invalidateAuthMeCache();
   window.dispatchEvent(new CustomEvent<AuthChangedDetail>(AUTH_CHANGED_EVENT, { detail }));
 }
 

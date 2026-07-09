@@ -197,6 +197,7 @@ public class AiChatClient {
         throw new ResponseStatusException(HttpStatus.BAD_GATEWAY, "OpenAI 응답 text를 찾을 수 없습니다.");
     }
 
+    /* helper 함수들 */
     private static String safeErrorBody(RestClientResponseException error) {
         String body = error.getResponseBodyAsString();
         if (body == null || body.isBlank()) {

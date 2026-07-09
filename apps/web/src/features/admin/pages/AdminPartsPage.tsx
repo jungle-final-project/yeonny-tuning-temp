@@ -839,7 +839,7 @@ export function AdminPartsPage() {
     }
   };
   const createAiAssetDraftFromPost = () => {
-    if (selectedPostId && window.confirm('AI가 게시글을 구조화하고, 네이버 후보가 있으면 INACTIVE 내부 자산 초안까지 생성합니다. 계속할까요?')) {
+    if (selectedPostId && window.confirm('AI가 게시글을 구조화하고 네이버 후보를 생성/갱신합니다. INACTIVE 자산 연결은 검수 후 "후보 승인"에서 별도로 진행합니다. 계속할까요?')) {
       createAiAssetDraftMutation.mutate(selectedPostId);
     }
   };
@@ -1077,8 +1077,8 @@ export function AdminPartsPage() {
               {createAiAssetDraftMutation.data ? (
                 <div className="mb-4">
                   <StateMessage
-                    type={createAiAssetDraftMutation.data.partId ? 'success' : 'info'}
-                    title={createAiAssetDraftMutation.data.partId ? 'AI INACTIVE 초안 생성' : 'AI 후보 정리 완료'}
+                    type={createAiAssetDraftMutation.data.candidateId ? 'success' : 'info'}
+                    title={createAiAssetDraftMutation.data.candidateId ? 'AI 초안 · 후보 검수 대기' : 'AI 후보 정리 완료'}
                     body={(createAiAssetDraftMutation.data.messages ?? []).join(' / ') || 'AI 자산화 결과를 반영했습니다.'}
                   />
                 </div>

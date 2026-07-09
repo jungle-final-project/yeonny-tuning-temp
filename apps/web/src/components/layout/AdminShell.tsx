@@ -1,6 +1,6 @@
 import { ReactNode } from 'react';
 import { Link, useLocation } from 'react-router-dom';
-import { Activity, Bot, Cpu, Download, Gauge, Home, LifeBuoy, Play, RefreshCw, Search } from 'lucide-react';
+import { Activity, Bot, Cpu, Download, Gauge, Home, LayoutGrid, LifeBuoy, Play, RefreshCw, Search } from 'lucide-react';
 
 type ExportValue = string | number | boolean | null | undefined;
 
@@ -24,10 +24,17 @@ export function AdminShell({ children, title, exportRows = [], exportFileName = 
   return (
     <div className="screen-shell flex bg-slate-100 font-['Noto_Sans_KR']">
       <AdminSidebar />
-      <div className="flex-1">
+      <div className="min-w-[1024px] flex-1">
         <div className="flex h-16 items-center justify-between border-b border-slate-200 bg-white px-7">
-          <div className="text-lg font-bold text-brand-navy">{title}</div>
+          <h1 className="text-lg font-bold text-brand-navy">{title}</h1>
           <div className="flex gap-2">
+            <Link
+              to="/"
+              className="inline-flex items-center gap-1 rounded border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-brand-navy hover:bg-slate-50"
+            >
+              <Home size={14} />
+              홈으로
+            </Link>
             <button
               type="button"
               disabled={!canExport}
@@ -60,30 +67,54 @@ export function AdminShell({ children, title, exportRows = [], exportFileName = 
 
 function AdminSidebar() {
   const { pathname } = useLocation();
-  const items = [
-    { to: '/admin', label: '대시보드', Icon: Home, match: (path: string) => path === '/admin' },
-    { to: '/admin/agent-sessions', label: '에이전트 세션', Icon: Bot, match: (path: string) => path.startsWith('/admin/agent-sessions') },
-    { to: '/admin/tool-invocations', label: '도구 이력', Icon: Activity, match: (path: string) => path.startsWith('/admin/tool-invocations') },
-    { to: '/admin/rag-evidence', label: '검색 근거', Icon: Search, match: (path: string) => path.startsWith('/admin/rag-evidence') },
-    { to: '/admin/parts', label: '부품/가격', Icon: Cpu, match: (path: string) => path === '/admin/parts' },
-    { to: '/admin/as-tickets', label: 'AS 티켓', Icon: LifeBuoy, match: (path: string) => path.startsWith('/admin/as-tickets') },
-    { to: '/admin/price-jobs', label: '가격 작업', Icon: RefreshCw, match: (path: string) => path.startsWith('/admin/price-jobs') },
-    { to: '/admin/load-tests', label: '부하 테스트', Icon: Gauge, match: (path: string) => path.startsWith('/admin/load-tests') }
+  const groups = [
+    {
+      heading: '운영',
+      items: [
+        { to: '/admin', label: '대시보드', Icon: Home, match: (path: string) => path === '/admin' },
+        { to: '/admin/as-tickets', label: 'AS 티켓', Icon: LifeBuoy, match: (path: string) => path.startsWith('/admin/as-tickets') },
+        { to: '/admin/support-chat-sessions', label: '상담방', Icon: LifeBuoy, match: (path: string) => path.startsWith('/admin/support-chat-sessions') },
+        { to: '/admin/parts', label: '부품/가격', Icon: Cpu, match: (path: string) => path === '/admin/parts' },
+        { to: '/admin/price-jobs', label: '가격 작업', Icon: RefreshCw, match: (path: string) => path.startsWith('/admin/price-jobs') }
+      ]
+    },
+    {
+      heading: 'AI / 추천',
+      items: [
+        { to: '/admin/agent-sessions', label: '에이전트 세션', Icon: Bot, match: (path: string) => path.startsWith('/admin/agent-sessions') },
+        { to: '/admin/tool-invocations', label: '도구 이력', Icon: Activity, match: (path: string) => path.startsWith('/admin/tool-invocations') },
+        { to: '/admin/rag-evidence', label: '검색 근거', Icon: Search, match: (path: string) => path.startsWith('/admin/rag-evidence') },
+        { to: '/admin/build-graph-layouts', label: '슬롯 보드 배치', Icon: LayoutGrid, match: (path: string) => path.startsWith('/admin/build-graph-layouts') }
+      ]
+    },
+    {
+      heading: '시스템',
+      items: [
+        { to: '/admin/load-tests', label: '부하 테스트', Icon: Gauge, match: (path: string) => path.startsWith('/admin/load-tests') }
+      ]
+    }
   ];
 
   return (
     <aside className="w-60 bg-brand-navy px-4 py-6 text-white">
-      <div className="mb-10 text-xl font-bold">BuildGraph<br />관리자</div>
-      <nav aria-label="관리자 메뉴" className="space-y-2">
-        {items.map(({ to, label, Icon, match }) => {
-          const isActive = match(pathname);
-          return (
-            <Link key={to} to={to} aria-current={isActive ? 'page' : undefined} className={`flex h-10 items-center gap-2 rounded px-3 text-sm font-semibold ${isActive ? 'bg-brand-blue text-white' : 'text-slate-300 hover:bg-white/10'}`}>
-              <Icon size={16} />
-              {label}
-            </Link>
-          );
-        })}
+      <div className="mb-8 text-xl font-bold">BuildGraph<br />관리자</div>
+      <nav aria-label="관리자 메뉴" className="space-y-5">
+        {groups.map((group) => (
+          <div key={group.heading}>
+            <div className="mb-2 px-3 text-[11px] font-bold uppercase tracking-wider text-slate-400">{group.heading}</div>
+            <div className="space-y-1">
+              {group.items.map(({ to, label, Icon, match }) => {
+                const isActive = match(pathname);
+                return (
+                  <Link key={to} to={to} aria-current={isActive ? 'page' : undefined} className={`flex h-10 items-center gap-2 rounded px-3 text-sm font-semibold ${isActive ? 'bg-brand-blue text-white' : 'text-slate-300 hover:bg-white/10'}`}>
+                    <Icon size={16} />
+                    {label}
+                  </Link>
+                );
+              })}
+            </div>
+          </div>
+        ))}
       </nav>
     </aside>
   );

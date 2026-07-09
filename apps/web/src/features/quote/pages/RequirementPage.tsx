@@ -63,7 +63,7 @@ export function RequirementPage() {
   return (
     <Screen>
       <div className="space-y-5">
-        <div className="grid grid-cols-[520px_1fr_320px] gap-5">
+        <div className="grid gap-5 xl:grid-cols-[minmax(0,520px)_minmax(0,1fr)_320px]">
           <Panel title="AI 견적 입력" subtitle="자연어 요구사항은 필수, 나머지는 추천 품질 보강용 선택 입력입니다.">
             <form onSubmit={submitParse} className="space-y-4">
               <textarea
@@ -72,8 +72,9 @@ export function RequirementPage() {
                 className="h-36 w-full rounded border border-slate-300 p-4 text-sm outline-none focus:border-brand-blue"
                 placeholder="예: 200만원 안에서 QHD 게임과 개발을 같이 할 PC 추천해줘. NVIDIA 선호."
               />
+              <div className="text-xs font-bold text-slate-400">상세 조건 (선택)</div>
               <div className="grid grid-cols-2 gap-3">
-                <Input label="예산" value={budget} onChange={setBudget} placeholder="2000000" />
+                <Input label="예산" value={budget} onChange={setBudget} placeholder="2,000,000" />
                 <Input label="주 용도" value={usageTags} onChange={setUsageTags} placeholder="게임, 개발" />
                 <Input label="해상도" value={resolution} onChange={setResolution} placeholder="QHD" />
                 <Input label="브랜드 선호" value={preferredVendors} onChange={setPreferredVendors} placeholder="NVIDIA" />
@@ -85,7 +86,7 @@ export function RequirementPage() {
                 <button disabled={!canParse} className="rounded bg-brand-blue px-5 py-2 text-sm font-bold text-white disabled:cursor-not-allowed disabled:bg-slate-300">
                   {parseMutation.isPending ? '분석 중' : '요구사항 분석'}
                 </button>
-                <button type="button" onClick={() => { setMessage(''); setBudget(''); setUsageTags(''); setResolution(''); setPreferredVendors(''); setPriority(''); }} className="rounded border border-slate-300 px-5 py-2 text-sm font-bold">
+                <button type="button" onClick={() => { setMessage(''); setBudget(''); setUsageTags(''); setResolution(''); setPreferredVendors(''); setPriority(''); }} className="rounded px-3 py-2 text-sm font-bold text-slate-500 hover:bg-slate-100 hover:text-slate-700">
                   초기화
                 </button>
               </div>
@@ -138,7 +139,7 @@ export function RequirementPage() {
         ) : null}
 
         {recommendations.length > 0 ? (
-          <div className="grid grid-cols-[1fr_420px] gap-5">
+          <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_420px]">
             <div className="space-y-5">
               <Panel title="추천 빌드 3개" subtitle="내부 자산, 저장된 현재가, Tool 검증 결과를 기반으로 생성">
                 <div className="flex gap-4 overflow-x-auto pb-1">
@@ -148,20 +149,19 @@ export function RequirementPage() {
                 </div>
               </Panel>
               <Panel title="Tool 검증 결과" subtitle={selectedBuild ? `${selectedBuild.name} 기준` : undefined}>
-                <DataTable columns={['tool', 'status', 'confidence', 'summary']} rows={toolRows(selectedBuild?.toolResults ?? [])} />
+                <DataTable columns={['검증 항목', '상태', '신뢰도', '요약']} rows={toolRows(selectedBuild?.toolResults ?? [])} />
               </Panel>
             </div>
-            <Panel title="RAG / Agent 근거 요약">
+            <Panel title="AI 추천 근거">
               <div className="space-y-4">
                 <StateMessage
                   type={selectedBuild?.agentSummary ? 'success' : 'info'}
-                  title={selectedBuild?.agentSummary ? 'Agent 요약 생성됨' : 'Agent 요약 대기'}
-                  body={selectedBuild?.agentSummary ?? '추천 build와 Tool 결과는 생성되었고, Agent summary는 실행 환경에 따라 비어 있을 수 있습니다.'}
+                  title={selectedBuild?.agentSummary ? 'AI 요약' : 'AI 요약 준비 중'}
+                  body={selectedBuild?.agentSummary ?? '추천 구성과 검증 결과는 생성되었습니다. AI 요약은 잠시 뒤에 표시될 수 있습니다.'}
                 />
                 <DataTable columns={['항목', '값']} rows={[
-                  { 항목: 'agentSessionId', 값: selectedBuild?.agentSessionId ?? '-' },
-                  { 항목: 'evidenceIds', 값: selectedBuild?.evidenceIds?.length ? `${selectedBuild.evidenceIds.length}개` : '-' },
-                  { 항목: 'warnings', 값: selectedBuild?.warnings?.length ? `${selectedBuild.warnings.length}개` : '없음' }
+                  { 항목: '근거 자료', 값: selectedBuild?.evidenceIds?.length ? `${selectedBuild.evidenceIds.length}개` : '—' },
+                  { 항목: '경고', 값: selectedBuild?.warnings?.length ? `${selectedBuild.warnings.length}개` : '없음' }
                 ]} />
               </div>
             </Panel>
@@ -183,11 +183,28 @@ function Input({ label, value, onChange, placeholder }: { label: string; value: 
 
 function toolRows(results: ToolResult[]) {
   return results.map((row) => ({
-    tool: row.tool,
-    status: <StatusBadge status={row.status} />,
-    confidence: <StatusBadge status={row.confidence} />,
-    summary: row.summary
+    '검증 항목': toolLabel(row.tool),
+    상태: <StatusBadge status={row.status} />,
+    신뢰도: <StatusBadge status={row.confidence} />,
+    요약: row.summary
   }));
+}
+
+function toolLabel(tool: string) {
+  switch (tool) {
+    case 'compatibility':
+      return '호환성 검증';
+    case 'power':
+      return '전력 검증';
+    case 'size':
+      return '규격 검증';
+    case 'performance':
+      return '성능 범위';
+    case 'price':
+      return '가격 확인';
+    default:
+      return tool;
+  }
 }
 
 function splitText(value: string) {

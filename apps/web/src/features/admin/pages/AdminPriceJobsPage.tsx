@@ -1,7 +1,16 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { AdminShell, DataTable, Panel, StateMessage } from '../../../components/ui';
-import { listPriceJobs, runPriceJob } from '../adminApi';
+import { listPipelineJobRuns, listPriceJobs, runPriceJob } from '../adminApi';
 import { KoreanStatusBadge } from '../adminDisplay';
+
+// pipeline_job_runs.job_name 표시명
+const PIPELINE_JOB_LABELS: Record<string, string> = {
+  PART_PRICE_REFRESH: '네이버 일일 가격',
+  DANAWA_SNAPSHOT_REFRESH: '다나와 백업 스냅샷',
+  DANAWA_TREND_REFRESH: '다나와 월별 추이',
+  MANUFACTURER_RELEASE_SCAN: '제조사 릴리스 스캔',
+  SHADOW_SCORE_RETENTION: '추천 섀도우 보존 정리'
+};
 
 export function AdminPriceJobsPage() {
   const queryClient = useQueryClient();
@@ -14,6 +23,20 @@ export function AdminPriceJobsPage() {
     mutationFn: runPriceJob,
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['admin-price-jobs'] })
   });
+  // 스케줄 잡(가격/다나와/릴리스 스캔/보존 정리) 실행 이력 — 예전에는 서버 로그로만 남아
+  // 잡이 연속 실패해도 관리자 화면에 아무 신호가 없었다.
+  const scheduledRunsQuery = useQuery({
+    queryKey: ['admin-pipeline-job-runs'],
+    queryFn: () => listPipelineJobRuns(30)
+  });
+  const scheduledRuns = scheduledRunsQuery.data?.items ?? [];
+  const scheduledRows = scheduledRuns.map((run) => ({
+    작업: PIPELINE_JOB_LABELS[run.jobName] ?? run.jobName,
+    상태: <KoreanStatusBadge status={run.status} />,
+    '소요(ms)': run.durationMs ?? '-',
+    결과: run.errorSummary ?? summarizeResult(run.resultSummary),
+    '실행 시간': formatDateTime(run.startedAt)
+  }));
 
   const jobs = jobsQuery.data?.items ?? [];
   const activeJob = hasActiveJob(jobs);
@@ -69,8 +92,33 @@ export function AdminPriceJobsPage() {
           {runMutation.isError ? <StateMessage type="warn" title="실행 요청 실패" body="이미 실행 중인 작업이 있거나 관리자 권한을 확인해야 합니다." /> : null}
         </Panel>
       </div>
+      <div className="mt-5">
+        <Panel title="스케줄 실행 이력" subtitle="매일 도는 수집 파이프라인(가격/다나와/릴리스 스캔/보존 정리)의 자동 실행 결과">
+          {scheduledRunsQuery.isLoading ? (
+            <StateMessage type="info" title="이력 로딩 중" body="스케줄 실행 이력을 조회하고 있습니다." />
+          ) : scheduledRunsQuery.isError ? (
+            <StateMessage type="warn" title="이력 조회 실패" body="스케줄 실행 이력 응답을 불러오지 못했습니다." />
+          ) : scheduledRows.length ? (
+            <DataTable columns={['작업', '상태', '소요(ms)', '결과', '실행 시간']} rows={scheduledRows} />
+          ) : (
+            <StateMessage type="info" title="스케줄 실행 이력 없음" body="스케줄 잡이 아직 실행되지 않았습니다. 매일 04:00~06:00 KST에 도는 잡의 결과가 여기에 쌓입니다." />
+          )}
+        </Panel>
+      </div>
     </AdminShell>
   );
+}
+
+function summarizeResult(result?: Record<string, unknown> | null) {
+  if (!result) {
+    return '-';
+  }
+  // 대표 카운트만 간단히 노출 (전체 JSON은 CSV/DB에서 확인)
+  const keys = ['attempted', 'updated', 'skipped', 'failed', 'errors', 'scannedSources', 'newPosts', 'createdCandidates', 'deleted'];
+  const parts = keys
+    .filter((key) => result[key] !== undefined)
+    .map((key) => `${key}=${result[key]}`);
+  return parts.length ? parts.join(' ') : '-';
 }
 
 function hasActiveJob(jobs: Array<{ status: string }>) {

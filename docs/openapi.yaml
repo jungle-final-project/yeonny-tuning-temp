@@ -345,6 +345,18 @@ paths:
           schema:
             type: string
             enum: [QUOTE_DRAFT_CURRENT]
+        - in: query
+          name: compatibilityMode
+          description: 현재 견적초안 기준 후보 평가 방식. ADD는 기존 같은 카테고리 부품을 유지하고, REPLACE는 같은 카테고리 부품을 후보로 교체해 평가한다.
+          schema:
+            type: string
+            enum: [ADD, REPLACE]
+        - in: query
+          name: replaceTargetPartId
+          description: 교체 대상 부품 public_id. 지정하면 해당 부품만 후보로 교체해 평가한다.
+          schema:
+            type: string
+            format: uuid
         - $ref: "#/components/parameters/Page"
         - $ref: "#/components/parameters/Size"
       responses:

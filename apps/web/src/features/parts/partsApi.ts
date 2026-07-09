@@ -3,12 +3,14 @@ import type { AiBuildItem } from '../quote/aiSelection';
 import type {
   CompatiblePartCandidateRequest,
   CompatiblePartCandidateResponse,
+  HomeRecommendedPartsResponse,
   PartPage,
   PartPriceHistory,
   PartPriceHistoryParams,
   PartSearchParams,
   PartRow,
-  QuoteDraft
+  QuoteDraft,
+  RecommendationEventRequest
 } from './types';
 
 export function listParts(params: PartSearchParams = {}) {
@@ -20,6 +22,17 @@ export function listParts(params: PartSearchParams = {}) {
   });
   const query = search.toString();
   return api<PartPage>(`/api/parts${query ? `?${query}` : ''}`);
+}
+
+export function listHomeRecommendedParts(limit = 4) {
+  return api<HomeRecommendedPartsResponse>(`/api/recommendations/home-parts?limit=${limit}`);
+}
+
+export function recordRecommendationEvent(payload: RecommendationEventRequest) {
+  return api('/api/recommendation-events', {
+    method: 'POST',
+    body: JSON.stringify(payload)
+  });
 }
 
 export function getPart(partId: string) {

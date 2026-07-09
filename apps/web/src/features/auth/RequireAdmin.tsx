@@ -2,7 +2,7 @@ import { ReactNode, useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { ShieldAlert } from 'lucide-react';
 import { Screen, StateMessage } from '../../components/ui';
-import { ApiError, getToken } from '../../lib/api';
+import { AUTH_CHANGED_EVENT, ApiError, getToken } from '../../lib/api';
 import { getCurrentUser } from './authApi';
 
 type AdminCheckState = 'checking' | 'missing-token' | 'unauthorized' | 'forbidden' | 'allowed';
@@ -11,28 +11,36 @@ export function RequireAdmin({ children }: { children: ReactNode }) {
   const [state, setState] = useState<AdminCheckState>('checking');
 
   useEffect(() => {
-    const token = getToken();
-    if (!token) {
-      setState('missing-token');
-      return;
-    }
-
     let cancelled = false;
+    let checkId = 0;
 
-    getCurrentUser()
-      .then((user) => {
-        if (!cancelled) {
-          setState(user.role === 'ADMIN' ? 'allowed' : 'forbidden');
-        }
-      })
-      .catch((error) => {
-        if (!cancelled) {
-          setState(error instanceof ApiError && error.status === 401 ? 'unauthorized' : 'forbidden');
-        }
-      });
+    const checkAdmin = () => {
+      const currentCheckId = ++checkId;
+      const token = getToken();
+      if (!token) {
+        setState('missing-token');
+        return;
+      }
+      setState('checking');
+      getCurrentUser()
+        .then((user) => {
+          if (!cancelled && currentCheckId === checkId) {
+            setState(user.role === 'ADMIN' ? 'allowed' : 'forbidden');
+          }
+        })
+        .catch((error) => {
+          if (!cancelled && currentCheckId === checkId) {
+            setState(error instanceof ApiError && error.status === 401 ? 'unauthorized' : 'forbidden');
+          }
+        });
+    };
+
+    checkAdmin();
+    window.addEventListener(AUTH_CHANGED_EVENT, checkAdmin);
 
     return () => {
       cancelled = true;
+      window.removeEventListener(AUTH_CHANGED_EVENT, checkAdmin);
     };
   }, []);
 

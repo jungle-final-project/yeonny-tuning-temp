@@ -67,60 +67,60 @@ public class RagQueryService {
         String vector = RagEmbeddingService.vectorLiteral(ragEmbeddingService.embedQuery(normalizedQuery));
         List<Map<String, Object>> items = jdbcTemplate.queryForList("""
                         WITH input AS (
-                          SELECT ?::vector AS query_embedding,
-                                 ?::text AS query_text,
-                                 ?::text AS purpose,
-                                 ?::text AS source_type
+                            SELECT ?::vector AS query_embedding,
+                                    ?::text AS query_text,
+                                    ?::text AS purpose,
+                                    ?::text AS source_type
                         ),
                         ranked AS (
                         SELECT re.public_id::text AS id,
-                               s.public_id::text AS agent_session_id,
-                               re.source_id,
-                               re.chunk_text,
-                               re.summary,
-                               (1 - (re.embedding <=> input.query_embedding))::double precision AS vector_score,
-                               (
-                                 CASE WHEN lower(re.source_id) LIKE lower(concat('%', input.query_text, '%')) THEN 0.30 ELSE 0 END +
-                                 CASE WHEN lower(re.summary) LIKE lower(concat('%', input.query_text, '%')) THEN 0.20 ELSE 0 END +
-                                 CASE WHEN lower(re.chunk_text) LIKE lower(concat('%', input.query_text, '%')) THEN 0.30 ELSE 0 END +
-                                 CASE WHEN lower(coalesce(re.metadata->>'title', '')) LIKE lower(concat('%', input.query_text, '%')) THEN 0.20 ELSE 0 END
-                               )::double precision AS keyword_score,
-                               re.score AS stored_score,
-                               coalesce(re.metadata, '{}'::jsonb) || jsonb_build_object(
-                                 'retrievalMode', 'VECTOR',
-                                 'vectorScore', (1 - (re.embedding <=> input.query_embedding)),
-                                 'keywordScore',
-                                 (
-                                   CASE WHEN lower(re.source_id) LIKE lower(concat('%', input.query_text, '%')) THEN 0.30 ELSE 0 END +
-                                   CASE WHEN lower(re.summary) LIKE lower(concat('%', input.query_text, '%')) THEN 0.20 ELSE 0 END +
-                                   CASE WHEN lower(re.chunk_text) LIKE lower(concat('%', input.query_text, '%')) THEN 0.30 ELSE 0 END +
-                                   CASE WHEN lower(coalesce(re.metadata->>'title', '')) LIKE lower(concat('%', input.query_text, '%')) THEN 0.20 ELSE 0 END
-                                 )
-                               ) AS metadata
+                                s.public_id::text AS agent_session_id,
+                                re.source_id,
+                                re.chunk_text,
+                                re.summary,
+                                (1 - (re.embedding <=> input.query_embedding))::double precision AS vector_score,
+                                (
+                                    CASE WHEN lower(re.source_id) LIKE lower(concat('%', input.query_text, '%')) THEN 0.30 ELSE 0 END +
+                                    CASE WHEN lower(re.summary) LIKE lower(concat('%', input.query_text, '%')) THEN 0.20 ELSE 0 END +
+                                    CASE WHEN lower(re.chunk_text) LIKE lower(concat('%', input.query_text, '%')) THEN 0.30 ELSE 0 END +
+                                    CASE WHEN lower(coalesce(re.metadata->>'title', '')) LIKE lower(concat('%', input.query_text, '%')) THEN 0.20 ELSE 0 END
+                                )::double precision AS keyword_score,
+                                re.score AS stored_score,
+                                coalesce(re.metadata, '{}'::jsonb) || jsonb_build_object(
+                                    'retrievalMode', 'VECTOR',
+                                    'vectorScore', (1 - (re.embedding <=> input.query_embedding)),
+                                    'keywordScore',
+                                    (
+                                    CASE WHEN lower(re.source_id) LIKE lower(concat('%', input.query_text, '%')) THEN 0.30 ELSE 0 END +
+                                    CASE WHEN lower(re.summary) LIKE lower(concat('%', input.query_text, '%')) THEN 0.20 ELSE 0 END +
+                                    CASE WHEN lower(re.chunk_text) LIKE lower(concat('%', input.query_text, '%')) THEN 0.30 ELSE 0 END +
+                                    CASE WHEN lower(coalesce(re.metadata->>'title', '')) LIKE lower(concat('%', input.query_text, '%')) THEN 0.20 ELSE 0 END
+                                    )
+                                ) AS metadata
                         FROM rag_evidence re
                         CROSS JOIN input
                         LEFT JOIN agent_sessions s ON s.id = re.agent_session_id
                         WHERE re.agent_session_id IS NULL
-                          AND re.embedding IS NOT NULL
-                          AND (
+                            AND re.embedding IS NOT NULL
+                            AND (
                             input.purpose IS NULL
                             OR re.metadata->>'purpose' = input.purpose
                             OR jsonb_exists(coalesce(re.metadata->'purposes', '[]'::jsonb), input.purpose)
-                          )
-                          AND (input.source_type IS NULL OR re.metadata->>'sourceType' = input.source_type)
+                            )
+                            AND (input.source_type IS NULL OR re.metadata->>'sourceType' = input.source_type)
                         )
                         SELECT id,
-                               agent_session_id,
-                               source_id,
-                               chunk_text,
-                               summary,
-                               (vector_score + keyword_score)::double precision AS score,
-                               metadata
+                                agent_session_id,
+                                source_id,
+                                chunk_text,
+                                summary,
+                                (vector_score + keyword_score)::double precision AS score,
+                                metadata
                         FROM ranked
                         ORDER BY (vector_score + keyword_score) DESC,
-                                 vector_score DESC,
-                                 stored_score DESC NULLS LAST,
-                                 id
+                                vector_score DESC,
+                                stored_score DESC NULLS LAST,
+                                id
                         LIMIT ?
                         OFFSET 0
                         """,
@@ -142,13 +142,13 @@ public class RagQueryService {
                 SELECT count(*)
                 FROM rag_evidence re
                 WHERE re.agent_session_id IS NULL
-                  AND re.embedding IS NOT NULL
-                  AND (
-                    ?::text IS NULL
-                    OR re.metadata->>'purpose' = ?::text
-                    OR jsonb_exists(coalesce(re.metadata->'purposes', '[]'::jsonb), ?::text)
-                  )
-                  AND (?::text IS NULL OR re.metadata->>'sourceType' = ?::text)
+                    AND re.embedding IS NOT NULL
+                    AND (
+                        ?::text IS NULL
+                        OR re.metadata->>'purpose' = ?::text
+                        OR jsonb_exists(coalesce(re.metadata->'purposes', '[]'::jsonb), ?::text)
+                    )
+                    AND (?::text IS NULL OR re.metadata->>'sourceType' = ?::text)
                 """, Integer.class, normalizedPurpose, normalizedPurpose, normalizedPurpose, normalizedSourceType, normalizedSourceType);
         return MockData.map("items", items, "page", safePage, "size", safeSize, "total", total == null ? 0 : total);
     }
@@ -372,29 +372,29 @@ public class RagQueryService {
         params.add(offset);
         List<Map<String, Object>> items = jdbcTemplate.queryForList("""
                         SELECT re.public_id::text AS id,
-                               s.public_id::text AS agent_session_id,
-                               re.source_id,
-                               re.chunk_text,
-                               re.summary,
-                               re.score,
-                               re.metadata
+                                s.public_id::text AS agent_session_id,
+                                re.source_id,
+                                re.chunk_text,
+                                re.summary,
+                                re.score,
+                                re.metadata
                         FROM rag_evidence re
                         LEFT JOIN agent_sessions s ON s.id = re.agent_session_id
                         WHERE (
-                          ?::text IS NULL
-                          OR lower(re.source_id) LIKE lower(concat('%', ?, '%'))
-                          OR lower(re.summary) LIKE lower(concat('%', ?, '%'))
-                          OR lower(re.chunk_text) LIKE lower(concat('%', ?, '%'))
+                            ?::text IS NULL
+                            OR lower(re.source_id) LIKE lower(concat('%', ?, '%'))
+                            OR lower(re.summary) LIKE lower(concat('%', ?, '%'))
+                            OR lower(re.chunk_text) LIKE lower(concat('%', ?, '%'))
                         )
                         AND (
-                          ?::text IS NULL
-                          OR re.metadata->>'purpose' = ?::text
-                          OR jsonb_exists(coalesce(re.metadata->'purposes', '[]'::jsonb), ?::text)
+                            ?::text IS NULL
+                            OR re.metadata->>'purpose' = ?::text
+                            OR jsonb_exists(coalesce(re.metadata->'purposes', '[]'::jsonb), ?::text)
                         )
                         AND (?::text IS NULL OR re.metadata->>'sourceType' = ?::text)
                         ORDER BY CASE WHEN re.agent_session_id IS NULL THEN 0 ELSE 1 END,
-                                 re.score DESC NULLS LAST,
-                                 re.id
+                                re.score DESC NULLS LAST,
+                                re.id
                         LIMIT ?
                         OFFSET ?
                         """, params.toArray())
@@ -405,15 +405,15 @@ public class RagQueryService {
                 SELECT count(*)
                 FROM rag_evidence re
                 WHERE (
-                  ?::text IS NULL
-                  OR lower(re.source_id) LIKE lower(concat('%', ?, '%'))
-                  OR lower(re.summary) LIKE lower(concat('%', ?, '%'))
-                  OR lower(re.chunk_text) LIKE lower(concat('%', ?, '%'))
+                    ?::text IS NULL
+                    OR lower(re.source_id) LIKE lower(concat('%', ?, '%'))
+                    OR lower(re.summary) LIKE lower(concat('%', ?, '%'))
+                    OR lower(re.chunk_text) LIKE lower(concat('%', ?, '%'))
                 )
                 AND (
-                  ?::text IS NULL
-                  OR re.metadata->>'purpose' = ?::text
-                  OR jsonb_exists(coalesce(re.metadata->'purposes', '[]'::jsonb), ?::text)
+                    ?::text IS NULL
+                    OR re.metadata->>'purpose' = ?::text
+                    OR jsonb_exists(coalesce(re.metadata->'purposes', '[]'::jsonb), ?::text)
                 )
                 AND (?::text IS NULL OR re.metadata->>'sourceType' = ?::text)
                 """,
