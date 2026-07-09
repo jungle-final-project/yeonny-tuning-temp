@@ -5,6 +5,7 @@ import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -32,6 +33,9 @@ class BuildGraphControllerTest {
 
     @MockitoBean
     private BuildGraphService buildGraphService;
+
+    @MockitoBean
+    private BuildGraphLayoutService buildGraphLayoutService;
 
     @MockitoBean
     private CurrentUserService currentUserService;
@@ -123,6 +127,38 @@ class BuildGraphControllerTest {
 
         verify(currentUserService).requireUser(USER_TOKEN);
         verify(buildGraphService).resolve(eq(USER_TOKEN), anyMap());
+    }
+
+    @Test
+    void buildGraphLayoutDefaultReturnsUnauthorizedWhenTokenIsMissing() throws Exception {
+        mockMvc.perform(get("/api/build-graph-layouts/default"))
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.code").value("UNAUTHORIZED"));
+
+        verifyNoInteractions(buildGraphLayoutService);
+    }
+
+    @Test
+    void buildGraphLayoutDefaultReturnsAnchorsForUserToken() throws Exception {
+        when(currentUserService.requireUser(USER_TOKEN)).thenReturn(null);
+        when(buildGraphLayoutService.getDefaultLayout()).thenReturn(Map.of(
+                "layoutKey", "DEFAULT",
+                "source", "SAVED",
+                "positions", Map.of("CPU", Map.of("x", 20, "y", 170)),
+                "anchors", Map.of(
+                        "GPU", Map.of("card", Map.of("x", 24, "y", 84), "part", Map.of("x", 40, "y", 55))
+                )
+        ));
+
+        mockMvc.perform(get("/api/build-graph-layouts/default")
+                        .header("Authorization", USER_TOKEN))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.layoutKey").value("DEFAULT"))
+                .andExpect(jsonPath("$.anchors.GPU.card.x").value(24))
+                .andExpect(jsonPath("$.anchors.GPU.part.y").value(55));
+
+        verify(currentUserService).requireUser(USER_TOKEN);
+        verify(buildGraphLayoutService).getDefaultLayout();
     }
 
     private static Map<String, Object> node(String id, String type, String category, String label, String status) {

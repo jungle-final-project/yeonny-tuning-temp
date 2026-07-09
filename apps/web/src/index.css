@@ -155,6 +155,20 @@ background:
   animation: slot-edge-draw 520ms ease-out;
 }
 
+/* 선택된 카드→3D 부품 엘보 연결선 draw-in. pathLength=1 정규화라 경로 길이와 무관하게 점선이 흘러 나온다. */
+@keyframes iso-card-connector-draw {
+  from {
+    stroke-dashoffset: 1;
+  }
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+
+.iso-card-connector-draw {
+  animation: iso-card-connector-draw 420ms ease-out;
+}
+
 /* 꽂힌 포트가 잠깐 점등되는 펄스. */
 @keyframes slot-port-pulse {
   0% {
@@ -279,6 +293,7 @@ background:
   .slot-attach-flash,
   .slot-plug-in,
   .slot-edge-draw,
+  .iso-card-connector-draw,
   .slot-port-pulse,
   .slot-empty-pulse,
   .slot-pass-pulse,
@@ -457,6 +472,19 @@ background:
   transition: filter 0.25s ease;
 }
 
+.slot-board-iso-scene-highlight {
+  opacity: 0;
+  filter:
+    drop-shadow(0 0 3px rgba(37, 99, 235, 0.85))
+    drop-shadow(0 0 12px rgba(37, 99, 235, 0.68))
+    drop-shadow(0 8px 22px rgba(37, 99, 235, 0.42));
+  transition: opacity 0.2s ease;
+}
+
+.slot-board-iso-scene-highlight[data-active='true'] {
+  opacity: 1;
+}
+
 .iso-part[data-status='PASS'] .iso-part-img {
   filter: drop-shadow(0 0 5px rgba(22, 163, 74, 0.28));
 }
@@ -609,6 +637,7 @@ background:
 @media (prefers-reduced-motion: reduce) {
   .iso-part,
   .iso-part-img,
+  .slot-board-iso-scene-highlight,
   .slot-problem-marker,
   .slot-problem-marker-hint {
     transition: none;

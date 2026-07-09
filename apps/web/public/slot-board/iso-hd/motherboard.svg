@@ -1,0 +1,88 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 920 476" fill="none">
+  <!-- 메인보드 (iso-hd): 씬 보드 평면 위 실장 오버레이. VRM 방열판·IO 실드·트레이스·헤더. -->
+  <!-- 모든 요소 좌표는 iso/motherboard.svg와 동일 (씬 소켓 프린트 정합 유지) -->
+  <!-- idle 모션은 opt-in: reduced-motion 환경에서는 정지 상태로 남는다 -->
+  <style>
+    @media (prefers-reduced-motion: no-preference) {
+      .mb-led {
+        animation: led-breathe 4s ease-in-out infinite;
+      }
+      @keyframes led-breathe {
+        0%, 100% { opacity: 0.4; }
+        50% { opacity: 1; }
+      }
+    }
+  </style>
+  <defs>
+    <linearGradient id="hdVrmTop" x1="240" y1="150" x2="396" y2="228" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#aec2e0"/>
+      <stop offset="55%" stop-color="#93abcf"/>
+      <stop offset="100%" stop-color="#7891ba"/>
+    </linearGradient>
+    <linearGradient id="hdVrmL" x1="240" y1="180" x2="336" y2="252" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#5c7bb0"/>
+      <stop offset="100%" stop-color="#4a6699"/>
+    </linearGradient>
+    <linearGradient id="hdIoTop" x1="114" y1="206" x2="250" y2="274" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#8393aa"/>
+      <stop offset="100%" stop-color="#586880"/>
+    </linearGradient>
+  </defs>
+  <!-- VRM 방열판 (소켓 좌상단) -->
+  <g>
+    <polygon points="300,150 396,198 336,228 240,180" fill="url(#hdVrmTop)"/>
+    <polygon points="240,180 336,228 336,252 240,204" fill="url(#hdVrmL)"/>
+    <polygon points="396,198 336,228 336,252 396,222" fill="#6f8bb8"/>
+    <g stroke="#42618f" stroke-width="1.8">
+      <line x1="252" y1="190" x2="348" y2="238"/><line x1="266" y1="184" x2="362" y2="232"/>
+      <line x1="280" y1="177" x2="376" y2="225"/>
+    </g>
+    <g stroke="#d3e0f1" stroke-width="0.8" opacity="0.95">
+      <line x1="252" y1="188" x2="348" y2="236"/><line x1="266" y1="182" x2="362" y2="230"/>
+      <line x1="280" y1="175" x2="376" y2="223"/>
+    </g>
+    <polyline points="240,180 300,150 396,198" stroke="#e2ebf6" stroke-width="1.3" opacity="0.95"/>
+  </g>
+  <!-- IO 실드 블록 (좌측 모서리) -->
+  <g>
+    <polygon points="150,206 250,256 214,274 114,224" fill="url(#hdIoTop)"/>
+    <polygon points="114,224 214,274 214,296 114,246" fill="#2b3a4f"/>
+    <polygon points="250,256 214,274 214,296 250,278" fill="#455569"/>
+    <g fill="#0a1220">
+      <polygon points="142,228 162,238 152,243 132,233"/>
+      <polygon points="168,241 188,251 178,256 158,246"/>
+      <polygon points="194,254 214,264 204,269 184,259"/>
+    </g>
+    <g fill="#38bdf8" opacity="0.7">
+      <polygon points="146,231 154,235 150,237 142,233"/>
+    </g>
+    <polyline points="114,224 150,206 250,256" stroke="#a3b2c6" stroke-width="1" opacity="0.95"/>
+  </g>
+  <!-- 트레이스 (실크스크린 배선) -->
+  <g stroke="#5c8ae0" stroke-width="2" opacity="0.3">
+    <polyline points="220,240 420,340 620,240"/>
+    <polyline points="260,300 460,400 700,280"/>
+    <polyline points="500,120 700,220 660,240"/>
+  </g>
+  <g stroke="#5c8ae0" stroke-width="1.4" opacity="0.2">
+    <polyline points="320,360 480,440 640,360"/>
+    <polyline points="420,180 560,250 620,220"/>
+  </g>
+  <!-- CMOS 배터리 -->
+  <ellipse cx="560" cy="330" rx="17" ry="9" fill="#b8c6db" stroke="#8ea3c2" stroke-width="1.4"/>
+  <ellipse cx="560" cy="327" rx="17" ry="9" fill="#e8eef6"/>
+  <ellipse cx="556" cy="325" rx="6" ry="3" fill="#fbfdff" opacity="0.95"/>
+  <!-- 전면 패널 헤더 (우하단 골드 핀) -->
+  <g fill="#c98a05" opacity="0.95">
+    <circle cx="600" cy="420" r="3"/><circle cx="612" cy="426" r="3"/><circle cx="624" cy="432" r="3"/>
+    <circle cx="608" cy="412" r="3"/><circle cx="620" cy="418" r="3"/><circle cx="632" cy="424" r="3"/>
+  </g>
+  <g fill="#fde68a" opacity="0.7">
+    <circle cx="599" cy="419" r="1"/><circle cx="611" cy="425" r="1"/><circle cx="607" cy="411" r="1"/>
+  </g>
+  <!-- 보드 상태 LED (idle breathe) -->
+  <g class="mb-led">
+    <circle cx="652" cy="404" r="4" fill="#34d399"/>
+    <circle cx="652" cy="404" r="7" fill="#34d399" opacity="0.25"/>
+  </g>
+</svg>

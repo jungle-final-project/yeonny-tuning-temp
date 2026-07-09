@@ -24,6 +24,7 @@ export const SLOT_BOARD_BG = '/slot-board/backgrounds/topology-board-bg.svg';
 
 /** 등각 실장 씬 배경. viewBox 1600x840 기준으로 아래 SLOT_ISO_ART 좌표가 맞춰져 있다. */
 export const SLOT_BOARD_ISO_SCENE = '/slot-board/iso/scene-board.svg';
+export const SLOT_BOARD_ISO_SCENE_HIGHLIGHT = '/slot-board/iso/scene-board-blue-highlight.svg';
 
 export type SlotIsoArt = {
   src: string;
@@ -41,26 +42,26 @@ export type SlotIsoArt = {
 // 씬의 소켓 프린트 위치(CPU 소켓, RAM 슬롯, PCIe, M.2, PSU 베이)에 맞춘 고정 좌표.
 // 관리자 드래그 좌표는 콜아웃 카드에만 적용되고, 이 물리 위치는 바뀌지 않는다.
 export const SLOT_ISO_ART: Record<PartCategory, SlotIsoArt> = {
-  CASE: { src: '/slot-board/iso/case.svg', x: 69, y: 30, w: 20, mount: 'fade', z: 1 },
-  MOTHERBOARD: { src: '/slot-board/iso/motherboard.svg', x: 15, y: 26.2, w: 57.5, mount: 'fade', z: 2 },
-  CPU: { src: '/slot-board/iso/cpu.svg', x: 31.2, y: 31.7, w: 15, mount: 'drop', z: 3 },
-  STORAGE: { src: '/slot-board/iso/ssd.svg', x: 49.6, y: 48.9, w: 15, mount: 'drop', z: 3 },
-  RAM: { src: '/slot-board/iso/ram.svg', x: 52.9, y: 29.8, w: 13.75, mount: 'drop', z: 4 },
-  PSU: { src: '/slot-board/iso/psu.svg', x: 66.6, y: 61.3, w: 20, mount: 'slide', z: 4 },
-  GPU: { src: '/slot-board/iso/gpu.svg', x: 29.7, y: 48.9, w: 22.5, mount: 'drop', z: 5 },
-  COOLER: { src: '/slot-board/iso/cooler.svg', x: 30.6, y: 25, w: 16.25, mount: 'drop', z: 6 }
+  CASE: { src: '/slot-board/iso-hd/case.svg', x: 69, y: 30, w: 20, mount: 'fade', z: 1 },
+  MOTHERBOARD: { src: '/slot-board/iso-hd/motherboard.svg', x: 15, y: 26.2, w: 57.5, mount: 'fade', z: 2 },
+  CPU: { src: '/slot-board/iso-hd/cpu.svg', x: 31.2, y: 31.7, w: 15, mount: 'drop', z: 3 },
+  STORAGE: { src: '/slot-board/iso-hd/ssd.svg', x: 49.6, y: 48.9, w: 15, mount: 'drop', z: 3 },
+  RAM: { src: '/slot-board/iso-hd/ram.svg', x: 52.9, y: 29.8, w: 13.75, mount: 'drop', z: 4 },
+  PSU: { src: '/slot-board/iso-hd/psu.svg', x: 66.6, y: 61.3, w: 20, mount: 'slide', z: 4 },
+  GPU: { src: '/slot-board/iso-hd/gpu.svg', x: 29.7, y: 48.9, w: 22.5, mount: 'drop', z: 5 },
+  COOLER: { src: '/slot-board/iso-hd/cooler.svg', x: 30.6, y: 25, w: 16.25, mount: 'drop', z: 6 }
 };
 
 // SelfQuote 3D 관계도 전용 콜아웃 좌표. AdminBuildGraphLayoutsPage의 편집 좌표와 분리한다.
 export const SLOT_BOARD_ISO_CALLOUT_LAYOUTS: Record<PartCategory, SlotConfig['layout']> = {
-  CPU: { x: 2, y: 3, w: 20, h: 16 },
-  RAM: { x: 46, y: 2, w: 18, h: 16 },
-  STORAGE: { x: 66, y: 3, w: 20, h: 16 },
-  COOLER: { x: 24, y: 2, w: 20, h: 15 },
-  MOTHERBOARD: { x: 48, y: 86, w: 18, h: 12 },
-  GPU: { x: 24, y: 84, w: 22, h: 14 },
-  PSU: { x: 76, y: 86, w: 22, h: 12 },
-  CASE: { x: 2, y: 78, w: 20, h: 16 }
+  CPU: { x: 2, y: 2, w: 22, h: 14 },
+  COOLER: { x: 26, y: 2, w: 22, h: 14 },
+  RAM: { x: 50, y: 2, w: 22, h: 14 },
+  STORAGE: { x: 74, y: 2, w: 22, h: 14 },
+  CASE: { x: 2, y: 84, w: 22, h: 14 },
+  GPU: { x: 26, y: 84, w: 22, h: 14 },
+  MOTHERBOARD: { x: 50, y: 84, w: 22, h: 14 },
+  PSU: { x: 74, y: 84, w: 22, h: 14 }
 };
 
 // 실장도(placement) 좌표계: 평면도 아트가 viewBox 0 0 160 100으로 그려지고
@@ -84,6 +85,20 @@ export const SLOT_CONFIGS: SlotConfig[] = [
 ];
 
 export const SLOT_COUNT = SLOT_CONFIGS.length;
+
+// 견적 체크리스트 권장 순서 — 카드/3D 글리프 번호 뱃지와 체크리스트가 같은 번호를 쓰도록 단일 출처.
+// (SLOT_CONFIGS 배열 순서와 다르므로 번호는 반드시 이 배열에서 유도한다.)
+export const RECOMMENDED_SLOT_ORDER: PartCategory[] = ['CPU', 'MOTHERBOARD', 'RAM', 'GPU', 'STORAGE', 'PSU', 'CASE', 'COOLER'];
+
+const SLOT_ORDER_NUMBER: Record<PartCategory, number> = RECOMMENDED_SLOT_ORDER.reduce((acc, category, index) => {
+  acc[category] = index + 1;
+  return acc;
+}, {} as Record<PartCategory, number>);
+
+/** 체크리스트 번호(1..8). RECOMMENDED_SLOT_ORDER의 index+1과 일치. */
+export function slotOrderNumber(category: PartCategory): number {
+  return SLOT_ORDER_NUMBER[category] ?? 0;
+}
 
 export const SLOT_BOARD_DEFAULT_POSITIONS: Record<PartCategory, SlotBoardPosition> = SLOT_CONFIGS.reduce((positions, slot) => {
   positions[slot.category] = { x: slot.layout.x, y: slot.layout.y };

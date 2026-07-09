@@ -3,11 +3,16 @@ import { useMutation, useQuery } from '@tanstack/react-query';
 import { LayoutGrid, Move, RotateCcw, Save } from 'lucide-react';
 import { AdminShell, StateMessage } from '../../../components/ui';
 import {
+  RECOMMENDED_SLOT_ORDER,
   SLOT_BOARD_BG,
+  SLOT_BOARD_ISO_CALLOUT_LAYOUTS,
+  SLOT_BOARD_ISO_SCENE,
   SLOT_CONFIGS,
+  SLOT_ISO_ART,
   clampSlotBoardPosition,
   defaultSlotBoardPositions,
   mergeSlotBoardPositions,
+  slotConfigFor,
   slotLayoutWithPosition,
   type SlotBoardPosition,
   type SlotConfig
@@ -15,7 +20,8 @@ import {
 import {
   getDefaultBuildGraphLayout,
   resetDefaultBuildGraphLayout,
-  saveDefaultBuildGraphLayout
+  saveDefaultBuildGraphLayout,
+  type BuildGraphAnchor
 } from '../adminApi';
 import type { PartCategory } from '../../quote/aiSelection';
 
@@ -27,21 +33,80 @@ type DragState = {
   pointerOffsetY: number;
 };
 
+type AnchorPoint = { x: number; y: number };
+type AnchorPair = { card: AnchorPoint; part: AnchorPoint };
+type AnchorKind = 'card' | 'part';
+
+type AnchorDragState = {
+  category: PartCategory;
+  kind: AnchorKind;
+  pointerOffsetX: number;
+  pointerOffsetY: number;
+};
+
+function clamp01(value: number): number {
+  return Math.round(Math.min(100, Math.max(0, value)));
+}
+
+// 3D 커넥터 앵커 기본값 — self-quote IsoCardConnector의 현재 자동 계산과 동일한 시드로 시작한다.
+function defaultAnchors(): Record<PartCategory, AnchorPair> {
+  const result = {} as Record<PartCategory, AnchorPair>;
+  for (const category of RECOMMENDED_SLOT_ORDER) {
+    const iso = SLOT_ISO_ART[category];
+    const card = SLOT_BOARD_ISO_CALLOUT_LAYOUTS[category];
+    result[category] = {
+      card: { x: clamp01(card.x + card.w / 2), y: clamp01(card.y + card.h / 2) },
+      part: { x: clamp01(iso.x + iso.w / 2), y: clamp01(iso.y + iso.w * 0.35) }
+    };
+  }
+  return result;
+}
+
+function mergeAnchors(fetched: Record<string, BuildGraphAnchor> | undefined): Record<PartCategory, AnchorPair> {
+  const merged = defaultAnchors();
+  if (!fetched) {
+    return merged;
+  }
+  for (const category of RECOMMENDED_SLOT_ORDER) {
+    const anchor = fetched[category];
+    if (!anchor) {
+      continue;
+    }
+    if (isFiniteAnchorPoint(anchor.card) && isFiniteAnchorPoint(anchor.part)) {
+      merged[category] = {
+        card: { x: clamp01(anchor.card.x), y: clamp01(anchor.card.y) },
+        part: { x: clamp01(anchor.part.x), y: clamp01(anchor.part.y) }
+      };
+    }
+  }
+  return merged;
+}
+
+function isFiniteAnchorPoint(point: AnchorPoint | undefined): point is AnchorPoint {
+  return Boolean(point) && Number.isFinite(point?.x) && Number.isFinite(point?.y);
+}
+
 export function AdminBuildGraphLayoutsPage() {
   const boardRef = useRef<HTMLDivElement | null>(null);
   const dragRef = useRef<DragState | null>(null);
+  const anchorBoardRef = useRef<HTMLDivElement | null>(null);
+  const anchorDragRef = useRef<AnchorDragState | null>(null);
   const [positions, setPositions] = useState<Record<PartCategory, SlotBoardPosition>>(() => defaultSlotBoardPositions());
+  const [anchors, setAnchors] = useState<Record<PartCategory, AnchorPair>>(() => defaultAnchors());
   const [saveState, setSaveState] = useState<SaveState>('idle');
   const [draggingCategory, setDraggingCategory] = useState<PartCategory | null>(null);
+  const [selectedAnchorCategory, setSelectedAnchorCategory] = useState<PartCategory>('CPU');
+  const [draggingAnchor, setDraggingAnchor] = useState<{ category: PartCategory; kind: AnchorKind } | null>(null);
 
   const layoutQuery = useQuery({
     queryKey: ['admin-build-graph-layout-default'],
     queryFn: getDefaultBuildGraphLayout
   });
   const saveMutation = useMutation({
-    mutationFn: () => saveDefaultBuildGraphLayout(positions),
+    mutationFn: () => saveDefaultBuildGraphLayout(positions, anchors),
     onSuccess: (layout) => {
       setPositions(mergeSlotBoardPositions(layout.positions));
+      setAnchors(mergeAnchors(layout.anchors));
       setSaveState('saved');
     }
   });
@@ -49,6 +114,7 @@ export function AdminBuildGraphLayoutsPage() {
     mutationFn: resetDefaultBuildGraphLayout,
     onSuccess: (layout) => {
       setPositions(mergeSlotBoardPositions(layout.positions));
+      setAnchors(mergeAnchors(layout.anchors));
       setSaveState('reset');
     }
   });
@@ -56,6 +122,7 @@ export function AdminBuildGraphLayoutsPage() {
   useEffect(() => {
     if (layoutQuery.data) {
       setPositions(mergeSlotBoardPositions(layoutQuery.data.positions));
+      setAnchors(mergeAnchors(layoutQuery.data.anchors));
       setSaveState('idle');
     }
   }, [layoutQuery.data]);
@@ -105,6 +172,51 @@ export function AdminBuildGraphLayoutsPage() {
     };
   }, [draggingCategory]);
 
+  useEffect(() => {
+    if (!draggingAnchor) {
+      return;
+    }
+
+    const previousUserSelect = document.body.style.userSelect;
+    document.body.style.userSelect = 'none';
+
+    const handlePointerMove = (event: PointerEvent) => {
+      const board = anchorBoardRef.current;
+      const drag = anchorDragRef.current;
+      if (!board || !drag) {
+        return;
+      }
+      const rect = board.getBoundingClientRect();
+      if (rect.width <= 0 || rect.height <= 0) {
+        return;
+      }
+      const nextPoint: AnchorPoint = {
+        x: clamp01(((event.clientX - rect.left - drag.pointerOffsetX) / rect.width) * 100),
+        y: clamp01(((event.clientY - rect.top - drag.pointerOffsetY) / rect.height) * 100)
+      };
+      setAnchors((current) => ({
+        ...current,
+        [drag.category]: { ...current[drag.category], [drag.kind]: nextPoint }
+      }));
+      setSaveState('dirty');
+    };
+
+    const stopDrag = () => {
+      anchorDragRef.current = null;
+      setDraggingAnchor(null);
+    };
+
+    window.addEventListener('pointermove', handlePointerMove);
+    window.addEventListener('pointerup', stopDrag);
+    window.addEventListener('pointercancel', stopDrag);
+    return () => {
+      document.body.style.userSelect = previousUserSelect;
+      window.removeEventListener('pointermove', handlePointerMove);
+      window.removeEventListener('pointerup', stopDrag);
+      window.removeEventListener('pointercancel', stopDrag);
+    };
+  }, [draggingAnchor]);
+
   const slotLayouts = useMemo(() => SLOT_CONFIGS.map((slot) => ({
     slot,
     layout: slotLayoutWithPosition(slot, positions[slot.category])
@@ -129,6 +241,28 @@ export function AdminBuildGraphLayoutsPage() {
       pointerOffsetY: event.clientY - rect.top - (position.y / 100) * rect.height
     };
     setDraggingCategory(slot.category);
+  };
+
+  const startAnchorDrag = (event: ReactPointerEvent<HTMLButtonElement>, category: PartCategory, kind: AnchorKind) => {
+    if (event.button !== 0) {
+      return;
+    }
+    const board = anchorBoardRef.current;
+    if (!board) {
+      return;
+    }
+    const rect = board.getBoundingClientRect();
+    if (rect.width <= 0 || rect.height <= 0) {
+      return;
+    }
+    const point = anchors[category]?.[kind] ?? defaultAnchors()[category][kind];
+    anchorDragRef.current = {
+      category,
+      kind,
+      pointerOffsetX: event.clientX - rect.left - (point.x / 100) * rect.width,
+      pointerOffsetY: event.clientY - rect.top - (point.y / 100) * rect.height
+    };
+    setDraggingAnchor({ category, kind });
   };
 
   const handleKeyDown = (event: ReactKeyboardEvent<HTMLButtonElement>, category: PartCategory) => {
@@ -239,6 +373,78 @@ export function AdminBuildGraphLayoutsPage() {
           </div>
         </section>
 
+        <section className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
+          <div className="border-b border-slate-200 px-5 py-3">
+            <h2 className="text-sm font-black text-brand-navy">3D 커넥터 앵커 배치</h2>
+            <p className="mt-1 text-xs text-slate-500">
+              카드 앵커(파랑)와 부품 앵커(주황)를 끌어 self-quote 3D 관계도 연결선을 조정합니다. 카테고리를 선택한 뒤 보드 위 점을 드래그하세요.
+            </p>
+          </div>
+          <div className="flex flex-wrap gap-1.5 border-b border-slate-200 px-5 py-3">
+            {RECOMMENDED_SLOT_ORDER.map((category) => {
+              const slot = slotConfigFor(category);
+              return (
+                <button
+                  key={category}
+                  type="button"
+                  data-testid={`admin-anchor-category-${category}`}
+                  onClick={() => setSelectedAnchorCategory(category)}
+                  className={`rounded-full border px-3 py-1.5 text-xs font-bold transition ${
+                    selectedAnchorCategory === category
+                      ? 'border-brand-blue bg-blue-50 text-brand-blue'
+                      : 'border-slate-200 bg-white text-slate-600 hover:border-brand-blue/60'
+                  }`}
+                >
+                  {slot?.label ?? category}
+                </button>
+              );
+            })}
+          </div>
+          <div className="bg-[linear-gradient(180deg,#f8fafc_0%,#ffffff_100%)] p-4">
+            <div
+              ref={anchorBoardRef}
+              data-testid="admin-anchor-board"
+              className="relative aspect-[16/8.4] overflow-hidden rounded-lg border border-slate-200 bg-[#f6fbff] bg-contain bg-center bg-no-repeat"
+              style={{ backgroundImage: `url(${SLOT_BOARD_ISO_SCENE})` }}
+            >
+              <AnchorHandle
+                category={selectedAnchorCategory}
+                kind="card"
+                point={anchors[selectedAnchorCategory]?.card ?? defaultAnchors()[selectedAnchorCategory].card}
+                isDragging={draggingAnchor?.category === selectedAnchorCategory && draggingAnchor?.kind === 'card'}
+                onPointerDown={(event) => startAnchorDrag(event, selectedAnchorCategory, 'card')}
+              />
+              <AnchorHandle
+                category={selectedAnchorCategory}
+                kind="part"
+                point={anchors[selectedAnchorCategory]?.part ?? defaultAnchors()[selectedAnchorCategory].part}
+                isDragging={draggingAnchor?.category === selectedAnchorCategory && draggingAnchor?.kind === 'part'}
+                onPointerDown={(event) => startAnchorDrag(event, selectedAnchorCategory, 'part')}
+              />
+            </div>
+          </div>
+          <div className="border-t border-slate-200 p-5">
+            <h3 className="text-xs font-black text-brand-navy">앵커 좌표</h3>
+            <div className="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
+              {RECOMMENDED_SLOT_ORDER.map((category) => {
+                const pair = anchors[category] ?? defaultAnchors()[category];
+                const slot = slotConfigFor(category);
+                return (
+                  <div
+                    key={category}
+                    data-testid={`admin-anchor-readout-${category}`}
+                    className="rounded border border-slate-100 bg-slate-50 px-3 py-2 text-xs"
+                  >
+                    <div className="font-bold text-slate-700">{slot?.label ?? category}</div>
+                    <div className="mt-1 font-mono text-slate-500">카드 x {pair.card.x} · y {pair.card.y}</div>
+                    <div className="font-mono text-slate-500">부품 x {pair.part.x} · y {pair.part.y}</div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        </section>
+
         <section className="rounded-lg border border-slate-200 bg-white p-5">
           <h2 className="text-sm font-black text-brand-navy">저장 좌표</h2>
           <div className="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
@@ -301,6 +507,43 @@ function SlotLayoutCard({
       <span className="text-xs font-black leading-4 text-commerce-ink">
         {slot.category === 'STORAGE' ? 'SSD / 저장장치' : `${slot.label} 슬롯`}
       </span>
+    </button>
+  );
+}
+
+function AnchorHandle({
+  category,
+  kind,
+  point,
+  isDragging,
+  onPointerDown
+}: {
+  category: PartCategory;
+  kind: AnchorKind;
+  point: AnchorPoint;
+  isDragging: boolean;
+  onPointerDown: (event: ReactPointerEvent<HTMLButtonElement>) => void;
+}) {
+  const style: CSSProperties = {
+    left: `${point.x}%`,
+    top: `${point.y}%`
+  };
+  const label = kind === 'card' ? '카드 앵커' : '부품 앵커';
+  const colorClass = kind === 'card' ? 'border-brand-blue bg-brand-blue' : 'border-amber-500 bg-amber-500';
+
+  return (
+    <button
+      type="button"
+      data-testid={`admin-anchor-handle-${category}-${kind}`}
+      aria-label={`${category} ${label} 이동`}
+      title={`${category} ${label}`}
+      onPointerDown={onPointerDown}
+      style={style}
+      className={`absolute z-20 flex h-5 w-5 -translate-x-1/2 -translate-y-1/2 touch-none cursor-grab items-center justify-center rounded-full border-2 text-white shadow-md transition focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-blue ${colorClass} ${
+        isDragging ? 'scale-125 cursor-grabbing' : ''
+      }`}
+    >
+      <span className="sr-only">{label}</span>
     </button>
   );
 }

@@ -166,6 +166,9 @@ class AdminControllerTest {
                 "positions", Map.of(
                         "CPU", Map.of("x", 140, "y", 190),
                         "GPU", Map.of("x", 520, "y", 340)
+                ),
+                "anchors", Map.of(
+                        "GPU", Map.of("card", Map.of("x", 24, "y", 84), "part", Map.of("x", 40, "y", 55))
                 )
         ));
 
@@ -177,13 +180,21 @@ class AdminControllerTest {
                                   "positions": {
                                     "CPU": { "x": 140, "y": 190 },
                                     "GPU": { "x": 520, "y": 340 }
+                                  },
+                                  "anchors": {
+                                    "GPU": {
+                                      "card": { "x": 24, "y": 84 },
+                                      "part": { "x": 40, "y": 55 }
+                                    }
                                   }
                                 }
                                 """))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.source").value("SAVED"))
                 .andExpect(jsonPath("$.positions.CPU.x").value(140))
-                .andExpect(jsonPath("$.positions.GPU.y").value(340));
+                .andExpect(jsonPath("$.positions.GPU.y").value(340))
+                .andExpect(jsonPath("$.anchors.GPU.card.x").value(24))
+                .andExpect(jsonPath("$.anchors.GPU.part.y").value(55));
 
         verify(currentUserService).requireAdmin(ADMIN_TOKEN);
         verify(buildGraphLayoutService).saveDefaultLayout(anyMap(), eq(ADMIN));

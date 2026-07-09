@@ -30,8 +30,15 @@ import { UpgradeAdvisorPanel } from '../components/slot-board/UpgradeAdvisorPane
 import { SlotBoard, type SlotBoardVisualMode } from '../components/slot-board/SlotBoard';
 import { SlotCandidatePanel } from '../components/slot-board/SlotCandidatePanel';
 import { SlotStatusBar } from '../components/slot-board/SlotStatusBar';
-import { SLOT_CONFIGS, SLOT_COUNT, isSlotCategory, slotConfigFor } from '../components/slot-board/slotBoardConfig';
-import { applyAiBuildToQuoteDraft, deleteQuoteDraftItem, getCurrentQuoteDraft, patchQuoteDraftItem, putQuoteDraftItem } from '../partsApi';
+import { RECOMMENDED_SLOT_ORDER, SLOT_CONFIGS, SLOT_COUNT, isSlotCategory, slotConfigFor } from '../components/slot-board/slotBoardConfig';
+import {
+  applyAiBuildToQuoteDraft,
+  deleteQuoteDraftItem,
+  getBuildGraphLayoutDefault,
+  getCurrentQuoteDraft,
+  patchQuoteDraftItem,
+  putQuoteDraftItem
+} from '../partsApi';
 import { quoteDraftToRecommendedBuild, selfQuoteBuildId } from '../selfQuoteBuild';
 import type { PartRow, QuoteDraft, QuoteDraftItem } from '../types';
 
@@ -125,6 +132,15 @@ function SelfQuoteSlotBoardPage() {
     }),
     placeholderData: keepPreviousData,
     enabled: hasToken && !isQuoteDraftLoading,
+    retry: false
+  });
+
+  // 관리자가 배치한 3D 커넥터 앵커. 실패/미저장이어도 IsoCardConnector는 자동 계산으로 폴백한다.
+  const anchorQuery = useQuery({
+    queryKey: ['build-graph-layout-default'],
+    queryFn: getBuildGraphLayoutDefault,
+    enabled: hasToken,
+    staleTime: 5 * 60 * 1000,
     retry: false
   });
 
@@ -400,6 +416,7 @@ function SelfQuoteSlotBoardPage() {
             onRemoveItem={removeItem}
             isRemovePending={deleteMutation.isPending}
             graph={graphQuery.data}
+            connectorAnchors={anchorQuery.data?.anchors}
           />
           {selectedSlot ? (
             <SlotCandidatePanel
@@ -498,9 +515,6 @@ function writeSlotBoardVisualMode(mode: SlotBoardVisualMode) {
     // localStorage가 차단된 환경에서는 현재 세션 상태만 유지한다.
   }
 }
-
-// 멘토 피드백: "무엇을 사야 하는지, 어디까지 했는지"의 품목 지도. 권장 선택 순서이며 강제가 아니다.
-const RECOMMENDED_SLOT_ORDER: PartCategory[] = ['CPU', 'MOTHERBOARD', 'RAM', 'GPU', 'STORAGE', 'PSU', 'CASE', 'COOLER'];
 
 function QuoteChecklist({
   draftItems,

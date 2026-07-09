@@ -24,6 +24,10 @@ public class BuildGraphLayoutService {
     private static final Set<String> ALLOWED_CATEGORIES = Set.of(
             "CPU", "MOTHERBOARD", "RAM", "GPU", "STORAGE", "PSU", "CASE", "COOLER", "PRICE"
     );
+    // 3D 커넥터 앵커 대상 — 관계도 노드(PRICE 포함 9개)와 달리 실제 3D 글리프가 있는 8개만.
+    private static final Set<String> ANCHOR_CATEGORIES = Set.of(
+            "CPU", "MOTHERBOARD", "RAM", "GPU", "STORAGE", "PSU", "CASE", "COOLER"
+    );
     private final JdbcTemplate jdbcTemplate;
 
     public BuildGraphLayoutService(JdbcTemplate jdbcTemplate) {
@@ -33,9 +37,9 @@ public class BuildGraphLayoutService {
     public Map<String, Object> getDefaultLayout() {
         SavedLayout savedLayout = savedLayout();
         if (savedLayout == null) {
-            return layoutResponse("DEFAULT", defaultPositions(), null);
+            return layoutResponse("DEFAULT", defaultPositions(), Map.of(), null);
         }
-        return layoutResponse("SAVED", mergeWithDefaults(savedLayout.positions()), savedLayout.updatedAt());
+        return layoutResponse("SAVED", mergeWithDefaults(savedLayout.positions()), savedLayout.anchors(), savedLayout.updatedAt());
     }
 
     public Map<String, GraphPosition> resolvePositions() {
@@ -48,38 +52,44 @@ public class BuildGraphLayoutService {
 
     public Map<String, Object> saveDefaultLayout(Map<String, Object> request, CurrentUserService.CurrentUser admin) {
         Map<String, GraphPosition> positions = normalizePositions(request == null ? Map.of() : request);
+        Map<String, GraphAnchor> anchors = normalizeAnchors(request == null ? Map.of() : request);
         String json = toJson(positionMap(positions));
+        String anchorsJson = toJson(anchorMap(anchors));
         jdbcTemplate.update("""
                 INSERT INTO build_graph_layouts (
                   layout_key,
                   positions_json,
+                  anchors_json,
                   created_by,
                   updated_by,
                   created_at,
                   updated_at
                 )
-                VALUES (?, ?::jsonb, ?, ?, now(), now())
+                VALUES (?, ?::jsonb, ?::jsonb, ?, ?, now(), now())
                 ON CONFLICT (layout_key) DO UPDATE
                 SET positions_json = EXCLUDED.positions_json,
+                    anchors_json = EXCLUDED.anchors_json,
                     updated_by = EXCLUDED.updated_by,
                     updated_at = now()
                 """,
                 DEFAULT_LAYOUT_KEY,
                 json,
+                anchorsJson,
                 admin.internalId(),
                 admin.internalId()
         );
-        return layoutResponse("SAVED", mergeWithDefaults(positions), null);
+        return layoutResponse("SAVED", mergeWithDefaults(positions), anchors, null);
     }
 
     public Map<String, Object> resetDefaultLayout(CurrentUserService.CurrentUser admin) {
         jdbcTemplate.update("DELETE FROM build_graph_layouts WHERE layout_key = ?", DEFAULT_LAYOUT_KEY);
-        return layoutResponse("DEFAULT", defaultPositions(), null);
+        return layoutResponse("DEFAULT", defaultPositions(), Map.of(), null);
     }
 
     private SavedLayout savedLayout() {
         return jdbcTemplate.queryForList("""
                         SELECT positions_json::text AS positions_json,
+                               anchors_json::text AS anchors_json,
                                updated_at
                         FROM build_graph_layouts
                         WHERE layout_key = ?
@@ -89,6 +99,7 @@ public class BuildGraphLayoutService {
                 .findFirst()
                 .map(row -> new SavedLayout(
                         parsePositions(DbValueMapper.string(row, "positions_json")),
+                        parseAnchors(DbValueMapper.string(row, "anchors_json")),
                         DbValueMapper.timestamp(row, "updated_at")
                 ))
                 .orElse(null);
@@ -195,11 +206,14 @@ public class BuildGraphLayoutService {
         return positions;
     }
 
-    private static Map<String, Object> layoutResponse(String source, Map<String, GraphPosition> positions, Object updatedAt) {
+    private static Map<String, Object> layoutResponse(
+            String source, Map<String, GraphPosition> positions, Map<String, GraphAnchor> anchors, Object updatedAt
+    ) {
         return MockData.map(
                 "layoutKey", DEFAULT_LAYOUT_KEY,
                 "source", source,
                 "positions", positionMap(positions),
+                "anchors", anchorMap(anchors),
                 "updatedAt", updatedAt
         );
     }
@@ -210,12 +224,87 @@ public class BuildGraphLayoutService {
         return result;
     }
 
-    private record SavedLayout(Map<String, GraphPosition> positions, Object updatedAt) {
+    // anchors는 선택 필드 — 요청에 없으면 빈 맵(카드/자동 계산 폴백은 프론트에서 처리).
+    private static Map<String, GraphAnchor> normalizeAnchors(Map<String, Object> request) {
+        Object value = request.get("anchors");
+        if (value == null) {
+            return Map.of();
+        }
+        if (!(value instanceof Map<?, ?> rawAnchors)) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "anchors는 객체여야 합니다.");
+        }
+        Map<String, GraphAnchor> anchors = new LinkedHashMap<>();
+        for (Map.Entry<?, ?> entry : rawAnchors.entrySet()) {
+            String category = normalizeCategory(entry.getKey());
+            if (!ANCHOR_CATEGORIES.contains(category)) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "지원하지 않는 앵커 category입니다.");
+            }
+            Map<String, Object> anchor = objectMap(entry.getValue());
+            anchors.put(category, new GraphAnchor(anchorPoint(anchor.get("card")), anchorPoint(anchor.get("part"))));
+        }
+        return anchors;
+    }
+
+    private static GraphPoint anchorPoint(Object value) {
+        Map<String, Object> point = objectMap(value);
+        return new GraphPoint(anchorCoordinate(point.get("x"), "x"), anchorCoordinate(point.get("y"), "y"));
+    }
+
+    // 앵커는 SVG viewBox 0~100 퍼센트 좌표라 슬롯 배치(0~2400)와 범위가 다르다.
+    private static int anchorCoordinate(Object value, String key) {
+        if (!(value instanceof Number) && value != null) {
+            try {
+                return anchorCoordinate(Double.parseDouble(value.toString()), key);
+            } catch (NumberFormatException exception) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, key + " 앵커 좌표가 숫자가 아닙니다.");
+            }
+        }
+        return anchorCoordinate(value == null ? Double.NaN : ((Number) value).doubleValue(), key);
+    }
+
+    private static int anchorCoordinate(double value, String key) {
+        if (!Double.isFinite(value) || value < 0 || value > 100) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, key + " 앵커 좌표 범위(0~100)가 올바르지 않습니다.");
+        }
+        return (int) Math.round(value);
+    }
+
+    private static Map<String, GraphAnchor> parseAnchors(String json) {
+        if (json == null || json.isBlank()) {
+            return Map.of();
+        }
+        try {
+            Map<String, Object> parsed = OBJECT_MAPPER.readValue(json, MAP_TYPE);
+            return normalizeAnchors(Map.of("anchors", parsed));
+        } catch (JsonProcessingException exception) {
+            return Map.of();
+        }
+    }
+
+    private static Map<String, Object> anchorMap(Map<String, GraphAnchor> anchors) {
+        Map<String, Object> result = new LinkedHashMap<>();
+        anchors.forEach((category, anchor) -> result.put(category, anchor.toMap()));
+        return result;
+    }
+
+    private record SavedLayout(Map<String, GraphPosition> positions, Map<String, GraphAnchor> anchors, Object updatedAt) {
     }
 
     public record GraphPosition(int x, int y) {
         Map<String, Object> toMap() {
             return Map.of("x", x, "y", y);
+        }
+    }
+
+    public record GraphPoint(int x, int y) {
+        Map<String, Object> toMap() {
+            return Map.of("x", x, "y", y);
+        }
+    }
+
+    public record GraphAnchor(GraphPoint card, GraphPoint part) {
+        Map<String, Object> toMap() {
+            return Map.of("card", card.toMap(), "part", part.toMap());
         }
     }
 }
