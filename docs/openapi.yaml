@@ -4491,10 +4491,124 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/BuildGraphInsightDto"
+        compositeScore:
+          $ref: "#/components/schemas/BuildCompositeScoreDto"
         toolResults:
           type: array
           items:
             $ref: "#/components/schemas/ToolResultDto"
+    BuildCompositeScoreDto:
+      type: object
+      required: [policyVersion, score, rawScore, maxScore, grade, label, summary, components, caps, requestFit, curve, missingCategories]
+      properties:
+        policyVersion:
+          type: string
+          example: build-composite-score-v1
+        score:
+          type: integer
+          minimum: 0
+          maximum: 1000
+          description: 완성 PC 조합 사용자 표시용 성능/완성도 0~1000점. 가격 효율은 섞지 않으며 compatibility/power/size FAIL이면 0점.
+        rawScore:
+          type: integer
+          minimum: 0
+          maximum: 1000
+        maxScore:
+          type: integer
+          example: 1000
+        grade:
+          type: string
+          example: A
+        label:
+          type: string
+          example: 고성능
+        summary:
+          type: string
+        components:
+          type: array
+          items:
+            $ref: "#/components/schemas/BuildCompositeScoreComponentDto"
+        caps:
+          type: array
+          items:
+            $ref: "#/components/schemas/BuildCompositeScoreCapDto"
+        requestFit:
+          $ref: "#/components/schemas/BuildCompositeRequestFitDto"
+        curve:
+          type: array
+          items:
+            $ref: "#/components/schemas/BuildCompositeScoreCurveDto"
+        missingCategories:
+          type: array
+          items:
+            type: string
+    BuildCompositeScoreComponentDto:
+      type: object
+      required: [key, label, score, maxScore, percent, summary]
+      properties:
+        key:
+          type: string
+          example: performance
+        label:
+          type: string
+          example: 성능
+        score:
+          type: integer
+          minimum: 0
+        maxScore:
+          type: integer
+          minimum: 1
+        percent:
+          type: integer
+          minimum: 0
+          maximum: 100
+        summary:
+          type: string
+    BuildCompositeScoreCapDto:
+      type: object
+      required: [code, maxScore, reason]
+      properties:
+        code:
+          type: string
+          example: LOW_POWER_HEADROOM
+        maxScore:
+          type: integer
+          minimum: 0
+          maximum: 1000
+        reason:
+          type: string
+    BuildCompositeRequestFitDto:
+      type: object
+      required: [status, score, budgetWon, totalPrice, priceDiff, summary]
+      properties:
+        status:
+          type: string
+          enum: [PASS, WARN, OVER_BUDGET, UNSPECIFIED]
+        score:
+          type: integer
+          minimum: 0
+          maximum: 100
+        budgetWon:
+          type: integer
+          nullable: true
+        totalPrice:
+          type: integer
+          nullable: true
+        priceDiff:
+          type: integer
+          nullable: true
+        summary:
+          type: string
+    BuildCompositeScoreCurveDto:
+      type: object
+      required: [marker, label]
+      properties:
+        marker:
+          type: integer
+          minimum: 0
+          maximum: 1000
+        label:
+          type: string
     BuildGraphNodeDto:
       type: object
       required: [id, type, label, status]

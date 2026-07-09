@@ -294,10 +294,13 @@ export function BuildDependencyGraph({
           <h2 className="mt-1 text-xl font-black text-commerce-ink">{title}</h2>
           <p className="mt-1 max-w-3xl break-keep text-sm leading-6 text-slate-500">{displayGraph?.summary ?? subtitle}</p>
         </div>
-        <div className="buildgraph-stat-grid grid grid-cols-3 gap-2 text-center text-xs sm:min-w-[260px]">
-          <GraphStat label="노드" value={displayGraph ? graphModel.nodes.length : 0} />
-          <GraphStat label="관계" value={displayGraph ? graphModel.edges.length : 0} />
-          <GraphStat label="주의" value={displayGraph?.insights.filter((insight) => insight.status !== 'PASS').length ?? 0} tone="warn" />
+        <div className="flex w-full flex-col gap-2 lg:w-auto">
+          {displayGraph?.compositeScore ? <CompositeScoreMeter score={displayGraph.compositeScore} /> : null}
+          <div className="buildgraph-stat-grid grid grid-cols-3 gap-2 text-center text-xs sm:min-w-[260px]">
+            <GraphStat label="노드" value={displayGraph ? graphModel.nodes.length : 0} />
+            <GraphStat label="관계" value={displayGraph ? graphModel.edges.length : 0} />
+            <GraphStat label="주의" value={displayGraph?.insights.filter((insight) => insight.status !== 'PASS').length ?? 0} tone="warn" />
+          </div>
         </div>
       </div>
 
@@ -1425,6 +1428,71 @@ function partPhotoUrl(part: PartRow) {
     return attributeImageUrl;
   }
   return null;
+}
+
+function CompositeScoreMeter({ score }: { score: NonNullable<BuildGraphResolveResponse['compositeScore']> }) {
+  const percent = Math.max(0, Math.min(100, Math.round((score.score / Math.max(1, score.maxScore)) * 100)));
+  const topComponents = [...score.components]
+    .sort((left, right) => right.maxScore - left.maxScore)
+    .slice(0, 3);
+  return (
+    <div data-testid="build-composite-score" className="rounded-md border border-commerce-line bg-slate-50 p-3 text-left shadow-sm sm:min-w-[260px]">
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <div className="text-[11px] font-black uppercase text-slate-400">종합 점수</div>
+          <div className={`mt-0.5 text-2xl font-black ${scoreTone(score.score)}`}>
+            {score.score.toLocaleString('ko-KR')}<span className="text-sm text-slate-400"> / {score.maxScore.toLocaleString('ko-KR')}</span>
+          </div>
+        </div>
+        <div className="rounded bg-white px-2 py-1 text-right text-[11px] font-black text-commerce-ink ring-1 ring-commerce-line">
+          <div>{score.grade}</div>
+          <div className="text-slate-500">{score.label}</div>
+        </div>
+      </div>
+      <div className="mt-2 h-2 rounded-full bg-slate-200">
+        <div className={`h-2 rounded-full ${score.score <= 0 ? 'bg-red-500' : 'bg-brand-blue'}`} style={{ width: `${percent}%` }} />
+      </div>
+      <div className="mt-2 grid gap-1">
+        {topComponents.map((component) => (
+          <div key={component.key} className="flex items-center justify-between gap-3 text-[11px] font-bold text-slate-600">
+            <span>{component.label}</span>
+            <span className="text-commerce-ink">{component.score}/{component.maxScore}</span>
+          </div>
+        ))}
+      </div>
+      {score.requestFit ? (
+        <div className={`mt-2 rounded px-2 py-1 text-[11px] font-black ${requestFitTone(score.requestFit.status)}`}>
+          {requestFitLabel(score.requestFit)}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+function requestFitLabel(requestFit: NonNullable<BuildGraphResolveResponse['compositeScore']>['requestFit']) {
+  if (!requestFit) return '요청 예산 정보 없음';
+  const formatter = new Intl.NumberFormat('ko-KR');
+  if (requestFit.status === 'OVER_BUDGET') {
+    return `요청 예산 초과 · 차액 ${formatter.format(Math.abs(requestFit.priceDiff ?? 0))}원`;
+  }
+  if (requestFit.status === 'PASS') return '요청 예산 적합';
+  if (requestFit.status === 'WARN') return '요청 예산 근접';
+  return requestFit.summary || '요청 예산 정보 없음';
+}
+
+function requestFitTone(status?: string) {
+  if (status === 'OVER_BUDGET') return 'bg-red-50 text-red-700';
+  if (status === 'WARN') return 'bg-amber-50 text-amber-700';
+  if (status === 'PASS') return 'bg-emerald-50 text-emerald-700';
+  return 'bg-slate-100 text-slate-500';
+}
+
+function scoreTone(score: number) {
+  if (score >= 930) return 'text-brand-blue';
+  if (score >= 850) return 'text-commerce-green';
+  if (score >= 750) return 'text-commerce-ink';
+  if (score >= 600) return 'text-amber-600';
+  return 'text-red-600';
 }
 
 function GraphStat({ label, value, tone = 'default' }: { label: string; value: number; tone?: 'default' | 'warn' }) {

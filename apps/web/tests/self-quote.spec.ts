@@ -208,6 +208,7 @@ const fullDraft = {
 async function loginAsUser(page: Page) {
   await page.addInitScript(() => {
     localStorage.setItem('buildgraph.token', 'jwt-user-token');
+    localStorage.setItem('buildgraph.homeLoginChoice.dismissed', 'true');
   });
 }
 

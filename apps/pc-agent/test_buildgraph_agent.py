@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import gzip
 import json
+import os
 import tempfile
 import unittest
 from datetime import datetime, timedelta, timezone
@@ -1712,6 +1713,48 @@ class AgentGoal1112Test(unittest.TestCase):
             self.assertEqual(startup_path.name, f"{agent.APP_NAME}.cmd")
             self.assertIn(f'"{installed}" run-background', startup_path.read_text(encoding="utf-8"))
 
+    def test_ensure_installed_executable_skips_copy_when_content_matches(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            source = root / "Downloads" / "PCAgent.exe"
+            target = root / "LocalAppData" / agent.DATA_APP_NAME / f"{agent.APP_NAME}.exe"
+            source.parent.mkdir(parents=True)
+            target.parent.mkdir(parents=True)
+            source.write_bytes(b"pca-agent-exe")
+            target.write_bytes(b"pca-agent-exe")
+            os.utime(source, (200, 200))
+            os.utime(target, (100, 100))
+
+            with patch.dict("os.environ", {"LOCALAPPDATA": str(root / "LocalAppData")}), \
+                    patch.object(agent.sys, "frozen", True, create=True), \
+                    patch.object(agent.sys, "executable", str(source)), \
+                    patch("buildgraph_agent.shutil.copy2") as copy2:
+                installed = agent.ensure_installed_executable()
+
+            self.assertEqual(installed, target)
+            copy2.assert_not_called()
+
+    def test_ensure_installed_executable_reports_locked_target_permission_error(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            source = root / "Downloads" / "PCAgent.exe"
+            target = root / "LocalAppData" / agent.DATA_APP_NAME / f"{agent.APP_NAME}.exe"
+            source.parent.mkdir(parents=True)
+            target.parent.mkdir(parents=True)
+            source.write_bytes(b"new-pca-agent-exe")
+            target.write_bytes(b"old-pca-agent-exe")
+            permission_error = PermissionError(13, "Permission denied", str(target))
+
+            with patch.dict("os.environ", {"LOCALAPPDATA": str(root / "LocalAppData")}), \
+                    patch.object(agent.sys, "frozen", True, create=True), \
+                    patch.object(agent.sys, "executable", str(source)), \
+                    patch("buildgraph_agent.shutil.copy2", side_effect=permission_error):
+                with self.assertRaises(agent.AgentError) as context:
+                    agent.ensure_installed_executable()
+
+            self.assertIn("PCAgent.exe", str(context.exception))
+            self.assertIn("Permission denied", str(context.exception))
+
     def test_register_startup_removes_legacy_startup_commands(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
@@ -2175,6 +2218,15 @@ class AgentGoal1112Test(unittest.TestCase):
 
         self.assertEqual(exit_code, 0)
         run_background.assert_called_once_with(open_viewer_when_running=True)
+
+    def test_no_arg_launch_reports_agent_error_without_unhandled_exception(self) -> None:
+        with patch("buildgraph_agent.run_background", side_effect=agent.AgentError("locked target")), \
+                patch("buildgraph_agent.show_agent_error_dialog") as show_error:
+            exit_code = agent.main([])
+
+        self.assertEqual(exit_code, 4)
+        show_error.assert_called_once()
+        self.assertEqual(show_error.call_args.args[1], "locked target")
 
     def test_run_background_exits_when_instance_lock_exists(self) -> None:
         with patch("buildgraph_agent.acquire_named_instance_lock", return_value=None) as acquire_lock, \

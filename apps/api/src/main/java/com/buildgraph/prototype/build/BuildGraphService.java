@@ -25,17 +25,20 @@ public class BuildGraphService {
     private final ToolCheckService toolCheckService;
     private final CurrentUserService currentUserService;
     private final BuildGraphLayoutService buildGraphLayoutService;
+    private final BuildCompositeScoreService buildCompositeScoreService;
 
     public BuildGraphService(
             JdbcTemplate jdbcTemplate,
             ToolCheckService toolCheckService,
             CurrentUserService currentUserService,
-            BuildGraphLayoutService buildGraphLayoutService
+            BuildGraphLayoutService buildGraphLayoutService,
+            BuildCompositeScoreService buildCompositeScoreService
     ) {
         this.jdbcTemplate = jdbcTemplate;
         this.toolCheckService = toolCheckService;
         this.currentUserService = currentUserService;
         this.buildGraphLayoutService = buildGraphLayoutService;
+        this.buildCompositeScoreService = buildCompositeScoreService;
     }
 
     public Map<String, Object> resolve(String authorization, Map<String, Object> request) {
@@ -52,6 +55,7 @@ public class BuildGraphService {
         int total = total(parts);
         int budget = firstNumber(body.get("budgetWon"), total);
         List<Map<String, Object>> toolResults = parts.isEmpty() ? List.of() : toolCheckService.checkBuild(parts, budget);
+        Map<String, Object> compositeScore = buildCompositeScoreService.score(parts, toolResults, budget, total);
         GraphDraft draft = buildGraph(parts, toolResults, mode, view, focus, budget, total);
         List<Map<String, Object>> nodes = withLayoutPositions(draft.nodes(), buildGraphLayoutService.resolvePositions());
         return MockData.map(
@@ -61,6 +65,7 @@ public class BuildGraphService {
                 "edges", draft.edges(),
                 "focusNodeIds", draft.focusNodeIds(),
                 "insights", draft.insights(),
+                "compositeScore", compositeScore,
                 "toolResults", toolResults
         );
     }

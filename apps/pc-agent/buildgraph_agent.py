@@ -2673,6 +2673,44 @@ def installed_executable_path() -> Path:
     return app_data_dir() / f"{APP_NAME}.exe"
 
 
+def files_have_same_content(left: Path, right: Path) -> bool:
+    try:
+        if left.stat().st_size != right.stat().st_size:
+            return False
+        with left.open("rb") as left_file, right.open("rb") as right_file:
+            while True:
+                left_chunk = left_file.read(1024 * 1024)
+                right_chunk = right_file.read(1024 * 1024)
+                if left_chunk != right_chunk:
+                    return False
+                if not left_chunk:
+                    return True
+    except OSError:
+        return False
+
+
+def executable_install_required(source: Path, target: Path) -> bool:
+    if not target.exists():
+        return True
+    try:
+        source_stat = source.stat()
+        target_stat = target.stat()
+        if source_stat.st_size != target_stat.st_size:
+            return True
+    except OSError:
+        return True
+    return not files_have_same_content(source, target)
+
+
+def install_permission_error_message(target: Path, exception: OSError) -> str:
+    return (
+        f"PCAgent 시작프로그램 실행 파일을 교체할 수 없습니다: {target}\n"
+        "이미 실행 중인 PCAgent가 있으면 트레이 아이콘에서 종료하거나 작업 관리자에서 "
+        "PCAgent.exe를 종료한 뒤 다시 실행해 주세요. 재부팅 직후 다시 실행해도 해결할 수 있습니다.\n"
+        f"원인: {exception}"
+    )
+
+
 def ensure_installed_executable() -> Path:
     if not getattr(sys, "frozen", False):
         return Path(sys.executable)
@@ -2684,8 +2722,10 @@ def ensure_installed_executable() -> Path:
 
     target.parent.mkdir(parents=True, exist_ok=True)
     try:
-        if not target.exists() or source.stat().st_mtime_ns != target.stat().st_mtime_ns or source.stat().st_size != target.stat().st_size:
+        if executable_install_required(source, target):
             shutil.copy2(source, target)
+    except PermissionError as exception:
+        raise AgentError(install_permission_error_message(target, exception)) from exception
     except OSError as exception:
         raise AgentError(f"Failed to install PCAgent executable for startup: {exception}") from exception
     return target
@@ -3575,6 +3615,77 @@ def diagnosis_detail_model(config: AgentConfig, path: Path) -> dict[str, Any]:
 
 def powershell_string(value: str) -> str:
     return "'" + value.replace("'", "''") + "'"
+
+
+def show_agent_error_dialog(title: str, message: str) -> None:
+    if tk is not None:
+        root = None
+        try:
+            width = 560
+            height = 260
+            root = tk.Tk()
+            root.title(title)
+            root.update_idletasks()
+            screen_width = root.winfo_screenwidth()
+            screen_height = root.winfo_screenheight()
+            x = max(0, (screen_width - width) // 2)
+            y = max(0, (screen_height - height) // 2)
+            root.geometry(f"{width}x{height}+{x}+{y}")
+            root.minsize(520, 220)
+            root.configure(background="#f8fafc")
+            root.attributes("-topmost", True)
+            root.after(250, lambda: root.attributes("-topmost", False))
+
+            container = tk.Frame(root, background="#f8fafc", padx=22, pady=18)
+            container.pack(fill="both", expand=True)
+            tk.Label(
+                container,
+                text=title,
+                font=("Segoe UI", 13, "bold"),
+                foreground="#991b1b",
+                background="#f8fafc",
+                anchor="w",
+            ).pack(fill="x")
+            tk.Label(
+                container,
+                text=message,
+                font=("Segoe UI", 10),
+                foreground="#1f2937",
+                background="#f8fafc",
+                justify="left",
+                anchor="nw",
+                wraplength=500,
+            ).pack(fill="both", expand=True, pady=(12, 16))
+            tk.Button(
+                container,
+                text="확인",
+                width=10,
+                command=root.destroy,
+            ).pack(anchor="e")
+            root.protocol("WM_DELETE_WINDOW", root.destroy)
+            root.mainloop()
+            return
+        except Exception:
+            pass
+        finally:
+            if root is not None:
+                try:
+                    root.destroy()
+                except Exception:
+                    pass
+    if os.name != "nt":
+        return
+    command = (
+        "Add-Type -AssemblyName PresentationFramework; "
+        f"[System.Windows.MessageBox]::Show({powershell_string(message)}, {powershell_string(title)}, 'OK', 'Error')"
+    )
+    try:
+        subprocess.Popen(
+            ["powershell.exe", "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", command],
+            **hidden_subprocess_kwargs(),
+        )
+    except OSError:
+        return
 
 
 def show_log_viewer_powershell(config_path: Path) -> None:
@@ -7208,7 +7319,11 @@ def submit_issue_ticket(
 def main(argv: Sequence[str] | None = None) -> int:
     argv = list(sys.argv[1:] if argv is None else argv)
     if not argv:
-        return run_background(open_viewer_when_running=True)
+        try:
+            return run_background(open_viewer_when_running=True)
+        except AgentError as exception:
+            show_agent_error_dialog("PCAgent 실행 실패", str(exception))
+            return 4
 
     parser = argparse.ArgumentParser(description="PCAgent prototype CLI")
     sub = parser.add_subparsers(dest="command", required=True)

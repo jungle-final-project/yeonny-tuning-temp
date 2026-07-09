@@ -11,11 +11,13 @@ import {
   FileText,
   LifeBuoy,
   PackageCheck,
+  X,
   type LucideIcon
 } from 'lucide-react';
 import { AppHeader } from '../../../components/ui';
+import { useLockedPageScroll } from '../../../hooks/useHiddenPageScrollbar';
 import { AUTH_CHANGED_EVENT } from '../../../lib/api';
-import { openAiAssistant } from '../../../lib/events';
+import { AI_BUILD_ASSISTANT_VISIBILITY_CHANGED_EVENT, isAiAssistantOpen, openAiAssistant, type AiAssistantVisibilityDetail } from '../../../lib/events';
 import { partImageUrl } from '../../parts/partDisplay';
 import { applyAiBuildToQuoteDraft, getPart, listHomeRecommendedParts, listParts, recordRecommendationEvent } from '../../parts/partsApi';
 import type { HomeRecommendedPart, PartRow } from '../../parts/types';
@@ -96,6 +98,35 @@ type FeaturedBuildResolvedPart = {
 type RecommendationTab = 'popular' | 'ai';
 
 const HOME_RECOMMENDED_PART_LIMIT = 8;
+const HOME_LOGIN_CHOICE_DISMISSED_KEY = 'buildgraph.homeLoginChoice.dismissed';
+
+function readHomeLoginChoiceDismissed() {
+  try {
+    return localStorage.getItem(HOME_LOGIN_CHOICE_DISMISSED_KEY) === 'true';
+  } catch {
+    return false;
+  }
+}
+
+function dismissHomeLoginChoice() {
+  try {
+    localStorage.setItem(HOME_LOGIN_CHOICE_DISMISSED_KEY, 'true');
+  } catch {
+    // localStorage가 막힌 환경에서는 현재 화면에서만 닫히도록 둔다.
+  }
+}
+
+function resetHomeLoginChoiceDismissed() {
+  try {
+    localStorage.removeItem(HOME_LOGIN_CHOICE_DISMISSED_KEY);
+  } catch {
+    // localStorage가 막힌 환경에서는 현재 화면 상태만 유지한다.
+  }
+}
+
+function shouldShowHomeLoginChoice(skipPrompt: boolean) {
+  return !skipPrompt && !isAiAssistantOpen() && !readHomeLoginChoiceDismissed();
+}
 
 const promoSlides: PromoSlide[] = [
   {
@@ -287,6 +318,7 @@ export function HomePage() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const [searchParams, setSearchParams] = useSearchParams();
+  const skipHomeChoicePromptRef = useRef(searchParams.get('assistant') === 'open');
   const homeMainRef = useRef<HTMLElement | null>(null);
   const [assistantSession, setAssistantSession] = useState<AiAssistantSession>(() => readAssistantSession());
   const [recommendationTab, setRecommendationTab] = useState<RecommendationTab>(() => readAssistantSession().latestBuilds.length > 0 ? 'ai' : 'popular');
@@ -295,6 +327,10 @@ export function HomePage() {
   const [applyingBuildId, setApplyingBuildId] = useState<string | null>(null);
   const [applyingFeaturedBuildId, setApplyingFeaturedBuildId] = useState<string | null>(null);
   const [applyError, setApplyError] = useState<string | null>(null);
+  const [showHomeChoicePrompt, setShowHomeChoicePrompt] = useState(() => shouldShowHomeLoginChoice(skipHomeChoicePromptRef.current));
+  const [showAiFlowChoicePrompt, setShowAiFlowChoicePrompt] = useState(false);
+  const [neverShowHomeChoice, setNeverShowHomeChoice] = useState(false);
+  useLockedPageScroll(showHomeChoicePrompt || showAiFlowChoicePrompt);
   const latestHomeAiBuilds = recentBuildsForChatContext(assistantSession);
   const selectedAiBuild = selectedAiBuildId
     ? latestHomeAiBuilds.find((build) => build.id === selectedAiBuildId) ?? null
@@ -424,6 +460,36 @@ export function HomePage() {
   }, [searchParams, setSearchParams]);
 
   useEffect(() => {
+    const syncHomeChoicePrompt = () => {
+      if (skipHomeChoicePromptRef.current || isAiAssistantOpen()) {
+        setShowHomeChoicePrompt(false);
+        return;
+      }
+      setNeverShowHomeChoice(false);
+      setShowHomeChoicePrompt(shouldShowHomeLoginChoice(false));
+    };
+
+    const closeChoicesForAiAssistant = (event: Event) => {
+      const detail = event instanceof CustomEvent ? event.detail as AiAssistantVisibilityDetail | undefined : undefined;
+      if (!detail?.open) {
+        return;
+      }
+      setShowHomeChoicePrompt(false);
+      setShowAiFlowChoicePrompt(false);
+    };
+
+    syncHomeChoicePrompt();
+    window.addEventListener(AUTH_CHANGED_EVENT, syncHomeChoicePrompt);
+    window.addEventListener('storage', syncHomeChoicePrompt);
+    window.addEventListener(AI_BUILD_ASSISTANT_VISIBILITY_CHANGED_EVENT, closeChoicesForAiAssistant);
+    return () => {
+      window.removeEventListener(AUTH_CHANGED_EVENT, syncHomeChoicePrompt);
+      window.removeEventListener('storage', syncHomeChoicePrompt);
+      window.removeEventListener(AI_BUILD_ASSISTANT_VISIBILITY_CHANGED_EVENT, closeChoicesForAiAssistant);
+    };
+  }, []);
+
+  useEffect(() => {
     const syncAssistantSession = () => {
       clearLegacyAiStorage();
       const nextSession = readAssistantSession();
@@ -532,6 +598,57 @@ export function HomePage() {
       setApplyError('추천상품 견적을 셀프 견적 장바구니에 담지 못했습니다. 잠시 후 다시 시도해 주세요.');
     } finally {
       setApplyingFeaturedBuildId(null);
+    }
+  }
+
+  function rememberHomeChoiceIfNeeded() {
+    if (neverShowHomeChoice) {
+      dismissHomeLoginChoice();
+    }
+  }
+
+  function chooseAiBuildFlow() {
+    rememberHomeChoiceIfNeeded();
+    setShowHomeChoicePrompt(false);
+    setShowAiFlowChoicePrompt(true);
+  }
+
+  function choosePartsFlow() {
+    rememberHomeChoiceIfNeeded();
+    setShowHomeChoicePrompt(false);
+    setShowAiFlowChoicePrompt(false);
+    navigate('/parts');
+  }
+
+  function chooseCenteredAiAssistant() {
+    setShowAiFlowChoicePrompt(false);
+    openAiAssistant({ placement: 'center' });
+  }
+
+  function chooseSelfQuoteFlow() {
+    setShowAiFlowChoicePrompt(false);
+    navigate('/self-quote');
+  }
+
+  function chooseAllPartsFlow() {
+    setShowAiFlowChoicePrompt(false);
+    navigate('/parts');
+  }
+
+  function closeHomeChoicePrompt() {
+    setShowHomeChoicePrompt(false);
+  }
+
+  function closeAiFlowChoicePrompt() {
+    setShowAiFlowChoicePrompt(false);
+  }
+
+  function changeNeverShowHomeChoice(checked: boolean) {
+    setNeverShowHomeChoice(checked);
+    if (checked) {
+      dismissHomeLoginChoice();
+    } else {
+      resetHomeLoginChoiceDismissed();
     }
   }
 
@@ -647,6 +764,214 @@ export function HomePage() {
         />
       </div>
       </main>
+      {showHomeChoicePrompt ? (
+        <HomeLoginChoiceDialog
+          neverShow={neverShowHomeChoice}
+          onNeverShowChange={changeNeverShowHomeChoice}
+          onChooseAi={chooseAiBuildFlow}
+          onChooseParts={choosePartsFlow}
+          onClose={closeHomeChoicePrompt}
+        />
+      ) : null}
+      {showAiFlowChoicePrompt ? (
+        <HomeAiFlowChoiceDialog
+          onChooseAi={chooseCenteredAiAssistant}
+          onChooseSelfQuote={chooseSelfQuoteFlow}
+          onChooseAllParts={chooseAllPartsFlow}
+          onClose={closeAiFlowChoicePrompt}
+        />
+      ) : null}
+    </div>
+  );
+}
+
+type HomeLoginChoiceDialogProps = {
+  neverShow: boolean;
+  onNeverShowChange: (checked: boolean) => void;
+  onChooseAi: () => void;
+  onChooseParts: () => void;
+  onClose: () => void;
+};
+
+function HomeLoginChoiceDialog({
+  neverShow,
+  onNeverShowChange,
+  onChooseAi,
+  onChooseParts,
+  onClose
+}: HomeLoginChoiceDialogProps) {
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/60 px-4 py-6"
+      role="presentation"
+      onWheel={(event) => event.stopPropagation()}
+      onTouchMove={(event) => event.stopPropagation()}
+    >
+      <section
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="home-login-choice-title"
+        aria-describedby="home-login-choice-description"
+        data-testid="home-login-choice-dialog"
+        className="relative w-full max-w-[1064px]"
+      >
+        <button
+          type="button"
+          aria-label="선택지 닫기"
+          onClick={onClose}
+          className="absolute -top-12 right-0 grid h-11 w-11 place-items-center rounded-full bg-white text-slate-600 shadow-lg transition hover:bg-slate-100 hover:text-commerce-ink focus:outline-none focus:ring-4 focus:ring-blue-100"
+        >
+          <X size={20} />
+        </button>
+        <div className="mx-auto flex max-w-[868px] items-start gap-4 rounded-2xl bg-white p-8 shadow-lg sm:p-9">
+          <div className="grid h-[62px] w-[62px] shrink-0 place-items-center rounded-xl bg-commerce-ink text-white" aria-hidden="true">
+            <Bot size={31} strokeWidth={2.3} />
+          </div>
+          <div>
+            <h2 id="home-login-choice-title" className="text-[28px] font-black leading-9 text-commerce-ink">
+              어떤 방식으로 PC를 맞춰볼까요?
+            </h2>
+            <p id="home-login-choice-description" className="mt-2 break-keep text-[20px] leading-8 text-slate-600">
+              처음이라면 AI 추천으로 빠르게 시작하거나, 전체 부품 목록에서 직접 비교할 수 있습니다.
+            </p>
+          </div>
+        </div>
+
+        <div className="mt-7 grid gap-5 sm:grid-cols-2">
+          <button
+            type="button"
+            autoFocus
+            onClick={onChooseAi}
+            data-testid="home-login-choice-ai"
+            className="group flex min-h-[249px] flex-col items-start rounded-2xl bg-white p-7 text-left shadow-lg transition hover:-translate-y-0.5 hover:bg-blue-50 focus:outline-none focus:ring-4 focus:ring-blue-100"
+          >
+            <span className="grid h-[62px] w-[62px] place-items-center rounded-xl bg-brand-blue text-white transition group-hover:bg-blue-700" aria-hidden="true">
+              <Bot size={31} strokeWidth={2.3} />
+            </span>
+            <span className="mt-6 text-[22px] font-black leading-8 text-commerce-ink">AI로 부품 맞춰보기</span>
+            <span className="mt-2 break-keep text-[20px] leading-8 text-slate-600">예산과 용도를 말하면 추천 조합을 바로 만들어줍니다.</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={onChooseParts}
+            data-testid="home-login-choice-parts"
+            className="group flex min-h-[249px] flex-col items-start rounded-2xl bg-white p-7 text-left shadow-lg transition hover:-translate-y-0.5 hover:bg-emerald-50 focus:outline-none focus:ring-4 focus:ring-emerald-100"
+          >
+            <span className="grid h-[62px] w-[62px] place-items-center rounded-xl bg-emerald-600 text-white transition group-hover:bg-emerald-700" aria-hidden="true">
+              <Boxes size={31} strokeWidth={2.3} />
+            </span>
+            <span className="mt-6 text-[22px] font-black leading-8 text-commerce-ink">부품 보러가기</span>
+            <span className="mt-2 break-keep text-[20px] leading-8 text-slate-600">전체 부품 페이지에서 카테고리와 가격을 직접 살펴봅니다.</span>
+          </button>
+        </div>
+
+        <label className="mx-auto mt-6 flex w-fit items-center gap-3 rounded-2xl bg-white px-5 py-4 text-[20px] font-bold text-slate-700 shadow-lg">
+          <input
+            type="checkbox"
+            checked={neverShow}
+            onChange={(event) => onNeverShowChange(event.currentTarget.checked)}
+            className="h-5 w-5 accent-blue-600"
+          />
+          다시는 표시하지 않기
+        </label>
+      </section>
+    </div>
+  );
+}
+
+type HomeAiFlowChoiceDialogProps = {
+  onChooseAi: () => void;
+  onChooseSelfQuote: () => void;
+  onChooseAllParts: () => void;
+  onClose: () => void;
+};
+
+function HomeAiFlowChoiceDialog({
+  onChooseAi,
+  onChooseSelfQuote,
+  onChooseAllParts,
+  onClose
+}: HomeAiFlowChoiceDialogProps) {
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/60 px-4 py-6"
+      role="presentation"
+      onWheel={(event) => event.stopPropagation()}
+      onTouchMove={(event) => event.stopPropagation()}
+    >
+      <section
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="home-ai-flow-choice-title"
+        aria-describedby="home-ai-flow-choice-description"
+        data-testid="home-ai-flow-choice-dialog"
+        className="relative w-full max-w-[1316px]"
+      >
+        <button
+          type="button"
+          aria-label="선택지 닫기"
+          onClick={onClose}
+          className="absolute -top-12 right-0 grid h-11 w-11 place-items-center rounded-full bg-white text-slate-600 shadow-lg transition hover:bg-slate-100 hover:text-commerce-ink focus:outline-none focus:ring-4 focus:ring-blue-100"
+        >
+          <X size={20} />
+        </button>
+        <div className="mx-auto flex max-w-[868px] items-start gap-4 rounded-2xl bg-white p-8 shadow-lg sm:p-9">
+          <div className="grid h-[62px] w-[62px] shrink-0 place-items-center rounded-xl bg-brand-blue text-white" aria-hidden="true">
+            <Bot size={31} strokeWidth={2.3} />
+          </div>
+          <div>
+            <h2 id="home-ai-flow-choice-title" className="text-[28px] font-black leading-9 text-commerce-ink">
+              견적을 어떤 방식으로 시작할까요?
+            </h2>
+            <p id="home-ai-flow-choice-description" className="mt-2 break-keep text-[20px] leading-8 text-slate-600">
+              AI에게 바로 맡기거나, 직접 담아보면서 비교할 수 있습니다.
+            </p>
+          </div>
+        </div>
+
+        <div className="mt-7 grid gap-5 md:grid-cols-3">
+          <button
+            type="button"
+            autoFocus
+            onClick={onChooseAi}
+            data-testid="home-ai-flow-choice-ai"
+            className="group flex min-h-[249px] flex-col items-start rounded-2xl bg-white p-7 text-left shadow-lg transition hover:-translate-y-0.5 hover:bg-blue-50 focus:outline-none focus:ring-4 focus:ring-blue-100"
+          >
+            <span className="grid h-[62px] w-[62px] place-items-center rounded-xl bg-brand-blue text-white transition group-hover:bg-blue-700" aria-hidden="true">
+              <Bot size={31} strokeWidth={2.3} />
+            </span>
+            <span className="mt-6 text-[22px] font-black leading-8 text-commerce-ink">AI로 맞춰보기</span>
+            <span className="mt-2 break-keep text-[20px] leading-8 text-slate-600">예산과 용도를 말하면 중앙 창에서 추천을 시작합니다.</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={onChooseSelfQuote}
+            data-testid="home-ai-flow-choice-self-quote"
+            className="group flex min-h-[249px] flex-col items-start rounded-2xl bg-white p-7 text-left shadow-lg transition hover:-translate-y-0.5 hover:bg-slate-50 focus:outline-none focus:ring-4 focus:ring-blue-100"
+          >
+            <span className="grid h-[62px] w-[62px] place-items-center rounded-xl bg-commerce-ink text-white transition group-hover:bg-slate-700" aria-hidden="true">
+              <FileText size={31} strokeWidth={2.3} />
+            </span>
+            <span className="mt-6 text-[22px] font-black leading-8 text-commerce-ink">셀프견적</span>
+            <span className="mt-2 break-keep text-[20px] leading-8 text-slate-600">견적판에서 부품을 직접 담고 조합을 확인합니다.</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={onChooseAllParts}
+            data-testid="home-ai-flow-choice-all-parts"
+            className="group flex min-h-[249px] flex-col items-start rounded-2xl bg-white p-7 text-left shadow-lg transition hover:-translate-y-0.5 hover:bg-emerald-50 focus:outline-none focus:ring-4 focus:ring-emerald-100"
+          >
+            <span className="grid h-[62px] w-[62px] place-items-center rounded-xl bg-emerald-600 text-white transition group-hover:bg-emerald-700" aria-hidden="true">
+              <Boxes size={31} strokeWidth={2.3} />
+            </span>
+            <span className="mt-6 text-[22px] font-black leading-8 text-commerce-ink">전체부품</span>
+            <span className="mt-2 break-keep text-[20px] leading-8 text-slate-600">전체 부품 목록에서 카테고리별로 먼저 살펴봅니다.</span>
+          </button>
+        </div>
+      </section>
     </div>
   );
 }

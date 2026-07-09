@@ -139,6 +139,45 @@ export type BuildGraphInsight = {
   relatedNodeIds: string[];
 };
 
+export type BuildCompositeScoreComponent = {
+  key: 'performance' | 'compatibility' | 'balance' | 'upgrade' | 'evidence' | string;
+  label: string;
+  score: number;
+  maxScore: number;
+  percent: number;
+  summary: string;
+};
+
+export type BuildCompositeScoreCap = {
+  code: string;
+  maxScore: number;
+  reason: string;
+};
+
+export type BuildCompositeRequestFit = {
+  status: 'PASS' | 'WARN' | 'OVER_BUDGET' | 'UNSPECIFIED' | string;
+  score: number;
+  budgetWon?: number;
+  totalPrice?: number;
+  priceDiff?: number;
+  summary: string;
+};
+
+export type BuildCompositeScore = {
+  policyVersion: string;
+  score: number;
+  rawScore: number;
+  maxScore: number;
+  grade: string;
+  label: string;
+  summary: string;
+  components: BuildCompositeScoreComponent[];
+  caps: BuildCompositeScoreCap[];
+  requestFit?: BuildCompositeRequestFit;
+  curve?: { marker: number; label: string }[];
+  missingCategories?: string[];
+};
+
 export type BuildGraphResolveRequest = {
   source: BuildGraphSource;
   view?: BuildGraphView;
@@ -154,6 +193,7 @@ export type BuildGraphResolveResponse = {
   edges: BuildGraphEdge[];
   focusNodeIds: string[];
   insights: BuildGraphInsight[];
+  compositeScore?: BuildCompositeScore;
   toolResults: AiToolResult[];
 };
 
@@ -340,6 +380,19 @@ export function clearAssistantSession(ownerKey: string | null = getAiStorageOwne
   if (!storageKey) return;
   window.sessionStorage.removeItem(storageKey);
   window.dispatchEvent(new Event(AI_ASSISTANT_SESSION_CHANGED_EVENT));
+}
+
+export function resetAssistantConversation(ownerKey: string | null = getAiStorageOwnerKey()) {
+  const session = readAssistantSession(ownerKey);
+  const nextSession: AiAssistantSession = {
+    ...session,
+    messages: [initialAssistantMessage],
+    latestGraphFocus: undefined,
+    latestActiveBuildId: undefined,
+    updatedAt: new Date().toISOString()
+  };
+  saveAssistantSession(nextSession, ownerKey);
+  return nextSession;
 }
 
 export function normalizeAiRecommendedBuild(build: AiRecommendedBuild): AiRecommendedBuild {
