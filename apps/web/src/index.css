@@ -472,6 +472,19 @@ background:
   transition: filter 0.25s ease;
 }
 
+.slot-board-iso-scene-highlight {
+  opacity: 0;
+  filter:
+    drop-shadow(0 0 3px rgba(37, 99, 235, 0.85))
+    drop-shadow(0 0 12px rgba(37, 99, 235, 0.68))
+    drop-shadow(0 8px 22px rgba(37, 99, 235, 0.42));
+  transition: opacity 0.2s ease;
+}
+
+.slot-board-iso-scene-highlight[data-active='true'] {
+  opacity: 1;
+}
+
 .iso-part[data-status='PASS'] .iso-part-img {
   filter: drop-shadow(0 0 5px rgba(22, 163, 74, 0.28));
 }
@@ -624,6 +637,7 @@ background:
 @media (prefers-reduced-motion: reduce) {
   .iso-part,
   .iso-part-img,
+  .slot-board-iso-scene-highlight,
   .slot-problem-marker,
   .slot-problem-marker-hint {
     transition: none;

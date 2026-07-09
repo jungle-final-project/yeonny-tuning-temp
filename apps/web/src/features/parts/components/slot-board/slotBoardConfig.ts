@@ -24,6 +24,7 @@ export const SLOT_BOARD_BG = '/slot-board/backgrounds/topology-board-bg.svg';
 
 /** 등각 실장 씬 배경. viewBox 1600x840 기준으로 아래 SLOT_ISO_ART 좌표가 맞춰져 있다. */
 export const SLOT_BOARD_ISO_SCENE = '/slot-board/iso/scene-board.svg';
+export const SLOT_BOARD_ISO_SCENE_HIGHLIGHT = '/slot-board/iso/scene-board-blue-highlight.svg';
 
 export type SlotIsoArt = {
   src: string;

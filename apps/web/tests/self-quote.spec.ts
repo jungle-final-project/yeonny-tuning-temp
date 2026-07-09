@@ -638,6 +638,43 @@ test('draws a card-to-part elbow connector only for the selected card in 3D view
   await expect(connector).toHaveCount(0);
 });
 
+test('uses a border-only asset for selected 3D motherboard highlight', async ({ request }) => {
+  const response = await request.get('/slot-board/iso/scene-board-blue-highlight.svg');
+  const svg = await response.text();
+
+  expect(response.ok()).toBeTruthy();
+  expect(svg).toContain('viewBox="0 0 1600 840"');
+  expect(svg).toMatch(/stroke="#60a5fa"|stroke="#93c5fd"/);
+  expect(svg).not.toMatch(/<(linearGradient|radialGradient)\b/);
+  expect(svg).not.toMatch(/\sfill="(?!none")[^"]+"/);
+});
+
+test('highlights only the blue scene board layer when motherboard is selected in 3D view', async ({ page }) => {
+  await loginAsUser(page);
+  await page.route('**/api/quote-drafts/current**', async (route) => {
+    await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(fullDraft) });
+  });
+  await page.route('**/api/parts**', async (route) => {
+    await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ items: [], page: 0, size: 20, total: 0 }) });
+  });
+
+  await page.goto('/self-quote');
+  await page.getByRole('switch', { name: '3D UI 보기' }).click();
+
+  await expect(page.getByTestId('slot-board-motherboard-highlight')).toHaveAttribute('data-active', 'false');
+  await page.getByTestId('slot-MOTHERBOARD').getByRole('button', { name: '메인보드 슬롯 열기' }).click();
+
+  await expect(page).toHaveURL('/self-quote?category=MOTHERBOARD');
+  await expect(page.getByTestId('slot-board-motherboard-highlight')).toHaveAttribute('data-active', 'true');
+  await expect(page.getByTestId('slot-board-motherboard-highlight')).toHaveCSS('background-image', /scene-board-blue-highlight\.svg/);
+  await expect(page.getByTestId('slot-board-motherboard-art')).not.toHaveAttribute('data-selected', 'true');
+  await expect(page.getByTestId('iso-part-MOTHERBOARD')).toHaveAttribute('data-selected', 'false');
+  await expect(page.getByTestId('iso-part-MOTHERBOARD')).toHaveAttribute('data-spotlight', 'false');
+  await expect(page.getByTestId('iso-part-MOTHERBOARD')).toHaveAttribute('data-dimmed', 'true');
+  await expect(page.getByTestId('iso-part-CPU')).toHaveAttribute('data-dimmed', 'true');
+  await expect(page.getByTestId('iso-part-GPU')).toHaveAttribute('data-dimmed', 'true');
+});
+
 test('uses admin-placed anchors for the 3D connector when available', async ({ page }) => {
   await loginAsUser(page);
   await page.route('**/api/quote-drafts/current**', async (route) => {

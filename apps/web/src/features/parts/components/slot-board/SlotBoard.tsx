@@ -7,6 +7,7 @@ import {
   SLOT_BOARD_ISO_CALLOUT_LAYOUTS,
   SLOT_BOARD_ISO_EDGES,
   SLOT_BOARD_ISO_SCENE,
+  SLOT_BOARD_ISO_SCENE_HIGHLIGHT,
   SLOT_BOARD_ART_VIEWBOX,
   SLOT_CONFIGS,
   SLOT_ISO_ART,
@@ -305,6 +306,7 @@ function IsometricSlotBoardBody({
   const [activeProblemCategory, setActiveProblemCategory] = useState<PartCategory | null>(null);
   const [hoveredCategory, setHoveredCategory] = useState<PartCategory | null>(null);
   const focusCategory = hoveredCategory ?? selectedCategory;
+  const isMotherboardSceneFocused = focusCategory === 'MOTHERBOARD' || selectedCategory === 'MOTHERBOARD';
   const celebrating = useCompletionCelebration(items, statusByCategory);
   const activeProblem = activeProblemCategory ? problemDetailsByCategory.get(activeProblemCategory) : undefined;
 
@@ -353,8 +355,15 @@ function IsometricSlotBoardBody({
       <div
         data-testid="slot-board-motherboard-art"
         aria-hidden="true"
-        className="pointer-events-none absolute inset-2 hidden rounded-lg bg-contain bg-center bg-no-repeat lg:block"
+        className="pointer-events-none absolute inset-2 z-0 hidden rounded-lg bg-contain bg-center bg-no-repeat lg:block"
         style={{ backgroundImage: `url(${SLOT_BOARD_ISO_SCENE})` }}
+      />
+      <div
+        data-testid="slot-board-motherboard-highlight"
+        data-active={isMotherboardSceneFocused ? 'true' : 'false'}
+        aria-hidden="true"
+        className="slot-board-iso-scene-highlight pointer-events-none absolute inset-2 z-[1] hidden rounded-lg bg-contain bg-center bg-no-repeat lg:block"
+        style={{ backgroundImage: `url(${SLOT_BOARD_ISO_SCENE_HIGHLIGHT})` }}
       />
       <IsoPartLayer
         items={items}
@@ -654,7 +663,10 @@ function IsoPartLayer({
   return (
     <div className="pointer-events-none absolute inset-2 z-[5] hidden lg:block">
       {SLOT_CONFIGS.map((slot) => {
-        const isSpotlighted = focusCategory ? slot.category === focusCategory : false;
+        const isMotherboardFocused = focusCategory === 'MOTHERBOARD';
+        const partFocusCategory = isMotherboardFocused ? null : focusCategory;
+        const isSpotlighted = partFocusCategory ? slot.category === partFocusCategory : false;
+        const isSelected = selectedCategory === slot.category && slot.category !== 'MOTHERBOARD';
         return (
           <IsoPart
             key={slot.category}
@@ -662,10 +674,10 @@ function IsoPartLayer({
             items={items.filter((item) => item.category === slot.category)}
             isMounting={flashingCategories.has(slot.category)}
             status={statusByCategory.get(slot.category)}
-            isHovered={hoveredCategory === slot.category}
-            isDimmed={focusCategory ? !isSpotlighted : false}
+            isHovered={hoveredCategory === slot.category && slot.category !== 'MOTHERBOARD'}
+            isDimmed={isMotherboardFocused || (partFocusCategory ? !isSpotlighted : false)}
             isSpotlighted={isSpotlighted}
-            isSelected={selectedCategory === slot.category}
+            isSelected={isSelected}
             problemDetail={problemDetailsByCategory.get(slot.category)}
             onHoverChange={onHoverChange}
             onSelect={() => onSlotSelect(slot.category)}
