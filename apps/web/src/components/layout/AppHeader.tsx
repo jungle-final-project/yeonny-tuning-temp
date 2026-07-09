@@ -96,13 +96,14 @@ export function AppHeader() {
       </div>
       <header className="border-b border-commerce-line bg-white">
         <div className="mx-auto grid min-h-[82px] w-full max-w-[1320px] grid-cols-[auto_minmax(0,1fr)] items-center gap-3 px-4 py-3 sm:px-6 lg:px-8 xl:grid-cols-[auto_minmax(260px,520px)_auto] xl:px-0 2xl:grid-cols-[auto_minmax(320px,620px)_auto]">
-          <Link to="/" className="flex min-w-0 items-center gap-3 rounded-md focus:outline-none focus:ring-4 focus:ring-blue-100">
-            <div className="grid h-11 w-11 shrink-0 place-items-center overflow-hidden rounded-md border border-commerce-line bg-white" aria-hidden="true">
-              <img src="/assets/specup-logo.png" alt="" className="h-9 w-9 object-contain" />
-            </div>
-            <div>
-              <div className="text-xl font-black leading-5 tracking-tight text-commerce-ink">다짜조</div>
-              <div className="text-xs font-semibold text-slate-500">당신만을 위한 PC 견적 플랫폼</div>
+          <Link to="/" className="flex min-w-0 items-center rounded-md focus:outline-none focus:ring-4 focus:ring-blue-100">
+            <div className="min-w-0">
+              <img
+                src="/assets/brand/dazzajo-title.png"
+                alt="다짜조"
+                className="h-[46px] w-auto max-w-[150px] object-contain"
+              />
+              <div className="mt-1 whitespace-nowrap text-[10px] font-semibold leading-3 text-slate-500">당신만을 위한 PC 견적 플랫폼</div>
             </div>
           </Link>
           <form onSubmit={submitSearch} className="col-span-2 row-start-2 flex h-12 w-full min-w-0 items-center rounded-md border border-commerce-ink bg-white px-3 shadow-sm xl:col-span-1 xl:col-start-2 xl:row-start-1">
