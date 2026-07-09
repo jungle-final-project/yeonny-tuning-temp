@@ -71,6 +71,34 @@ function item(category: string, partId: string, name: string, manufacturer: stri
   };
 }
 
+function compositeScoreFixture(score: number, label: string) {
+  return {
+    policyVersion: 'build-composite-score-v1',
+    score,
+    rawScore: score,
+    maxScore: 1000,
+    grade: score >= 850 ? 'A' : 'B',
+    label,
+    summary: `${label} 저장 견적입니다.`,
+    components: [
+      { key: 'performance', label: '성능', score: Math.round(score * 0.43), maxScore: 430, percent: 80, summary: '성능 참고' },
+      { key: 'compatibility', label: '호환·장착 안전성', score: 220, maxScore: 220, percent: 100, summary: '호환 통과' },
+      { key: 'balance', label: '병목·여유 균형', score: 130, maxScore: 160, percent: 81, summary: '균형 참고' }
+    ],
+    caps: [],
+    requestFit: {
+      status: 'PASS',
+      score: 100,
+      budgetWon: 0,
+      totalPrice: 0,
+      priceDiff: 0,
+      summary: '요청 예산 적합'
+    },
+    curve: [],
+    missingCategories: []
+  };
+}
+
 async function openMyQuotesAsUser(page: Page) {
   const priceAlertRequests: unknown[] = [];
   const applyBuildRequests: unknown[] = [];
@@ -168,7 +196,7 @@ async function openMyQuotesAsUser(page: Page) {
       body: JSON.stringify({ items: priceAlerts, page: 0, size: 20, total: priceAlerts.length })
     });
   });
-  // 저장 견적 성능 비교 매트릭스 — 견적별 CPU/GPU 벤치마크 점수를 돌려준다.
+  // 이전 CPU/GPU 개별 점수 endpoint는 더 이상 비교 대표점수에 쓰지 않는다.
   await page.route('**/api/tools/performance/check', async (route) => {
     await route.fulfill({
       status: 200,
@@ -182,6 +210,10 @@ async function openMyQuotesAsUser(page: Page) {
   await page.route('**/api/build-graphs/resolve', async (route) => {
     const body = JSON.parse(route.request().postData() ?? '{}');
     graphRequests.push(body);
+    const partIds = (body.items ?? []).map((item: { partId?: string }) => item.partId).join('|');
+    const compositeScore = partIds.includes('part-gpu-5080')
+      ? compositeScoreFixture(924, '고성능')
+      : compositeScoreFixture(854, '고성능');
     await route.fulfill({
       status: 200,
       contentType: 'application/json',
@@ -206,6 +238,7 @@ async function openMyQuotesAsUser(page: Page) {
         ],
         focusNodeIds: ['part-CPU', 'part-GPU'],
         insights: [],
+        compositeScore,
         toolResults: [
           {
             tool: 'performance',
@@ -247,9 +280,12 @@ test('shows saved quotes, actionable price alert setup, and alert progress', asy
   await expect(perfMatrix).toContainText('AMD Ryzen 7 9700X');
   await expect(perfMatrix).toContainText('GeForce RTX 5070');
   await expect(perfMatrix).toContainText('GeForce RTX 5080');
-  // 성능 참고 섹션 — 벤치마크 등급.
+  // 성능 참고 섹션 — CPU/GPU 평균이 아니라 완성 견적 1000점 종합 점수.
   await expect(perfMatrix).toContainText('종합');
-  await expect(perfMatrix).toContainText('상위급');
+  await expect(perfMatrix).toContainText('1000점');
+  await expect(perfMatrix.getByTestId('quote-compare-composite-gauge')).toHaveCount(2);
+  await expect(perfMatrix).toContainText('854');
+  await expect(perfMatrix).toContainText('924');
   // 견적 선택 해제 시 해당 열(부품)이 사라진다.
   await perfMatrix.getByTestId('compare-toggle-build-workstation').click();
   await expect(perfMatrix).not.toContainText('GeForce RTX 5080');
@@ -341,8 +377,9 @@ test('opens a read-only dependency graph popup for each saved quote', async ({ p
 
   await firstBuild.getByRole('button', { name: '견적 관계 그래프 보기' }).click();
 
-  await expect.poll(() => graphRequests.length).toBe(1);
-  expect(graphRequests[0]).toMatchObject({
+  await expect.poll(() => graphRequests.length).toBeGreaterThanOrEqual(1);
+  const firstBuildGraphRequest = graphRequests.find((request) => JSON.stringify(request).includes('part-cpu-9700x'));
+  expect(firstBuildGraphRequest).toMatchObject({
     source: 'AI_BUILD',
     budgetWon: 2_180_000,
     items: [
@@ -357,6 +394,7 @@ test('opens a read-only dependency graph popup for each saved quote', async ({ p
   await expect(dialog).toContainText('QHD 균형 저장 견적');
   await expect(dialog).toContainText('읽기 전용');
   await expect(dialog.getByTestId('graph-flow-canvas')).toBeVisible();
+  await expect(dialog.getByTestId('build-composite-score-gauge')).toBeVisible();
   await dialog.getByRole('button', { name: '관계 그래프 닫기' }).click();
   await expect(dialog).toHaveCount(0);
 });

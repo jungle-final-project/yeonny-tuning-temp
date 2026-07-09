@@ -88,6 +88,36 @@ function buildGraphResponse(mode = 'ISSUE_PATH') {
   };
 }
 
+function compositeScoreFixture(score = 734, label = '기본형') {
+  return {
+    policyVersion: 'build-composite-score-v1',
+    score,
+    rawScore: score,
+    maxScore: 1000,
+    grade: score >= 850 ? 'A' : score >= 750 ? 'B' : 'C',
+    label,
+    summary: '호환성은 통과했지만 성능과 운영 여유를 함께 보면 보완 여지가 있습니다.',
+    components: [
+      { key: 'performance', label: '성능', score: 288, maxScore: 430, percent: 67, summary: 'CPU/GPU/RAM/저장장치/쿨링 기반' },
+      { key: 'compatibility', label: '호환·장착 안전성', score: 220, maxScore: 220, percent: 100, summary: '호환 통과' },
+      { key: 'balance', label: '병목·여유 균형', score: 112, maxScore: 160, percent: 70, summary: '전력과 부품 체급 균형' },
+      { key: 'upgrade', label: '확장·운영 여유', score: 74, maxScore: 110, percent: 67, summary: '확장성 참고' },
+      { key: 'evidence', label: '근거 신뢰도', score: 40, maxScore: 80, percent: 50, summary: 'Tool/벤치 근거' }
+    ],
+    caps: [],
+    requestFit: {
+      status: 'PASS',
+      score: 100,
+      budgetWon: 800000,
+      totalPrice: 800000,
+      priceDiff: 0,
+      summary: '요청 예산에 맞습니다.'
+    },
+    curve: [],
+    missingCategories: []
+  };
+}
+
 function problemGraphResponse() {
   const base = buildGraphResponse();
   return {
@@ -1092,6 +1122,7 @@ test('shows the current build performance panel from the resolve performance too
       contentType: 'application/json',
       body: JSON.stringify({
         ...buildGraphResponse(),
+        compositeScore: compositeScoreFixture(),
         toolResults: [
           {
             tool: 'performance',
@@ -1124,12 +1155,15 @@ test('shows the current build performance panel from the resolve performance too
 
   const panel = page.getByTestId('quote-performance-panel');
   await expect(panel).toBeVisible();
-  // 용도 적합도(PASS/WARN → 사용자 언어) + 점수 막대 + 근거 표기.
-  await expect(panel.getByTestId('quote-performance-fit')).toHaveText('여유 낮음');
-  await expect(panel.getByTestId('quote-performance-cpu-score')).toContainText('68');
-  await expect(panel.getByTestId('quote-performance-gpu-score')).toContainText('63');
-  await expect(panel.getByTestId('quote-performance-cpu')).toContainText('라이젠 9600X');
-  await expect(panel).toContainText('공개 벤치마크 기준');
+  // CPU/GPU 개별 점수 대신 완성 견적 1000점 종합 점수만 대표로 노출한다.
+  await expect(panel.getByTestId('quote-performance-grid')).toBeVisible();
+  await expect(panel.getByTestId('quote-performance-fit')).toHaveText('기본형');
+  await expect(panel.getByTestId('quote-composite-score-gauge')).toBeVisible();
+  await expect(panel.getByTestId('quote-composite-score')).toContainText('734');
+  await expect(panel).toContainText('호환·성능·여유 종합 1000점');
+  await expect(panel.getByTestId('quote-composite-score-bar')).toHaveCount(0);
+  await expect(panel.getByTestId('quote-performance-cpu-score')).toHaveCount(0);
+  await expect(panel.getByTestId('quote-performance-gpu-score')).toHaveCount(0);
   // 정책: 정확 FPS·실성능 보장 아님 문구 노출.
   await expect(panel).toContainText('보장하지 않습니다');
 });
@@ -1154,6 +1188,7 @@ test('shows game FPS reference in the performance panel with game and resolution
       contentType: 'application/json',
       body: JSON.stringify({
         ...buildGraphResponse(),
+        compositeScore: compositeScoreFixture(812, '균형형'),
         toolResults: [{
           tool: 'performance',
           status: 'PASS',
@@ -1199,6 +1234,7 @@ test('shows game FPS reference in the performance panel with game and resolution
 
   const fps = page.getByTestId('quote-fps-section');
   await expect(fps).toBeVisible();
+  await expect(page.getByTestId('quote-performance-grid')).toBeVisible();
   // 기본: 배그 · QHD → 130fps, '매우 부드러움', 프리셋 한글화, 하위 1% 평균(1% low).
   await expect(fps.getByTestId('fps-avg')).toHaveText('130');
   await expect(fps.getByTestId('fps-result')).toContainText('매우 부드러움');
