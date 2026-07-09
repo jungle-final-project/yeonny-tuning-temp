@@ -51,7 +51,7 @@ const ASSISTANT_DESKTOP_QUERY = '(min-width: 768px)';
 const CENTER_SCROLLBAR_TRACK_TOP = 8;
 const CENTER_SCROLLBAR_TRACK_BOTTOM = 12;
 const CENTER_SCROLLBAR_MIN_THUMB_HEIGHT = 32;
-const CENTER_SCROLLBAR_HIDE_DELAY_MS = 900;
+const CENTER_SCROLLBAR_HIDE_DELAY_MS = 700;
 
 export function AiBuildAssistant({ surface = 'home' }: AiBuildAssistantProps) {
   const navigate = useNavigate();
@@ -104,7 +104,7 @@ export function AiBuildAssistant({ surface = 'home' }: AiBuildAssistantProps) {
   }, []);
 
   useEffect(() => {
-    function startFreshConversation() {
+    function resetCenteredConversation() {
       const ownerKey = getAiStorageOwnerKey();
       const nextSession = resetAssistantConversation(ownerKey);
       setSession(nextSession);
@@ -118,8 +118,11 @@ export function AiBuildAssistant({ surface = 'home' }: AiBuildAssistantProps) {
 
     const openAssistant = (event: Event) => {
       const detail = (event as CustomEvent<AiAssistantOpenDetail>).detail;
-      startFreshConversation();
-      setPlacement(detail?.placement ?? 'side');
+      const nextPlacement = detail?.placement ?? 'side';
+      setPlacement(nextPlacement);
+      if (nextPlacement === 'center') {
+        resetCenteredConversation();
+      }
       if (!isDesktopAssistant) {
         window.dispatchEvent(new Event(SUPPORT_CHAT_CLOSE_EVENT));
       }
@@ -135,7 +138,6 @@ export function AiBuildAssistant({ surface = 'home' }: AiBuildAssistantProps) {
     const toggleAssistant = () => setOpen((current) => {
       const nextOpen = !current;
       if (nextOpen) {
-        startFreshConversation();
         setPlacement('side');
       }
       if (nextOpen && !isDesktopAssistant) {
@@ -509,7 +511,7 @@ export function AiBuildAssistant({ surface = 'home' }: AiBuildAssistantProps) {
                       event.stopPropagation();
                       revealCenterScrollbar();
                     }}
-                    onScroll={() => updateCenterScrollbar(centerScrollbarVisibleRef.current)}
+                    onScroll={revealCenterScrollbar}
                     onTouchMove={(event) => {
                       event.stopPropagation();
                       revealCenterScrollbar();
@@ -536,10 +538,13 @@ export function AiBuildAssistant({ surface = 'home' }: AiBuildAssistantProps) {
                     <div
                       aria-hidden="true"
                       data-testid="ai-chat-custom-scrollbar"
-                      className={`pointer-events-none absolute -right-4 w-1.5 rounded-full bg-white/10 opacity-0 transition-opacity ease-out motion-reduce:transition-none ${centerScrollbar.visible ? 'opacity-100 duration-150' : 'duration-700'}`}
+                      className="pointer-events-none absolute -right-5 w-2 rounded-full bg-white/10"
                       style={{
                         bottom: CENTER_SCROLLBAR_TRACK_BOTTOM,
-                        top: CENTER_SCROLLBAR_TRACK_TOP
+                        opacity: centerScrollbar.visible ? 1 : 0,
+                        top: CENTER_SCROLLBAR_TRACK_TOP,
+                        transition: centerScrollbar.visible ? 'opacity 120ms ease-out' : 'opacity 700ms linear',
+                        willChange: 'opacity'
                       }}
                     >
                       <div
