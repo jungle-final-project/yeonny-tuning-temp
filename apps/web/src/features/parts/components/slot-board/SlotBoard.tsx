@@ -709,7 +709,6 @@ function IsoPart({
     return null;
   }
   const slotStatus = status ?? 'PASS';
-  const orderNumber = slotOrderNumber(slot.category);
   const markerPlacement = isoProblemMarkerPlacement(slot.category);
   return (
     <div
@@ -732,13 +731,6 @@ function IsoPart({
       <div className="iso-part-shadow absolute inset-x-[14%] bottom-[4%] h-[14%] rounded-[50%] bg-slate-900/20 blur-[5px]" />
       <img src={iso.src} alt="" className={`iso-part-img relative w-full iso-part-img--${iso.mount}`} />
       <span aria-hidden="true" className={`iso-part-impact iso-part-impact--${iso.mount}`} />
-      <span
-        data-testid={`iso-order-${slot.category}`}
-        aria-hidden="true"
-        className="pointer-events-none absolute left-[4%] top-[2%] z-[11] flex h-4 w-4 items-center justify-center rounded-full bg-brand-blue text-[9px] font-black leading-none text-white shadow"
-      >
-        {orderNumber}
-      </span>
       {problemDetail ? (
         <button
           type="button"

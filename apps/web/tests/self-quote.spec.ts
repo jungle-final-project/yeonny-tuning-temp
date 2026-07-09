@@ -657,7 +657,7 @@ test('falls back to auto-computed anchors when the layout fetch fails', async ({
   await expect(connector).toHaveAttribute('data-anchor-source', 'auto');
 });
 
-test('numbers cards and 3D glyphs with the checklist order in 3D view', async ({ page }) => {
+test('keeps card order badges but hides 3D glyph order badges', async ({ page }) => {
   await loginAsUser(page);
   await page.route('**/api/quote-drafts/current**', async (route) => {
     await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(fullDraft) });
@@ -675,10 +675,13 @@ test('numbers cards and 3D glyphs with the checklist order in 3D view', async ({
   await expect(page.getByTestId('slot-order-GPU')).toHaveText('4');
   await expect(page.getByTestId('slot-order-COOLER')).toHaveText('8');
 
-  // 3D 글리프 번호도 같은 체계.
-  await expect(page.getByTestId('iso-order-CPU')).toHaveText('1');
-  await expect(page.getByTestId('iso-order-GPU')).toHaveText('4');
-  await expect(page.getByTestId('iso-order-PSU')).toHaveText('6');
+  // 3D 그림 위 번호는 제거하고, 부품 이미지만 유지한다.
+  await expect(page.getByTestId('iso-part-CPU')).toBeVisible();
+  await expect(page.getByTestId('iso-part-GPU')).toBeVisible();
+  await expect(page.getByTestId('iso-part-PSU')).toBeVisible();
+  await expect(page.getByTestId('iso-order-CPU')).toHaveCount(0);
+  await expect(page.getByTestId('iso-order-GPU')).toHaveCount(0);
+  await expect(page.getByTestId('iso-order-PSU')).toHaveCount(0);
 });
 
 test('shows the AI start banner on an empty quote with manual and AI entry points', async ({ page }) => {
