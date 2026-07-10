@@ -1,4 +1,4 @@
-import { expect, test, type Page } from '@playwright/test';
+import { expect, test, type Locator, type Page } from '@playwright/test';
 
 type AiTier = 'budget' | 'balanced' | 'performance';
 type PartCategory = 'CPU' | 'MOTHERBOARD' | 'RAM' | 'GPU' | 'STORAGE' | 'PSU' | 'CASE' | 'COOLER';
@@ -670,6 +670,19 @@ async function openHomeAsUser(page: Page, options: { dismissHomeChoice?: boolean
   await page.goto('/');
 }
 
+async function expectFlowNodeReady(node: Locator) {
+  await expect(node).toHaveCount(1);
+  await expect.poll(async () => {
+    const box = await node.boundingBox();
+    const isVisible = await node.evaluate((element) => {
+      const style = window.getComputedStyle(element);
+      return style.display !== 'none' && style.visibility !== 'hidden' && style.opacity !== '0';
+    }).catch(() => false);
+    return Boolean(isVisible && box && box.width > 0 && box.height > 0);
+  }, { timeout: 10000 }).toBe(true);
+  await expect(node).toBeVisible();
+}
+
 async function mockSelfQuoteApis(
   page: Page,
   options: { staleGetAfterApply?: boolean; getDelayAfterApplyMs?: number; initialItems?: MockQuoteDraftItem[]; failApply?: boolean } = {}
@@ -905,6 +918,7 @@ test('renders the full draggable home preview graph', async ({ page }) => {
   await expect(graphCanvas).toContainText('Total');
 
   const gpuNode = graphCanvas.locator('.react-flow__node').filter({ hasText: 'RTX 5070' }).first();
+  await expectFlowNodeReady(gpuNode);
   const beforeDragBox = await gpuNode.boundingBox();
   expect(beforeDragBox).not.toBeNull();
   const dragStartX = (beforeDragBox?.x ?? 0) + (beforeDragBox?.width ?? 0) / 2;
@@ -998,6 +1012,7 @@ test('chatbot uses build-chat API and updates latest home AI recommendations', a
   expect(graphCanvasBox?.height).toBeGreaterThanOrEqual(280);
   expect(graphPaneBox?.height).toBeGreaterThanOrEqual(260);
   const gpuGraphNode = graphCanvas.locator('.react-flow__node').filter({ hasText: 'RTX 5070' }).first();
+  await expectFlowNodeReady(gpuGraphNode);
   await expect(gpuGraphNode).toHaveClass(/buildgraph-flow-node/);
   await expect(gpuGraphNode).not.toHaveClass(/react-flow__node-default/);
   await expect(gpuGraphNode).toHaveCSS('border-radius', '10px');
@@ -1916,9 +1931,9 @@ test('shows a read-only build graph preview on recommendation card hover and reu
   await expect(preview).toContainText('주의 필요 2건');
   await expect(preview.getByText('검증 요약')).toHaveCount(0);
   await expect(preview.getByText('추천 저장 전 상세 drawer에서 Tool 검증 결과를 확인하세요.')).toHaveCount(0);
-  await expect(preview.locator('.react-flow__node').filter({ hasText: 'GPU' }).filter({ hasText: '호환 가능' })).toBeVisible();
-  await expect(preview.locator('.react-flow__node').filter({ hasText: '파워' }).filter({ hasText: '주의' })).toBeVisible();
-  await expect(preview.locator('.react-flow__node').filter({ hasText: 'RTX 5070' })).toBeVisible();
+  await expectFlowNodeReady(preview.locator('.react-flow__node').filter({ hasText: 'GPU' }).filter({ hasText: '호환 가능' }));
+  await expectFlowNodeReady(preview.locator('.react-flow__node').filter({ hasText: '파워' }).filter({ hasText: '주의' }));
+  await expectFlowNodeReady(preview.locator('.react-flow__node').filter({ hasText: 'RTX 5070' }));
   await expect(preview.locator('.react-flow__node').filter({ hasText: '총액' })).toHaveCount(0);
   const cardBox = await firstCard.boundingBox();
   const previewBox = await preview.boundingBox();
@@ -1943,7 +1958,7 @@ test('shows a read-only build graph preview on recommendation card hover and reu
   await expect.poll(() => buildGraphRequests.length).toBe(1);
 
   await page.getByRole('button', { name: /200만원 균형형/ }).hover();
-  await expect(page.getByTestId('latest-build-graph-preview').locator('.react-flow__node').filter({ hasText: 'RTX 5070' })).toBeVisible();
+  await expectFlowNodeReady(page.getByTestId('latest-build-graph-preview').locator('.react-flow__node').filter({ hasText: 'RTX 5070' }));
   await expect.poll(() => buildGraphRequests.length).toBe(2);
 });
 
@@ -1963,7 +1978,7 @@ test('shows the graph preview on card focus and suppresses hover preview while t
   const drawer = page.getByRole('dialog', { name: '추천 조합 상세' });
   await expect(drawer).toBeVisible();
   await expect(drawer.getByRole('heading', { name: '견적 관계도' })).toBeVisible();
-  await expect(drawer.locator('.react-flow__node').filter({ hasText: 'RTX 5070' })).toBeVisible();
+  await expectFlowNodeReady(drawer.locator('.react-flow__node').filter({ hasText: 'RTX 5070' }));
 
   await page.getByRole('button', { name: /200만원 실속형/ }).hover();
   await expect(page.getByTestId('latest-build-graph-preview')).toHaveCount(0);
@@ -2092,7 +2107,7 @@ test('keeps the unified home usable on mobile width', async ({ page }) => {
   await expect(main.getByTestId('build-dependency-graph')).toContainText('AI 추천 관계도');
   await main.getByTestId('build-dependency-graph').getByRole('button', { name: '관계 안내 닫기' }).click();
   const mobileGpuNode = main.getByTestId('graph-flow-canvas').locator('.react-flow__node').filter({ hasText: 'RTX 5070' }).first();
-  await expect(mobileGpuNode).toBeVisible();
+  await expectFlowNodeReady(mobileGpuNode);
   await mobileGpuNode.dispatchEvent('click');
   await expect(main.getByTestId('graph-flow-canvas').getByTestId('graph-node-candidate-panel')).toContainText('호환 후보');
   await moveHomeFullPageDown(page);
