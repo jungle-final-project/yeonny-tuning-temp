@@ -255,8 +255,12 @@ public class BuildChatService {
                 && !rawBudgetIntent.explicitHardConstraint()
                 && objectMaps(objectMap(body.get("currentQuoteDraft")).get("items")).isEmpty()) {
             stageStartNanos = System.nanoTime();
+            // 스냅샷은 티어 예산 기준 TARGET 밴드로 미리 계산돼 있다. 요청 예산이 티어와 다를 수 있으므로
+            // (허용 오차 15%), 실제 요청 예산 기준 모드 규칙(TARGET ±12.5%, MAX 이하)을 서빙 시점에
+            // 다시 검증하고, 하나라도 어긋나면 빠른 경로를 포기하고 일반 경로로 흘린다.
             Optional<BuildChatTierSnapshotStore.TierSnapshot> tierSnapshot =
-                    tierSnapshotStore.bestFor(rawBudgetIntent.budget(), rawBudgetIntent.mode(), tierSnapshotTolerancePct);
+                    tierSnapshotStore.bestFor(rawBudgetIntent.budget(), rawBudgetIntent.mode(), tierSnapshotTolerancePct)
+                            .filter(snapshot -> snapshotSatisfiesBudgetMode(snapshot.builds(), rawBudgetIntent.budget(), rawBudgetIntent.mode()));
             long tierMs = elapsedMs(stageStartNanos);
             if (tierSnapshot.isPresent()) {
                 BuildChatTierSnapshotStore.TierSnapshot snapshot = tierSnapshot.get();
@@ -375,7 +379,7 @@ public class BuildChatService {
                 && !usageOnlyFollowUp) {
             List<String> fallbackWarnings = new ArrayList<>();
             List<Map<String, Object>> fallbackBuilds = rawBudgetIntent.hasBudget()
-                    ? nearBudgetLadderBuilds(rawBudgetIntent.budget(), List.of(), fallbackWarnings, new BuildChatGuardStats())
+                    ? nearBudgetLadderBuilds(rawBudgetIntent.budget(), rawBudgetIntent.mode(), List.of(), fallbackWarnings, new BuildChatGuardStats())
                     : openBudgetFallbackBuilds(fallbackWarnings);
             if (!fallbackBuilds.isEmpty()) {
                 response.put("answerType", "BUDGET");
@@ -452,10 +456,32 @@ public class BuildChatService {
     public record TierBuilds(List<Map<String, Object>> builds, List<String> warnings) {
     }
 
-    // 예산 티어 스냅샷용 계산: "티어 이하 & 최대 근접" 사다리 탐색 (총액 ≤ 티어 보장)
+    // 티어 스냅샷 서빙 게이트: 모든 카드가 요청 예산 기준 모드 규칙을 만족할 때만 즉시 응답에 쓴다.
+    // totalPrice가 없는 카드는 검증 불가이므로 서빙하지 않는다(일반 경로 폴백).
+    private static boolean snapshotSatisfiesBudgetMode(List<Map<String, Object>> builds, int budgetWon, String mode) {
+        if (builds == null || builds.isEmpty()) {
+            return false;
+        }
+        for (Map<String, Object> build : builds) {
+            Integer totalPrice = numberValue(build.get("totalPrice"));
+            if (totalPrice == null) {
+                return false;
+            }
+            if ("MAX".equals(mode) && totalPrice > budgetWon) {
+                return false;
+            }
+            if ("TARGET".equals(mode) && !withinTargetBudgetBand(totalPrice, budgetWon)) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    // 예산 티어 스냅샷용 계산: "N만원 PC"는 계약상 target 예산이므로 스냅샷도 TARGET 규칙
+    // (티어 예산 ±12.5% 밴드)으로 미리 계산한다. 실제 요청 예산과의 밴드 재검증은 서빙 시점에 한다.
     public TierBuilds computeBudgetTierBuilds(int budgetWon) {
         List<String> warnings = new ArrayList<>();
-        List<Map<String, Object>> builds = nearBudgetLadderBuilds(budgetWon, List.of(), warnings, new BuildChatGuardStats());
+        List<Map<String, Object>> builds = nearBudgetLadderBuilds(budgetWon, "TARGET", List.of(), warnings, new BuildChatGuardStats());
         if (!builds.isEmpty()) {
             warnings.add("명시 예산 범위에 맞춰 내부 자산 기준 보조 견적을 재구성했습니다.");
         }
@@ -2339,48 +2365,77 @@ public class BuildChatService {
                 }
                 return List.of(build);
             }
-            List<Map<String, Object>> relaxed = nearBudgetLadderBuilds(budgetWon, engineResponse.evidenceIds(), warnings, guardStats);
+            // MIN 완화는 "예산 이하에서 최대 구성" 의미이므로 TARGET 밴드가 아니라 MAX 사다리를 유지한다
+            List<Map<String, Object>> relaxed = nearBudgetLadderBuilds(budgetWon, "MAX", engineResponse.evidenceIds(), warnings, guardStats);
             if (!relaxed.isEmpty()) {
                 warnings.add("요청 예산 하한 이상의 조합을 내부 자산으로 구성하지 못해, 예산 이하에서 구성 가능한 최대 조합을 추천합니다.");
             }
             return relaxed;
         }
 
-        // TARGET/MAX: 예산을 넘지 않으면서 최대한 근접한 조합을 사다리 방식으로 찾는다
-        List<Map<String, Object>> ladder = nearBudgetLadderBuilds(budgetWon, engineResponse.evidenceIds(), warnings, guardStats);
+        // TARGET: 계약 밴드(±12.5%) 안 조합만 / MAX: 예산을 넘지 않으면서 최대한 근접한 조합을 사다리로 찾는다
+        List<Map<String, Object>> ladder = nearBudgetLadderBuilds(budgetWon, rawBudgetIntent.mode(), engineResponse.evidenceIds(), warnings, guardStats);
         if (!ladder.isEmpty()) {
             warnings.add("명시 예산 범위에 맞춰 내부 자산 기준 보조 견적을 재구성했습니다.");
         }
         return ladder;
     }
 
-    // 3개 추천의 다양성을 위한 타깃 예산 비율: 가성비 / 균형 / 예산 근접.
+    // 3개 추천의 다양성을 위한 타깃 예산 비율(MAX/완화 모드): 가성비 / 균형 / 예산 근접.
+    // 계약상 MAX(이하) 모드는 "예산 이하 우선"만 요구하므로 가격대를 넓게 편다.
     // 느슨한 가격 밴드 탐색은 가지치기가 무력해져 수십 초가 걸리므로,
     // 타깃 예산을 낮춰 "타깃의 87.5%~100%" 타이트한 탐색을 3번 수행한다.
     private static final double[] NEAR_BUDGET_TIER_TARGETS = {0.55, 0.75, 1.0};
+    // TARGET(명시 예산) 모드 타깃 비율: 계약(docs/API_CONTRACT.md)이 총액을 예산의 87.5%~112.5%로
+    // 규정하므로, 다양성은 가격 분산이 아니라 밴드 안 구성 차이로 만든다.
+    private static final double[] TARGET_BAND_TIER_TARGETS = {0.90, 1.0, 1.08};
+    // 명시 예산 target 모드 계약 밴드(±12.5%) — LLM 경로 최종 필터(withinBudgetGuard),
+    // 결정적 사다리, 티어 스냅샷 서빙 게이트가 같은 값을 공유한다.
+    static final double TARGET_BUDGET_BAND_LOWER = 0.875;
+    static final double TARGET_BUDGET_BAND_UPPER = 1.125;
+
+    private static boolean withinTargetBudgetBand(Integer totalPrice, int budgetWon) {
+        return totalPrice != null
+                && totalPrice >= Math.floor(budgetWon * TARGET_BUDGET_BAND_LOWER)
+                && totalPrice <= Math.ceil(budgetWon * TARGET_BUDGET_BAND_UPPER);
+    }
 
     private List<Map<String, Object>> nearBudgetLadderBuilds(
             int budgetWon,
+            String budgetMode,
             List<String> evidenceIds,
             List<String> warnings,
             BuildChatGuardStats guardStats
     ) {
-        // 타깃 예산별로 1개씩 뽑아 가성비/균형/근접 다양성을 확보한다
+        // TARGET 모드는 계약 밴드(±12.5%) 밖 카드를 반환하지 않는다 — 밴드 밖 3장보다 밴드 안 2장이 낫다.
+        boolean targetBand = "TARGET".equals(budgetMode);
+        double[] tierTargets = targetBand ? TARGET_BAND_TIER_TARGETS : NEAR_BUDGET_TIER_TARGETS;
+        // 타깃 예산별로 1개씩 뽑아 구성 다양성을 확보한다
         LinkedHashMap<String, Map<String, Object>> byComposition = new LinkedHashMap<>();
-        for (double targetRatio : NEAR_BUDGET_TIER_TARGETS) {
+        for (double targetRatio : tierTargets) {
             int targetBudget = (int) Math.floor(budgetWon * targetRatio);
-            List<Map<String, Object>> targetResult = singleTargetLadderBuilds(targetBudget, evidenceIds);
+            List<Map<String, Object>> targetResult = singleTargetLadderBuilds(targetBudget, budgetMode, budgetWon, evidenceIds);
             if (!targetResult.isEmpty()) {
                 Map<String, Object> build = targetResult.get(0);
+                if (targetBand && !withinTargetBudgetBand(numberValue(build.get("totalPrice")), budgetWon)) {
+                    continue;
+                }
                 byComposition.putIfAbsent(buildItemsKey(build), build);
             }
         }
 
-        // 부족분은 예산 근접 탐색 결과로 보충한다
+        // 부족분 보충: MAX는 예산 근접 탐색, TARGET은 밴드 하한 미달을 상향 보정하도록
+        // 밴드 상한(112.5%)까지 열어 한 번 더 탐색한다
         if (byComposition.size() < 3) {
-            for (Map<String, Object> build : singleTargetLadderBuilds(budgetWon, evidenceIds)) {
+            int supplementTarget = targetBand
+                    ? (int) Math.floor(budgetWon * TARGET_BUDGET_BAND_UPPER)
+                    : budgetWon;
+            for (Map<String, Object> build : singleTargetLadderBuilds(supplementTarget, budgetMode, budgetWon, evidenceIds)) {
                 if (byComposition.size() >= 3) {
                     break;
+                }
+                if (targetBand && !withinTargetBudgetBand(numberValue(build.get("totalPrice")), budgetWon)) {
+                    continue;
                 }
                 byComposition.putIfAbsent(buildItemsKey(build), build);
             }
@@ -2422,7 +2477,7 @@ public class BuildChatService {
                 .mapToInt(Integer::intValue)
                 .max()
                 .orElse(0);
-        if (bestTotal < Math.floor(budgetWon * 0.875)) {
+        if (bestTotal < Math.floor(budgetWon * TARGET_BUDGET_BAND_LOWER)) {
             warnings.add("예산에 근접한 조합을 내부 자산으로 구성하지 못해, 구성 가능한 범위에서 예산 이하 최대 조합을 추천합니다.");
         }
         if (guardStats != null) {
@@ -2446,7 +2501,12 @@ public class BuildChatService {
      * 조합 DFS는 소켓 비호환 조합마다 Tool 검증(SQL)을 반복해 수십 초가 걸렸다 —
      * 여기서는 비중 배분 + 호환 프리필터로 후보를 만들고 Tool 검증은 1~4회만 수행한다.
      */
-    private List<Map<String, Object>> singleTargetLadderBuilds(int targetBudget, List<String> evidenceIds) {
+    private List<Map<String, Object>> singleTargetLadderBuilds(
+            int targetBudget,
+            String budgetMode,
+            int displayBudgetWon,
+            List<String> evidenceIds
+    ) {
         if (targetBudget <= 0) {
             return List.of();
         }
@@ -2459,10 +2519,15 @@ public class BuildChatService {
             return List.of();
         }
         GreedyBuild greedy = build.get();
+        // 카드에 노출하는 예산/모드: TARGET은 사용자 명시 예산 그대로, 그 외(MAX/완화)는 기존처럼
+        // 사다리 타깃 예산을 MAX로 표기한다.
+        boolean targetBand = "TARGET".equals(budgetMode);
         Map<String, Object> map = budgetFallbackBuildMap(
                 TIERS.get(1),
                 greedy.parts(),
-                new BudgetIntent(targetBudget, "MAX", false),
+                targetBand
+                        ? new BudgetIntent(displayBudgetWon, "TARGET", false)
+                        : new BudgetIntent(targetBudget, "MAX", false),
                 2,
                 greedy.toolResults(),
                 greedy.warnings(),
@@ -3265,7 +3330,7 @@ public class BuildChatService {
             return totalPrice <= budget;
         }
         if ("TARGET".equals(budgetMode) || "USER_BUDGET".equals(text(context.get("budgetPolicy")))) {
-            return totalPrice >= Math.floor(budget * 0.875) && totalPrice <= Math.ceil(budget * 1.125);
+            return withinTargetBudgetBand(totalPrice, budget);
         }
         return true;
     }

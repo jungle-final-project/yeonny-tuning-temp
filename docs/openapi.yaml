@@ -3658,7 +3658,7 @@ components:
           type: string
         builds:
           type: array
-          description: 견적 추천 질문은 추천 build 2~3개를 반환한다. 견적 변경(BUILD_MODIFY) 요청은 변경 미리보기 카드 1장(tier=draft-edit, badges=[DRAFT_EDIT_PREVIEW])을, 예산이 최소 구성가에 미달하거나 예산 근접 조합을 구성하지 못한 경우 '가능한 최소 구성' 카드 1장을 반환할 수 있다. 시뮬레이션/명확화/거절(LLM 실패) 응답에서는 빈 배열이다.
+          description: 견적 추천 질문은 추천 build 1~3개를 반환한다. 명시 예산 target 모드에서는 모든 카드의 totalPrice가 예산의 87.5%~112.5% 밴드 안에 들어야 하며, 밴드 밖 조합은 카드 수가 줄더라도 반환하지 않는다(밴드 밖 3장보다 밴드 안 2장을 택한다). 견적 변경(BUILD_MODIFY) 요청은 변경 미리보기 카드 1장(tier=draft-edit, badges=[DRAFT_EDIT_PREVIEW])을, 예산이 최소 구성가에 미달하거나 예산 근접 조합을 구성하지 못한 경우 '가능한 최소 구성' 카드 1장을 반환할 수 있다. 시뮬레이션/명확화/거절(LLM 실패) 응답에서는 빈 배열이다.
           items:
             $ref: "#/components/schemas/AiBuildRecommendationDto"
         simulation:

@@ -89,9 +89,10 @@ class BuildChatServiceTest {
         AiChatEngine aiChatEngine = mock(AiChatEngine.class);
         BuildChatService service = new BuildChatService(jdbcTemplate, toolCheckService, aiChatEngine, BuildChatCacheService.disabled());
         BuildChatTierSnapshotStore store = new BuildChatTierSnapshotStore();
+        // 스냅샷 총액은 요청 예산(437만) 기준 target 밴드(±12.5%) 안이어야 즉시 서빙된다
         store.put(new BuildChatTierSnapshotStore.TierSnapshot(
                 4_000_000,
-                List.of(Map.of("id", "tier-build-400", "tier", "balanced")),
+                List.of(Map.of("id", "tier-build-400", "tier", "balanced", "totalPrice", 4_200_000)),
                 List.of("미리 계산된 조합"),
                 java.time.Instant.now()
         ));
@@ -136,6 +137,168 @@ class BuildChatServiceTest {
         ));
         assertThat(withDraft.get("builds")).asList()
                 .noneMatch(build -> "tier-build-400".equals(((Map<?, ?>) build).get("id")));
+    }
+
+    @Test
+    void buildChatSkipsTierSnapshotWhenSnapshotTotalIsBelowRequestedTargetBand() {
+        // 스냅샷 티어(400만)는 허용 오차(15%) 안이지만, 총액(360만)이 요청 예산(460만)의
+        // target 밴드 하한(402.5만)에 못 미치면 즉시 응답을 포기하고 일반 경로로 흘린다.
+        JdbcTemplate jdbcTemplate = mock(JdbcTemplate.class);
+        ToolCheckService toolCheckService = mock(ToolCheckService.class);
+        AiChatEngine aiChatEngine = mock(AiChatEngine.class);
+        BuildChatService service = new BuildChatService(jdbcTemplate, toolCheckService, aiChatEngine, BuildChatCacheService.disabled());
+        BuildChatTierSnapshotStore store = new BuildChatTierSnapshotStore();
+        store.put(new BuildChatTierSnapshotStore.TierSnapshot(
+                4_000_000,
+                List.of(Map.of("id", "tier-build-400", "tier", "balanced", "totalPrice", 3_600_000)),
+                List.of(),
+                java.time.Instant.now()
+        ));
+        service.setTierSnapshotStore(store);
+        when(aiChatEngine.respondLlmRequired(any(AiChatEngineRequest.class), nullable(String.class))).thenReturn(buildResponse());
+        when(toolCheckService.checkBuild(anyList(), anyInt())).thenReturn(List.of());
+
+        Map<String, Object> response = service.chat(Map.of("message", "460만원 PC 추천해줘"));
+
+        assertThat(response.get("builds")).asList()
+                .noneMatch(build -> "tier-build-400".equals(((Map<?, ?>) build).get("id")));
+        verify(aiChatEngine).respondLlmRequired(any(AiChatEngineRequest.class), nullable(String.class));
+    }
+
+    @Test
+    void buildChatSkipsTierSnapshotWhenSnapshotTotalExceedsMaxBudget() {
+        // 스냅샷은 target 밴드로 프리계산되므로 티어보다 비싼 카드(440만)가 있을 수 있다.
+        // "이하"(max 모드) 요청 예산(410만)을 넘으면 서빙하지 않고, 예산 이하(450만 요청)면 서빙한다.
+        JdbcTemplate jdbcTemplate = mock(JdbcTemplate.class);
+        ToolCheckService toolCheckService = mock(ToolCheckService.class);
+        AiChatEngine aiChatEngine = mock(AiChatEngine.class);
+        BuildChatService service = new BuildChatService(jdbcTemplate, toolCheckService, aiChatEngine, BuildChatCacheService.disabled());
+        BuildChatTierSnapshotStore store = new BuildChatTierSnapshotStore();
+        store.put(new BuildChatTierSnapshotStore.TierSnapshot(
+                4_000_000,
+                List.of(Map.of("id", "tier-build-400", "tier", "balanced", "totalPrice", 4_400_000)),
+                List.of(),
+                java.time.Instant.now()
+        ));
+        service.setTierSnapshotStore(store);
+        when(aiChatEngine.respondLlmRequired(any(AiChatEngineRequest.class), nullable(String.class))).thenReturn(buildResponse());
+        when(toolCheckService.checkBuild(anyList(), anyInt())).thenReturn(List.of());
+
+        Map<String, Object> overMax = service.chat(Map.of("message", "410만원 이하로 PC 추천해줘"));
+        assertThat(overMax.get("builds")).asList()
+                .noneMatch(build -> "tier-build-400".equals(((Map<?, ?>) build).get("id")));
+        verify(aiChatEngine).respondLlmRequired(any(AiChatEngineRequest.class), nullable(String.class));
+
+        Map<String, Object> underMax = service.chat(Map.of("message", "450만원 이하로 PC 추천해줘"));
+        assertThat(underMax.get("builds")).asList()
+                .anyMatch(build -> "tier-build-400".equals(((Map<?, ?>) build).get("id")));
+        // 서빙된 두 번째 요청은 엔진을 다시 부르지 않는다(호출 횟수 1회 유지)
+        verify(aiChatEngine).respondLlmRequired(any(AiChatEngineRequest.class), nullable(String.class));
+    }
+
+    @Test
+    void targetBudgetLadderKeepsEveryCardInsideContractBand() {
+        // 계약(docs/API_CONTRACT.md): 명시 예산 target 모드는 총액을 예산의 87.5%~112.5%에 맞춘다.
+        // 과거 55/75/100% 가격 다양화 사다리는 800만 요청에 435만/572만 카드를 내 계약을 위반했다 —
+        // 이제 다양성은 밴드 안 구성 차이로 만들고, 밴드 밖 카드는 제외한다.
+        JdbcTemplate jdbcTemplate = mock(JdbcTemplate.class);
+        stubDensePartCatalog(jdbcTemplate);
+        ToolCheckService toolCheckService = mock(ToolCheckService.class);
+        when(toolCheckService.checkBuild(anyList(), anyInt())).thenReturn(List.of());
+        AiChatEngine aiChatEngine = mock(AiChatEngine.class);
+        BuildChatService service = new BuildChatService(jdbcTemplate, toolCheckService, aiChatEngine, BuildChatCacheService.disabled());
+
+        Map<String, Object> response = service.chat(Map.of("message", "800만원으로 PC 추천해줘"));
+
+        assertThat(response).containsEntry("answerType", "BUDGET");
+        @SuppressWarnings("unchecked")
+        List<Map<String, Object>> builds = (List<Map<String, Object>>) response.get("builds");
+        assertThat(builds).hasSizeGreaterThanOrEqualTo(2);
+        assertThat(builds).allSatisfy(build ->
+                assertThat((Integer) build.get("totalPrice")).isBetween(7_000_000, 9_000_000));
+        // 카드에는 사용자 명시 예산과 target 모드가 그대로 표기된다
+        assertThat(builds).allSatisfy(build -> {
+            assertThat(build).containsEntry("budgetWon", 8_000_000);
+            assertThat(build.get("badges")).asList().contains("TARGET");
+        });
+        verifyNoInteractions(aiChatEngine);
+    }
+
+    @Test
+    void maxBudgetLadderKeepsWideValueLadderForUnderBudgetRequests() {
+        // "이하"(max 모드) 요청은 계약상 "예산 이하 우선"만 요구하므로
+        // 가성비(55%)~예산 근접(100%) 가격 사다리를 그대로 유지한다.
+        JdbcTemplate jdbcTemplate = mock(JdbcTemplate.class);
+        stubDensePartCatalog(jdbcTemplate);
+        ToolCheckService toolCheckService = mock(ToolCheckService.class);
+        when(toolCheckService.checkBuild(anyList(), anyInt())).thenReturn(List.of());
+        AiChatEngine aiChatEngine = mock(AiChatEngine.class);
+        BuildChatService service = new BuildChatService(jdbcTemplate, toolCheckService, aiChatEngine, BuildChatCacheService.disabled());
+
+        Map<String, Object> response = service.chat(Map.of("message", "800만원 이하로 PC 추천해줘"));
+
+        @SuppressWarnings("unchecked")
+        List<Map<String, Object>> builds = (List<Map<String, Object>>) response.get("builds");
+        assertThat(builds).hasSizeGreaterThanOrEqualTo(2);
+        // target 밴드(87.5%) 아래 가성비 카드가 살아 있어야 한다 — max 모드는 밴드 필터 대상이 아니다
+        assertThat(builds).anySatisfy(build ->
+                assertThat((Integer) build.get("totalPrice")).isLessThan(7_000_000));
+        verifyNoInteractions(aiChatEngine);
+    }
+
+    @Test
+    void budgetTierSnapshotPrecomputeFollowsTargetBandRule() {
+        // 티어 스냅샷 프리계산은 "N만원 PC"(target 의미) 요청에 서빙되므로 TARGET 밴드 규칙을 따른다
+        JdbcTemplate jdbcTemplate = mock(JdbcTemplate.class);
+        stubDensePartCatalog(jdbcTemplate);
+        ToolCheckService toolCheckService = mock(ToolCheckService.class);
+        when(toolCheckService.checkBuild(anyList(), anyInt())).thenReturn(List.of());
+        AiChatEngine aiChatEngine = mock(AiChatEngine.class);
+        BuildChatService service = new BuildChatService(jdbcTemplate, toolCheckService, aiChatEngine, BuildChatCacheService.disabled());
+
+        BuildChatService.TierBuilds tierBuilds = service.computeBudgetTierBuilds(8_000_000);
+
+        assertThat(tierBuilds.builds()).isNotEmpty();
+        assertThat(tierBuilds.builds()).allSatisfy(build ->
+                assertThat((Integer) build.get("totalPrice")).isBetween(7_000_000, 9_000_000));
+    }
+
+    // 결정적 사다리 테스트용 촘촘한 부품 카탈로그: 카테고리별 8단계 가격(기본가 × 1~8)
+    private static void stubDensePartCatalog(JdbcTemplate jdbcTemplate) {
+        Map<String, Integer> basePrice = Map.of(
+                "CPU", 300_000,
+                "MOTHERBOARD", 150_000,
+                "RAM", 100_000,
+                "GPU", 500_000,
+                "STORAGE", 100_000,
+                "PSU", 100_000,
+                "CASE", 100_000,
+                "COOLER", 100_000);
+        doAnswer(invocation -> {
+            String sql = invocation.getArgument(0, String.class);
+            if (!sql.contains("FROM parts")) {
+                return List.<Map<String, Object>>of();
+            }
+            Object[] arguments = invocation.getArguments();
+            String category = arguments.length > 1 ? String.valueOf(arguments[1]) : null;
+            Integer base = basePrice.get(category);
+            if (base == null) {
+                return List.<Map<String, Object>>of();
+            }
+            List<Map<String, Object>> rows = new java.util.ArrayList<>();
+            for (int step = 1; step <= 8; step += 1) {
+                int price = base * step;
+                rows.add(new java.util.HashMap<String, Object>(Map.of(
+                        "internal_id", (long) price,
+                        "id", category.toLowerCase(java.util.Locale.ROOT) + "-" + price,
+                        "category", category,
+                        "name", category + " " + price,
+                        "manufacturer", "테스트",
+                        "price", price,
+                        "attributes", "{}")));
+            }
+            return rows;
+        }).when(jdbcTemplate).queryForList(anyString(), any(Object[].class));
     }
 
     @Test
