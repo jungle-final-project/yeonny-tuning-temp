@@ -178,7 +178,7 @@ async function mockRecommendationModelSummary(page: Page) {
   });
 }
 
-test('shows permission screen without calling auth/me when token is missing', async ({ page }) => {
+test('redirects to admin login without calling auth/me when token is missing', async ({ page }) => {
   let authMeCalls = 0;
   await page.route('**/api/auth/me', async (route) => {
     authMeCalls += 1;
@@ -187,8 +187,8 @@ test('shows permission screen without calling auth/me when token is missing', as
 
   await page.goto('/admin');
 
-  await expect(page.getByRole('heading', { name: '관리자 권한이 필요합니다' })).toBeVisible();
-  await expect(page.getByText('관리자 화면을 보려면 먼저 로그인해야 합니다.')).toBeVisible();
+  await expect(page.getByRole('heading', { name: '관리자 로그인' })).toBeVisible();
+  await expect(page).toHaveURL(/\/admin\/login\?redirect=%2Fadmin/);
   await page.waitForTimeout(100);
   expect(authMeCalls).toBe(0);
 });
@@ -197,17 +197,17 @@ for (const route of adminRoutes) {
   test(`guards ${route} when token is missing`, async ({ page }) => {
     await page.goto(route);
 
-    await expect(page.getByRole('heading', { name: '관리자 권한이 필요합니다' })).toBeVisible();
-    await expect(page.getByText('관리자 화면을 보려면 먼저 로그인해야 합니다.')).toBeVisible();
-    await expect(page.getByRole('link', { name: '로그인으로 이동' })).toBeVisible();
-    await expect(page.getByRole('link', { name: '홈으로 이동' })).toBeVisible();
+    await expect(page.getByRole('heading', { name: '관리자 로그인' })).toBeVisible();
+    const url = new URL(page.url());
+    expect(url.pathname).toBe('/admin/login');
+    expect(url.searchParams.get('redirect')).toBe(route);
   });
 }
 
 test('does not expose protected admin page content without admin permission', async ({ page }) => {
   await page.goto('/admin/parts');
 
-  await expect(page.getByRole('heading', { name: '관리자 권한이 필요합니다' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: '관리자 로그인' })).toBeVisible();
   await expect(page.locator('main')).not.toContainText('부품 DB');
   await expect(page.locator('main')).not.toContainText('가격 Job 상태');
 });
@@ -249,8 +249,8 @@ test('shows login-needed message when auth/me returns 401', async ({ page }) => 
 
   await page.goto('/admin');
 
-  await expect(page.getByRole('heading', { name: '관리자 권한이 필요합니다' })).toBeVisible();
-  await expect(page.getByText('관리자 화면을 보려면 먼저 로그인해야 합니다.')).toBeVisible();
+  await expect(page.getByRole('heading', { name: '관리자 로그인' })).toBeVisible();
+  await expect(page).toHaveURL(/\/admin\/login\?redirect=%2Fadmin/);
   expect(authMeCalls).toBeGreaterThan(0);
 });
 

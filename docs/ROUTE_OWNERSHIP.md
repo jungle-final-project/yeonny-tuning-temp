@@ -64,7 +64,7 @@ MVP 기준 결정값:
 | `/builds/:buildId/change-part` route | 1번 | 2번 | 1번은 교체 flow와 route state, 2번은 parts 검색/필터와 category별 후보 DTO만 수정 가능 | 예, 1번과 2번 상호 review |
 | `/admin` route | 5번 | 2번, 3번, 4번 | 5번은 shell, guard, dashboard frame을 수정한다. 각 도메인 owner는 자기 admin summary card의 데이터 mapping만 수정 가능 | 도메인 card 변경 시 5번 |
 | AdminShell | 5번 | 2번, 3번, 4번 | 승인만 필요한 변경: nav item label/order, 각 owner의 admin route link 추가. 5번만 직접 수정 가능한 변경: guard, layout slot contract, admin 권한 분기, dashboard 공통 query | 예, 5번 |
-| Auth 화면 | 1번 | 5번 | 1번은 `/login`, `/signup`, `/auth/callback`(미구현 — Google OAuth 도입 시 활성화) 화면 state, form validation, Auth API 연결을 수정한다. token 저장 helper와 admin route guard 변경은 5번과 합의한다 | token/guard 변경 시 5번 |
+| Auth 화면 | 1번 | 5번 | 1번은 `/login`, `/signup`, `/auth/callback`, `/admin/login` 화면 state, form validation, Auth API 연결을 수정한다. token 저장 helper와 admin route guard 변경은 5번과 합의한다 | token/guard 변경 시 5번 |
 | Auth API/User | 1번 | 5번 | 1번은 auth endpoint, users, JWT, refresh, OAuth 구현을 수정한다. 5번은 공통 API client, `RequireAdmin`, admin guard, security allowlist를 검토한다 | auth/token/security 변경 시 5번 |
 | `components/**` | 5번 | 모든 화면 owner | 승인만 필요한 변경: 기존 prop을 깨지 않는 style variant, 접근성 label, 빈 상태 문구. 5번만 직접 수정 가능한 변경: prop rename/remove, layout primitive, table/form control contract, global theme token | 예, 5번 |
 | `apps/web/src/lib/api.ts` | 5번 | 모든 API owner | 승인만 필요한 변경: owner별 endpoint wrapper 추가, typed DTO import 추가. 5번만 직접 수정 가능한 변경: auth header, refresh retry, base URL, error normalization, pagination 공통 처리 | error/auth/pagination 변경 시 5번 |
@@ -77,11 +77,11 @@ MVP 기준 결정값:
 
 | 항목 | 내용 |
 |---|---|
-| 담당 화면 route | `/`, `/requirements/new`, `/builds/latest`, `/builds/:buildId`, `/builds/:buildId/change-part`, `/my/quotes`, `/login`, `/signup`, `/admin/build-graph-layouts`, `/auth/callback`(미구현 — Google OAuth 도입 시 활성화) |
-| frontend files | `features/quote/**`, `features/auth/pages/**` |
+| 담당 화면 route | `/`, `/requirements/new`, `/builds/latest`, `/builds/:buildId`, `/builds/:buildId/change-part`, `/my/quotes`, `/login`, `/signup`, `/auth/callback`, `/admin/login`, `/admin/build-graph-layouts` |
+| frontend files | `features/quote/**`, `features/auth/**` |
 | backend packages | `build`, `requirement`, `user`, `auth` |
 | DB tables | `requirements`, `builds`, `build_items`, `users`, `user_auth_providers`, `refresh_tokens` |
-| API endpoints | `POST /api/requirements/parse`, `POST /api/builds/recommend`, `POST /api/builds/from-chat`, `POST /api/build-graphs/resolve`, `GET /api/builds/{id}`, `GET /api/builds/history`, `POST /api/builds/{id}/change-part`, `POST /api/users`, `POST /api/auth/login`, `POST /api/auth/refresh`, `POST /api/auth/logout`, `GET /api/auth/me`, 그리고 미구현 예정 계약(Google OAuth 도입 시 활성화, 현재 controller 없음) `GET /api/auth/google/start`, `GET /api/auth/google/callback`, `POST /api/auth/exchange` |
+| API endpoints | `POST /api/requirements/parse`, `POST /api/builds/recommend`, `POST /api/builds/from-chat`, `POST /api/build-graphs/resolve`, `GET /api/builds/{id}`, `GET /api/builds/history`, `POST /api/builds/{id}/change-part`, `POST /api/users`, `POST /api/auth/login`, `POST /api/auth/refresh`, `POST /api/auth/logout`, `GET /api/auth/me`, `GET /api/auth/google/start`, `GET /api/auth/google/callback`, `POST /api/auth/exchange` |
 | 협업자 | Auth 공통/token/guard/security는 5번, Tool/RAG 근거는 3번, parts 데이터는 2번, 관리자 관계도 배치 API는 5번 admin shell/security/migration과 협업 |
 
 Auth 화면과 Auth/User API 구현 주 owner는 1번이다. 5번은 `apps/web/src/lib/api.ts`, `RequireAdmin`, admin guard, security allowlist, migration 순서 관점에서 협업한다.
@@ -170,9 +170,10 @@ XGBoost reranker는 Build Chat에서 shadow scoring만 수행하고, 홈 하단 
 | `/checkout` | 2번 | 1번, 5번 | `GET /api/quote-drafts/current` |
 | `/checkout/complete` | 2번 | 1번, 5번 | 프론트 `sessionStorage` 데모 상태 |
 | `/parts/:partId` | 2번 | 5번 | `GET /api/parts/{id}`, `PUT /api/quote-drafts/current/items/{partId}`, `POST /api/recommendation-events` |
-| `/login` | 1번 | 5번 | `POST /api/auth/login`, `GET /api/auth/google/start`(미구현 — Google OAuth 도입 시) |
-| `/signup` | 1번 | 5번 | `POST /api/users` |
-| `/auth/callback`(미구현 — Google OAuth 도입 시 활성화, 현재 App.tsx에 route 없음) | 1번 | 5번 | `POST /api/auth/exchange`(미구현) |
+| `/login` | 1번 | 5번 | `POST /api/auth/login`, `GET /api/auth/google/start` |
+| `/signup` | 1번 | 5번 | `POST /api/users`, `GET /api/auth/google/start` |
+| `/auth/callback` | 1번 | 5번 | `POST /api/auth/exchange` |
+| `/admin/login` | 1번 | 5번 | `POST /api/auth/login`, `GET /api/auth/google/start`, `POST /api/auth/exchange` |
 | `/support/new` | 4번 | 5번 | `POST /api/agent-logs/upload`, `POST /api/as-tickets` |
 | `/support/ai-chat` | 3번 | 4번, 5번 | `GET /api/ai/as-chat`, `POST /api/ai/as-chat/stream`, `POST /api/ai/as-chat` |
 | `/support/:ticketId` | 4번 | - | `GET /api/as-tickets/{id}`, 전역 위젯 `GET /api/support/chat-sessions/current?asTicketId={id}` |
@@ -202,9 +203,9 @@ XGBoost reranker는 Build Chat에서 shadow scoring만 수행하고, 홈 하단 
 | `POST /api/auth/refresh` | 1번 | 5번 |
 | `POST /api/auth/logout` | 1번 | 5번 |
 | `GET /api/auth/me` | 1번 | 5번 |
-| `GET /api/auth/google/start`(미구현 — Google OAuth 도입 시 활성화) | 1번 | 5번 |
-| `GET /api/auth/google/callback`(미구현 — Google OAuth 도입 시 활성화) | 1번 | 5번 |
-| `POST /api/auth/exchange`(미구현 — Google OAuth 도입 시 활성화) | 1번 | 5번 |
+| `GET /api/auth/google/start` | 1번 | 5번 |
+| `GET /api/auth/google/callback` | 1번 | 5번 |
+| `POST /api/auth/exchange` | 1번 | 5번 |
 | `POST /api/requirements/parse` | 1번 | - |
 | `POST /api/builds/recommend` | 1번 | 2번, 3번 |
 | `POST /api/builds/from-chat` | 1번 | 3번 |
@@ -335,7 +336,7 @@ XGBoost reranker는 Build Chat에서 shadow scoring만 수행하고, 홈 하단 
 
 | 담당자 | 완료 기준 |
 |---|---|
-| 1번 | `/requirements/new`에서 `POST /api/requirements/parse`와 `POST /api/builds/recommend` mock 또는 dev API를 호출하고, `/builds/:buildId`가 `BuildDto`의 `items`, `totalPrice`, `confidence`, `warnings`, `evidenceIds`, `changeableCategories`를 렌더링한다. `/builds/:buildId/change-part`는 `POST /api/builds/{id}/change-part`의 성공/409 응답을 화면에서 구분한다. `/login`, `/signup`, `/auth/callback`과 Auth/User API는 `API_CONTRACT.md`/`openapi.yaml` 계약과 충돌하지 않게 연결한다. |
+| 1번 | `/requirements/new`에서 `POST /api/requirements/parse`와 `POST /api/builds/recommend` mock 또는 dev API를 호출하고, `/builds/:buildId`가 `BuildDto`의 `items`, `totalPrice`, `confidence`, `warnings`, `evidenceIds`, `changeableCategories`를 렌더링한다. `/builds/:buildId/change-part`는 `POST /api/builds/{id}/change-part`의 성공/409 응답을 화면에서 구분한다. `/login`, `/signup`, `/auth/callback`, `/admin/login`과 Auth/User API는 `API_CONTRACT.md`/`openapi.yaml` 계약과 충돌하지 않게 연결한다. |
 | 2번 | `GET /api/parts`, `GET /api/parts/{id}`, `GET /api/parts/{id}/price-history`, 5개 Tool API, `GET/POST /api/price-alerts`, `GET /api/admin/price-jobs`, `POST /api/admin/price-jobs/run`, `POST /api/admin/parts/catalog/refresh`, `POST /api/admin/parts/external-offers/refresh`, `POST /api/admin/parts/danawa-price-snapshots/refresh`, `POST /api/admin/parts/danawa-price-trends/refresh`가 계약 DTO로 응답한다. pagination 기본값/최대값, `price_jobs` 중복 실행 409, seed 기준 `parts` 조회 제외 조건, 내부 자산 갱신이 사용자 조회 중 외부 API를 호출하지 않는 조건, 가격 이력 조회가 `price_snapshots`만 읽는 조건, 다나와 백업/월별 추이 수집이 `parts.price`를 변경하지 않는 조건을 contract test로 확인한다. |
 | 3번 | `POST /api/ai/agent-sessions`, `POST /api/ai/agent-sessions/{id}/run`, `GET /api/ai/agent-sessions/{id}`, admin Agent/RAG/Tool 상세 API가 public_id만 반환한다. 실행 중 세션 재실행 409, 금지 상태 전이 409, `stateTimeline`/`requestPayload`/`resultPayload` DTO shape를 contract test로 확인한다. |
 | 4번 | `POST /api/agent-logs/upload`가 JSONL 파일 크기/MIME/확장자/라인 validation을 수행하고 `FILE_VALIDATION_ERROR`를 반환할 수 있다. `GET /api/agent-logs/{id}`, `POST/GET /api/as-tickets`, `PATCH /api/admin/as-tickets/{id}`가 본인 소유 404, 금지 상태 전이 409, soft delete 조회 제외를 contract test로 확인한다. |

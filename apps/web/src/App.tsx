@@ -1,5 +1,5 @@
 import { Navigate, Route, Routes, useLocation } from 'react-router-dom';
-import { LoginPage, SignupPage } from './features/auth/AuthPages';
+import { AdminLoginPage, AuthCallbackPage, LoginPage, SignupPage } from './features/auth/AuthPages';
 import { RequireAdmin } from './features/auth/RequireAdmin';
 import { RequireUser } from './features/auth/RequireUser';
 import { AllPartsPage, CheckoutCompletePage, CheckoutPage, PartDetailPage, SelfQuotePage } from './features/parts/PartsPages';
@@ -29,6 +29,8 @@ export default function App() {
         <Route path="/support/:ticketId" element={<RequireUser><SupportTicketPage /></RequireUser>} />
         <Route path="/login" element={<LoginPage />} />
         <Route path="/signup" element={<SignupPage />} />
+        <Route path="/auth/callback" element={<AuthCallbackPage />} />
+        <Route path="/admin/login" element={<AdminLoginPage />} />
         <Route path="/admin" element={<RequireAdmin><AdminDashboardPage /></RequireAdmin>} />
         <Route path="/admin/agent-sessions" element={<RequireAdmin><AgentSessionsListAdminPage /></RequireAdmin>} />
         <Route path="/admin/agent-sessions/:id" element={<RequireAdmin><AgentSessionAdminPage /></RequireAdmin>} />
@@ -53,7 +55,7 @@ export default function App() {
 
 function GlobalSupportChatWidget() {
   const { pathname } = useLocation();
-  if (pathname === '/login' || pathname === '/signup' || pathname.startsWith('/admin') || pathname === '/support/new') {
+  if (pathname === '/login' || pathname === '/signup' || pathname === '/auth/callback' || pathname.startsWith('/admin') || pathname === '/support/new') {
     return null;
   }
   return <SupportChatWidget />;
@@ -61,7 +63,7 @@ function GlobalSupportChatWidget() {
 
 function GlobalAiBuildAssistant() {
   const { pathname } = useLocation();
-  if (pathname === '/login' || pathname === '/signup' || pathname.startsWith('/admin') || pathname === '/self-quote') {
+  if (pathname === '/login' || pathname === '/signup' || pathname === '/auth/callback' || pathname.startsWith('/admin') || pathname === '/self-quote') {
     return null;
   }
   return <AiBuildAssistant surface="home" />;

@@ -68,6 +68,10 @@ docker compose up --build
 | `BUILD_CHAT_TIER_SNAPSHOT_ENABLED` | 선택 | Build Chat 예산 티어 스냅샷 | 기본값은 `true`입니다. 200만~1300만원(100만원 간격) 추천 조합을 백그라운드에서 미리 계산해 두고, 예산 요청이 티어와 허용 오차(기본 15%) 안이면 LLM/조합 탐색 없이 즉시 응답합니다. 명시적 부품 제약이나 견적 드래프트 문맥이 있으면 기존 경로로 폴백합니다. |
 | `BUILD_CHAT_TIER_SNAPSHOT_REFRESH_DELAY_MS` | 선택 | 티어 스냅샷 재계산 주기 | 기본값은 `3600000`(1시간)입니다. 범위/간격/허용오차는 `BUILD_CHAT_TIER_SNAPSHOT_MIN_BUDGET_WON`/`MAX_BUDGET_WON`/`STEP_WON`/`TOLERANCE_PCT`로 조절합니다. |
 | `BUILDGRAPH_CORS_ALLOWED_ORIGINS` | 선택 | REST/WS 허용 origin | 기본값은 `http://localhost:5173,http://127.0.0.1:5173,http://localhost:5174,http://127.0.0.1:5174`입니다. 배포 환경에서는 실제 web/admin origin을 명시해야 합니다. |
+| `GOOGLE_OAUTH_CLIENT_ID` | Google 로그인 테스트 시 필요 | `/login`, `/signup`, `/admin/login` Google 버튼 | 없으면 Google OAuth 시작 API가 `428 PRECONDITION_REQUIRED`를 반환합니다. |
+| `GOOGLE_OAUTH_CLIENT_SECRET` | Google 로그인 테스트 시 필요 | API Google code exchange | 커밋 금지입니다. Google access/refresh token은 DB에 저장하지 않습니다. |
+| `GOOGLE_OAUTH_REDIRECT_URI` | Google 로그인 테스트 시 필요 | Google OAuth callback | 기본 로컬 값은 `http://localhost:8080/api/auth/google/callback`입니다. Google Console 승인 redirect URI와 일치해야 합니다. |
+| `GOOGLE_OAUTH_WEB_CALLBACK_URL` | Google 로그인 테스트 시 필요 | 프론트 callback route | 기본 로컬 값은 `http://localhost:5173/auth/callback`입니다. |
 | `SUPPORT_CHAT_WS_TICKET_TTL_SECONDS` | 선택 | Support Chat WebSocket ticket TTL | 기본값은 `60`초입니다. WS URL에는 JWT를 싣지 않고 REST로 발급한 1회용 ticket을 첫 `AUTH` frame으로 전송합니다. |
 | `RECOMMENDATION_RERANKER_ENDPOINT` | 선택 | 홈 추천부품 XGBoost scorer | Docker 기본값은 `http://xgb-reranker:8091/score`입니다. 로컬 jar 단독 실행 시에는 `http://localhost:8091/score`로 바꿉니다. |
 | `RECOMMENDATION_RERANKER_MODEL_PATH` | 선택 | XGBoost scorer 모델 파일 | Docker에서는 `/models/<model-file>.json` 형식입니다. 비어 있으면 baseline scorer로 동작합니다. |
@@ -97,6 +101,8 @@ docker compose up --build
 | --- | --- | --- | --- |
 | USER | `user@example.com` | `passw0rd!` | 쇼핑몰, 수동 견적, AS Chat |
 | ADMIN | `admin@example.com` | `passw0rd!` | 관리자 화면, 가격 갱신 API |
+
+관리자는 공개 회원가입으로 만들지 않습니다. seed 관리자 또는 운영자가 DB/관리 명령으로 사전 부여한 `ADMIN` 계정만 `/admin/login`에서 로그인할 수 있고, Google 인증도 기존 `ADMIN` 이메일과 연결될 때만 관리자 화면에 접근합니다.
 
 서비스 주소:
 

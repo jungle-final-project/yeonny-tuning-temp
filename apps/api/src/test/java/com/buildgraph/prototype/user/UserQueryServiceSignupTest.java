@@ -20,6 +20,7 @@ class UserQueryServiceSignupTest {
     private final JdbcTemplate jdbcTemplate = org.mockito.Mockito.mock(JdbcTemplate.class);
     private final PasswordService passwordService = new PasswordService();
     private final CurrentUserService currentUserService = org.mockito.Mockito.mock(CurrentUserService.class);
+    private final GoogleOAuthRuntimeStore googleOAuthRuntimeStore = org.mockito.Mockito.mock(GoogleOAuthRuntimeStore.class);
     private final JwtTokenService jwtTokenService = new JwtTokenService(
             "test-buildgraph-jwt-secret-change-me-2026",
             "buildgraph-api-test",
@@ -36,7 +37,8 @@ class UserQueryServiceSignupTest {
             passwordService,
             jwtTokenService,
             currentUserService,
-            refreshTokenService
+            refreshTokenService,
+            googleOAuthRuntimeStore
     );
 
     @Test

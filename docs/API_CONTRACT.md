@@ -149,17 +149,24 @@ MVP 기준 결정값:
 | `POST` | `/api/auth/refresh` | no | 1번 | `{ "refreshToken": "opaque-refresh-token" }` | `{ "accessToken": "new-jwt-access-token", "refreshToken": "new-opaque-refresh-token" }` | `refresh_tokens` |
 | `POST` | `/api/auth/logout` | USER | 1번 | `{ "refreshToken": "opaque-refresh-token" }` | `204 No Content` | `refresh_tokens` |
 | `GET` | `/api/auth/me` | USER | 1번 | - | `{ "id": "c6d75f0c-0f57-4d1c-a8b2-a4079dcd40fd", "email": "user@example.com", "name": "홍길동", "role": "USER" }` | `users` |
-| `GET` | `/api/auth/google/start` | no | 1번 | - | `302 Redirect` | runtime |
-| `GET` | `/api/auth/google/callback` | no | 1번 | Google callback query | `302 /auth/callback?code=one-time-code` | `users`, `user_auth_providers`, runtime |
-| `POST` | `/api/auth/exchange` | no | 1번 | `{ "code": "one-time-code" }` | `{ "accessToken": "jwt-access-token", "refreshToken": "opaque-refresh-token", "user": { "id": "c6d75f0c-0f57-4d1c-a8b2-a4079dcd40fd", "email": "user@example.com", "name": "홍길동", "role": "USER" } }` | `users`, `user_auth_providers`, `refresh_tokens`, runtime |
+| `GET` | `/api/auth/google/start` | no | 1번 | `?redirect=/my/quotes` | `302 Google OAuth redirect` | runtime |
+| `GET` | `/api/auth/google/callback` | no | 1번 | Google callback query | `302 /auth/callback?code=one-time-code&redirect=/my/quotes` | `users`, `user_auth_providers`, runtime |
+| `POST` | `/api/auth/exchange` | no | 1번 | `{ "code": "one-time-code", "termsAccepted": true, "marketingAccepted": false }` | `{ "accessToken": "jwt-access-token", "refreshToken": "opaque-refresh-token", "user": { "id": "c6d75f0c-0f57-4d1c-a8b2-a4079dcd40fd", "email": "user@example.com", "name": "홍길동", "role": "USER" } }` | `users`, `user_auth_providers`, `refresh_tokens`, runtime |
 
 Auth/User 구현 owner는 1번이다. 5번은 `Authorization` header 전달, token 저장 helper, `RequireAdmin`, admin guard, security allowlist, 공통 `ErrorResponse` 정합성을 검토한다.
 
 Google OAuth 정책:
 
 - V1 provider는 `GOOGLE` 1개다.
-- verified email이 기존 local 계정과 같으면 같은 `users` row에 연결한다.
+- `/api/auth/google/start`의 `redirect`는 `/`로 시작하고 `//`로 시작하지 않는 내부 경로만 허용한다.
+- state와 one-time code는 Redis에 짧은 TTL로 저장하고, exchange 성공 시 one-time code는 1회만 소비한다.
+- Google scope는 `openid email profile`만 요청한다.
+- Google `email_verified=true`만 허용한다.
+- 신규 Google 사용자는 `/api/auth/exchange`에서 `termsAccepted=true`를 보내기 전까지 `400 VALIDATION_ERROR`, `details.reason="TERMS_REQUIRED"`를 받으며 `users` row가 생성되지 않는다.
+- 공개 이메일 회원가입과 신규 Google 가입은 항상 `role=USER`만 생성한다. request body의 `role` 값은 받거나 신뢰하지 않는다.
+- verified email이 기존 local 계정과 같으면 같은 `users` row에 연결하고 기존 role을 유지한다. 기존 `ADMIN` 이메일이면 `ADMIN`으로 로그인되지만, Google 신규 가입으로 `ADMIN`이 생성되지는 않는다.
 - Google access/refresh token은 저장하지 않는다.
+- 관리자 계정은 `/admin/login`에서 로그인하며 공개 `/admin/signup`은 만들지 않는다.
 
 ### Quote/Build
 

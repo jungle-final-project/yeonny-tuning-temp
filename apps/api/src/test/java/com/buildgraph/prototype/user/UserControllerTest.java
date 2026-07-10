@@ -10,6 +10,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import com.buildgraph.prototype.agent.PcAgentAsService;
+import java.net.URI;
 import java.util.Map;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -33,6 +34,9 @@ class UserControllerTest {
 
     @MockitoBean
     private PcAgentAsService pcAgentAsService;
+
+    @MockitoBean
+    private GoogleOAuthService googleOAuthService;
 
     @Test
     void loginReturnsAuthResponse() throws Exception {
@@ -117,6 +121,61 @@ class UserControllerTest {
     }
 
     @Test
+    void googleStartRedirectsToProvider() throws Exception {
+        when(googleOAuthService.start("/admin")).thenReturn(URI.create("https://accounts.google.com/o/oauth2/v2/auth?state=state"));
+
+        mockMvc.perform(get("/api/auth/google/start")
+                        .param("redirect", "/admin"))
+                .andExpect(status().isFound())
+                .andExpect(org.springframework.test.web.servlet.result.MockMvcResultMatchers.header().string("Location", "https://accounts.google.com/o/oauth2/v2/auth?state=state"));
+
+        verify(googleOAuthService).start("/admin");
+    }
+
+    @Test
+    void googleCallbackRedirectsToWebCallback() throws Exception {
+        when(googleOAuthService.callback("google-code", "state", null)).thenReturn(URI.create("http://localhost:5173/auth/callback?code=one-time-code"));
+
+        mockMvc.perform(get("/api/auth/google/callback")
+                        .param("code", "google-code")
+                        .param("state", "state"))
+                .andExpect(status().isFound())
+                .andExpect(org.springframework.test.web.servlet.result.MockMvcResultMatchers.header().string("Location", "http://localhost:5173/auth/callback?code=one-time-code"));
+
+        verify(googleOAuthService).callback("google-code", "state", null);
+    }
+
+    @Test
+    void exchangeReturnsAuthResponse() throws Exception {
+        when(userQueryService.exchangeGoogleLogin("one-time-code", true, false)).thenReturn(Map.of(
+                "accessToken", "jwt-access-token",
+                "refreshToken", "refresh-token",
+                "user", Map.of(
+                        "id", "00000000-0000-4000-8000-000000001004",
+                        "email", "user@example.com",
+                        "name", "Demo User",
+                        "role", "USER"
+                )
+        ));
+
+        mockMvc.perform(post("/api/auth/exchange")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "code": "one-time-code",
+                                  "termsAccepted": true,
+                                  "marketingAccepted": false
+                                }
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.accessToken").value("jwt-access-token"))
+                .andExpect(jsonPath("$.refreshToken").value("refresh-token"))
+                .andExpect(jsonPath("$.user.role").value("USER"));
+
+        verify(userQueryService).exchangeGoogleLogin("one-time-code", true, false);
+    }
+
+    @Test
     void logoutReturnsNoContent() throws Exception {
         mockMvc.perform(post("/api/auth/logout")
                         .header("Authorization", "Bearer jwt-access-token")
@@ -160,6 +219,7 @@ class UserControllerTest {
                                   "email": "user@example.com",
                                   "password": "passw0rd!",
                                   "name": "Demo User",
+                                  "role": "ADMIN",
                                   "termsAccepted": true,
                                   "marketingAccepted": false
                                 }

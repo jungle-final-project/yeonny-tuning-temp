@@ -300,6 +300,13 @@ Index:
 - index: `users.role`
 - index: `users.deleted_at`
 
+Auth 저장 규칙:
+
+- `users.email`은 local 회원가입과 Google 연결 모두 소문자 trim 기준으로 저장한다.
+- 공개 회원가입과 신규 Google 가입은 항상 `role='USER'`만 생성한다. 클라이언트 request의 role 값은 저장하지 않는다.
+- 관리자 계정은 seed/admin 운영 절차로만 `role='ADMIN'`을 갖는다. Google 로그인은 기존 `ADMIN` row에 provider를 연결할 수 있지만 신규 Google 가입으로 `ADMIN` row를 만들지 않는다.
+- `/admin/signup`용 별도 테이블이나 공개 관리자 가입 row는 만들지 않는다.
+
 ### user_auth_providers
 
 목적: Google OAuth provider 계정과 내부 사용자를 연결한다.
@@ -321,6 +328,13 @@ Index:
 - unique: `(provider, provider_user_id)`
 - index: `user_auth_providers.user_id`
 - index: `user_auth_providers.provider_email`
+
+Provider 저장 규칙:
+
+- V1 provider는 `GOOGLE`만 사용한다.
+- `provider_email`은 verified email을 소문자 trim 기준으로 저장한다.
+- Google access token과 refresh token은 저장하지 않는다.
+- `(provider='GOOGLE', provider_user_id)`가 없고 verified email이 기존 `users.email`과 같으면 기존 사용자 row에 provider를 연결하고 role은 유지한다.
 
 ### refresh_tokens
 

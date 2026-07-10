@@ -117,23 +117,62 @@ paths:
   /api/auth/google/start:
     get:
       summary: Google OAuth 시작
-      description: 미구현 — Google OAuth 도입 시 활성화 예정 계약(담당 1번). 현재 백엔드에 controller가 없어 호출 시 404를 반환한다.
+      description: "Google OAuth authorization endpoint로 redirect한다. redirect query는 내부 경로만 허용하며 기본값은 `/`이다."
       security: []
+      parameters:
+        - in: query
+          name: redirect
+          required: false
+          schema:
+            type: string
+            example: /my/quotes
       responses:
         "302":
           description: Google OAuth로 redirect
+          headers:
+            Location:
+              schema:
+                type: string
+                format: uri
+        "428":
+          description: Google OAuth 환경변수 미설정
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
   /api/auth/google/callback:
     get:
       summary: Google OAuth callback
-      description: 미구현 — Google OAuth 도입 시 활성화 예정 계약(담당 1번). 현재 백엔드에 controller가 없어 호출 시 404를 반환한다.
+      description: Google code/state를 검증한 뒤 서버 one-time code를 Redis에 저장하고 web callback으로 redirect한다.
       security: []
+      parameters:
+        - in: query
+          name: code
+          required: false
+          schema:
+            type: string
+        - in: query
+          name: state
+          required: false
+          schema:
+            type: string
+        - in: query
+          name: error
+          required: false
+          schema:
+            type: string
       responses:
         "302":
-          description: 프론트 callback route로 redirect
+          description: "`/auth/callback?code=...&redirect=...` 또는 `/auth/callback?error=...`로 redirect"
+          headers:
+            Location:
+              schema:
+                type: string
+                format: uri
   /api/auth/exchange:
     post:
       summary: OAuth one-time code 교환
-      description: 미구현 — Google OAuth 도입 시 활성화 예정 계약(담당 1번). 현재 백엔드에 controller가 없어 호출 시 404를 반환한다.
+      description: "Google callback에서 받은 서버 one-time code를 JWT/refresh token으로 교환한다. 신규 Google 사용자는 약관 동의 전에는 `VALIDATION_ERROR`와 `details.reason=TERMS_REQUIRED`를 반환한다."
       security: []
       requestBody:
         required: true
@@ -148,6 +187,18 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/AuthResponse"
+        "400":
+          description: 신규 Google 사용자 약관 동의 필요 또는 요청 값 오류
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          description: 만료되었거나 재사용된 one-time code
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
   /api/requirements/parse:
     post:
       summary: 자연어 요구사항 파싱
@@ -3411,6 +3462,12 @@ components:
       properties:
         code:
           type: string
+        termsAccepted:
+          type: boolean
+          nullable: true
+        marketingAccepted:
+          type: boolean
+          nullable: true
     RequirementParseRequest:
       type: object
       required: [message]

@@ -1,4 +1,4 @@
-import { ApiError, api, getRefreshToken, refreshAuthTokens } from '../../lib/api';
+import { API_BASE_URL, ApiError, api, getRefreshToken, refreshAuthTokens } from '../../lib/api';
 
 export type LoginResponse = {
   accessToken: string;
@@ -38,6 +38,23 @@ export function signup(payload: SignupPayload) {
     method: 'POST',
     body: JSON.stringify(payload)
   });
+}
+
+type AuthExchangePayload = {
+  code: string;
+  termsAccepted?: boolean;
+  marketingAccepted?: boolean;
+};
+
+export function exchangeAuthCode(payload: AuthExchangePayload) {
+  return api<LoginResponse>('/api/auth/exchange', {
+    method: 'POST',
+    body: JSON.stringify(payload)
+  });
+}
+
+export function googleOAuthStartUrl(redirect: string) {
+  return `${API_BASE_URL}/api/auth/google/start?redirect=${encodeURIComponent(redirect)}`;
 }
 
 export async function logout(refreshToken: string) {

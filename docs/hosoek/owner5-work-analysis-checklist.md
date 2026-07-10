@@ -104,7 +104,7 @@ Figma 기준으로 5번이 직접 맡아야 할 화면은 `153:1880 STATE-15 ADM
 | --- | --- | --- |
 | Auth/User 백엔드 | 완료에 가까움 | `UserController`, `UserQueryService`, `PasswordService`, `JwtTokenService`, `RefreshTokenService`가 있고 관련 테스트가 있다. |
 | Auth 프론트 | 부분완료 | 로그인/회원가입 API 호출은 하지만 refresh token은 저장하지 않고, 실패 시 backend validation 메시지를 보여주지 않는다. |
-| Google OAuth | 미완료 | 계약에는 `GET /api/auth/google/start`, `GET /api/auth/google/callback`, `POST /api/auth/exchange`가 있으나 controller 구현이 없다. |
+| Google OAuth | 완료 | `GET /api/auth/google/start`, `GET /api/auth/google/callback`, `POST /api/auth/exchange`가 구현됐고 신규 Google 사용자는 약관 동의 후 `USER`로 생성된다. |
 | Quote/Build API | 부분완료 | `parse`, `recommend`, `build detail`, `history`, `change-part`는 있으나 현재 사용자 소유권 기준이 빠져 있다. |
 | 내 견적함 | 미완료 | `/my/quotes`는 `quoteMock`을 렌더링하고 가격 알림 등록도 정적 form이다. |
 | 테스트 | 부족 | Auth 테스트는 많지만 Build/Quote controller/service contract test가 없다. |
@@ -214,7 +214,7 @@ Figma 기준으로 5번이 직접 맡아야 할 화면은 `153:1880 STATE-15 ADM
 1번은 Quote/Auth owner라서 Auth는 많이 진행됐지만, Quote/Build 쪽 계약이 아직 남아 있습니다.
 
 - Auth 백엔드의 로그인/회원가입/JWT/refresh/logout은 들어왔습니다.
-- Google OAuth 계약 endpoint인 `GET /api/auth/google/start`, `GET /api/auth/google/callback`, `POST /api/auth/exchange`는 구현 여부를 확정해 주세요. MVP에서 제외할 거면 계약 문서도 같이 바꿔야 합니다.
+- Google OAuth 계약 endpoint인 `GET /api/auth/google/start`, `GET /api/auth/google/callback`, `POST /api/auth/exchange`는 구현됐습니다. 운영 환경에서는 `GOOGLE_OAUTH_*` 환경변수와 Google Console redirect URI를 맞춰 주세요.
 - `BuildQueryService`에서 requirement/build 저장이 현재 로그인 사용자 기준이 아니라 `user@example.com` 기준으로 들어가는 부분을 현재 사용자 기준으로 바꿔 주세요.
 - `GET /api/builds/history`, `GET /api/builds/{id}`, `POST /api/builds/{id}/change-part`는 현재 로그인 사용자 소유권을 확인하고, 남의 자원이면 `404 NOT_FOUND`를 반환해야 합니다.
 - `/my/quotes`는 현재 `quoteMock` 기반입니다. 실제 `GET /api/builds/history`와 2번의 `GET/POST /api/price-alerts` 연동 범위를 정리해 주세요.
@@ -784,7 +784,7 @@ AdminShell nav 분석 결과:
   - [x] 로그인/회원가입 화면은 API payload, 오류 표시, token 저장, logout 흐름 테스트가 있다.
   - [x] 요구사항 분석, 추천, build 상세, 부품 변경 API 골격은 있다.
 - [ ] 1번 미완료/확인 필요
-  - [ ] `GET /api/auth/google/start`, `GET /api/auth/google/callback`, `POST /api/auth/exchange`는 OpenAPI/계약에는 있으나 현재 `UserController`에 구현되어 있지 않다.
+  - [x] `GET /api/auth/google/start`, `GET /api/auth/google/callback`, `POST /api/auth/exchange`는 `UserController`에 구현되어 있다.
   - [ ] `BuildQueryService.parse()`가 현재 로그인 사용자 id가 아니라 `user@example.com` 고정 user_id로 requirement를 저장한다.
   - [ ] `GET /api/builds/history`, `GET /api/builds/{id}`, `POST /api/builds/{id}/change-part`는 현재 사용자 소유권 404를 보장하지 않는다.
   - [ ] `/my/quotes`는 `quoteMock` 기반 정적 화면이고 `getBuildHistory()`를 호출하지 않는다.

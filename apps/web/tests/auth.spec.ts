@@ -102,6 +102,152 @@ test('shows admin navigation only for ADMIN role', async ({ page }) => {
   await expect(page.getByRole('navigation').getByRole('link', { name: '관리자' })).toHaveAttribute('href', '/admin');
 });
 
+test('blocks USER accounts on admin login and does not save tokens', async ({ page }) => {
+  await page.route('**/api/auth/login', async (route) => {
+    expect(JSON.parse(route.request().postData() ?? '{}')).toEqual({
+      email: 'user@example.com',
+      password: 'passw0rd!'
+    });
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        accessToken: 'jwt-user-token',
+        refreshToken: 'refresh-user-token',
+        user: {
+          id: 'user-001',
+          email: 'user@example.com',
+          name: 'Regular User',
+          role: 'USER'
+        }
+      })
+    });
+  });
+
+  await page.goto('/admin/login?redirect=/admin/parts');
+  await page.getByLabel('이메일').fill('user@example.com');
+  await page.getByLabel('비밀번호').fill('passw0rd!');
+  await page.getByRole('button', { name: '관리자 로그인' }).click();
+
+  await expect(page.getByText('관리자 권한이 있는 계정만 관리자 화면에 로그인할 수 있습니다.')).toBeVisible();
+  expect(await page.evaluate(() => localStorage.getItem('buildgraph.token'))).toBeNull();
+  expect(await page.evaluate(() => localStorage.getItem('buildgraph.refreshToken'))).toBeNull();
+});
+
+test('exchanges Google callback code and stores returned tokens', async ({ page }) => {
+  let exchangeCalls = 0;
+  await page.route('**/api/auth/exchange', async (route) => {
+    exchangeCalls += 1;
+    expect(JSON.parse(route.request().postData() ?? '{}')).toEqual({ code: 'one-time-code' });
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        accessToken: 'jwt-google-user',
+        refreshToken: 'refresh-google-user',
+        user: {
+          id: 'google-user-001',
+          email: 'google-user@example.com',
+          name: 'Google User',
+          role: 'USER'
+        }
+      })
+    });
+  });
+  await page.route('**/api/auth/me', async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        id: 'google-user-001',
+        email: 'google-user@example.com',
+        name: 'Google User',
+        role: 'USER'
+      })
+    });
+  });
+
+  await page.goto('/auth/callback?code=one-time-code&redirect=/login');
+
+  await expect(page).toHaveURL('/login');
+  await expect.poll(() => exchangeCalls).toBe(1);
+  expect(await page.evaluate(() => localStorage.getItem('buildgraph.token'))).toBe('jwt-google-user');
+  expect(await page.evaluate(() => localStorage.getItem('buildgraph.refreshToken'))).toBe('refresh-google-user');
+});
+
+test('shows terms step for new Google users and retries exchange with consent', async ({ page }) => {
+  let exchangeCalls = 0;
+  await page.route('**/api/auth/exchange', async (route) => {
+    exchangeCalls += 1;
+    const payload = JSON.parse(route.request().postData() ?? '{}');
+    if (exchangeCalls === 1) {
+      expect(payload).toEqual({ code: 'terms-code' });
+      await route.fulfill({
+        status: 400,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          code: 'VALIDATION_ERROR',
+          message: '약관 동의가 필요합니다.',
+          details: {
+            reason: 'TERMS_REQUIRED',
+            email: 'new-google@example.com',
+            name: 'New Google'
+          }
+        })
+      });
+      return;
+    }
+    expect(payload).toEqual({
+      code: 'terms-code',
+      termsAccepted: true,
+      marketingAccepted: false
+    });
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        accessToken: 'jwt-new-google',
+        refreshToken: 'refresh-new-google',
+        user: {
+          id: 'new-google-001',
+          email: 'new-google@example.com',
+          name: 'New Google',
+          role: 'USER'
+        }
+      })
+    });
+  });
+
+  await page.goto('/auth/callback?code=terms-code&redirect=/login');
+
+  await expect(page.getByRole('heading', { name: 'Google 회원가입 완료' })).toBeVisible();
+  await expect(page.getByText('new-google@example.com 계정으로 가입을 완료합니다.')).toBeVisible();
+  await page.getByLabel('서비스 이용약관 및 로그 업로드 정책 확인').check();
+  await page.getByRole('button', { name: '가입 완료' }).click();
+
+  await expect(page).toHaveURL('/login');
+  await expect.poll(() => exchangeCalls).toBe(2);
+  expect(await page.evaluate(() => localStorage.getItem('buildgraph.token'))).toBe('jwt-new-google');
+});
+
+test('shows callback failure when Google exchange code is expired', async ({ page }) => {
+  await page.route('**/api/auth/exchange', async (route) => {
+    await route.fulfill({
+      status: 401,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        code: 'UNAUTHORIZED',
+        message: 'Google login session has expired.'
+      })
+    });
+  });
+
+  await page.goto('/auth/callback?code=expired-code');
+
+  await expect(page.getByRole('heading', { name: 'Google 로그인 실패' })).toBeVisible();
+  await expect(page.getByText('Google login session has expired.')).toBeVisible();
+});
+
 test('refreshes expired access token and retries current user request', async ({ page }) => {
   let expiredMeCalls = 0;
   let refreshedMeCalls = 0;
@@ -518,7 +664,7 @@ test('submits signup form with the OpenAPI user payload', async ({ page }) => {
   await page.getByLabel('비밀번호', { exact: true }).fill('passw0rd!');
   await page.getByLabel('비밀번호 확인').fill('passw0rd!');
   await page.getByLabel('서비스 이용약관 및 로그 업로드 정책 확인').check();
-  await page.getByRole('button', { name: '회원가입' }).click();
+  await page.getByRole('button', { name: '회원가입', exact: true }).click();
 
   await expect(page).toHaveURL('/login');
 });
@@ -541,7 +687,7 @@ test('shows signup API error message', async ({ page }) => {
   await page.getByLabel('비밀번호', { exact: true }).fill('passw0rd!');
   await page.getByLabel('비밀번호 확인').fill('passw0rd!');
   await page.getByLabel('서비스 이용약관 및 로그 업로드 정책 확인').check();
-  await page.getByRole('button', { name: '회원가입' }).click();
+  await page.getByRole('button', { name: '회원가입', exact: true }).click();
 
   await expect(page.getByText('이미 가입된 이메일입니다.')).toBeVisible();
   await expect(page).toHaveURL('/signup');

@@ -438,7 +438,8 @@ test('admin guard reacts when auth is cleared', async ({ page }) => {
     clearToken();
   });
 
-  await expect(page.getByRole('heading', { name: '관리자 권한이 필요합니다' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: '관리자 로그인' })).toBeVisible();
+  await expect(page).toHaveURL(/\/admin\/login\?redirect=%2Fadmin%2Fsupport-chat-sessions/);
 });
 
 async function mockAdmin(page: Page) {
