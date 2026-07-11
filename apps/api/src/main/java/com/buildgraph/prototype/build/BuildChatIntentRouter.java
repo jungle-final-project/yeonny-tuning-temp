@@ -2,11 +2,9 @@ package com.buildgraph.prototype.build;
 
 import com.buildgraph.prototype.agent.PartRouteResolver;
 import java.util.ArrayList;
-import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
-import java.util.Set;
 import java.util.regex.Pattern;
 import org.springframework.stereotype.Service;
 
@@ -234,16 +232,41 @@ public class BuildChatIntentRouter {
     }
 
     private static List<String> locationCategories(String normalized) {
-        Set<String> categories = new LinkedHashSet<>();
+        List<LocationCategoryMatch> matches = new ArrayList<>();
         for (LocationCategoryKeywords check : LOCATION_CATEGORIES) {
-            if (check.keywords().stream().map(BuildChatIntentRouter::normalize).anyMatch(normalized::contains)) {
-                categories.add(check.category());
+            String searchText = locationCategorySearchText(normalized, check.category());
+            int firstIndex = check.keywords().stream()
+                    .map(BuildChatIntentRouter::normalize)
+                    .mapToInt(searchText::indexOf)
+                    .filter(index -> index >= 0)
+                    .min()
+                    .orElse(-1);
+            if (firstIndex >= 0) {
+                matches.add(new LocationCategoryMatch(check.category(), firstIndex));
             }
         }
-        if (categories.isEmpty() && normalized.contains("보드")) {
-            categories.add("MOTHERBOARD");
+        if (matches.isEmpty() && normalized.contains("보드")) {
+            matches.add(new LocationCategoryMatch("MOTHERBOARD", normalized.indexOf("보드")));
         }
-        return List.copyOf(categories);
+        return matches.stream()
+                .sorted(java.util.Comparator.comparingInt(LocationCategoryMatch::index))
+                .map(LocationCategoryMatch::category)
+                .distinct()
+                .toList();
+    }
+
+    private static String locationCategorySearchText(String normalized, String category) {
+        if (!"CPU".equals(category)) {
+            return normalized;
+        }
+        return normalized
+                .replace("cpu쿨러", "쿨러")
+                .replace("cpucooler", "cooler")
+                .replace("씨피유쿨러", "쿨러")
+                .replace("씨퓨쿨러", "쿨러")
+                .replace("프로세서쿨러", "쿨러")
+                .replace("cpu수랭", "수랭")
+                .replace("cpu공랭", "공랭");
     }
 
     private static boolean isSimulationIntent(String normalized, String category) {
@@ -474,5 +497,8 @@ public class BuildChatIntentRouter {
     }
 
     private record LocationCategoryKeywords(String category, List<String> keywords) {
+    }
+
+    private record LocationCategoryMatch(String category, int index) {
     }
 }
