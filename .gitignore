@@ -21,3 +21,4 @@ playwright-report/
 .vscode/
 .devcontainer/devcontainer-lock.json
 *.tsbuildinfo
+infra/k6/results/

@@ -5,17 +5,30 @@ import { addPart, getParts, checkAllConditions } from './util/quote-url.js';
 
 /* 테스트 설정값: 시나리오
     : 시나리오 명 
-        - 가상 유저 수 유지
-        - 가상 유저 수
-        - 진행 시간 */
+        - 캐싱 없을 시
+        - 캐싱 수행 시 */
 export const options = {
     scenarios: {
         /* 캐시 없는 상태로 테스트 */
         cache_none: {
-            executor: 'constant-vus',
+            executor: 'ramping-arrival-rate',
             exec: 'selfQuoteFlow',
-            vus: 5,
-            duration: '90s',
+
+            startRate: 2,
+            timeUnit: '1s',
+            preAllocatedVUs: 100,
+            maxVUs: 500,
+
+            stages: [
+                { target: 2, duration: '5s' },    // 약 50 HTTP RPS
+                { target: 4, duration: '5s' },    // 약 100 HTTP RPS
+                { target: 8, duration: '5s' },    // 약 200 HTTP RPS
+                { target: 12, duration: '5s' },   // 약 300 HTTP RPS
+                { target: 20, duration: '10s' },  // 약 500 HTTP RPS까지 증가
+                { target: 20, duration: '1m' },   // 약 500 HTTP RPS 유지
+                { target: 2, duration: '30s' },   // 부하 감소
+            ],
+
             startTime: '0s',
             env: {
                 BASE_URL: 'http://localhost:8081',
@@ -26,17 +39,31 @@ export const options = {
         },
         /* 캐시 있는 상태로 테스트 */
         cache_caffeine: {
-            executor: 'constant-vus',
+            executor: 'ramping-arrival-rate',
             exec: 'selfQuoteFlow',
-            vus: 5,
-            duration: '90s',
-            startTime: '95s',
+
+            startRate: 2,
+            timeUnit: '1s',
+            preAllocatedVUs: 100,
+            maxVUs: 500,
+
+            stages: [
+                { target: 2, duration: '5s' },    // 약 50 HTTP RPS
+                { target: 4, duration: '5s' },    // 약 100 HTTP RPS
+                { target: 8, duration: '5s' },    // 약 200 HTTP RPS
+                { target: 12, duration: '5s' },   // 약 300 HTTP RPS
+                { target: 20, duration: '10s' },  // 약 500 HTTP RPS까지 증가
+                { target: 20, duration: '1m' },   // 약 500 HTTP RPS 유지
+                { target: 2, duration: '30s' },   // 부하 감소
+            ],
+
+            startTime: '125s',
             env: {
                 BASE_URL: 'http://localhost:8082',
             },
             tags: {
                 cache: 'caffeine',
-            },
+            }
         },
     }
 };
