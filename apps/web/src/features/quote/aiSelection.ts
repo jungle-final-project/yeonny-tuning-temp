@@ -139,6 +139,45 @@ export type BuildGraphInsight = {
   relatedNodeIds: string[];
 };
 
+export type BuildCompositeScoreComponent = {
+  key: 'performance' | 'compatibility' | 'balance' | 'upgrade' | 'evidence' | string;
+  label: string;
+  score: number;
+  maxScore: number;
+  percent: number;
+  summary: string;
+};
+
+export type BuildCompositeScoreCap = {
+  code: string;
+  maxScore: number;
+  reason: string;
+};
+
+export type BuildCompositeRequestFit = {
+  status: 'PASS' | 'WARN' | 'OVER_BUDGET' | 'UNSPECIFIED' | string;
+  score: number;
+  budgetWon?: number;
+  totalPrice?: number;
+  priceDiff?: number;
+  summary: string;
+};
+
+export type BuildCompositeScore = {
+  policyVersion: string;
+  score: number;
+  rawScore: number;
+  maxScore: number;
+  grade: string;
+  label: string;
+  summary: string;
+  components: BuildCompositeScoreComponent[];
+  caps: BuildCompositeScoreCap[];
+  requestFit?: BuildCompositeRequestFit;
+  curve?: { marker: number; label: string }[];
+  missingCategories?: string[];
+};
+
 export type BuildGraphResolveRequest = {
   source: BuildGraphSource;
   view?: BuildGraphView;
@@ -154,6 +193,7 @@ export type BuildGraphResolveResponse = {
   edges: BuildGraphEdge[];
   focusNodeIds: string[];
   insights: BuildGraphInsight[];
+  compositeScore?: BuildCompositeScore;
   toolResults: AiToolResult[];
 };
 
@@ -212,7 +252,7 @@ export const PART_CATEGORY_LABELS: Record<PartCategory, string> = {
 const initialAssistantMessage: AiChatMessage = {
   id: 'ai-intro',
   role: 'assistant',
-  text: '예산 견적은 “200만원 게이밍 PC 추천”, 견적 완성은 “지금 견적 나머지 채워줘”, 성능 비교는 “CPU를 9700X로 바꾸면?”처럼 물어보세요. 추천은 서버의 실제 부품 DB와 룰 기반 검증 결과로 계산됩니다.',
+  text: '예산 견적은 “200만원 게이밍 PC 추천”, 견적 완성은 “지금 견적 나머지 채워줘”, 성능 비교는 “CPU를 9700X로 바꾸면?”처럼 물어보세요. 추천은 실제 부품 데이터와 검증 결과를 바탕으로 계산됩니다.',
   createdAt: '2026-06-30T00:00:00.000Z',
   kind: 'intro'
 };
@@ -342,10 +382,23 @@ export function clearAssistantSession(ownerKey: string | null = getAiStorageOwne
   window.dispatchEvent(new Event(AI_ASSISTANT_SESSION_CHANGED_EVENT));
 }
 
+export function resetAssistantConversation(ownerKey: string | null = getAiStorageOwnerKey()) {
+  const session = readAssistantSession(ownerKey);
+  const nextSession: AiAssistantSession = {
+    ...session,
+    messages: [initialAssistantMessage],
+    latestGraphFocus: undefined,
+    latestActiveBuildId: undefined,
+    updatedAt: new Date().toISOString()
+  };
+  saveAssistantSession(nextSession, ownerKey);
+  return nextSession;
+}
+
 export function normalizeAiRecommendedBuild(build: AiRecommendedBuild): AiRecommendedBuild {
   const items = build.items.map((item) => ({
     ...item,
-    quantity: Math.max(item.quantity ?? 1, defaultAiBuildQuantity(item.category))
+    quantity: resolvedAiBuildQuantity(item.quantity, item.category)
   }));
   const titleMatch = build.title.trim().match(/^([\d,]+원)\s+(.+)$/);
   const normalizedTitle = titleMatch
@@ -441,11 +494,16 @@ function normalizeAssistantMessages(messages: AiChatMessage[]) {
 
 function buildCompositionFingerprint(build: AiRecommendedBuild) {
   return build.items
-    .map((item) => `${item.category}:${item.partId}:${Math.max(item.quantity ?? 1, defaultAiBuildQuantity(item.category))}`)
+    .map((item) => `${item.category}:${item.partId}:${resolvedAiBuildQuantity(item.quantity, item.category)}`)
     .sort()
     .join('|');
 }
 
 function defaultAiBuildQuantity(category: PartCategory) {
   return category === 'RAM' ? 2 : 1;
+}
+
+// 서버가 수량을 명시하면 그대로 존중하고(예: 드래프트 유지 RAM 1개), 미지정일 때만 카테고리 기본값을 채운다.
+function resolvedAiBuildQuantity(quantity: number | undefined, category: PartCategory) {
+  return typeof quantity === 'number' && quantity >= 1 ? quantity : defaultAiBuildQuantity(category);
 }

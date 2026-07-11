@@ -1,3 +1,8 @@
+import http from 'k6/http';
+
+/* 테스트 대상 url */
+const BASE_URL = __ENV.BASE_URL || 'http://localhost:8081';
+
 /* helper 함수들
    1. 인증 파싱
    2. 가중 랜덤 선택 */

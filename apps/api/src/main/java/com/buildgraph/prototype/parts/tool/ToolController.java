@@ -1,6 +1,6 @@
 package com.buildgraph.prototype.parts.tool;
 
-import com.buildgraph.prototype.parts.part.PartQueryService;
+import com.buildgraph.prototype.parts.part.PartService;
 import com.buildgraph.prototype.parts.util.NaverShoppingOfferService;
 import com.buildgraph.prototype.user.CurrentUserService;
 
@@ -20,7 +20,7 @@ import org.springframework.web.bind.annotation.RestController;
 @RequestMapping("/api")
 @RequiredArgsConstructor
 public class ToolController {
-    private final PartQueryService partQueryService;
+    private final PartService partQueryService;
     private final ToolService toolCheckService;
     private final NaverShoppingOfferService naverShoppingOfferService;
     private final CurrentUserService currentUserService;

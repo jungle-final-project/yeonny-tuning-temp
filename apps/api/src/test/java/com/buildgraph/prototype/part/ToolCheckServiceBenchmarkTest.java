@@ -11,8 +11,8 @@ import java.util.Map;
 import org.junit.jupiter.api.Test;
 import org.springframework.jdbc.core.JdbcTemplate;
 
+import com.buildgraph.prototype.parts.part.PartQuery;
 import com.buildgraph.prototype.parts.tool.ToolBuildPart;
-import com.buildgraph.prototype.parts.tool.ToolQuery;
 import com.buildgraph.prototype.parts.tool.ToolRepository;
 import com.buildgraph.prototype.parts.tool.ToolService;
 import com.buildgraph.prototype.parts.util.PerformaceRule;
@@ -28,7 +28,7 @@ class ToolCheckServiceBenchmarkTest {
                         Map.of("part_id", 2L, "score", 92.0, "summary", "GPU category-local normalized score")
         ));
         ToolRepository toolRepository = mock(ToolRepository.class);
-        ToolQuery toolQuery = mock(ToolQuery.class);
+        PartQuery toolQuery = mock(PartQuery.class);
         PerformaceRule performaceRule = new PerformaceRule(jdbcTemplate);
         ToolService service = new ToolService(jdbcTemplate, toolRepository, performaceRule, toolQuery);
 

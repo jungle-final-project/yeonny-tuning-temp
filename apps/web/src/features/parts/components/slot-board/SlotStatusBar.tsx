@@ -1,6 +1,7 @@
 import { FolderPlus, MessageCircle, ShoppingCart } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { StateMessage } from '../../../../components/ui';
+import { openAiAssistant } from '../../../../lib/events';
 import type { QuoteDraft } from '../../types';
 import { SLOT_COUNT, SLOT_CONFIGS } from './slotBoardConfig';
 
@@ -45,13 +46,13 @@ export function SlotStatusBar({
         </div>
       ) : !hasToken ? (
         <div className="rounded-lg border border-dashed border-slate-300 px-4 py-2.5 text-xs font-bold text-slate-500">
-          로그인하면 슬롯에 담은 부품이 서버 견적초안에 저장됩니다.
+          로그인하면 슬롯에 담은 부품이 견적 장바구니에 저장됩니다.
           <Link to={loginHref} className="ml-2 font-black text-brand-blue hover:underline">로그인하고 견적 담기</Link>
         </div>
       ) : isDraftLoading ? (
-        <div className="rounded-lg border border-commerce-line px-4 py-2.5 text-xs font-bold text-slate-500">내 견적초안을 불러오는 중입니다.</div>
+        <div className="rounded-lg border border-commerce-line px-4 py-2.5 text-xs font-bold text-slate-500">내 견적 장바구니를 불러오는 중입니다.</div>
       ) : isDraftError ? (
-        <div className="rounded-lg border border-orange-200 bg-orange-50 px-4 py-2.5 text-xs font-bold text-orange-700">견적초안 API를 불러오지 못했습니다.</div>
+        <div className="rounded-lg border border-orange-200 bg-orange-50 px-4 py-2.5 text-xs font-bold text-orange-700">견적 장바구니를 불러오지 못했습니다. 잠시 후 다시 시도해 주세요.</div>
       ) : emptyCount > 0 ? (
         <div className="rounded-lg border border-blue-100 bg-blue-50/60 px-4 py-2.5 text-xs font-black text-brand-blue">
           미장착 슬롯 {emptyCount}개가 있습니다
@@ -66,13 +67,14 @@ export function SlotStatusBar({
           <div className="text-[11px] font-bold text-slate-400">장착 {filledCount}/{SLOT_COUNT}</div>
         </div>
         <div className="flex flex-wrap items-center gap-2">
-          <Link
-            to="/chatbot"
+          <button
+            type="button"
+            onClick={() => openAiAssistant()}
             className="inline-flex min-h-10 items-center gap-1.5 rounded-md border border-commerce-line bg-white px-4 text-sm font-black text-slate-700 hover:border-commerce-ink"
           >
             <MessageCircle size={15} className="text-brand-blue" />
             AI 상담
-          </Link>
+          </button>
           {hasItems ? (
             <button
               type="button"

@@ -1,0 +1,163 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 840" fill="none">
+  <!-- 등각(2:1) PC 내부 씬: 케이스 바닥 + 메인보드 평면 + 소켓 프린트. 부품 아트는 React 레이어가 얹는다. -->
+  <defs>
+    <radialGradient id="ambient" cx="50%" cy="46%" r="60%">
+      <stop offset="0%" stop-color="#d5e3f7" stop-opacity="0.6"/>
+      <stop offset="60%" stop-color="#dbe7f8" stop-opacity="0.28"/>
+      <stop offset="100%" stop-color="#dbe7f8" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="floorTop" x1="0" y1="0" x2="0.4" y2="1">
+      <stop offset="0%" stop-color="#f3f7fd"/>
+      <stop offset="55%" stop-color="#e9effa"/>
+      <stop offset="100%" stop-color="#dde6f3"/>
+    </linearGradient>
+    <linearGradient id="pcbTop" x1="240" y1="220" x2="1160" y2="680" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#2b4b7d"/>
+      <stop offset="48%" stop-color="#24406b"/>
+      <stop offset="100%" stop-color="#1d3559"/>
+    </linearGradient>
+    <linearGradient id="socketWell" x1="500" y1="300" x2="740" y2="420" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#22375c"/>
+      <stop offset="100%" stop-color="#16294a"/>
+    </linearGradient>
+    <linearGradient id="psuBayFloor" x1="1080" y1="560" x2="1380" y2="710" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#e2eaf5"/>
+      <stop offset="100%" stop-color="#ccd8e9"/>
+    </linearGradient>
+    <filter id="boardShadow" x="-15%" y="-15%" width="130%" height="130%">
+      <feGaussianBlur stdDeviation="16"/>
+    </filter>
+  </defs>
+
+  <ellipse cx="800" cy="470" rx="740" ry="330" fill="url(#ambient)"/>
+
+  <!-- 케이스 바닥 (섀시 트레이) -->
+  <polygon points="820,130 1510,475 820,820 130,475" fill="url(#floorTop)"/>
+  <polygon points="130,475 820,820 820,834 130,489" fill="#c4cfe0"/>
+  <polygon points="1510,475 820,820 820,834 1510,489" fill="#d3dcea"/>
+  <polygon points="820,130 1510,475 820,820 130,475" stroke="#b9c6da" stroke-width="2"/>
+  <!-- 트레이 가장자리 하이라이트 -->
+  <polyline points="130,475 820,130 1510,475" stroke="#ffffff" stroke-width="1.5" opacity="0.7"/>
+
+  <!-- 트레이 브러시드 결 -->
+  <g stroke="#d8e1ef" stroke-width="1.4" opacity="0.8">
+    <line x1="330" y1="475" x2="820" y2="230"/>
+    <line x1="430" y1="525" x2="1020" y2="230"/>
+    <line x1="620" y1="670" x2="1310" y2="325"/>
+    <line x1="770" y1="745" x2="1410" y2="425"/>
+  </g>
+
+  <!-- 트레이 타공 패턴 (미세 홈 음영) -->
+  <g>
+    <g fill="#c8d3e3" stroke="#b3c0d4" stroke-width="1">
+      <circle cx="820" cy="250" r="4"/><circle cx="920" cy="300" r="4"/><circle cx="1020" cy="350" r="4"/>
+      <circle cx="1120" cy="400" r="4"/><circle cx="1220" cy="450" r="4"/><circle cx="720" cy="300" r="4"/>
+      <circle cx="1120" cy="500" r="4"/><circle cx="1220" cy="550" r="4"/><circle cx="1320" cy="500" r="4"/>
+    </g>
+    <g fill="#ffffff" opacity="0.55">
+      <circle cx="821.5" cy="251.5" r="1.4"/><circle cx="921.5" cy="301.5" r="1.4"/><circle cx="1021.5" cy="351.5" r="1.4"/>
+      <circle cx="1121.5" cy="401.5" r="1.4"/><circle cx="1221.5" cy="451.5" r="1.4"/><circle cx="721.5" cy="301.5" r="1.4"/>
+      <circle cx="1121.5" cy="501.5" r="1.4"/><circle cx="1221.5" cy="551.5" r="1.4"/><circle cx="1321.5" cy="501.5" r="1.4"/>
+    </g>
+  </g>
+
+  <!-- 케이블 그로밋 (트레이 우측) -->
+  <g>
+    <ellipse cx="1250" cy="380" rx="26" ry="12" fill="#cbd6e6" stroke="#aebcd2" stroke-width="1.5"/>
+    <ellipse cx="1250" cy="378" rx="18" ry="7" fill="#94a3b8" opacity="0.6"/>
+  </g>
+
+  <!-- 메인보드 그림자 (소프트 AO) -->
+  <polygon points="716,244 1180,476 720,706 256,474" fill="#7b8cab" opacity="0.4" filter="url(#boardShadow)"/>
+
+  <!-- 메인보드 PCB -->
+  <polygon points="700,220 1160,450 700,680 240,450" fill="url(#pcbTop)"/>
+  <polygon points="240,450 700,680 700,688 240,458" fill="#14274a"/>
+  <polygon points="1160,450 700,680 700,688 1160,458" fill="#1b3459"/>
+  <polygon points="700,220 1160,450 700,680 240,450" stroke="#3c5e93" stroke-width="2"/>
+  <!-- PCB 상단 모서리 하이라이트 -->
+  <polyline points="240,450 700,220 1160,450" stroke="#6f92c9" stroke-width="1.5" opacity="0.8"/>
+
+  <!-- 트레이스 -->
+  <g stroke="#4f83e0" stroke-width="2" opacity="0.22">
+    <polyline points="360,450 560,350 760,450"/>
+    <polyline points="420,480 620,380 900,520"/>
+    <polyline points="700,250 980,390 940,410"/>
+    <polyline points="500,420 700,520 860,440"/>
+  </g>
+  <g stroke="#4f83e0" stroke-width="1.6" opacity="0.16">
+    <polyline points="300,430 480,340 640,420"/>
+    <polyline points="560,540 760,440 1000,560"/>
+    <polyline points="760,300 940,390 1080,430"/>
+    <polyline points="440,500 640,600 820,510"/>
+    <polyline points="820,340 1000,430 1100,480"/>
+  </g>
+  <!-- SMD 패드 점 -->
+  <g fill="#5c8ae0" opacity="0.35">
+    <circle cx="470" cy="410" r="2.4"/><circle cx="486" cy="418" r="2.4"/><circle cx="502" cy="426" r="2.4"/>
+    <circle cx="880" cy="480" r="2.4"/><circle cx="896" cy="488" r="2.4"/><circle cx="912" cy="496" r="2.4"/>
+    <circle cx="640" cy="580" r="2.4"/><circle cx="656" cy="588" r="2.4"/>
+  </g>
+
+  <!-- 표준 스탠드오프 (하이라이트 포함) -->
+  <g>
+    <g fill="#5c7bb0">
+      <circle cx="700" cy="248" r="5"/><circle cx="1120" cy="452" r="5"/><circle cx="700" cy="652" r="5"/>
+      <circle cx="280" cy="452" r="5"/><circle cx="480" cy="340" r="5"/><circle cx="920" cy="560" r="5"/>
+    </g>
+    <g fill="#aec3e4">
+      <circle cx="698.6" cy="246.6" r="1.8"/><circle cx="1118.6" cy="450.6" r="1.8"/><circle cx="698.6" cy="650.6" r="1.8"/>
+      <circle cx="278.6" cy="450.6" r="1.8"/><circle cx="478.6" cy="338.6" r="1.8"/><circle cx="918.6" cy="558.6" r="1.8"/>
+    </g>
+  </g>
+
+  <!-- CPU 소켓 -->
+  <polygon points="620,300 740,360 620,420 500,360" fill="url(#socketWell)" stroke="#5c7bb0" stroke-width="2.5"/>
+  <g fill="#33507f">
+    <circle cx="620" cy="330" r="3"/><circle cx="650" cy="345" r="3"/><circle cx="680" cy="360" r="3"/>
+    <circle cx="590" cy="345" r="3"/><circle cx="560" cy="360" r="3"/><circle cx="620" cy="360" r="3"/>
+    <circle cx="650" cy="375" r="3"/><circle cx="590" cy="375" r="3"/><circle cx="620" cy="390" r="3"/>
+  </g>
+  <polygon points="620,300 740,360 620,420 500,360" fill="none" stroke="#7c98c8" stroke-width="1" stroke-dasharray="6 5" transform="translate(0,-4)"/>
+  <!-- 소켓 리텐션 레버 -->
+  <polyline points="512,376 496,384 486,380" stroke="#8fa6c8" stroke-width="3" stroke-linecap="round"/>
+
+  <!-- RAM 슬롯 x4 (래치 포함) -->
+  <g>
+    <polygon points="830,290 1090,420 1070,430 810,300" fill="#16294a" stroke="#4d6ea8" stroke-width="1.5"/>
+    <polygon points="794,308 1054,438 1034,448 774,318" fill="#16294a" stroke="#4d6ea8" stroke-width="1.5"/>
+    <polygon points="758,326 1018,456 998,466 738,336" fill="#16294a" stroke="#4d6ea8" stroke-width="1.5"/>
+    <polygon points="722,344 982,474 962,484 702,354" fill="#16294a" stroke="#4d6ea8" stroke-width="1.5"/>
+    <g fill="#5c7bb0">
+      <polygon points="826,286 836,291 830,294 820,289"/><polygon points="1086,416 1096,421 1090,424 1080,419"/>
+      <polygon points="790,304 800,309 794,312 784,307"/><polygon points="1050,434 1060,439 1054,442 1044,437"/>
+      <polygon points="754,322 764,327 758,330 748,325"/><polygon points="1014,452 1024,457 1018,460 1008,455"/>
+      <polygon points="718,340 728,345 722,348 712,343"/><polygon points="978,470 988,475 982,478 972,473"/>
+    </g>
+  </g>
+
+  <!-- PCIe x16 슬롯 -->
+  <polygon points="520,460 800,600 784,608 504,468" fill="#16294a" stroke="#4d6ea8" stroke-width="2"/>
+  <polygon points="536,468 616,508 612,510 532,470" fill="#33507f"/>
+  <!-- PCIe 래치 -->
+  <polygon points="792,596 806,603 798,607 784,600" fill="#5c7bb0"/>
+
+  <!-- M.2 슬롯 -->
+  <polygon points="860,460 980,520 968,526 848,466" fill="#16294a" stroke="#4d6ea8" stroke-width="1.5"/>
+  <circle cx="972" cy="521" r="3.2" fill="#33507f" stroke="#5c7bb0" stroke-width="1"/>
+
+  <!-- 칩셋 방열판 -->
+  <polygon points="900,520 948,544 900,568 852,544" fill="#96adcf"/>
+  <polygon points="852,544 900,568 900,578 852,554" fill="#5c7bb0"/>
+  <polygon points="948,544 900,568 900,578 948,554" fill="#748fbb"/>
+  <g stroke="#7189b3" stroke-width="1.4">
+    <line x1="866" y1="537" x2="914" y2="561"/>
+    <line x1="880" y1="530" x2="928" y2="554"/>
+    <line x1="894" y1="523" x2="942" y2="547"/>
+  </g>
+  <polyline points="852,544 900,520 948,544" stroke="#c3d2e8" stroke-width="1.2" opacity="0.9"/>
+
+  <!-- PSU 베이 -->
+  <polygon points="1180,560 1380,660 1280,710 1080,610" fill="url(#psuBayFloor)" stroke="#94a3b8" stroke-width="2" stroke-dasharray="8 6"/>
+  <polygon points="1180,560 1380,660 1280,710 1080,610" fill="#334155" opacity="0.06" transform="translate(0,6)"/>
+</svg>

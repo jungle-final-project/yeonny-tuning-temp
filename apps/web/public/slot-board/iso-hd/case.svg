@@ -1,0 +1,98 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 300" fill="none">
+  <!-- 케이스 (iso-hd): 오픈 프레임 타워 + 강화유리 패널 + 전면 흡기 팬 + 상단 IO. -->
+  <!-- 프레임·팬 중심(88,206)·패널 좌표는 iso/case.svg와 동일 -->
+  <!-- 흡기 팬: [스큐 투영 g > 원형 좌표 fan-spin g] 중첩. idle 모션은 reduced-motion에서 정지. -->
+  <style>
+    @media (prefers-reduced-motion: no-preference) {
+      .fan-spin {
+        transform-box: fill-box;
+        transform-origin: center;
+        animation: fan-spin 4.5s linear infinite;
+      }
+      .case-led {
+        animation: led-breathe 3.6s ease-in-out infinite;
+      }
+      @keyframes fan-spin {
+        to { transform: rotate(360deg); }
+      }
+      @keyframes led-breathe {
+        0%, 100% { opacity: 0.45; }
+        50% { opacity: 1; }
+      }
+    }
+  </style>
+  <defs>
+    <linearGradient id="hdCaseGlass" x1="280" y1="110" x2="160" y2="298" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#bfdbfe" stop-opacity="0.34"/>
+      <stop offset="45%" stop-color="#60a5fa" stop-opacity="0.12"/>
+      <stop offset="100%" stop-color="#3b82f6" stop-opacity="0.2"/>
+    </linearGradient>
+    <linearGradient id="hdCaseMesh" x1="20" y1="110" x2="160" y2="298" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#e0e8f2"/>
+      <stop offset="100%" stop-color="#b6c4d7"/>
+    </linearGradient>
+    <linearGradient id="hdCaseBlade" x1="0" y1="-28" x2="0" y2="0" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#54647d"/>
+      <stop offset="100%" stop-color="#324056"/>
+    </linearGradient>
+    <radialGradient id="hdCaseHub" cx="40%" cy="35%" r="70%">
+      <stop offset="0%" stop-color="#647488"/>
+      <stop offset="100%" stop-color="#3a475c"/>
+    </radialGradient>
+  </defs>
+  <!-- 뒷면 수직 프레임 -->
+  <g stroke="#9aabc0" stroke-width="4" stroke-linecap="round">
+    <line x1="140" y1="40" x2="140" y2="170"/>
+    <line x1="20" y1="110" x2="20" y2="240"/>
+    <line x1="280" y1="110" x2="280" y2="240"/>
+    <line x1="160" y1="170" x2="160" y2="298"/>
+  </g>
+  <!-- 상단 프레임 -->
+  <g stroke="#9aabc0" stroke-width="4" stroke-linejoin="round">
+    <polyline points="20,110 140,40 280,110 160,170 20,110"/>
+  </g>
+  <g stroke="#eef3f9" stroke-width="1.4" opacity="0.95">
+    <polyline points="20,108 140,38 280,108"/>
+  </g>
+  <!-- 하단 프레임 -->
+  <g stroke="#5c6b83" stroke-width="4" stroke-linejoin="round">
+    <polyline points="20,240 160,298 280,240"/>
+  </g>
+  <!-- 전면 메쉬 패널 (좌측면) -->
+  <polygon points="20,110 160,170 160,298 20,238" fill="url(#hdCaseMesh)" opacity="0.5"/>
+  <g stroke="#94a3b8" stroke-width="1.6" opacity="0.7">
+    <line x1="36" y1="130" x2="36" y2="252"/><line x1="60" y1="140" x2="60" y2="262"/>
+    <line x1="84" y1="150" x2="84" y2="272"/><line x1="108" y1="160" x2="108" y2="282"/>
+    <line x1="132" y1="170" x2="132" y2="292"/>
+  </g>
+  <!-- 전면 흡기 팬 (메쉬 패널 부착, idle spin) -->
+  <g transform="translate(88,206) skewY(23.2)">
+    <circle r="38" fill="#1b2536"/>
+    <circle r="31" fill="#0d1524"/>
+    <circle r="29.6" fill="none" stroke="#38455c" stroke-width="1.4"/>
+    <g class="fan-spin">
+      <circle r="28" fill="none"/>
+      <path d="M1.4 -8 C 9 -10 17 -18 18 -27 C 11 -28 3 -22 -1 -9 Z" fill="url(#hdCaseBlade)"/>
+      <path d="M1.4 -8 C 9 -10 17 -18 18 -27 C 11 -28 3 -22 -1 -9 Z" fill="url(#hdCaseBlade)" transform="rotate(51.43)"/>
+      <path d="M1.4 -8 C 9 -10 17 -18 18 -27 C 11 -28 3 -22 -1 -9 Z" fill="url(#hdCaseBlade)" transform="rotate(102.86)"/>
+      <path d="M1.4 -8 C 9 -10 17 -18 18 -27 C 11 -28 3 -22 -1 -9 Z" fill="url(#hdCaseBlade)" transform="rotate(154.29)"/>
+      <path d="M1.4 -8 C 9 -10 17 -18 18 -27 C 11 -28 3 -22 -1 -9 Z" fill="url(#hdCaseBlade)" transform="rotate(205.71)"/>
+      <path d="M1.4 -8 C 9 -10 17 -18 18 -27 C 11 -28 3 -22 -1 -9 Z" fill="url(#hdCaseBlade)" transform="rotate(257.14)"/>
+      <path d="M1.4 -8 C 9 -10 17 -18 18 -27 C 11 -28 3 -22 -1 -9 Z" fill="url(#hdCaseBlade)" transform="rotate(308.57)"/>
+    </g>
+    <circle r="8" fill="url(#hdCaseHub)"/>
+    <circle r="8" fill="none" stroke="#5f6f88" stroke-width="1.1"/>
+    <circle cx="-2.2" cy="-2.2" r="2.6" fill="#7a8aa2"/>
+  </g>
+  <!-- 강화유리 사이드 패널 (우측면, 반투명 + 대각 반사) -->
+  <polygon points="280,110 160,170 160,298 280,238" fill="url(#hdCaseGlass)" stroke="#93c5fd" stroke-width="2"/>
+  <polygon points="252,124 212,144 176,262 216,242" fill="#ffffff" opacity="0.18"/>
+  <polygon points="270,115 258,121 236,232 248,226" fill="#ffffff" opacity="0.12"/>
+  <!-- 상단 IO: 전원 LED (idle breathe) + 리셋 -->
+  <g class="case-led">
+    <circle cx="150" cy="86" r="5" fill="#3b82f6"/>
+    <circle cx="150" cy="86" r="8" fill="#3b82f6" opacity="0.25"/>
+    <circle cx="148.6" cy="84.6" r="1.6" fill="#dbeafe"/>
+  </g>
+  <circle cx="170" cy="96" r="3.4" fill="#647488"/>
+</svg>

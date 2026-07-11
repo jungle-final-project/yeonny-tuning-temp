@@ -1,0 +1,72 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 220 200" fill="none">
+  <!-- RAM 스틱: 방열판 + LED 바 + 칩 + 골드 핑거 -->
+  <!-- idle 모션은 opt-in: reduced-motion 환경(또는 미디어쿼리 미전파)에서는 정지 상태로 남는다 -->
+  <style>
+    @media (prefers-reduced-motion: no-preference) {
+      .ram-led {
+        animation: led-breathe 3.2s ease-in-out infinite;
+      }
+      @keyframes led-breathe {
+        0%, 100% { opacity: 0.6; }
+        50% { opacity: 1; }
+      }
+    }
+  </style>
+  <defs>
+    <linearGradient id="ramHeat" x1="28" y1="56" x2="168" y2="196" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#3f4f66"/>
+      <stop offset="55%" stop-color="#334155"/>
+      <stop offset="100%" stop-color="#283549"/>
+    </linearGradient>
+    <linearGradient id="ramLed" x1="28" y1="56" x2="168" y2="140" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#60a5fa"/>
+      <stop offset="50%" stop-color="#3b82f6"/>
+      <stop offset="100%" stop-color="#2563eb"/>
+    </linearGradient>
+  </defs>
+  <!-- PCB 상단 얇은 면 -->
+  <polygon points="40,50 180,120 168,126 28,56" fill="#1f3a60"/>
+  <polyline points="40,50 180,120" stroke="#4d6ea8" stroke-width="1" opacity="0.8"/>
+  <!-- 전면(방열판) -->
+  <polygon points="28,56 168,126 168,196 28,126" fill="url(#ramHeat)"/>
+  <polygon points="168,126 180,120 180,190 168,196" fill="#1e293b"/>
+  <!-- 방열판 상단 LED 바 (idle breathe 대상) -->
+  <g class="ram-led">
+    <polygon points="28,56 168,126 168,140 28,70" fill="url(#ramLed)"/>
+    <polygon points="168,126 180,120 180,134 168,140" fill="#1d4ed8"/>
+    <polygon points="28,56 168,126 168,131 28,61" fill="#bfdbfe" opacity="0.55"/>
+  </g>
+  <!-- 방열판 specular 하이라이트 -->
+  <polygon points="40,76 74,93 74,160 40,143" fill="#ffffff" opacity="0.08"/>
+  <!-- 방열판 사선 커팅 -->
+  <g stroke="#475569" stroke-width="2">
+    <line x1="56" y1="84" x2="56" y2="158"/><line x1="84" y1="98" x2="84" y2="172"/>
+    <line x1="112" y1="112" x2="112" y2="186"/><line x1="140" y1="126" x2="140" y2="196"/>
+  </g>
+  <g stroke="#5d6b80" stroke-width="0.8" opacity="0.9">
+    <line x1="57.5" y1="84.8" x2="57.5" y2="158.8"/><line x1="85.5" y1="98.8" x2="85.5" y2="172.8"/>
+    <line x1="113.5" y1="112.8" x2="113.5" y2="186.8"/><line x1="141.5" y1="126.8" x2="141.5" y2="196.8"/>
+  </g>
+  <!-- 라벨 -->
+  <polygon points="66,110 130,142 130,164 66,132" fill="#0f172a"/>
+  <polygon points="66,110 130,142 130,144 66,112" fill="#334155"/>
+  <polyline points="74,124 122,148" stroke="#93c5fd" stroke-width="3"/>
+  <polyline points="74,132 108,149" stroke="#64748b" stroke-width="2.4"/>
+  <!-- 골드 핑거 -->
+  <g stroke="#d97706" stroke-width="3">
+    <line x1="34" y1="126" x2="34" y2="136"/><line x1="46" y1="132" x2="46" y2="142"/>
+    <line x1="58" y1="138" x2="58" y2="148"/><line x1="70" y1="144" x2="70" y2="154"/>
+    <line x1="82" y1="150" x2="82" y2="160"/><line x1="94" y1="156" x2="94" y2="166"/>
+    <line x1="106" y1="162" x2="106" y2="172"/><line x1="118" y1="168" x2="118" y2="178"/>
+    <line x1="130" y1="174" x2="130" y2="184"/><line x1="142" y1="180" x2="142" y2="190"/>
+    <line x1="154" y1="186" x2="154" y2="196"/>
+  </g>
+  <g stroke="#fbbf24" stroke-width="1" opacity="0.75">
+    <line x1="33" y1="126" x2="33" y2="136"/><line x1="45" y1="132" x2="45" y2="142"/>
+    <line x1="57" y1="138" x2="57" y2="148"/><line x1="69" y1="144" x2="69" y2="154"/>
+    <line x1="81" y1="150" x2="81" y2="160"/><line x1="93" y1="156" x2="93" y2="166"/>
+    <line x1="105" y1="162" x2="105" y2="172"/><line x1="117" y1="168" x2="117" y2="178"/>
+    <line x1="129" y1="174" x2="129" y2="184"/><line x1="141" y1="180" x2="141" y2="190"/>
+    <line x1="153" y1="186" x2="153" y2="196"/>
+  </g>
+</svg>

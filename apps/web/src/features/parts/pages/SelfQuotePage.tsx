@@ -1,6 +1,6 @@
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Bell, LayoutGrid, X } from 'lucide-react';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link, Navigate, useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import { useHiddenPageScrollbar } from '../../../hooks/useHiddenPageScrollbar';
 import { Screen } from '../../../components/ui';
@@ -22,15 +22,22 @@ import {
   type PartCategory,
   type AiSelectedBuild
 } from '../../quote/aiSelection';
+import { AiBuildAssistant } from '../../quote/components/AiBuildAssistant';
 import { resolveBuildGraph, saveBuildFromChat } from '../../quote/quoteApi';
+import { withObjectParticle } from '../components/slot-board/koreanParticle';
 import { QuoteComparePanel } from '../components/slot-board/QuoteComparePanel';
 import { QuotePerformancePanel } from '../components/slot-board/QuotePerformancePanel';
-import { UpgradeAdvisorPanel } from '../components/slot-board/UpgradeAdvisorPanel';
-import { SlotBoard } from '../components/slot-board/SlotBoard';
-import { SlotCandidatePanel } from '../components/slot-board/SlotCandidatePanel';
+import { SlotBoard, type SlotBoardVisualMode } from '../components/slot-board/SlotBoard';
 import { SlotStatusBar } from '../components/slot-board/SlotStatusBar';
-import { SLOT_CONFIGS, SLOT_COUNT, isSlotCategory, slotConfigFor } from '../components/slot-board/slotBoardConfig';
-import { applyAiBuildToQuoteDraft, deleteQuoteDraftItem, getCurrentQuoteDraft, patchQuoteDraftItem, putQuoteDraftItem } from '../partsApi';
+import { RECOMMENDED_SLOT_ORDER, SLOT_CONFIGS, SLOT_COUNT, isMultiItemCategory, isSlotCategory } from '../components/slot-board/slotBoardConfig';
+import {
+  applyAiBuildToQuoteDraft,
+  deleteQuoteDraftItem,
+  getBuildGraphLayoutDefault,
+  getCurrentQuoteDraft,
+  listParts,
+  putQuoteDraftItem
+} from '../partsApi';
 import { quoteDraftToRecommendedBuild, selfQuoteBuildId } from '../selfQuoteBuild';
 import type { PartRow, QuoteDraft, QuoteDraftItem } from '../types';
 
@@ -60,14 +67,13 @@ function SelfQuoteSlotBoardPage() {
   const [searchParams, setSearchParams] = useSearchParams();
   const categoryParam = searchParams.get('category');
   const selectedCategory: PartCategory | null = isSlotCategory(categoryParam) ? categoryParam : null;
-  const selectedSlot = selectedCategory ? slotConfigFor(selectedCategory) ?? null : null;
   const [aiBuild, setAiBuild] = useState<AiSelectedBuild | null>(() => readSelectedAiBuild());
   // R1 견적 비교: 챗봇이 마지막으로 내려준 추천 배치(최대 3안 — 가성비/균형/고성능).
   const [recentBuilds, setRecentBuilds] = useState<AiRecommendedBuild[]>(() => recentBuildsForChatContext(readAssistantSession()));
   const [compareOpen, setCompareOpen] = useState(false);
   const [applyingBuildId, setApplyingBuildId] = useState<string | null>(null);
   const [compareApplyError, setCompareApplyError] = useState<string | null>(null);
-  const [upgradeOpen, setUpgradeOpen] = useState(false);
+  const { effectiveVisualMode, setVisualMode } = useSlotBoardVisualMode();
   const hasToken = Boolean(getToken());
   const loginHref = `/login?redirect=${encodeURIComponent(`${location.pathname}${location.search}`)}`;
 
@@ -87,17 +93,6 @@ function SelfQuoteSlotBoardPage() {
   });
   const deleteMutation = useMutation({
     mutationFn: (partId: string) => deleteQuoteDraftItem(partId),
-    onSuccess: invalidateQuoteDraft
-  });
-  const quantityMutation = useMutation({
-    mutationFn: ({ partId, quantity }: { partId: string; quantity: number }) => patchQuoteDraftItem(partId, quantity),
-    onSuccess: invalidateQuoteDraft
-  });
-  const replaceMutation = useMutation({
-    mutationFn: async ({ removePartId, partId }: { removePartId: string; partId: string }) => {
-      await putQuoteDraftItem(partId, 1);
-      return deleteQuoteDraftItem(removePartId);
-    },
     onSuccess: invalidateQuoteDraft
   });
   const saveQuoteMutation = useMutation({
@@ -122,7 +117,17 @@ function SelfQuoteSlotBoardPage() {
       focus: graphFocus
     }),
     placeholderData: keepPreviousData,
-    enabled: hasToken && !isQuoteDraftLoading
+    enabled: hasToken && !isQuoteDraftLoading,
+    retry: false
+  });
+
+  // 관리자가 배치한 3D 커넥터 앵커. 실패/미저장이어도 IsoCardConnector는 자동 계산으로 폴백한다.
+  const anchorQuery = useQuery({
+    queryKey: ['build-graph-layout-default'],
+    queryFn: getBuildGraphLayoutDefault,
+    enabled: hasToken,
+    staleTime: 5 * 60 * 1000,
+    retry: false
   });
 
   useEffect(() => {
@@ -198,14 +203,6 @@ function SelfQuoteSlotBoardPage() {
     addMutation.mutate({ partId: part.id, quantity: 1 });
   };
 
-  const replacePart = (removePartId: string, part: PartRow) => {
-    if (!hasToken) {
-      navigate(loginHref);
-      return;
-    }
-    replaceMutation.mutate({ removePartId, partId: part.id });
-  };
-
   const removeItem = (partId: string) => {
     if (!hasToken) {
       navigate(loginHref);
@@ -214,15 +211,7 @@ function SelfQuoteSlotBoardPage() {
     deleteMutation.mutate(partId);
   };
 
-  const updateQuantity = (partId: string, quantity: number) => {
-    if (!hasToken) {
-      navigate(loginHref);
-      return;
-    }
-    quantityMutation.mutate({ partId, quantity });
-  };
-
-  const isMutating = addMutation.isPending || deleteMutation.isPending || replaceMutation.isPending || quantityMutation.isPending;
+  const isMutating = addMutation.isPending || deleteMutation.isPending;
   const hasCompatibilityFail = quoteHasCompatibilityFail(graphQuery.data, draftItems);
 
   const filledCount = SLOT_CONFIGS.filter((slot) => draftItems.some((item) => item.category === slot.category)).length;
@@ -257,6 +246,7 @@ function SelfQuoteSlotBoardPage() {
           unmetConditionCount={unmetConditionCount}
           storageItems={draftItems.filter((item) => item.category === 'STORAGE')}
           graphLoading={graphQuery.isLoading}
+          graphError={graphQuery.isError}
         />
 
         {/* 시작 안내: 빈 견적이면 AI/직접 시작을 명시하고, 진행 중이면 다음 선택을 안내한다 */}
@@ -268,7 +258,7 @@ function SelfQuoteSlotBoardPage() {
             <div className="min-w-0">
               <div className="text-sm font-black text-commerce-ink">뭘 골라야 할지 모르겠다면, AI에게 예산과 용도만 알려주세요</div>
               <div className="mt-1 text-xs text-slate-500">
-                예: &quot;게이밍 200만원&quot; — AI가 완성된 조합을 추천하고, 선택하면 이 화면에 그대로 채워집니다
+                예: &quot;게이밍 200만원&quot; — AI가 완성된 조합을 추천하고, 선택하면 이 화면에 그대로 채워져요
               </div>
             </div>
             <div className="flex shrink-0 flex-wrap gap-2">
@@ -296,7 +286,7 @@ function SelfQuoteSlotBoardPage() {
             className="flex flex-wrap items-center gap-2 rounded-md border border-blue-100 bg-blue-50/50 px-3 py-2 text-xs font-black text-brand-blue"
           >
             <span>
-              다음: {RECOMMENDED_SLOT_ORDER.indexOf(nextCategory) + 1}. {PART_CATEGORY_LABELS[nextCategory]}를 선택해 주세요
+              다음: {RECOMMENDED_SLOT_ORDER.indexOf(nextCategory) + 1}. {withObjectParticle(PART_CATEGORY_LABELS[nextCategory])} 선택해 주세요
             </span>
             <button
               type="button"
@@ -306,14 +296,7 @@ function SelfQuoteSlotBoardPage() {
               바로 열기
             </button>
           </div>
-        ) : (
-          <div
-            data-testid="quote-complete-guide"
-            className="rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs font-black text-emerald-700"
-          >
-            8개 품목이 모두 채워졌어요 — 호환 상태를 확인하고 저장하거나 구매하세요
-          </div>
-        )}
+        ) : null}
 
         {aiBuild ? (
           <AiSelectedBuildPanel
@@ -331,7 +314,7 @@ function SelfQuoteSlotBoardPage() {
         {recentBuilds.length >= 2 && !compareOpen ? (
           <div className="panel flex flex-wrap items-center justify-between gap-2 border-blue-100 px-4 py-2.5">
             <span className="text-xs font-bold text-slate-600">
-              AI가 추천한 {recentBuilds.length}안(가성비·균형·고성능)을 나란히 비교할 수 있어요
+              AI가 추천한 {recentBuilds.length}안을 나란히 비교할 수 있어요
             </span>
             <button
               type="button"
@@ -354,62 +337,34 @@ function SelfQuoteSlotBoardPage() {
           />
         ) : null}
 
-        {/* R1 업그레이드 진단: 부품이 담긴 견적(=기존 PC 구성)에서 증상 기반 교체 제안으로 진입한다. */}
-        {draftItems.length > 0 && !upgradeOpen ? (
-          <div className="panel flex flex-wrap items-center justify-between gap-2 border-commerce-line px-4 py-2.5">
-            <span className="text-xs font-bold text-slate-600">PC가 예전 같지 않다면 — 증상만 고르면 병목 부품 교체를 제안해 드려요</span>
-            <button
-              type="button"
-              data-testid="upgrade-advisor-open"
-              onClick={() => setUpgradeOpen(true)}
-              className="rounded-md border border-commerce-line bg-white px-3 py-1.5 text-xs font-black text-slate-700 transition hover:border-commerce-ink"
-            >
-              업그레이드 진단
-            </button>
-          </div>
-        ) : null}
-        {upgradeOpen && draftItems.length > 0 ? (
-          <UpgradeAdvisorPanel
-            draftItems={draftItems}
-            onOpenSlot={selectSlot}
-            onClose={() => setUpgradeOpen(false)}
-          />
-        ) : null}
-
-        {/* 본문: 체크리스트(품목 지도) + 보드(보조 그래프) + 우측 상세 패널.
-            세 열의 세로 길이는 보드에 맞춘다 — 체크리스트는 스트레치, 우측 패널은 내부 스크롤. */}
-        <div className="grid gap-4 lg:grid-cols-[230px_minmax(0,1fr)_380px] lg:items-start">
+        {/* 본문: 체크리스트(품목 지도) + 보드(보조 그래프) + AI 상담 패널. */}
+        <div className="grid gap-4 lg:grid-cols-[360px_minmax(0,1fr)_360px] lg:items-start">
           <QuoteChecklist
             draftItems={draftItems}
             selectedCategory={selectedCategory}
             nextCategory={nextCategory}
             onSelect={selectSlot}
+            onAddPart={addPart}
+            isMutating={isMutating}
           />
-          <SlotBoard
-            items={draftItems}
-            selectedCategory={selectedCategory}
-            nextCategory={nextCategory}
-            onSlotSelect={selectSlot}
-            onRemoveItem={removeItem}
-            isRemovePending={deleteMutation.isPending}
-            graph={graphQuery.data}
-          />
-          {selectedSlot ? (
-            <SlotCandidatePanel
-              key={selectedSlot.category}
-              slot={selectedSlot}
-              draftItems={draftItems.filter((item) => item.category === selectedSlot.category)}
-              onClose={closePanel}
-              onAddPart={addPart}
-              onReplacePart={replacePart}
+          <div className="min-h-0 lg:h-[800px]">
+            <SlotBoard
+              items={draftItems}
+              selectedCategory={selectedCategory}
+              nextCategory={nextCategory}
+              visualMode={effectiveVisualMode}
+              onVisualModeChange={setVisualMode}
+              onClearSelection={closePanel}
+              onSlotSelect={selectSlot}
               onRemoveItem={removeItem}
-              onUpdateQuantity={updateQuantity}
-              isMutating={isMutating}
-              draftSignature={quoteGraphSignature(draftItems)}
+              isRemovePending={deleteMutation.isPending}
+              graph={graphQuery.data}
+              connectorAnchors={anchorQuery.data?.anchors}
             />
-          ) : (
-            <SlotDetailPlaceholder onPick={selectSlot} />
-          )}
+          </div>
+          <div className="min-h-0 lg:h-[800px]">
+            <AiBuildAssistant surface="self-quote" variant="embedded" />
+          </div>
         </div>
 
         {/* 담긴 견적으로 성능 비교(R1): resolveBuildGraph가 이미 내려주는 performance 툴 결과를 표시한다. */}
@@ -436,32 +391,122 @@ function SelfQuoteSlotBoardPage() {
   );
 }
 
-// 멘토 피드백: "무엇을 사야 하는지, 어디까지 했는지"의 품목 지도. 권장 선택 순서이며 강제가 아니다.
-const RECOMMENDED_SLOT_ORDER: PartCategory[] = ['CPU', 'MOTHERBOARD', 'RAM', 'GPU', 'STORAGE', 'PSU', 'CASE', 'COOLER'];
+const SLOT_BOARD_VISUAL_MODE_STORAGE_KEY = 'buildgraph.selfQuote.slotBoardVisualMode';
+
+function useSlotBoardVisualMode() {
+  const [visualMode, setVisualModeState] = useState<SlotBoardVisualMode>(readSlotBoardVisualMode);
+  const [isDesktop, setIsDesktop] = useState(isDesktopSlotBoardViewport);
+
+  useEffect(() => {
+    if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') {
+      return;
+    }
+    const media = window.matchMedia('(min-width: 1024px)');
+    const sync = () => setIsDesktop(media.matches);
+    sync();
+    media.addEventListener('change', sync);
+    return () => media.removeEventListener('change', sync);
+  }, []);
+
+  const setVisualMode = useCallback((mode: SlotBoardVisualMode) => {
+    setVisualModeState(mode);
+    writeSlotBoardVisualMode(mode);
+  }, []);
+
+  return {
+    effectiveVisualMode: isDesktop ? visualMode : 'motherboard',
+    setVisualMode
+  };
+}
+
+function isDesktopSlotBoardViewport() {
+  return typeof window !== 'undefined' &&
+    typeof window.matchMedia === 'function' &&
+    window.matchMedia('(min-width: 1024px)').matches;
+}
+
+function readSlotBoardVisualMode(): SlotBoardVisualMode {
+  if (typeof window === 'undefined') {
+    return 'motherboard';
+  }
+  try {
+    const storedValue = window.localStorage.getItem(SLOT_BOARD_VISUAL_MODE_STORAGE_KEY);
+    return storedValue === 'isometric' ? 'isometric' : 'motherboard';
+  } catch {
+    return 'motherboard';
+  }
+}
+
+function writeSlotBoardVisualMode(mode: SlotBoardVisualMode) {
+  if (typeof window === 'undefined') {
+    return;
+  }
+  try {
+    window.localStorage.setItem(SLOT_BOARD_VISUAL_MODE_STORAGE_KEY, mode);
+  } catch {
+    // localStorage가 차단된 환경에서는 현재 세션 상태만 유지한다.
+  }
+}
 
 function QuoteChecklist({
   draftItems,
   selectedCategory,
   nextCategory,
-  onSelect
+  onSelect,
+  onAddPart,
+  isMutating
 }: {
   draftItems: QuoteDraftItem[];
   selectedCategory: PartCategory | null;
   nextCategory: PartCategory | null;
   onSelect: (category: PartCategory) => void;
+  onAddPart: (part: PartRow) => void;
+  isMutating: boolean;
 }) {
+  const [expandedCategory, setExpandedCategory] = useState<PartCategory | null>(() => selectedCategory ?? nextCategory ?? 'CPU');
   const filledCount = RECOMMENDED_SLOT_ORDER.filter((category) => draftItems.some((item) => item.category === category)).length;
+  const activeCategory = expandedCategory ?? selectedCategory ?? nextCategory ?? 'CPU';
+  const selectedPartIds = useMemo(() => new Set(draftItems.map((item) => item.partId)), [draftItems]);
+  const activeIsMulti = isMultiItemCategory(activeCategory);
+  const candidateQuery = useQuery({
+    queryKey: ['parts', 'checklist-accordion-candidates', activeCategory, activeIsMulti ? 'ADD' : 'REPLACE'],
+    queryFn: () => listParts({
+      category: activeCategory,
+      page: 0,
+      size: 24,
+      sort: 'compatibility',
+      compatibilitySource: 'QUOTE_DRAFT_CURRENT',
+      compatibilityMode: activeIsMulti ? 'ADD' : undefined
+    }),
+    enabled: Boolean(activeCategory),
+    placeholderData: keepPreviousData,
+    staleTime: 30_000
+  });
+
+  const openCategory = (category: PartCategory) => {
+    setExpandedCategory((current) => current === category ? null : category);
+    onSelect(category);
+  };
+
+  const choosePart = (category: PartCategory, part: PartRow) => {
+    onAddPart(part);
+    const next = RECOMMENDED_SLOT_ORDER.find((candidate) => candidate !== category && !draftItems.some((item) => item.category === candidate));
+    setExpandedCategory(null);
+    if (next) {
+      onSelect(next);
+    }
+  };
 
   return (
     // lg: 보드(구성 관계도) 높이에 맞춰 늘어난다 — 좌·중 열의 아래 끝이 나란해진다.
-    <aside data-testid="quote-checklist" className="panel h-fit p-4 lg:h-auto lg:self-stretch">
+    <aside data-testid="quote-checklist" className="panel flex h-fit flex-col p-4 lg:h-[800px] lg:overflow-hidden">
       <div className="mb-3 flex items-center justify-between">
         <h2 className="text-sm font-black text-commerce-ink">견적 체크리스트</h2>
         <span data-testid="quote-checklist-progress" className="text-[11px] font-black text-slate-500">
           {filledCount}/{RECOMMENDED_SLOT_ORDER.length} 완료
         </span>
       </div>
-      <ol className="space-y-1.5">
+      <ol className="min-h-0 flex-1 space-y-1.5 overflow-y-auto pr-1">
         {RECOMMENDED_SLOT_ORDER.map((category, index) => {
           const items = draftItems.filter((item) => item.category === category);
           const filled = items.length > 0;
@@ -474,12 +519,13 @@ function QuoteChecklist({
               <button
                 type="button"
                 aria-label={`${label} 후보 목록 열기`}
+                aria-expanded={expandedCategory === category}
                 data-testid={`checklist-${category}`}
                 data-filled={filled ? 'true' : 'false'}
                 data-next={isNext ? 'true' : 'false'}
-                onClick={() => onSelect(category)}
+                onClick={() => openCategory(category)}
                 className={`w-full rounded-md border px-2.5 py-2 text-left text-xs transition ${
-                  isSelected
+                  isSelected || expandedCategory === category
                     ? 'border-brand-blue bg-white ring-2 ring-blue-100'
                     : filled
                       ? 'border-emerald-200 bg-emerald-50/40 hover:border-emerald-400'
@@ -512,6 +558,63 @@ function QuoteChecklist({
                   <div className="mt-1 text-[11px] text-slate-400">+ 부품 선택</div>
                 )}
               </button>
+              {expandedCategory === category ? (
+                <div
+                  data-testid={`checklist-candidates-${category}`}
+                  className="mt-1.5 rounded-md border border-blue-100 bg-blue-50/30 p-1.5"
+                >
+                  {candidateQuery.isLoading ? (
+                    <div className="rounded bg-white px-2 py-3 text-center text-[11px] font-bold text-slate-400">후보를 불러오는 중</div>
+                  ) : candidateQuery.isError ? (
+                    <div className="rounded bg-white px-2 py-3 text-center text-[11px] font-bold text-red-500">후보를 불러오지 못했습니다</div>
+                  ) : (
+                    <div className="max-h-[330px] space-y-1 overflow-y-auto pr-1">
+                      {(candidateQuery.data?.items ?? []).map((part) => {
+                        const isAlreadySelected = selectedPartIds.has(part.id);
+                        const status = part.compatibility?.status;
+                        const isFail = status === 'FAIL';
+                        return (
+                          <button
+                            key={part.id}
+                            type="button"
+                            disabled={isMutating || isAlreadySelected || isFail}
+                            onClick={() => choosePart(category, part)}
+                            className={`w-full rounded border bg-white px-2 py-2 text-left text-[11px] transition ${
+                              isFail
+                                ? 'border-slate-200 opacity-55'
+                                : isAlreadySelected
+                                  ? 'border-emerald-200 bg-emerald-50'
+                                  : 'border-commerce-line hover:border-brand-blue hover:bg-white'
+                            } disabled:cursor-not-allowed`}
+                          >
+                            <div className="flex items-start justify-between gap-2">
+                              <span className="line-clamp-2 min-w-0 font-black text-commerce-ink">{part.name}</span>
+                              <span className="shrink-0 font-black text-commerce-ink">{part.price.toLocaleString()}원</span>
+                            </div>
+                            <div className="mt-1 flex items-center justify-between gap-2 text-[10px]">
+                              <span className="truncate text-slate-500">{part.manufacturer ?? '제조사 미상'}</span>
+                              <span className={`shrink-0 font-black ${
+                                status === 'PASS'
+                                  ? 'text-emerald-700'
+                                  : status === 'WARN'
+                                    ? 'text-amber-600'
+                                    : status === 'FAIL'
+                                      ? 'text-red-600'
+                                      : 'text-slate-400'
+                              }`}>
+                                {isAlreadySelected ? '선택됨' : status ?? '확인 전'}
+                              </span>
+                            </div>
+                          </button>
+                        );
+                      })}
+                      {candidateQuery.data?.items.length === 0 ? (
+                        <div className="rounded bg-white px-2 py-3 text-center text-[11px] font-bold text-slate-400">표시할 후보가 없습니다</div>
+                      ) : null}
+                    </div>
+                  )}
+                </div>
+              ) : null}
             </li>
           );
         })}
@@ -604,7 +707,7 @@ function AiSelectedBuildPanel({
           </div>
           <button
             type="button"
-            aria-label="AI 선택 조합 비우기"
+            aria-label="AI 선택 조합 표시 닫기"
             onClick={onClear}
             className="grid h-10 w-10 place-items-center rounded-md border border-commerce-line bg-white text-slate-600 hover:border-commerce-sale hover:text-commerce-sale"
           >
@@ -774,43 +877,6 @@ function graphToolForCategory(category: PartCategory): BuildGraphFocus['tool'] {
   return undefined;
 }
 
-// 슬롯 미선택 시 우측 컬럼을 채우는 상세 placeholder. 슬롯을 고르면 실제 후보 패널로 전환된다.
-function SlotDetailPlaceholder({ onPick }: { onPick: (category: PartCategory) => void }) {
-  return (
-    <section
-      data-testid="slot-detail-placeholder"
-      className="hidden rounded-lg border border-commerce-line bg-white lg:block"
-    >
-      <div className="border-b border-commerce-line px-4 py-3">
-        <h2 className="text-base font-black text-commerce-ink">구성 상세 · 교체 후보</h2>
-        <p className="mt-0.5 text-[11px] font-bold text-slate-500">슬롯을 선택하면 현재 견적 기준 교체 후보를 보여줍니다.</p>
-      </div>
-      <div className="space-y-3 p-4">
-        <div className="rounded-md border border-dashed border-slate-300 bg-slate-50/60 p-4 text-center">
-          <div className="mx-auto mb-2 flex h-10 w-10 items-center justify-center rounded-full bg-blue-50 text-brand-blue">
-            <LayoutGrid size={18} />
-          </div>
-          <p className="text-xs font-black text-slate-600">왼쪽 보드에서 슬롯을 눌러보세요</p>
-          <p className="mt-1 text-[11px] font-bold text-slate-400">부품 관계를 확인하고 교체 후보를 비교할 수 있습니다.</p>
-        </div>
-        <div className="flex flex-wrap gap-1.5">
-          {SLOT_CONFIGS.map((slot) => (
-            <button
-              key={slot.category}
-              type="button"
-              onClick={() => onPick(slot.category)}
-              className="inline-flex items-center gap-1 rounded-full border border-commerce-line bg-white px-2.5 py-1 text-[11px] font-black text-slate-600 hover:border-brand-blue hover:text-brand-blue"
-            >
-              <img src={slot.glyph} alt="" aria-hidden="true" className="h-3.5 w-auto max-w-10" />
-              {slot.label}
-            </button>
-          ))}
-        </div>
-      </div>
-    </section>
-  );
-}
-
 function QuoteSummaryBar({
   totalPrice,
   filledCount,
@@ -819,7 +885,8 @@ function QuoteSummaryBar({
   failCount,
   unmetConditionCount,
   storageItems,
-  graphLoading
+  graphLoading,
+  graphError
 }: {
   totalPrice: number;
   filledCount: number;
@@ -829,31 +896,37 @@ function QuoteSummaryBar({
   unmetConditionCount: number;
   storageItems: QuoteDraftItem[];
   graphLoading: boolean;
+  graphError: boolean;
 }) {
   // '조건 미충족' = 빨간 부품 노드는 없지만 검사(예: 파워 용량)가 FAIL — 구매 차단과 표기를 일치시킨다.
-  const hasRedState = failCount > 0 || unmetConditionCount > 0;
+  // 검증 자체가 실패하면(미검증) 정상으로 오인하지 않도록 회색 '검증 확인 불가'로 구분한다.
+  const hasRedState = !graphError && (failCount > 0 || unmetConditionCount > 0);
   const compatibilityText = graphLoading
     ? '확인 중'
-    : failCount > 0
-      ? `안 맞음 ${failCount}개`
-      : unmetConditionCount > 0
-        ? '조건 미충족'
-        : warnCount > 0
-          ? `주의 ${warnCount}개`
-          : filledCount === 0
-            ? '부품 없음'
-            : '이상 없음';
+    : graphError
+      ? '검증 확인 불가'
+      : failCount > 0
+        ? `장착 불가 ${failCount}개`
+        : unmetConditionCount > 0
+          ? '조건 미충족'
+          : warnCount > 0
+            ? `주의 ${warnCount}개`
+            : filledCount === 0
+              ? '부품 없음'
+              : '이상 없음';
   const compatibilityColor = hasRedState
     ? 'text-red-600'
-    : warnCount > 0
-      ? 'text-amber-600'
-      : filledCount === 0
-        ? 'text-slate-400'
-        : 'text-emerald-600';
+    : graphError
+      ? 'text-slate-400'
+      : warnCount > 0
+        ? 'text-amber-600'
+        : filledCount === 0
+          ? 'text-slate-400'
+          : 'text-emerald-600';
   const storageCount = storageItems.reduce((sum, item) => sum + item.quantity, 0);
 
   return (
-    <div data-testid="quote-summary-bar" className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+    <div data-testid="quote-summary-bar" className="sticky top-0 z-30 grid grid-cols-2 gap-2 bg-[#f6fbff]/95 py-2 backdrop-blur sm:grid-cols-4">
       <div className="panel flex items-center gap-3 px-4 py-3">
         <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-blue-50 text-xl font-black text-brand-blue">₩</span>
         <div className="min-w-0">
@@ -874,8 +947,8 @@ function QuoteSummaryBar({
         </div>
       </div>
       <div className="panel flex items-center gap-3 px-4 py-3">
-        <span className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-lg ${hasRedState ? 'bg-red-50' : warnCount > 0 ? 'bg-amber-50' : 'bg-emerald-50'}`}>
-          <svg viewBox="0 0 20 20" className={`h-5 w-5 ${hasRedState ? 'text-red-500' : warnCount > 0 ? 'text-amber-500' : 'text-emerald-500'}`} fill="none" stroke="currentColor" strokeWidth="2">
+        <span className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-lg ${hasRedState ? 'bg-red-50' : graphError ? 'bg-slate-100' : warnCount > 0 ? 'bg-amber-50' : 'bg-emerald-50'}`}>
+          <svg viewBox="0 0 20 20" className={`h-5 w-5 ${hasRedState ? 'text-red-500' : graphError ? 'text-slate-400' : warnCount > 0 ? 'text-amber-500' : 'text-emerald-500'}`} fill="none" stroke="currentColor" strokeWidth="2">
             <path d="M10 2a8 8 0 100 16A8 8 0 0010 2zm0 5v4m0 2.5v.5" strokeLinecap="round" />
           </svg>
         </span>
@@ -891,8 +964,8 @@ function QuoteSummaryBar({
           </svg>
         </span>
         <div className="min-w-0">
-          <div className="text-[11px] font-bold text-slate-500">스토리지</div>
-          <div className="text-sm font-black text-commerce-ink">{storageCount > 0 ? `SSD ${storageCount}개` : 'SSD 없음'}</div>
+          <div className="text-[11px] font-bold text-slate-500">SSD</div>
+          <div className="text-sm font-black text-commerce-ink">{storageCount > 0 ? `${storageCount}개` : '없음'}</div>
         </div>
       </div>
     </div>

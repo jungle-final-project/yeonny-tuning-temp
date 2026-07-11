@@ -5,7 +5,7 @@ import { Link, useLocation, useNavigate, useSearchParams } from 'react-router-do
 import { CategorySidebar, DataTable, Panel, StateMessage } from '../../../../components/ui';
 import { getToken } from '../../../../lib/api';
 import { saveBuildFromChat } from '../../../quote/quoteApi';
-import { partImageUrl, partShortSpec } from '../../partDisplay';
+import { handlePartImageError, partImageUrl, partShortSpec } from '../../partDisplay';
 import { deleteQuoteDraftItem, getCurrentQuoteDraft, getPartPriceHistory, listParts, patchQuoteDraftItem, putQuoteDraftItem } from '../../partsApi';
 import { quoteDraftToRecommendedBuild, selfQuoteBuildId } from '../../selfQuoteBuild';
 import type { PartRow, PartSearchParams, QuoteDraft, QuoteDraftItem } from '../../types';
@@ -53,17 +53,23 @@ export function LegacySelfQuoteListSections() {
     queryFn: getCurrentQuoteDraft,
     enabled: hasToken
   });
+  // 드래프트가 바뀌면 현재 드래프트 기준 호환 배지를 그리는 부품 목록도 함께 재평가한다.
+  // (SelfQuotePage의 invalidateQuoteDraft와 같은 결정 — 목록 쿼리 키 prefix만 이 화면 것으로)
+  const invalidateQuoteDraft = () => {
+    void queryClient.invalidateQueries({ queryKey: ['quote-draft', 'current'] });
+    void queryClient.invalidateQueries({ queryKey: ['parts', 'self-quote'] });
+  };
   const addMutation = useMutation({
     mutationFn: ({ partId, quantity }: { partId: string; quantity: number }) => putQuoteDraftItem(partId, quantity),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['quote-draft', 'current'] })
+    onSuccess: invalidateQuoteDraft
   });
   const deleteMutation = useMutation({
     mutationFn: (partId: string) => deleteQuoteDraftItem(partId),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['quote-draft', 'current'] })
+    onSuccess: invalidateQuoteDraft
   });
   const quantityMutation = useMutation({
     mutationFn: ({ partId, quantity }: { partId: string; quantity: number }) => patchQuoteDraftItem(partId, quantity),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['quote-draft', 'current'] })
+    onSuccess: invalidateQuoteDraft
   });
   const saveQuoteMutation = useMutation({
     mutationFn: (draft: QuoteDraft) => saveBuildFromChat({
@@ -82,6 +88,7 @@ export function LegacySelfQuoteListSections() {
   const draftItems = quoteDraft?.items ?? [];
   const selectedTotal = quoteDraft?.totalPrice ?? 0;
   const selectedPartIds = new Set(draftItems.map((part) => part.partId));
+  const filledSingleSlotCategories = new Set(draftItems.filter((part) => !allowsQuantity(part.category)).map((part) => part.category));
   const showPartsSkeleton = isLoading && !data;
   const showPartsRefreshing = isFetching && Boolean(data);
 
@@ -222,7 +229,7 @@ export function LegacySelfQuoteListSections() {
             </button>
           </div>
           {showPartsSkeleton ? <PartsTableSkeleton showCompatibility={Boolean(category)} /> : null}
-          {isError && !data ? <div className="rounded-md border border-orange-200 bg-orange-50 p-5 text-sm text-orange-700">부품 목록 API를 불러오지 못했습니다.</div> : null}
+          {isError && !data ? <div className="rounded-md border border-orange-200 bg-orange-50 p-5 text-sm text-orange-700">부품 목록을 불러오지 못했습니다. 잠시 후 다시 시도해 주세요.</div> : null}
           {!showPartsSkeleton && data ? (
             <div className="relative">
               {isError ? <div className="mb-3 rounded-md border border-orange-200 bg-orange-50 p-3 text-xs font-bold text-orange-700">새 부품 목록을 불러오지 못해 이전 목록을 유지합니다.</div> : null}
@@ -233,7 +240,7 @@ export function LegacySelfQuoteListSections() {
                 </div>
                 <DataTable
                   columns={partTableColumns(Boolean(category))}
-                  rows={partRows(parts, selectedPartIds, addPart, removePart, pendingPartActionId, Boolean(category))}
+                  rows={partRows(parts, selectedPartIds, filledSingleSlotCategories, addPart, removePart, pendingPartActionId, Boolean(category))}
                 />
                 <div className="mt-4 flex items-center justify-end gap-2">
                   <button
@@ -292,9 +299,9 @@ export function LegacySelfQuoteListSections() {
                 </Link>
               </div>
             ) : isQuoteDraftLoading ? (
-              <div className="rounded-md border border-commerce-line p-4 text-sm text-slate-500">내 견적초안을 불러오는 중입니다.</div>
+              <div className="rounded-md border border-commerce-line p-4 text-sm text-slate-500">내 견적 장바구니를 불러오는 중입니다.</div>
             ) : isQuoteDraftError ? (
-              <div className="rounded-md border border-orange-200 bg-orange-50 p-4 text-sm text-orange-700">견적초안 API를 불러오지 못했습니다.</div>
+              <div className="rounded-md border border-orange-200 bg-orange-50 p-4 text-sm text-orange-700">견적 장바구니를 불러오지 못했습니다. 잠시 후 다시 시도해 주세요.</div>
             ) : draftItems.length === 0 ? (
               <div className="rounded-md border border-dashed border-slate-300 p-4 text-sm text-slate-500">
                 왼쪽 목록에서 부품을 담으면 이곳에 내 견적이 쌓입니다.
@@ -332,10 +339,10 @@ export function LegacySelfQuoteListSections() {
             ) : null}
           </div>
           <div className="mt-4 space-y-3">
-            <button className="flex w-full min-h-11 items-center justify-center gap-2 rounded-md bg-commerce-ink px-4 py-3 text-sm font-black text-white hover:bg-slate-700">
+            <div className="flex w-full min-h-11 items-center justify-center gap-2 rounded-md border border-commerce-line bg-slate-50 px-4 py-3 text-center text-sm font-bold text-slate-600">
               <PackageCheck size={17} />
-              Tool 검증하기
-            </button>
+              부품 호환 검증은 셀프 견적 보드에서 확인할 수 있습니다.
+            </div>
             {draftItems.length > 0 ? (
               <Link to="/checkout" className="flex min-h-11 items-center justify-center gap-2 rounded-md border border-commerce-line bg-white px-4 py-3 text-center text-sm font-black text-commerce-ink hover:border-commerce-ink">
                 <ShoppingCart size={17} className="text-commerce-amber" />
@@ -375,12 +382,12 @@ function compatibilityBadgeClassName(status: NonNullable<PartRow['compatibility'
 
 function compatibilityStatusLabel(status: NonNullable<PartRow['compatibility']>['status']) {
   if (status === 'PASS') {
-    return '호환됨';
+    return '호환 가능';
   }
   if (status === 'WARN') {
     return '간섭 주의';
   }
-  return '안 맞음';
+  return '장착 불가';
 }
 
 function PartsTableSkeleton({ showCompatibility }: { showCompatibility: boolean }) {
@@ -421,13 +428,14 @@ function PartsTableSkeleton({ showCompatibility }: { showCompatibility: boolean 
 
 function partTableColumns(showCompatibility: boolean) {
   return showCompatibility
-    ? ['product', 'manufacturer', 'supplier', 'price', 'compatibility', 'action']
-    : ['product', 'manufacturer', 'supplier', 'price', 'action'];
+    ? ['상품', '제조사', '판매처', '가격', '호환 상태', '담기']
+    : ['상품', '제조사', '판매처', '가격', '담기'];
 }
 
 function partRows(
   parts: PartRow[],
   selectedPartIds: Set<string>,
+  filledSingleSlotCategories: Set<string>,
   onAddPart: (part: PartRow) => void,
   onRemovePart: (partId: string) => void,
   pendingPartActionId: string | null,
@@ -436,15 +444,17 @@ function partRows(
   return parts.map((part) => {
     const isSelected = selectedPartIds.has(part.id);
     const isPending = pendingPartActionId === part.id;
+    // 단일 슬롯 카테고리에 이미 다른 부품이 담겨 있으면 담기가 아니라 교체로 저장된다(패널 부제 참고).
+    const isReplace = !isSelected && !allowsQuantity(part.category) && filledSingleSlotCategories.has(part.category);
     const row = {
-      product: <PartProductCell part={part} />,
-      manufacturer: part.manufacturer ?? '-',
-      supplier: <SupplierCell part={part} />,
-      price: <span className="whitespace-nowrap text-sm font-black text-commerce-ink">{part.price.toLocaleString()}원</span>,
-      action: (
+      상품: <PartProductCell part={part} />,
+      제조사: part.manufacturer ?? '-',
+      판매처: <SupplierCell part={part} />,
+      가격: <span className="whitespace-nowrap text-sm font-black text-commerce-ink">{part.price.toLocaleString()}원</span>,
+      담기: (
         <button
           type="button"
-          aria-label={isSelected ? `${part.name} 견적에서 제거` : `${part.name} 견적 담기`}
+          aria-label={isSelected ? `${part.name} 견적에서 제거` : isReplace ? `${part.name} 견적 교체` : `${part.name} 견적 담기`}
           disabled={isPending}
           onClick={() => isSelected ? onRemovePart(part.id) : onAddPart(part)}
           className={`rounded-md px-3 py-2 text-xs font-black transition focus:outline-none focus:ring-2 focus:ring-brand-blue disabled:cursor-wait disabled:opacity-60 ${
@@ -453,14 +463,14 @@ function partRows(
               : 'bg-commerce-ink text-white hover:bg-slate-700'
           }`}
         >
-          {isPending ? (isSelected ? '빼는 중' : '담는 중') : isSelected ? '빼기' : '담기'}
+          {isPending ? (isSelected ? '빼는 중' : isReplace ? '교체 중' : '담는 중') : isSelected ? '빼기' : isReplace ? '교체' : '담기'}
         </button>
       )
     };
     return showCompatibility
       ? {
           ...row,
-          compatibility: <CompatibilityStatusCell part={part} />
+          '호환 상태': <CompatibilityStatusCell part={part} />
         }
       : row;
   });
@@ -557,6 +567,7 @@ function PartProductCell({ part }: { part: PartRow }) {
         <img
           src={partImageUrl(part)}
           alt={`${part.name} 제품 사진`}
+          onError={(event) => handlePartImageError(event, part.category)}
           className="h-16 w-16 rounded-md border border-commerce-line bg-slate-100 object-cover hover:border-commerce-ink"
         />
       </Link>

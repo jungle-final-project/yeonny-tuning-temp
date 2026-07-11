@@ -46,6 +46,9 @@ public final class DbValueMapper {
         if (value == null) {
             return fallback;
         }
+        if (value instanceof Map<?, ?> || value instanceof List<?>) {
+            return value;
+        }
         try {
             return OBJECT_MAPPER.readValue(value.toString(), OBJECT_TYPE);
         } catch (Exception ignored) {

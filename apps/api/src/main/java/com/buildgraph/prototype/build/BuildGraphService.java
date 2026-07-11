@@ -2,8 +2,8 @@ package com.buildgraph.prototype.build;
 
 import com.buildgraph.prototype.common.DbValueMapper;
 import com.buildgraph.prototype.common.MockData;
+import com.buildgraph.prototype.parts.part.PartQuery;
 import com.buildgraph.prototype.parts.tool.ToolBuildPart;
-import com.buildgraph.prototype.parts.tool.ToolQuery;
 import com.buildgraph.prototype.parts.tool.ToolService;
 import com.buildgraph.prototype.user.CurrentUserService;
 
@@ -30,7 +30,7 @@ public class BuildGraphService {
     private final JdbcTemplate jdbcTemplate;
     private final ToolService toolCheckService;
     private final CurrentUserService currentUserService;
-    private final ToolQuery toolQuery;
+    private final PartQuery toolQuery;
 
     public Map<String, Object> resolve(String authorization, Map<String, Object> request) {
         Map<String, Object> body = request == null ? Map.of() : request;
@@ -121,6 +121,7 @@ public class BuildGraphService {
         
         /* draftId 기반 part 정보 가져오기*/
         return toolQuery.partsByDraftIds(draftId);
+        /* PartCompatibleCandidateService의 동일명 함수 참고할 것: trad-off */
     }
 
     private GraphDraft buildGraph(

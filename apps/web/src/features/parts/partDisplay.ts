@@ -78,9 +78,12 @@ export function partImageUrl(part: DisplayPart) {
   if (typeof imageUrl === 'string' && imageUrl.trim()) {
     return imageUrl;
   }
+  return partImagePlaceholder(part.category);
+}
 
-  const label = part.category === 'STORAGE' ? 'SSD' : part.category;
-  const accent = categoryAccent(part.category);
+export function partImagePlaceholder(category?: string) {
+  const label = category === 'STORAGE' ? 'SSD' : category ?? 'PART';
+  const accent = categoryAccent(category ?? '');
   const svg = `
     <svg xmlns="http://www.w3.org/2000/svg" width="112" height="112" viewBox="0 0 112 112">
       <rect width="112" height="112" rx="14" fill="#f8fafc"/>
@@ -91,6 +94,17 @@ export function partImageUrl(part: DisplayPart) {
     </svg>
   `;
   return `data:image/svg+xml;utf8,${encodeURIComponent(svg)}`;
+}
+
+// 외부 오퍼 이미지 URL이 만료(404 등)되면 깨진 아이콘 대신 카테고리 플레이스홀더로 교체한다.
+// dataset 플래그로 onError 재발화(플레이스홀더 자체 실패) 무한 루프를 막는다.
+export function handlePartImageError(event: { currentTarget: HTMLImageElement }, category?: string) {
+  const image = event.currentTarget;
+  if (image.dataset.fallbackApplied === 'true') {
+    return;
+  }
+  image.dataset.fallbackApplied = 'true';
+  image.src = partImagePlaceholder(category);
 }
 
 export function partShortSpec(part: DisplayPart) {

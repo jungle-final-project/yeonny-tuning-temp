@@ -2,7 +2,7 @@ import { useInfiniteQuery } from '@tanstack/react-query';
 import { Eye, Heart, Search, X } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { partImageUrl, specRows } from '../../partDisplay';
+import { handlePartImageError, partImageUrl, specRows } from '../../partDisplay';
 import { listParts } from '../../partsApi';
 import type { PartRow, PartSearchParams, QuoteDraftItem } from '../../types';
 import { openAiAssistant } from '../../../../lib/events';
@@ -22,7 +22,6 @@ type SlotCandidatePanelProps = {
   onRemoveItem: (partId: string) => void;
   onUpdateQuantity: (partId: string, quantity: number) => void;
   isMutating: boolean;
-  draftSignature: string;
 };
 
 export function SlotCandidatePanel({
@@ -33,8 +32,7 @@ export function SlotCandidatePanel({
   onReplacePart,
   onRemoveItem,
   onUpdateQuantity,
-  isMutating,
-  draftSignature
+  isMutating
 }: SlotCandidatePanelProps) {
   const [sort, setSort] = useState<PartSearchParams['sort']>('price_asc');
   const [searchInput, setSearchInput] = useState('');
@@ -71,14 +69,18 @@ export function SlotCandidatePanel({
   }, [searchInput]);
 
   // 가격 범위 디바운스 — 숫자만 추출해 300ms 후 확정한다.
+  // 최소가가 최대가보다 크면(입력 실수) 두 값을 서로 바꿔 확정해, 서버 오류 대신 의도한 범위로 조회한다.
   useEffect(() => {
     const timer = setTimeout(() => {
       const parse = (value: string) => {
         const digits = value.replace(/[^0-9]/g, '');
         return digits ? Number(digits) : undefined;
       };
-      setMinPrice(parse(minPriceInput));
-      setMaxPrice(parse(maxPriceInput));
+      const parsedMin = parse(minPriceInput);
+      const parsedMax = parse(maxPriceInput);
+      const shouldSwap = parsedMin !== undefined && parsedMax !== undefined && parsedMin > parsedMax;
+      setMinPrice(shouldSwap ? parsedMax : parsedMin);
+      setMaxPrice(shouldSwap ? parsedMin : parsedMax);
     }, 300);
     return () => clearTimeout(timer);
   }, [minPriceInput, maxPriceInput]);
@@ -108,7 +110,7 @@ export function SlotCandidatePanel({
   // (REPLACE = 교체-전체)이 담기/교체 실행과 의미가 같아 파라미터를 생략한다.
   const compatibilityMode = replaceTargetId ? undefined : isMulti ? 'ADD' as const : undefined;
   const { data, isLoading, isError, isFetchingNextPage, hasNextPage, fetchNextPage } = useInfiniteQuery({
-    queryKey: ['parts', 'slot-candidates', slot.category, draftSignature, sort, q, manufacturer, minPrice, maxPrice, compatibilityMode ?? 'REPLACE', replaceTargetId],
+    queryKey: ['parts', 'slot-candidates', slot.category, sort, q, manufacturer, minPrice, maxPrice, compatibilityMode ?? 'REPLACE', replaceTargetId],
     queryFn: ({ pageParam }) => listParts({
       category: slot.category,
       page: pageParam,
@@ -203,7 +205,7 @@ export function SlotCandidatePanel({
       <div className="flex items-start justify-between gap-3 border-b border-commerce-line px-4 py-3">
         <div className="min-w-0">
           <h2 className="text-base font-black text-commerce-ink">{slot.label} 부품 목록</h2>
-          <p className="mt-0.5 text-[11px] font-bold text-slate-500">현재 견적 기준 호환 검사 · 장착 불가 후보는 선택할 수 없습니다</p>
+          <p className="mt-0.5 text-[11px] font-bold text-slate-500">현재 견적 기준 호환 검사 · 장착 불가 후보도 담아서 사유를 확인할 수 있어요</p>
         </div>
         <div className="flex items-center gap-2">
           <label className="flex items-center rounded-md border border-commerce-line bg-white px-2 py-1">
@@ -375,7 +377,7 @@ export function SlotCandidatePanel({
           <div className="rounded-md border border-commerce-line p-4 text-sm text-slate-500">후보 목록을 불러오는 중입니다.</div>
         ) : null}
         {isError && pages.length === 0 ? (
-          <div className="rounded-md border border-orange-200 bg-orange-50 p-4 text-sm text-orange-700">후보 목록 API를 불러오지 못했습니다.</div>
+          <div className="rounded-md border border-orange-200 bg-orange-50 p-4 text-sm text-orange-700">후보 목록을 불러오지 못했습니다. 잠시 후 다시 시도해 주세요.</div>
         ) : null}
 
         <div className="space-y-2">
@@ -391,7 +393,7 @@ export function SlotCandidatePanel({
               : isMulti || draftItems.length === 0
                 ? `${part.name} 담기`
                 : `${part.name} 교체`;
-            const actionText = isFail ? '장착 불가' : replaceTarget ? '이걸로 교체' : isMulti || draftItems.length === 0 ? '담기' : '교체';
+            const actionText = replaceTarget ? '이걸로 교체' : isMulti || draftItems.length === 0 ? '담기' : '교체';
             return (
               <article
                 key={part.id}
@@ -405,6 +407,7 @@ export function SlotCandidatePanel({
                   <img
                     src={partImageUrl(part)}
                     alt={`${part.name} 제품 사진`}
+                    onError={(event) => handlePartImageError(event, part.category)}
                     className="h-12 w-12 rounded-md border border-commerce-line bg-slate-100 object-cover transition hover:opacity-90"
                   />
                 </Link>
@@ -457,11 +460,11 @@ export function SlotCandidatePanel({
                       <Heart size={14} className={isWishlisted ? 'fill-rose-500' : ''} />
                     </button>
                   </div>
-                  {/* 비호환(FAIL)은 선택을 막고 사유만 표시한다. */}
+                  {/* 비호환(FAIL)도 담을 수 있다 — 왜 안 되는지 보드에서 빨강으로 보고 교체하는 UX(구매는 여전히 차단). */}
                   <button
                     type="button"
-                    aria-label={isFail ? `${actionLabel} (장착 불가)` : actionLabel}
-                    disabled={isMutating || isSelected || isFail}
+                    aria-label={isFail ? `${actionLabel} (장착 불가 — 담아서 확인)` : actionLabel}
+                    disabled={isMutating || isSelected}
                     onClick={() => replaceTarget ? onReplacePart(replaceTarget.partId, part) : onAddPart(part)}
                     className={`rounded-md px-2.5 py-2 text-xs font-black transition disabled:cursor-not-allowed ${
                       isSelected
@@ -593,7 +596,7 @@ function PartQuickView({
           </button>
         </div>
         <div className="mt-3 flex gap-3">
-          <img src={partImageUrl(part)} alt={`${part.name} 제품 사진`} className="h-20 w-20 shrink-0 rounded-md border border-commerce-line bg-slate-100 object-cover" />
+          <img src={partImageUrl(part)} alt={`${part.name} 제품 사진`} onError={(event) => handlePartImageError(event, part.category)} className="h-20 w-20 shrink-0 rounded-md border border-commerce-line bg-slate-100 object-cover" />
           <div className="min-w-0 flex-1 text-xs">
             <div className="text-[11px] font-bold text-slate-500">{part.manufacturer ?? '-'}</div>
             <div className="mt-1 text-lg font-black text-commerce-ink">{part.price.toLocaleString()}원</div>

@@ -1,0 +1,94 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 300" fill="none">
+  <!-- 케이스: 오픈 프레임 타워 + 강화유리 패널 힌트 + 전면 흡기 팬 -->
+  <!-- 흡기 팬은 [스큐 투영 g > 원형 좌표 fan-spin g] 중첩 구조: CSS 회전은 내부 그룹에만 건다 -->
+  <!-- idle 모션은 opt-in: reduced-motion 환경(또는 미디어쿼리 미전파)에서는 정지 상태로 남는다 -->
+  <style>
+    @media (prefers-reduced-motion: no-preference) {
+      .fan-spin {
+        transform-box: fill-box;
+        transform-origin: center;
+        animation: fan-spin 4.5s linear infinite;
+      }
+      .case-led {
+        animation: led-breathe 3.6s ease-in-out infinite;
+      }
+      @keyframes fan-spin {
+        to { transform: rotate(360deg); }
+      }
+      @keyframes led-breathe {
+        0%, 100% { opacity: 0.5; }
+        50% { opacity: 1; }
+      }
+    }
+  </style>
+  <defs>
+    <linearGradient id="caseGlass" x1="280" y1="110" x2="160" y2="298" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#93c5fd" stop-opacity="0.28"/>
+      <stop offset="45%" stop-color="#60a5fa" stop-opacity="0.1"/>
+      <stop offset="100%" stop-color="#60a5fa" stop-opacity="0.16"/>
+    </linearGradient>
+    <linearGradient id="caseMesh" x1="20" y1="110" x2="160" y2="298" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#d7dfeb"/>
+      <stop offset="100%" stop-color="#bcc8d9"/>
+    </linearGradient>
+    <linearGradient id="caseBlade" x1="0" y1="-28" x2="0" y2="0" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#4c5c74"/>
+      <stop offset="100%" stop-color="#36435a"/>
+    </linearGradient>
+  </defs>
+  <!-- 뒷면 수직 프레임 -->
+  <g stroke="#94a3b8" stroke-width="4" stroke-linecap="round">
+    <line x1="140" y1="40" x2="140" y2="170"/>
+    <line x1="20" y1="110" x2="20" y2="240"/>
+    <line x1="280" y1="110" x2="280" y2="240"/>
+    <line x1="160" y1="170" x2="160" y2="298"/>
+  </g>
+  <!-- 상단 프레임 -->
+  <g stroke="#94a3b8" stroke-width="4" stroke-linejoin="round">
+    <polyline points="20,110 140,40 280,110 160,170 20,110"/>
+  </g>
+  <g stroke="#e6edf6" stroke-width="1.4" opacity="0.9">
+    <polyline points="20,108 140,38 280,108"/>
+  </g>
+  <!-- 하단 프레임 -->
+  <g stroke="#64748b" stroke-width="4" stroke-linejoin="round">
+    <polyline points="20,240 160,298 280,240"/>
+  </g>
+  <!-- 전면 메쉬 패널 (좌측면) -->
+  <polygon points="20,110 160,170 160,298 20,238" fill="url(#caseMesh)" opacity="0.5"/>
+  <g stroke="#94a3b8" stroke-width="1.6" opacity="0.7">
+    <line x1="36" y1="130" x2="36" y2="252"/><line x1="60" y1="140" x2="60" y2="262"/>
+    <line x1="84" y1="150" x2="84" y2="272"/><line x1="108" y1="160" x2="108" y2="282"/>
+    <line x1="132" y1="170" x2="132" y2="292"/>
+  </g>
+  <!-- 전면 흡기 팬 (메쉬 패널 부착, idle spin 대상) -->
+  <g transform="translate(88,206) skewY(23.2)">
+    <circle r="38" fill="#1e293b"/>
+    <circle r="31" fill="#0f172a"/>
+    <circle r="29.6" fill="none" stroke="#33415c" stroke-width="1.4"/>
+    <g class="fan-spin">
+      <circle r="28" fill="none"/>
+      <path d="M1.4 -8 C 9 -10 17 -18 18 -27 C 11 -28 3 -22 -1 -9 Z" fill="url(#caseBlade)"/>
+      <path d="M1.4 -8 C 9 -10 17 -18 18 -27 C 11 -28 3 -22 -1 -9 Z" fill="url(#caseBlade)" transform="rotate(51.43)"/>
+      <path d="M1.4 -8 C 9 -10 17 -18 18 -27 C 11 -28 3 -22 -1 -9 Z" fill="url(#caseBlade)" transform="rotate(102.86)"/>
+      <path d="M1.4 -8 C 9 -10 17 -18 18 -27 C 11 -28 3 -22 -1 -9 Z" fill="url(#caseBlade)" transform="rotate(154.29)"/>
+      <path d="M1.4 -8 C 9 -10 17 -18 18 -27 C 11 -28 3 -22 -1 -9 Z" fill="url(#caseBlade)" transform="rotate(205.71)"/>
+      <path d="M1.4 -8 C 9 -10 17 -18 18 -27 C 11 -28 3 -22 -1 -9 Z" fill="url(#caseBlade)" transform="rotate(257.14)"/>
+      <path d="M1.4 -8 C 9 -10 17 -18 18 -27 C 11 -28 3 -22 -1 -9 Z" fill="url(#caseBlade)" transform="rotate(308.57)"/>
+    </g>
+    <circle r="8" fill="#475569"/>
+    <circle r="8" fill="none" stroke="#5b6b83" stroke-width="1.1"/>
+    <circle cx="-2.2" cy="-2.2" r="2.6" fill="#64748b"/>
+  </g>
+  <!-- 강화유리 사이드 패널 (우측면, 반투명 + 대각 반사) -->
+  <polygon points="280,110 160,170 160,298 280,238" fill="url(#caseGlass)" stroke="#93c5fd" stroke-width="2"/>
+  <polygon points="252,124 212,144 176,262 216,242" fill="#ffffff" opacity="0.16"/>
+  <polygon points="270,115 258,121 236,232 248,226" fill="#ffffff" opacity="0.1"/>
+  <!-- 상단 IO: 전원 LED (idle breathe 대상) + 리셋 -->
+  <g class="case-led">
+    <circle cx="150" cy="86" r="5" fill="#2563eb"/>
+    <circle cx="150" cy="86" r="8" fill="#3b82f6" opacity="0.25"/>
+    <circle cx="148.6" cy="84.6" r="1.6" fill="#bfdbfe"/>
+  </g>
+  <circle cx="170" cy="96" r="3.4" fill="#64748b"/>
+</svg>

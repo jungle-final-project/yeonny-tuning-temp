@@ -105,3 +105,22 @@ export function createPriceAlert(partId: string, targetPrice: number) {
     body: JSON.stringify({ partId, targetPrice })
   });
 }
+
+export type BuildGraphAnchorPoint = { x: number; y: number };
+
+export type BuildGraphAnchor = {
+  card: BuildGraphAnchorPoint;
+  part: BuildGraphAnchorPoint;
+};
+
+export type BuildGraphLayoutDefault = {
+  layoutKey: string;
+  source?: string;
+  positions: Record<string, BuildGraphAnchorPoint>;
+  anchors?: Record<string, BuildGraphAnchor>;
+  updatedAt?: string | null;
+};
+
+export function getBuildGraphLayoutDefault() {
+  return api<BuildGraphLayoutDefault>('/api/build-graph-layouts/default');
+}

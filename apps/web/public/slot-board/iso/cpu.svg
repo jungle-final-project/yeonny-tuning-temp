@@ -1,0 +1,51 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 240 160" fill="none">
+  <!-- CPU: 네이비 기판 + 실버 IHS (2:1 등각) -->
+  <defs>
+    <linearGradient id="cpuPcb" x1="20" y1="40" x2="220" y2="140" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#27466f"/>
+      <stop offset="100%" stop-color="#1a3153"/>
+    </linearGradient>
+    <linearGradient id="cpuIhs" x1="56" y1="52" x2="184" y2="116" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#f4f7fb"/>
+      <stop offset="45%" stop-color="#e2e8f0"/>
+      <stop offset="100%" stop-color="#b6c2d4"/>
+    </linearGradient>
+    <linearGradient id="cpuIhsSide" x1="56" y1="84" x2="120" y2="122" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#a8b6c9"/>
+      <stop offset="100%" stop-color="#8b9cb4"/>
+    </linearGradient>
+  </defs>
+  <polygon points="120,40 220,90 120,140 20,90" fill="url(#cpuPcb)"/>
+  <polygon points="20,90 120,140 120,148 20,98" fill="#142845"/>
+  <polygon points="220,90 120,140 120,148 220,98" fill="#1a3050"/>
+  <polygon points="120,40 220,90 120,140 20,90" stroke="#37598c" stroke-width="1.5"/>
+  <!-- 기판 가장자리 골드 패드 -->
+  <g fill="#d97706" opacity="0.85">
+    <circle cx="60" cy="92" r="2.4"/><circle cx="76" cy="100" r="2.4"/><circle cx="92" cy="108" r="2.4"/>
+    <circle cx="180" cy="92" r="2.4"/><circle cx="164" cy="100" r="2.4"/><circle cx="148" cy="108" r="2.4"/>
+    <circle cx="68" cy="80" r="2.4"/><circle cx="84" cy="72" r="2.4"/><circle cx="100" cy="64" r="2.4"/>
+    <circle cx="172" cy="80" r="2.4"/><circle cx="156" cy="72" r="2.4"/><circle cx="140" cy="64" r="2.4"/>
+  </g>
+  <!-- 기판 SMD 칩 -->
+  <g fill="#f59e0b" opacity="0.55">
+    <rect x="108" y="126" width="7" height="4" transform="rotate(26 108 126)"/>
+    <rect x="126" y="122" width="7" height="4" transform="rotate(-26 126 122)"/>
+  </g>
+  <!-- IHS (히트스프레더) -->
+  <polygon points="120,52 184,84 120,116 56,84" fill="url(#cpuIhs)"/>
+  <polygon points="56,84 120,116 120,122 56,90" fill="url(#cpuIhsSide)"/>
+  <polygon points="184,84 120,116 120,122 184,90" fill="#cbd5e1"/>
+  <polygon points="120,52 184,84 120,116 56,84" stroke="#94a3b8" stroke-width="1.2"/>
+  <!-- IHS 노치 (상하단 컷) -->
+  <polygon points="120,52 132,58 120,64 108,58" fill="#d3dce8"/>
+  <!-- IHS specular 사선 하이라이트 -->
+  <polygon points="88,68 132,90 120,96 76,74" fill="#ffffff" opacity="0.5"/>
+  <polygon points="140,94 158,103 150,107 132,98" fill="#ffffff" opacity="0.3"/>
+  <!-- IHS 각인 라인 -->
+  <polyline points="96,72 144,96" stroke="#8fa1b8" stroke-width="2"/>
+  <polyline points="112,64 160,88" stroke="#9db0c6" stroke-width="1.4" opacity="0.85"/>
+  <polyline points="104,84 136,100" stroke="#aab8cc" stroke-width="1.2" opacity="0.7"/>
+  <!-- 1번 핀 마커 -->
+  <circle cx="44" cy="90" r="3.2" fill="#f59e0b"/>
+  <circle cx="43" cy="89" r="1.1" fill="#fde68a"/>
+</svg>

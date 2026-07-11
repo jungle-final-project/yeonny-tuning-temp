@@ -1,0 +1,79 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 920 476" fill="none">
+  <!-- 메인보드 장착 오버레이: 씬의 보드 평면(240,220)-(1160,688)에 정확히 맞물린다 -->
+  <!-- idle 모션은 opt-in: reduced-motion 환경(또는 미디어쿼리 미전파)에서는 정지 상태로 남는다 -->
+  <style>
+    @media (prefers-reduced-motion: no-preference) {
+      .mb-led {
+        animation: led-breathe 4s ease-in-out infinite;
+      }
+      @keyframes led-breathe {
+        0%, 100% { opacity: 0.45; }
+        50% { opacity: 1; }
+      }
+    }
+  </style>
+  <defs>
+    <linearGradient id="vrmTop" x1="240" y1="150" x2="396" y2="228" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#9db3d4"/>
+      <stop offset="100%" stop-color="#7f97bd"/>
+    </linearGradient>
+    <linearGradient id="ioTop" x1="114" y1="206" x2="250" y2="274" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#75849a"/>
+      <stop offset="100%" stop-color="#586880"/>
+    </linearGradient>
+  </defs>
+  <!-- VRM 방열판 (소켓 좌상단) -->
+  <g>
+    <polygon points="300,150 396,198 336,228 240,180" fill="url(#vrmTop)"/>
+    <polygon points="240,180 336,228 336,252 240,204" fill="#5c7bb0"/>
+    <polygon points="396,198 336,228 336,252 396,222" fill="#748fbb"/>
+    <g stroke="#4a679c" stroke-width="1.8">
+      <line x1="252" y1="190" x2="348" y2="238"/><line x1="266" y1="184" x2="362" y2="232"/>
+      <line x1="280" y1="177" x2="376" y2="225"/>
+    </g>
+    <g stroke="#bfd0e8" stroke-width="0.8" opacity="0.9">
+      <line x1="252" y1="188" x2="348" y2="236"/><line x1="266" y1="182" x2="362" y2="230"/>
+      <line x1="280" y1="175" x2="376" y2="223"/>
+    </g>
+    <polyline points="240,180 300,150 396,198" stroke="#cfdcef" stroke-width="1.2" opacity="0.9"/>
+  </g>
+  <!-- IO 실드 블록 (좌측 모서리) -->
+  <g>
+    <polygon points="150,206 250,256 214,274 114,224" fill="url(#ioTop)"/>
+    <polygon points="114,224 214,274 214,296 114,246" fill="#334155"/>
+    <polygon points="250,256 214,274 214,296 250,278" fill="#475569"/>
+    <g fill="#0f172a">
+      <polygon points="142,228 162,238 152,243 132,233"/>
+      <polygon points="168,241 188,251 178,256 158,246"/>
+      <polygon points="194,254 214,264 204,269 184,259"/>
+    </g>
+    <g fill="#38bdf8" opacity="0.65">
+      <polygon points="146,231 154,235 150,237 142,233"/>
+    </g>
+    <polyline points="114,224 150,206 250,256" stroke="#94a3b8" stroke-width="1" opacity="0.9"/>
+  </g>
+  <!-- 추가 트레이스 -->
+  <g stroke="#5c8ae0" stroke-width="2" opacity="0.3">
+    <polyline points="220,240 420,340 620,240"/>
+    <polyline points="260,300 460,400 700,280"/>
+    <polyline points="500,120 700,220 660,240"/>
+  </g>
+  <g stroke="#5c8ae0" stroke-width="1.4" opacity="0.2">
+    <polyline points="320,360 480,440 640,360"/>
+    <polyline points="420,180 560,250 620,220"/>
+  </g>
+  <!-- CMOS 배터리 -->
+  <ellipse cx="560" cy="330" rx="17" ry="9" fill="#cbd5e1" stroke="#94a3b8" stroke-width="1.4"/>
+  <ellipse cx="560" cy="327" rx="17" ry="9" fill="#e2e8f0"/>
+  <ellipse cx="556" cy="325" rx="6" ry="3" fill="#f8fafc" opacity="0.9"/>
+  <!-- 전면 패널 헤더 (우하단) -->
+  <g fill="#d97706" opacity="0.9">
+    <circle cx="600" cy="420" r="3"/><circle cx="612" cy="426" r="3"/><circle cx="624" cy="432" r="3"/>
+    <circle cx="608" cy="412" r="3"/><circle cx="620" cy="418" r="3"/><circle cx="632" cy="424" r="3"/>
+  </g>
+  <!-- 보드 상태 LED (idle breathe 대상) -->
+  <g class="mb-led">
+    <circle cx="652" cy="404" r="4" fill="#34d399"/>
+    <circle cx="652" cy="404" r="7" fill="#34d399" opacity="0.25"/>
+  </g>
+</svg>

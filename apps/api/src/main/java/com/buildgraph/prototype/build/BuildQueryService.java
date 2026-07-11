@@ -8,11 +8,13 @@ import com.buildgraph.prototype.opsagent.trace.AgentTraceService;
 import com.buildgraph.prototype.parts.tool.ToolBuildPart;
 import com.buildgraph.prototype.parts.tool.ToolService;
 import com.buildgraph.prototype.opsagent.runner.AgentJobPublisher;
-import com.buildgraph.prototype.quoteagent.chat.AiChatEngine;
 import com.buildgraph.prototype.common.DbValueMapper;
 import com.buildgraph.prototype.common.MockData;
 import com.buildgraph.prototype.user.CurrentUserService;
 import com.fasterxml.jackson.databind.ObjectMapper;
+
+import lombok.RequiredArgsConstructor;
+
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.LinkedHashMap;
@@ -29,6 +31,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.web.server.ResponseStatusException;
 
 @Service
+@RequiredArgsConstructor
 public class BuildQueryService {
     private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
     private static final Pattern BUDGET_MANWON = Pattern.compile("([0-9]{2,4})\\s*만\\s*원?");
@@ -59,22 +62,7 @@ public class BuildQueryService {
     private final JdbcTemplate jdbcTemplate;
     private final AgentTraceService agentTraceService;
     private final AgentJobPublisher agentJobPublisher;
-    private final AiChatEngine aiChatEngine;
     private final ToolService toolCheckService;
-
-    public BuildQueryService(
-            JdbcTemplate jdbcTemplate,
-            AgentTraceService agentTraceService,
-            AgentJobPublisher agentJobPublisher,
-            AiChatEngine aiChatEngine,
-            ToolService toolCheckService
-    ) {
-        this.jdbcTemplate = jdbcTemplate;
-        this.agentTraceService = agentTraceService;
-        this.agentJobPublisher = agentJobPublisher;
-        this.aiChatEngine = aiChatEngine;
-        this.toolCheckService = toolCheckService;
-    }
 
     public Map<String, Object> parse(Map<String, Object> request, CurrentUserService.CurrentUser user) {
         Map<String, Object> body = request == null ? Map.of() : request;
@@ -919,13 +907,6 @@ public class BuildQueryService {
             return list.stream().anyMatch(item -> socket.equalsIgnoreCase(String.valueOf(item)));
         }
         return true;
-    }
-
-    private static boolean same(String left, String right) {
-        if (left == null || right == null) {
-            return true;
-        }
-        return left.equalsIgnoreCase(right);
     }
 
     private static String stringAttr(PartCandidate part, String key) {

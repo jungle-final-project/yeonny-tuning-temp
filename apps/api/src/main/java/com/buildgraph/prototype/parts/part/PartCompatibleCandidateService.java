@@ -3,7 +3,6 @@ package com.buildgraph.prototype.parts.part;
 import com.buildgraph.prototype.common.DbValueMapper;
 import com.buildgraph.prototype.common.MockData;
 import com.buildgraph.prototype.parts.tool.ToolBuildPart;
-import com.buildgraph.prototype.parts.tool.ToolQuery;
 import com.buildgraph.prototype.parts.tool.ToolService;
 import com.buildgraph.prototype.user.CurrentUserService;
 
@@ -27,7 +26,7 @@ public class PartCompatibleCandidateService {
 
     private final JdbcTemplate jdbcTemplate;
     private final ToolService toolService;
-    private final ToolQuery toolQuery;
+    private final PartQuery toolQuery;
 
     /* 추가된 함수: 후보호환평가 */
     public List<Map<String, Object>> partRowsWithCompatibility(
@@ -125,7 +124,7 @@ public class PartCompatibleCandidateService {
             return new CandidateEvaluation(candidate.partMap(), "PASS", "ACTIVE 부품 후보입니다.", checkedTools);
         }
         List<ToolBuildPart> nextParts = nextParts(baseParts, candidate.toolPart(), category, compatibilityMode, replaceTargetPartId);
-        List<Map<String, Object>> toolResults = toolService.checkBuild(nextParts, total(nextParts));
+        List<Map<String, Object>> toolResults = toolService.checkBuild(nextParts, total(nextParts), checkedTools);
         List<Map<String, Object>> relevantResults = toolResults.stream()
                 .filter(result -> checkedTools.contains(text(result.get("tool"))))
                 .toList();
@@ -225,7 +224,7 @@ public class PartCompatibleCandidateService {
                 DbValueMapper.string(row, "name"),
                 DbValueMapper.string(row, "manufacturer"),
                 firstNumber(row.get("price"), firstNumber(row.get("current_price"), 0)),
-                objectMap(row.get("attributes"))
+                objectMap(DbValueMapper.json(row, "attributes", Map.of()))
         );
     }
 

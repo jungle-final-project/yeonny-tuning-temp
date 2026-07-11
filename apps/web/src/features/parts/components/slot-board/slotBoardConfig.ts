@@ -22,6 +22,48 @@ export type SlotBoardPosition = {
 // (관리자 배치 페이지의 캔버스 배경 전용 — 실장도 보드는 인라인 아트를 쓴다)
 export const SLOT_BOARD_BG = '/slot-board/backgrounds/topology-board-bg.svg';
 
+/** 등각 실장 씬 배경. viewBox 1600x840 기준으로 아래 SLOT_ISO_ART 좌표가 맞춰져 있다. */
+export const SLOT_BOARD_ISO_SCENE = '/slot-board/iso/scene-board.svg';
+export const SLOT_BOARD_ISO_SCENE_HIGHLIGHT = '/slot-board/iso/scene-board-blue-highlight.svg';
+
+export type SlotIsoArt = {
+  src: string;
+  /** 씬(1600x840) 기준 아트 top-left % 좌표 */
+  x: number;
+  y: number;
+  /** 씬 너비 대비 아트 너비 % */
+  w: number;
+  /** 장착 모션: 수직 드롭 / 베이 슬라이드 / 크로스페이드 */
+  mount: 'drop' | 'slide' | 'fade';
+  /** 쌓임 순서. 케이스가 가장 뒤, 쿨러가 가장 앞. */
+  z: number;
+};
+
+// 씬의 소켓 프린트 위치(CPU 소켓, RAM 슬롯, PCIe, M.2, PSU 베이)에 맞춘 고정 좌표.
+// 관리자 드래그 좌표는 콜아웃 카드에만 적용되고, 이 물리 위치는 바뀌지 않는다.
+export const SLOT_ISO_ART: Record<PartCategory, SlotIsoArt> = {
+  CASE: { src: '/slot-board/iso-hd/case.svg', x: 69, y: 30, w: 20, mount: 'fade', z: 1 },
+  MOTHERBOARD: { src: '/slot-board/iso-hd/motherboard.svg', x: 15, y: 26.2, w: 57.5, mount: 'fade', z: 2 },
+  CPU: { src: '/slot-board/iso-hd/cpu.svg', x: 31.2, y: 31.7, w: 15, mount: 'drop', z: 3 },
+  STORAGE: { src: '/slot-board/iso-hd/ssd.svg', x: 49.6, y: 48.9, w: 15, mount: 'drop', z: 3 },
+  RAM: { src: '/slot-board/iso-hd/ram.svg', x: 52.9, y: 29.8, w: 13.75, mount: 'drop', z: 4 },
+  PSU: { src: '/slot-board/iso-hd/psu.svg', x: 66.6, y: 61.3, w: 20, mount: 'slide', z: 4 },
+  GPU: { src: '/slot-board/iso-hd/gpu.svg', x: 29.7, y: 48.9, w: 22.5, mount: 'drop', z: 5 },
+  COOLER: { src: '/slot-board/iso-hd/cooler.svg', x: 30.6, y: 25, w: 16.25, mount: 'drop', z: 6 }
+};
+
+// SelfQuote 3D 관계도 전용 콜아웃 좌표. AdminBuildGraphLayoutsPage의 편집 좌표와 분리한다.
+export const SLOT_BOARD_ISO_CALLOUT_LAYOUTS: Record<PartCategory, SlotConfig['layout']> = {
+  CPU: { x: 2, y: 2, w: 22, h: 14 },
+  COOLER: { x: 26, y: 2, w: 22, h: 14 },
+  RAM: { x: 50, y: 2, w: 22, h: 14 },
+  STORAGE: { x: 74, y: 2, w: 22, h: 14 },
+  CASE: { x: 2, y: 84, w: 22, h: 14 },
+  GPU: { x: 26, y: 84, w: 22, h: 14 },
+  MOTHERBOARD: { x: 50, y: 84, w: 22, h: 14 },
+  PSU: { x: 74, y: 84, w: 22, h: 14 }
+};
+
 // 실장도(placement) 좌표계: 평면도 아트가 viewBox 0 0 160 100으로 그려지고
 // 컨테이너는 lg:aspect-[16/10]이라 아트 1unit = 화면에서 가로세로 같은 길이다.
 // 아래 % 좌표는 아트 좌표를 (x/1.6, y) 변환한 값 — 아트의 소켓/슬롯 위치와 반드시 함께 움직여야 한다.
@@ -43,6 +85,20 @@ export const SLOT_CONFIGS: SlotConfig[] = [
 ];
 
 export const SLOT_COUNT = SLOT_CONFIGS.length;
+
+// 견적 체크리스트 권장 순서 — 카드/3D 글리프 번호 뱃지와 체크리스트가 같은 번호를 쓰도록 단일 출처.
+// (SLOT_CONFIGS 배열 순서와 다르므로 번호는 반드시 이 배열에서 유도한다.)
+export const RECOMMENDED_SLOT_ORDER: PartCategory[] = ['CPU', 'MOTHERBOARD', 'RAM', 'GPU', 'STORAGE', 'PSU', 'CASE', 'COOLER'];
+
+const SLOT_ORDER_NUMBER: Record<PartCategory, number> = RECOMMENDED_SLOT_ORDER.reduce((acc, category, index) => {
+  acc[category] = index + 1;
+  return acc;
+}, {} as Record<PartCategory, number>);
+
+/** 체크리스트 번호(1..8). RECOMMENDED_SLOT_ORDER의 index+1과 일치. */
+export function slotOrderNumber(category: PartCategory): number {
+  return SLOT_ORDER_NUMBER[category] ?? 0;
+}
 
 export const SLOT_BOARD_DEFAULT_POSITIONS: Record<PartCategory, SlotBoardPosition> = SLOT_CONFIGS.reduce((positions, slot) => {
   positions[slot.category] = { x: slot.layout.x, y: slot.layout.y };
@@ -94,6 +150,30 @@ export const FALLBACK_EDGES: SlotEdgeConfig[] = [
   // 좌측 거터로 크게 돌아 올라간다 — 24핀 선과 교차하지 않도록 바깥으로 휜다.
   { from: 'GPU', to: 'CASE', label: '장착 길이', bow: 20 }
 ];
+
+export const SLOT_BOARD_ISO_EDGES: SlotEdgeConfig[] = [
+  { from: 'CPU', to: 'MOTHERBOARD', label: '소켓 호환', implied: true },
+  { from: 'MOTHERBOARD', to: 'RAM', label: '메모리 규격', implied: true },
+  { from: 'GPU', to: 'MOTHERBOARD', label: 'PCIe x16', implied: true },
+  { from: 'MOTHERBOARD', to: 'CASE', label: '보드 규격', implied: true },
+  { from: 'MOTHERBOARD', to: 'STORAGE', label: 'M.2 장착', implied: true },
+  { from: 'PSU', to: 'MOTHERBOARD', label: '24핀 전원' },
+  { from: 'COOLER', to: 'CPU', label: '쿨러 장착' },
+  { from: 'COOLER', to: 'CASE', label: '높이 여유', bow: 10 },
+  { from: 'PSU', to: 'CASE', label: '파워 깊이', bow: -20, labelT: 0.3 },
+  { from: 'GPU', to: 'PSU', label: '전력 여유', bow: -14 },
+  { from: 'GPU', to: 'CASE', label: '장착 길이' }
+];
+
+/** 관계도에서 유도한 인접 카테고리(자기 자신 포함) — 3D 스포트라이트 딤 판정에 쓴다. */
+export function relatedCategories(category: PartCategory, edges: SlotEdgeConfig[] = FALLBACK_EDGES): Set<PartCategory> {
+  const related = new Set<PartCategory>([category]);
+  for (const edge of edges) {
+    if (edge.from === category) related.add(edge.to);
+    if (edge.to === category) related.add(edge.from);
+  }
+  return related;
+}
 
 export function slotConfigFor(category: string): SlotConfig | undefined {
   return SLOT_CONFIGS.find((slot) => slot.category === category);
@@ -150,6 +230,10 @@ export function slotLayoutWithPosition(slot: SlotConfig, position?: SlotBoardPos
     x: clamped.x,
     y: clamped.y
   };
+}
+
+export function slotIsoCalloutLayout(slot: SlotConfig) {
+  return SLOT_BOARD_ISO_CALLOUT_LAYOUTS[slot.category] ?? slot.layout;
 }
 
 function clamp(value: number, min: number, max: number) {

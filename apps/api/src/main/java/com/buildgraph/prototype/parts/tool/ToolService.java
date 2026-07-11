@@ -1,6 +1,7 @@
 package com.buildgraph.prototype.parts.tool;
 
 import com.buildgraph.prototype.common.MockData;
+import com.buildgraph.prototype.parts.part.PartQuery;
 import com.buildgraph.prototype.parts.util.PerformaceRule;
 import com.buildgraph.prototype.parts.util.PowerRule;
 
@@ -27,17 +28,24 @@ public class ToolService {
     private final JdbcTemplate jdbcTemplate;
     private final ToolRepository toolRepository;
     private final PerformaceRule performaceRule;
-    private final ToolQuery toolQuery;
+    private final PartQuery partQuery;
 
     /* 프론트 "셀프견적"이 호출하는 검증 Tool: 해당 견적을 검증 */
     public List<Map<String, Object>> checkBuild(List<ToolBuildPart> parts, int budget) {
+        return checkBuild(parts, budget, TOOL_ORDER);
+    }
+
+    /* 프론트 후보 목록에서 필요한 Tool만 검증 */
+    public List<Map<String, Object>> checkBuild(List<ToolBuildPart> parts, int budget, List<String> toolNames) {
+        List<String> tools = toolNames == null || toolNames.isEmpty()
+                ? TOOL_ORDER
+                : toolNames.stream().map(ToolService::normalizeToolName).toList();
+        int currentTotalPrice = total(parts);
         List<Map<String, Object>> results = new ArrayList<>();
 
-        results.add(checkResolvedTool("compatibility", parts, budget, total(parts), Map.of()));
-        results.add(checkResolvedTool("power", parts, budget, total(parts), Map.of()));
-        results.add(checkResolvedTool("size", parts, budget, total(parts), Map.of()));
-        results.add(checkResolvedTool("performance", parts, budget, total(parts), Map.of()));
-        results.add(checkResolvedTool("price", parts, budget, total(parts), Map.of()));
+        for (String tool : tools) {
+            results.add(checkResolvedTool(tool, parts, budget, currentTotalPrice, Map.of()));
+        }
 
         return results;
     }
@@ -99,25 +107,28 @@ public class ToolService {
         ToolBuildPart cpu = byCategory.get("CPU");
         ToolBuildPart motherboard = byCategory.get("MOTHERBOARD");
         ToolBuildPart ram = byCategory.get("RAM");
-        ToolBuildPart cooler = byCategory.get("COOLER");
 
-        boolean socketMatched = same(stringAttr(cpu, "socket"), stringAttr(motherboard, "socket"));
-        boolean memoryMatched = same(firstText(stringAttr(ram, "memoryType"), "DDR5"), 
-                                     firstText(stringAttr(motherboard, "memoryType"), "DDR5"));
-        boolean coolerMatched = socketSupported(cooler, stringAttr(cpu, "socket"));
-        boolean pass = socketMatched && memoryMatched && coolerMatched;
+        Boolean socketMatched = cpu == null || motherboard == null
+                ? null
+                : same(stringAttr(cpu, "socket"), stringAttr(motherboard, "socket"));
+        Boolean memoryMatched = ram == null || motherboard == null
+                ? null
+                : same(firstText(stringAttr(ram, "memoryType"), "DDR5"),
+                        firstText(stringAttr(motherboard, "memoryType"), "DDR5"));
 
-        Map<String, Object> details = Map.of(
+        boolean pass = !Boolean.FALSE.equals(socketMatched)
+                && !Boolean.FALSE.equals(memoryMatched);
+
+        Map<String, Object> details = MockData.map(
             "socketMatched", socketMatched,
-            "memoryTypeMatched", memoryMatched,
-            "coolerSocketMatched", coolerMatched
+            "memoryTypeMatched", memoryMatched
         );
         
         Map<String, Object> result = Map.of(
             "tool", "compatibility",
             "status", pass ? "PASS" : "FAIL",
             "score", pass ? 1.0 : 0.2,
-            "confidence", socketMatched && memoryMatched ? "HIGH" : "MEDIUM",
+            "confidence", Boolean.TRUE.equals(socketMatched) && Boolean.TRUE.equals(memoryMatched) ? "HIGH" : "MEDIUM",
             "summary", pass
                     ? "CPU, 메인보드, RAM, 쿨러 기본 호환성이 맞습니다."
                     : "소켓 또는 메모리 호환성 확인이 필요합니다.",
@@ -343,7 +354,7 @@ public class ToolService {
             return toolRepository.partsByBuildId(buildId);
         }
         List<String> partIds = stringList(request.get("partIds"));
-        return partIds.isEmpty() ? List.of() : toolQuery.partsByPublicIds(partIds);
+        return partIds.isEmpty() ? List.of() : partQuery.partsByPublicIds(partIds);
     }
 
     /** Resolves the concrete build parts that an Agent root can validate: 추후 이해 필요 */
@@ -416,18 +427,6 @@ public class ToolService {
             return true;
         }
         return left.equalsIgnoreCase(right);
-    }
-
-    /* 추가된 함수: 쿨러소켓검증 */
-    private static boolean socketSupported(ToolBuildPart cooler, String socket) {
-        if (socket == null || cooler == null) {
-            return true;
-        }
-        Object support = cooler.attributes().get("socketSupport");
-        if (support instanceof List<?> list) {
-            return list.stream().anyMatch(item -> socket.equalsIgnoreCase(String.valueOf(item)));
-        }
-        return true;
     }
 
     /** Reads a string attribute from a part. */
