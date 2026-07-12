@@ -1,5 +1,5 @@
 import http from 'k6/http';
-import { authHeaders } from './quote-helper.js';
+import { authHeaders } from './general-helper.js';
 
 /* 테스트 대상 url: 시나리오의 것을 자동 캐치 */
 function baseUrl() {

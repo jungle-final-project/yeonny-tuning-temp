@@ -29,15 +29,33 @@ export function pickByPareto(items) {
     return pool[Math.floor(Math.random() * pool.length)];
 }
 
-export function login() {
+/* 1. 로그인 함수 */
+export function login(
+    targetBaseUrl = baseUrl(),
+    email = __ENV.TEST_EMAIL,
+    password = __ENV.TEST_PASSWORD
+) {
     const res = http.post(
-        `${BASE_URL}/api/auth/login`,
+        `${targetBaseUrl}/api/auth/login`,
         JSON.stringify({
-        email: __ENV.TEST_EMAIL,
-        password: __ENV.TEST_PASSWORD,
+            email,
+            password,
         }),
-        { headers: { 'Content-Type': 'application/json' } }
+        {
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            tags: {
+                phase: 'setup-login',
+            },
+        }
     );
+
+    if (res.status !== 200) {
+        throw new Error(
+            `로그인 실패: url=${targetBaseUrl}, status=${res.status}`
+        );
+    }
 
     return JSON.parse(res.body).accessToken;
 }

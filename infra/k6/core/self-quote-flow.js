@@ -1,7 +1,7 @@
 import http from 'k6/http';
 import { check, sleep } from 'k6';
-import { login, pickByPareto } from './util/quote-helper.js';
-import { addPart, getParts, checkAllConditions } from './util/quote-url.js';
+import { login, pickByPareto } from '../util/general-helper.js';
+import { addPart, getParts, checkAllConditions } from '../util/quote-url.js';
 
 /* 테스트 설정값: 시나리오
     : 시나리오 명 
@@ -32,6 +32,7 @@ export const options = {
             startTime: '0s',
             env: {
                 BASE_URL: 'http://localhost:8081',
+                CACHE_MODE: 'none',
             },
             tags: {
                 cache: 'none',
@@ -57,9 +58,10 @@ export const options = {
                 { target: 2, duration: '30s' },   // 부하 감소
             ],
 
-            startTime: '125s',
+            startTime: '155s',
             env: {
                 BASE_URL: 'http://localhost:8082',
+                CACHE_MODE: 'caffeine',
             },
             tags: {
                 cache: 'caffeine',
@@ -68,10 +70,31 @@ export const options = {
     }
 };
 
+/* 1회성 로그인 진행 */
+export function setup() {
+    return {
+        noneToken: login(
+            'http://localhost:8081',
+            __ENV.TEST_EMAIL,
+            __ENV.TEST_PASSWORD
+        ),
+
+        caffeineToken: login(
+            'http://localhost:8082',
+            __ENV.TEST_EMAIL,
+            __ENV.TEST_PASSWORD
+        ),
+    };
+}
+
 /* 가상 사용자 요청 흐름
-   로그인 => self-quote 이동 => 1..8까지 부품 담기(여기서 Tool 호출) */
-export function selfQuoteFlow() {
-    const token = login();
+   로그인 => self-quote 이동 => 1..8까지 부품 담기(여기서 Tool 호출)
+   안자 data는 setup이 반환한 값 */
+export function selfQuoteFlow(data) {
+    const token =
+    __ENV.CACHE_MODE === 'caffeine'
+        ? data.caffeineToken
+        : data.noneToken;
 
     addingPart(token, 'CPU');
     addingPart(token, 'MOTHERBOARD');
