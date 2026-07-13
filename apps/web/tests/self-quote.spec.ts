@@ -1,5 +1,16 @@
 import { expect, test, type Page } from '@playwright/test';
 
+type KakaoPostcodeData = {
+  zonecode: string;
+  address: string;
+  roadAddress: string;
+  jibunAddress: string;
+  userSelectedType: 'R' | 'J';
+  bname: string;
+  buildingName: string;
+  apartment: 'Y' | 'N';
+};
+
 const checkoutDraft = {
   id: 'draft-checkout-test',
   status: 'ACTIVE',
@@ -240,6 +251,40 @@ async function loginAsUser(page: Page) {
     localStorage.setItem('buildgraph.token', 'jwt-user-token');
     localStorage.setItem('buildgraph.homeLoginChoice.dismissed', 'true');
   });
+}
+
+async function mockKakaoPostcode(page: Page, overrides: Partial<KakaoPostcodeData> = {}) {
+  await page.addInitScript((postcodeOverrides: Partial<KakaoPostcodeData>) => {
+    (window as unknown as { kakao: unknown }).kakao = {
+      Postcode: class {
+        private readonly options: { oncomplete: (data: unknown) => void };
+
+        constructor(options: { oncomplete: (data: unknown) => void }) {
+          this.options = options;
+        }
+
+        open() {
+          this.options.oncomplete({
+            zonecode: '06236',
+            address: '서울시 강남구 테헤란로 1',
+            roadAddress: '서울시 강남구 테헤란로 1',
+            jibunAddress: '서울시 강남구 역삼동 1',
+            userSelectedType: 'R',
+            bname: '역삼동',
+            buildingName: '',
+            apartment: 'N',
+            ...postcodeOverrides
+          });
+        }
+      }
+    };
+  }, overrides);
+}
+
+async function selectCheckoutAddress(page: Page, expectedAddress = '서울시 강남구 테헤란로 1 (역삼동)', expectedZonecode = '06236') {
+  await page.getByRole('button', { name: '주소 찾기' }).click();
+  await expect(page.getByLabel('우편번호')).toHaveValue(expectedZonecode);
+  await expect(page.locator('input[autocomplete="address-line1"]')).toHaveValue(expectedAddress);
 }
 
 async function mockEmptyPriceHistory(route: Parameters<Parameters<Page['route']>[1]>[0], partId: string) {
@@ -3308,6 +3353,7 @@ test('persists an assembly request, selects an offer, completes virtual payment,
     }
     await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(assemblyResponse()) });
   });
+  await mockKakaoPostcode(page);
 
   await page.goto('/checkout');
 
@@ -3325,7 +3371,7 @@ test('persists an assembly request, selects an offer, completes virtual payment,
   await page.getByLabel('희망 일정').fill('2099-07-20');
   await page.getByLabel('수령인').fill('데모 사용자');
   await page.getByLabel('연락처').fill('010-1234-5678');
-  await page.getByLabel('주소', { exact: true }).fill('서울시 강남구 테헤란로 1');
+  await selectCheckoutAddress(page);
   await page.getByRole('checkbox', { name: /BuildGraph 표준 AS 정책 적용에 동의합니다/ }).check();
   await page.getByRole('button', { name: '기사 제안 요청하기' }).click();
 
@@ -3372,13 +3418,20 @@ test('blocks an incompatible assembly request and does not expose a demo bypass'
       })
     });
   });
+  await mockKakaoPostcode(page, {
+    zonecode: '13500',
+    address: '경기도 성남시 분당구 1',
+    roadAddress: '경기도 성남시 분당구 1',
+    jibunAddress: '경기도 성남시 분당동 1',
+    bname: '분당동'
+  });
 
   await page.goto('/checkout');
   await page.getByLabel('조립 지역').selectOption('경기');
   await page.getByLabel('희망 일정').fill('2099-08-01');
   await page.getByLabel('수령인').fill('데모 사용자');
   await page.getByLabel('연락처').fill('010-1234-5678');
-  await page.getByLabel('주소', { exact: true }).fill('경기도 성남시 분당구 1');
+  await selectCheckoutAddress(page, '경기도 성남시 분당구 1 (분당동)', '13500');
   await page.getByRole('checkbox', { name: /BuildGraph 표준 AS 정책 적용에 동의합니다/ }).check();
   await expect(page.getByText('장착 불가 항목이 있어 실제 조립 요청을 만들 수 없습니다.')).toBeVisible();
   await expect(page.getByRole('button', { name: '기사 제안 요청하기' })).toBeDisabled();
