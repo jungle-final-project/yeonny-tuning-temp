@@ -190,8 +190,18 @@ function PerfPanelBody({
   const queryClient = useQueryClient();
   const [gameKey, setGameKey] = useState<string>(FPS_GAMES[0].key);
   const [resKey, setResKey] = useState<string>('QHD');
+  const roundedCompositeScore = Math.round(compositeScore.score);
+  const previousCompositeScoreRef = useRef(roundedCompositeScore);
+  const [scoreDelta, setScoreDelta] = useState<number | null>(null);
   const game = FPS_GAMES.find((g) => g.key === gameKey) ?? FPS_GAMES[0];
   const resolution = FPS_RESOLUTIONS.find((r) => r.key === resKey) ?? FPS_RESOLUTIONS[1];
+
+  useEffect(() => {
+    const previousScore = previousCompositeScoreRef.current;
+    if (previousScore === roundedCompositeScore) return;
+    setScoreDelta(roundedCompositeScore - previousScore);
+    previousCompositeScoreRef.current = roundedCompositeScore;
+  }, [roundedCompositeScore]);
 
   const partIds = perfItems.map((item) => item.partId).filter(Boolean);
   const partKey = useMemo(() => [...partIds].sort().join(','), [partIds]);
@@ -298,8 +308,8 @@ function PerfPanelBody({
   // CompositeScoreGauge(공용, 수정 금지) 대신 패널 로컬 고스트 아크로 기존(회색)/변경(파랑)을 겹쳐 보여준다.
   const compositeCard = (
       <div data-testid="quote-composite-score-card">
-        <div className="mb-1 flex flex-wrap items-center justify-between gap-2 text-[11px]">
-          <span className="font-black text-slate-600">종합 점수</span>
+        <div className="mb-1 flex flex-nowrap items-center justify-between gap-2 text-[11px]">
+          <span data-testid="quote-composite-score-title" className="shrink-0 whitespace-nowrap font-black text-slate-600">종합 점수</span>
           {hasWorkspace ? (
             <span className="inline-flex items-center gap-2">
               <span className="hidden font-bold text-slate-400 xl:inline">호환·성능·여유 종합 1000점</span>
@@ -335,6 +345,8 @@ function PerfPanelBody({
           className="mx-auto"
           scoreTestId="quote-composite-score"
           gaugeTestId="quote-composite-score-gauge"
+          delta={scoreDelta}
+          deltaTestId="quote-composite-score-delta"
         />
       )}
       {compositeScore.requestFit ? (
@@ -354,17 +366,17 @@ function PerfPanelBody({
     return (
       <div
         data-testid="quote-performance-grid"
-        className="rounded-lg border border-commerce-line bg-white px-3 py-2 lg:min-h-[108px]"
+        className="rounded-lg border border-commerce-line bg-white px-2.5 py-1 lg:min-h-[86px]"
       >
-        <div className={`grid gap-3 lg:items-center ${
-          activeComparison ? 'lg:grid-cols-[240px_minmax(0,1fr)_auto]' : 'lg:grid-cols-[190px_minmax(0,1fr)_auto]'
+        <div className={`grid gap-2 lg:items-center ${
+          activeComparison ? 'lg:grid-cols-[230px_minmax(0,1fr)_auto]' : 'lg:grid-cols-[176px_minmax(0,1fr)]'
         }`}>
-          <div className={`flex items-center justify-center border-b border-commerce-line pb-2 lg:border-b-0 lg:border-r lg:pb-0 lg:pr-3 ${
-            activeComparison ? 'min-h-[112px]' : 'min-h-[82px]'
+          <div className={`flex items-center justify-center border-b border-commerce-line pb-1.5 lg:border-b-0 lg:border-r lg:pb-0 lg:pr-2 ${
+            activeComparison ? 'min-h-[88px]' : 'min-h-[68px]'
           }`}>
             <div className="w-full min-w-0">
-              <div className="flex items-center justify-between gap-2 text-[9px] font-black">
-                <span className="text-slate-600">종합 점수</span>
+              <div className="flex flex-nowrap items-center justify-between gap-2 text-[9px] font-black">
+                <span data-testid="quote-composite-score-title" className="shrink-0 whitespace-nowrap text-slate-600">종합 점수</span>
                 {hasWorkspace ? (
                   <span className="flex min-w-0 items-center gap-1">
                     <span className="truncate text-slate-400">호환·성능·여유 종합 1000점</span>
@@ -403,13 +415,15 @@ function PerfPanelBody({
                   showLabel={false}
                   scoreTestId="quote-composite-score"
                   gaugeTestId="quote-composite-score-gauge"
+                  delta={scoreDelta}
+                  deltaTestId="quote-composite-score-delta"
                 />
               )}
             </div>
           </div>
 
           <div data-testid="quote-fps-section" className="min-w-0">
-            <div className="flex flex-wrap items-center justify-between gap-1.5">
+            <div className={`flex items-center justify-between gap-1.5 ${activeComparison ? 'flex-wrap' : 'flex-nowrap'}`}>
               <div className="flex min-w-0 items-baseline gap-2">
                 <span className="shrink-0 text-[11px] font-black text-slate-600">
                   {activeComparison ? '가격·성능 향상' : '게임 예상 성능'}
@@ -432,7 +446,7 @@ function PerfPanelBody({
                 ) : null}
               </div>
 
-              <div className="flex flex-wrap items-center justify-end gap-1.5">
+              <div className="flex shrink-0 flex-nowrap items-center justify-end gap-1.5">
                 {hasWorkspace && onStartComparison ? (
                   <CandidateCombo
                     perfItems={perfItems}
@@ -542,8 +556,8 @@ function PerfPanelBody({
                 </div>
               </div>
             ) : (
-              <div className="mt-1.5 flex min-w-0 items-center gap-2">
-                <div className="flex shrink-0 gap-1" role="group" aria-label="게임 선택">
+              <div className="mt-1 min-w-0">
+                <div className="flex min-w-0 items-center gap-1 overflow-hidden" role="group" aria-label="게임 선택">
                   {FPS_GAMES.map((g) => (
                     <button
                       key={g.key}
@@ -561,7 +575,7 @@ function PerfPanelBody({
                     </button>
                   ))}
                 </div>
-                <div className="hidden h-1.5 min-w-16 flex-1 overflow-hidden rounded-full bg-slate-100 xl:block">
+                <div className="mt-1 h-1.5 w-full overflow-hidden rounded-full bg-slate-100">
                   <div
                     className="h-full rounded-full bg-gradient-to-r from-brand-blue to-emerald-300 transition-[width] duration-500"
                     style={{ width: `${resultAvg === null ? 0 : Math.min(100, (resultAvg / FPS_CAP) * 100)}%` }}
@@ -571,7 +585,8 @@ function PerfPanelBody({
             )}
           </div>
 
-          <div className="flex flex-wrap items-center justify-end gap-2 border-t border-commerce-line pt-2 lg:border-l lg:border-t-0 lg:pl-3 lg:pt-0">
+          {activeComparison || checkoutActions ? (
+          <div className="flex flex-wrap items-center justify-end gap-2 border-t border-commerce-line pt-1.5 lg:border-l lg:border-t-0 lg:pl-2 lg:pt-0">
             {activeComparison ? (
               <>
                 {onApplyComparison ? (
@@ -603,9 +618,10 @@ function PerfPanelBody({
               </div>
             ) : null}
           </div>
+          ) : null}
         </div>
         {applyError ? (
-          <div data-testid="perf-apply-error" className="mt-2 rounded-md border border-red-100 bg-red-50/70 px-2.5 py-1.5 text-[11px] font-bold text-red-600">
+          <div data-testid="perf-apply-error" className="mt-1 rounded-md border border-red-100 bg-red-50/70 px-2.5 py-1 text-[11px] font-bold text-red-600">
             {applyError}
           </div>
         ) : null}
@@ -1121,8 +1137,8 @@ function CompactCompositeGhostArc({
       className="mx-auto w-[220px] text-center"
       aria-label={`종합 점수 기존 ${Math.round(baseScore).toLocaleString('ko-KR')}점 → 변경 ${Math.round(compareScore).toLocaleString('ko-KR')}점`}
     >
-      <div className="relative h-[78px]">
-        <svg className="h-[78px] w-full overflow-visible" viewBox="0 0 220 132" role="img" aria-hidden="true">
+      <div className="relative h-[48px]">
+        <svg className="h-[48px] w-full overflow-visible" viewBox="0 0 220 132" role="img" aria-hidden="true">
           <path
             d={COMPOSITE_ARC_PATH}
             fill="none"
@@ -1150,25 +1166,23 @@ function CompactCompositeGhostArc({
             strokeDasharray={`${comparePercent} 100`}
           />
         </svg>
-        <div className="absolute inset-x-0 bottom-0 z-10 px-1">
-          <div className="mx-auto flex w-fit min-w-[118px] items-baseline justify-center gap-1 rounded-md bg-white px-2 py-0.5 font-black leading-none">
-            <span data-testid="quote-composite-ghost-base" className="text-base text-slate-400">
-              {Math.round(baseScore).toLocaleString('ko-KR')}
-            </span>
-            <span aria-hidden="true" className="text-xs text-slate-400">→</span>
-            <span data-testid="quote-composite-compare-score" className="text-2xl text-brand-blue">
-              {Math.round(displayCompare).toLocaleString('ko-KR')}
-            </span>
-          </div>
+        <div className="absolute inset-x-0 bottom-1 z-10 flex justify-center">
+          <span
+            key={compareKey}
+            data-testid="quote-composite-compare-delta"
+            className={`perf-pop-in rounded-full border px-1.5 py-px text-[9px] font-black leading-none ${deltaBadgeTone(delta)}`}
+          >
+            {delta > 0 ? '+' : ''}{delta}점
+          </span>
         </div>
       </div>
-      <div className="-mt-0.5 flex justify-center">
-        <span
-          key={compareKey}
-          data-testid="quote-composite-compare-delta"
-          className={`perf-pop-in rounded-full border px-1.5 py-0.5 text-[9px] font-black ${deltaBadgeTone(delta)}`}
-        >
-          {delta > 0 ? '+' : ''}{delta}점
+      <div className="-mt-px flex items-baseline justify-center gap-1 bg-transparent font-black leading-none">
+        <span data-testid="quote-composite-ghost-base" className="text-sm text-slate-400">
+          {Math.round(baseScore).toLocaleString('ko-KR')}
+        </span>
+        <span aria-hidden="true" className="text-xs text-slate-400">→</span>
+        <span data-testid="quote-composite-compare-score" className="text-xl text-brand-blue">
+          {Math.round(displayCompare).toLocaleString('ko-KR')}
         </span>
       </div>
       <div className="-mt-1 flex items-center justify-between px-3 text-[8px] font-bold text-slate-400" aria-hidden="true">

@@ -1,6 +1,6 @@
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Bell, LayoutGrid, X } from 'lucide-react';
-import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent } from 'react';
+import { Bell, X } from 'lucide-react';
+import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent, type ReactNode } from 'react';
 import { Link, Navigate, useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import { useHiddenPageScrollbar } from '../../../hooks/useHiddenPageScrollbar';
 import { Screen } from '../../../components/ui';
@@ -283,6 +283,7 @@ function SelfQuoteSlotBoardPage() {
       hasCompatibilityFail={hasCompatibilityFail}
       onSave={() => quoteDraft && saveQuoteMutation.mutate(quoteDraft)}
       isSavePending={saveQuoteMutation.isPending}
+      compact
     />
   );
 
@@ -301,62 +302,6 @@ function SelfQuoteSlotBoardPage() {
   return (
     <Screen mainClassName="mx-auto w-full max-w-[1800px] px-4 py-2 sm:px-6 lg:h-[calc(100dvh-210px)] lg:overflow-hidden lg:px-[clamp(40px,4.5vw,88px)] xl:h-[calc(100dvh-167px)]">
       <div className="space-y-4 lg:flex lg:h-full lg:min-h-0 lg:flex-col lg:gap-2 lg:space-y-0">
-        {/* 페이지 헤더 */}
-        <div className="flex flex-wrap items-center gap-2">
-          <LayoutGrid size={15} className="text-brand-blue" />
-          <h1 className="text-base font-black tracking-tight text-commerce-ink">셀프 견적 · 구성 관계도</h1>
-          <span className="text-xs text-slate-400">슬롯을 눌러 후보를 확인하고 교체하세요</span>
-        </div>
-
-        {/* 핵심 의사결정 지표: 작업 전 가장 먼저 보이고, 조회 중에도 같은 자리를 유지한다. */}
-        <div ref={perfPanelRef} className="min-h-0">
-          {draftItems.length === 0 ? (
-            <section
-              data-testid="quote-start-banner"
-              className="panel flex min-h-[82px] flex-col justify-center gap-2 border-blue-100 bg-blue-50/60 px-4 py-2 md:flex-row md:items-center md:justify-between"
-            >
-              <div className="min-w-0">
-                <div className="text-sm font-black text-commerce-ink">뭘 골라야 할지 모르겠다면, AI에게 예산과 용도만 알려주세요</div>
-                <div className="mt-0.5 truncate text-[11px] text-slate-500">
-                  예: &quot;게이밍 200만원&quot; — AI 추천 조합을 적용하거나 CPU부터 직접 고를 수 있어요
-                </div>
-              </div>
-              <div className="flex shrink-0 flex-wrap gap-2">
-                <button
-                  type="button"
-                  data-testid="quote-ai-start"
-                  onClick={() => openAiAssistant()}
-                  className="rounded-md bg-brand-blue px-4 py-2 text-xs font-black text-white transition hover:bg-blue-700"
-                >
-                  AI로 시작하기
-                </button>
-                <button
-                  type="button"
-                  data-testid="quote-manual-start"
-                  onClick={() => selectSlot('CPU')}
-                  className="rounded-md border border-commerce-line bg-white px-4 py-2 text-xs font-black text-slate-700 transition hover:border-commerce-ink"
-                >
-                  직접 고르기 (CPU부터)
-                </button>
-              </div>
-            </section>
-          ) : (
-            <QuotePerformancePanel
-              graph={graphQuery.data}
-              items={draftItems}
-              comparison={perfComparison}
-              onClearComparison={() => setPerfComparison(null)}
-              onStartComparison={startPerfComparison}
-              onApplyComparison={(target) => addMutation.mutateAsync({ partId: target.partId, quantity: 1 })}
-              checkoutActions={checkoutActions}
-              isLoading={graphQuery.isLoading || graphQuery.isFetching}
-              isError={graphQuery.isError}
-              onRetry={() => void graphQuery.refetch()}
-              compact
-            />
-          )}
-        </div>
-
         {showSupplementaryQuotePanels && aiBuild ? (
           <AiSelectedBuildPanel
             build={aiBuild}
@@ -397,7 +342,54 @@ function SelfQuoteSlotBoardPage() {
         ) : null}
 
         {/* 본문: 체크리스트(품목 지도) + 보드(보조 그래프) + AI 상담 패널. */}
-        <div className="grid gap-4 lg:min-h-0 lg:flex-1 lg:grid-cols-[clamp(256px,18vw,320px)_minmax(0,1fr)_clamp(336px,21vw,400px)] lg:grid-rows-[minmax(0,1fr)_auto] lg:items-stretch lg:gap-2">
+        <div className="grid gap-4 lg:min-h-0 lg:flex-1 lg:grid-cols-[clamp(256px,18vw,320px)_minmax(0,1fr)_clamp(336px,21vw,400px)] lg:grid-rows-[auto_minmax(0,1fr)_auto] lg:items-stretch lg:gap-2">
+          {/* 핵심 의사결정 지표: 체크리스트+관계도 폭에 맞추고 AI 열은 이 행부터 사용한다. */}
+          <div ref={perfPanelRef} className="min-h-0 lg:col-span-2 lg:row-start-1">
+            {draftItems.length === 0 ? (
+              <section
+                data-testid="quote-start-banner"
+                className="panel flex min-h-[82px] flex-col justify-center gap-2 border-blue-100 bg-blue-50/60 px-4 py-2 md:flex-row md:items-center md:justify-between"
+              >
+                <div className="min-w-0">
+                  <div className="text-sm font-black text-commerce-ink">뭘 골라야 할지 모르겠다면, AI에게 예산과 용도만 알려주세요</div>
+                  <div className="mt-0.5 truncate text-[11px] text-slate-500">
+                    예: &quot;게이밍 200만원&quot; — AI 추천 조합을 적용하거나 CPU부터 직접 고를 수 있어요
+                  </div>
+                </div>
+                <div className="flex shrink-0 flex-wrap gap-2">
+                  <button
+                    type="button"
+                    data-testid="quote-ai-start"
+                    onClick={() => openAiAssistant()}
+                    className="rounded-md bg-brand-blue px-4 py-2 text-xs font-black text-white transition hover:bg-blue-700"
+                  >
+                    AI로 시작하기
+                  </button>
+                  <button
+                    type="button"
+                    data-testid="quote-manual-start"
+                    onClick={() => selectSlot('CPU')}
+                    className="rounded-md border border-commerce-line bg-white px-4 py-2 text-xs font-black text-slate-700 transition hover:border-commerce-ink"
+                  >
+                    직접 고르기 (CPU부터)
+                  </button>
+                </div>
+              </section>
+            ) : (
+              <QuotePerformancePanel
+                graph={graphQuery.data}
+                items={draftItems}
+                comparison={perfComparison}
+                onClearComparison={() => setPerfComparison(null)}
+                onStartComparison={startPerfComparison}
+                onApplyComparison={(target) => addMutation.mutateAsync({ partId: target.partId, quantity: 1 })}
+                isLoading={graphQuery.isLoading || graphQuery.isFetching}
+                isError={graphQuery.isError}
+                onRetry={() => void graphQuery.refetch()}
+                compact
+              />
+            )}
+          </div>
           <QuoteChecklist
             draftItems={draftItems}
             selectedCategory={selectedCategory}
@@ -430,12 +422,12 @@ function SelfQuoteSlotBoardPage() {
               connectorAnchors={anchorQuery.data?.anchors}
             />
           </div>
-          <div className="min-h-0 lg:row-span-2 lg:h-full">
+          <div className="min-h-0 lg:col-start-3 lg:row-span-3 lg:row-start-1 lg:h-full">
             <AiBuildAssistant surface="self-quote" variant="embedded" onBoardFocus={handleBoardFocus} />
           </div>
 
           {/* 보조 상태 지표: 작업 영역 아래에서 총액·장착 수·호환·SSD를 짧게 확인한다. */}
-          <div className="space-y-1.5 lg:col-span-2 lg:row-start-2 lg:min-h-0">
+          <div className="space-y-1.5 lg:col-span-2 lg:row-start-3 lg:min-h-0">
             <QuoteSummaryBar
               totalPrice={selectedTotal}
               filledCount={filledCount}
@@ -443,9 +435,9 @@ function SelfQuoteSlotBoardPage() {
               warnCount={warnCount}
               failCount={failCount}
               unmetConditionCount={unmetConditionCount}
-              storageItems={draftItems.filter((item) => item.category === 'STORAGE')}
               graphLoading={graphQuery.isLoading}
               graphError={graphQuery.isError}
+              checkoutActions={draftItems.length > 0 ? checkoutActions : null}
             />
             <SlotStatusBar
               quoteDraft={quoteDraft}
@@ -1107,9 +1099,9 @@ function QuoteSummaryBar({
   warnCount,
   failCount,
   unmetConditionCount,
-  storageItems,
   graphLoading,
-  graphError
+  graphError,
+  checkoutActions
 }: {
   totalPrice: number;
   filledCount: number;
@@ -1117,39 +1109,38 @@ function QuoteSummaryBar({
   warnCount: number;
   failCount: number;
   unmetConditionCount: number;
-  storageItems: QuoteDraftItem[];
   graphLoading: boolean;
   graphError: boolean;
+  checkoutActions?: ReactNode;
 }) {
   // '조건 미충족' = 빨간 부품 노드는 없지만 검사(예: 파워 용량)가 FAIL — 구매 차단과 표기를 일치시킨다.
   // 검증 자체가 실패하면(미검증) 정상으로 오인하지 않도록 회색 '검증 확인 불가'로 구분한다.
-  const hasRedState = !graphError && (failCount > 0 || unmetConditionCount > 0);
-  const compatibilityText = graphLoading
-    ? '확인 중'
-    : graphError
-      ? '검증 확인 불가'
-      : failCount > 0
-        ? `장착 불가 ${failCount}개`
-        : unmetConditionCount > 0
-          ? '조건 미충족'
-          : warnCount > 0
-            ? `주의 ${warnCount}개`
-            : filledCount === 0
-              ? '부품 없음'
+  const isEmpty = filledCount === 0;
+  const hasRedState = !isEmpty && !graphError && (failCount > 0 || unmetConditionCount > 0);
+  const compatibilityText = isEmpty
+    ? '부품 없음'
+    : graphLoading
+      ? '확인 중'
+      : graphError
+        ? '검증 확인 불가'
+        : failCount > 0
+          ? `장착 불가 ${failCount}개`
+          : unmetConditionCount > 0
+            ? '조건 미충족'
+            : warnCount > 0
+              ? `주의 ${warnCount}개`
               : '이상 없음';
-  const compatibilityColor = hasRedState
-    ? 'text-red-600'
-    : graphError
-      ? 'text-slate-400'
-      : warnCount > 0
-        ? 'text-amber-600'
-        : filledCount === 0
-          ? 'text-slate-400'
+  const compatibilityColor = isEmpty
+    ? 'text-slate-400'
+    : hasRedState
+      ? 'text-red-600'
+      : graphError
+        ? 'text-slate-400'
+        : warnCount > 0
+          ? 'text-amber-600'
           : 'text-emerald-600';
-  const storageCount = storageItems.reduce((sum, item) => sum + item.quantity, 0);
-
   return (
-    <div data-testid="quote-summary-bar" className="grid grid-cols-2 gap-2 sm:grid-cols-4 lg:gap-1.5">
+    <div data-testid="quote-summary-bar" className="grid grid-cols-2 gap-2 sm:grid-cols-[repeat(3,minmax(0,1fr))_auto] lg:gap-1.5">
       <div className="panel flex items-center gap-3 px-4 py-3 lg:gap-2.5 lg:px-2.5 lg:py-1.5">
         <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-blue-50 text-xl font-black text-brand-blue lg:h-7 lg:w-7 lg:text-base">₩</span>
         <div className="min-w-0">
@@ -1170,8 +1161,8 @@ function QuoteSummaryBar({
         </div>
       </div>
       <div className="panel flex items-center gap-3 px-4 py-3 lg:gap-2.5 lg:px-2.5 lg:py-1.5">
-        <span className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-lg lg:h-7 lg:w-7 ${hasRedState ? 'bg-red-50' : graphError ? 'bg-slate-100' : warnCount > 0 ? 'bg-amber-50' : 'bg-emerald-50'}`}>
-          <svg viewBox="0 0 20 20" className={`h-5 w-5 ${hasRedState ? 'text-red-500' : graphError ? 'text-slate-400' : warnCount > 0 ? 'text-amber-500' : 'text-emerald-500'}`} fill="none" stroke="currentColor" strokeWidth="2">
+        <span className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-lg lg:h-7 lg:w-7 ${isEmpty ? 'bg-slate-100' : hasRedState ? 'bg-red-50' : graphError ? 'bg-slate-100' : warnCount > 0 ? 'bg-amber-50' : 'bg-emerald-50'}`}>
+          <svg viewBox="0 0 20 20" className={`h-5 w-5 ${isEmpty ? 'text-slate-400' : hasRedState ? 'text-red-500' : graphError ? 'text-slate-400' : warnCount > 0 ? 'text-amber-500' : 'text-emerald-500'}`} fill="none" stroke="currentColor" strokeWidth="2">
             <path d="M10 2a8 8 0 100 16A8 8 0 0010 2zm0 5v4m0 2.5v.5" strokeLinecap="round" />
           </svg>
         </span>
@@ -1180,17 +1171,11 @@ function QuoteSummaryBar({
           <div className={`text-sm font-black ${compatibilityColor}`}>{compatibilityText}</div>
         </div>
       </div>
-      <div className="panel flex items-center gap-3 px-4 py-3 lg:gap-2.5 lg:px-2.5 lg:py-1.5">
-        <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-slate-100 text-slate-500 lg:h-7 lg:w-7">
-          <svg viewBox="0 0 20 20" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="2">
-            <rect x="3" y="6" width="14" height="8" rx="1" /><path d="M7 10h6M10 8v4" strokeLinecap="round" />
-          </svg>
-        </span>
-        <div className="min-w-0">
-          <div className="text-[11px] font-bold text-slate-500">SSD</div>
-          <div className="text-sm font-black text-commerce-ink">{storageCount > 0 ? `${storageCount}개` : '없음'}</div>
+      {checkoutActions ? (
+        <div data-testid="quote-checkout-actions" className="panel col-span-2 flex items-center justify-end gap-1.5 px-2 py-1.5 sm:col-span-1">
+          {checkoutActions}
         </div>
-      </div>
+      ) : null}
     </div>
   );
 }

@@ -54,7 +54,7 @@ export function FusedPlateArt({
   const isActionPending = isRemovePending || isQuantityPending;
   const [hoveredCategory, setHoveredCategory] = useState<PartCategory | null>(null);
   const stageContainerRef = useRef<HTMLDivElement | null>(null);
-  const stageSize = useContainedPlateSize(stageContainerRef);
+  const stageSize = useCoveredPlateSize(stageContainerRef);
   const aiFocusSet = new Set(aiFocusCategories);
   const hasAiFocus = aiFocusSet.size > 0;
   const hasHoveredLayer = hoveredCategory
@@ -112,10 +112,12 @@ export function FusedPlateArt({
   };
 
   return (
-    <div ref={stageContainerRef} data-testid="slot-board-fused-plate" className="absolute inset-0 hidden items-center justify-center bg-[#f6f7f9] lg:flex">
+    <div ref={stageContainerRef} data-testid="slot-board-fused-plate" className="absolute inset-0 hidden h-full w-full items-center justify-center overflow-hidden bg-[#f6f7f9] lg:flex">
       <div
         className="relative shrink-0"
-        style={stageSize ?? { height: '100%', aspectRatio: `${FUSED_BOARD_SIZE.width} / ${FUSED_BOARD_SIZE.height}`, maxWidth: '100%' }}
+        style={stageSize
+          ? { width: stageSize.width, height: stageSize.height, transform: `translateY(${stageSize.offsetY}px)` }
+          : { width: '100%', aspectRatio: `${FUSED_BOARD_SIZE.width} / ${FUSED_BOARD_SIZE.height}` }}
       >
         <img
           src={FUSED_PLATE_BG}
@@ -310,10 +312,11 @@ export function FusedPlateArt({
   );
 }
 
-// 부모가 판보다 가로로 좁거나 세로로 낮아져도 원본 비율을 유지한 채 contain 크기를 계산한다.
-// 이미지·레이어·번호·클릭 영역이 모두 이 무대를 기준으로 배치되므로 어느 화면에서도 좌표가 함께 움직인다.
-function useContainedPlateSize(containerRef: RefObject<HTMLDivElement>): CSSProperties | null {
-  const [size, setSize] = useState<{ width: number; height: number } | null>(null);
+type CoveredPlateSize = { width: number; height: number; offsetY: number };
+
+// 부모 영역을 빈틈없이 덮되 원본 비율은 유지한다. 이미지·번호·클릭 영역이 같은 무대를 공유해 좌표가 어긋나지 않는다.
+function useCoveredPlateSize(containerRef: RefObject<HTMLDivElement>): CoveredPlateSize | null {
+  const [size, setSize] = useState<CoveredPlateSize | null>(null);
 
   useLayoutEffect(() => {
     const container = containerRef.current;
@@ -325,12 +328,16 @@ function useContainedPlateSize(containerRef: RefObject<HTMLDivElement>): CSSProp
       if (containerWidth <= 0 || containerHeight <= 0) return;
 
       const ratio = FUSED_BOARD_SIZE.width / FUSED_BOARD_SIZE.height;
-      const width = Math.min(containerWidth, containerHeight * ratio);
+      const width = Math.max(containerWidth, containerHeight * ratio);
       const height = width / ratio;
+      const offsetY = Math.max(0, height - containerHeight) * 0.2;
       setSize((current) => (
-        current && Math.abs(current.width - width) < 0.5 && Math.abs(current.height - height) < 0.5
+        current
+          && Math.abs(current.width - width) < 0.5
+          && Math.abs(current.height - height) < 0.5
+          && Math.abs(current.offsetY - offsetY) < 0.5
           ? current
-          : { width, height }
+          : { width, height, offsetY }
       ));
     };
 

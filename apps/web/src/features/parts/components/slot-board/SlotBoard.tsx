@@ -166,7 +166,10 @@ export function SlotBoard({
   }, [onClearAiFocus]);
 
   return (
-    <div className="panel slot-board-panel relative flex h-full w-full min-w-0 max-w-[calc(100vw-2rem)] flex-col overflow-hidden lg:max-w-full">
+    <div
+      data-testid="slot-board-widget"
+      className="panel slot-board-panel isolate relative flex h-full min-h-0 w-full min-w-0 max-w-[calc(100vw-2rem)] flex-col overflow-hidden bg-white lg:max-w-full"
+    >
       {/* 보드 헤더: 제목 + 호환 상태 범례(초록/노랑/빨강/회색) */}
       <div className="border-b border-commerce-line bg-gradient-to-b from-white to-slate-50 px-4 py-2.5">
         <div className="flex items-center justify-between gap-2">
@@ -213,24 +216,6 @@ export function SlotBoard({
             ) : null}
             <SlotBoardModeSegments value={visualMode} onChange={handleVisualModeChange} />
           </div>
-        </div>
-        <div className="mt-2 flex flex-wrap items-center justify-end gap-3 text-[10px] font-bold text-slate-500">
-          <span className="flex items-center gap-1.5">
-            <svg width="20" height="4" viewBox="0 0 20 4" aria-hidden="true"><line x1="0" y1="2" x2="20" y2="2" stroke="#16a34a" strokeWidth="3" /></svg>
-            호환 가능
-          </span>
-          <span className="flex items-center gap-1.5">
-            <svg width="20" height="4" viewBox="0 0 20 4" aria-hidden="true"><line x1="0" y1="2" x2="20" y2="2" stroke="#d97706" strokeWidth="3" /></svg>
-            주의
-          </span>
-          <span className="flex items-center gap-1.5">
-            <svg width="20" height="4" viewBox="0 0 20 4" aria-hidden="true"><line x1="0" y1="2" x2="20" y2="2" stroke="#ef4444" strokeWidth="3" strokeDasharray="6 4" /></svg>
-            장착 불가
-          </span>
-          <span className="flex items-center gap-1.5">
-            <svg width="20" height="4" viewBox="0 0 20 4" aria-hidden="true"><line x1="0" y1="2" x2="20" y2="2" stroke="#94a3b8" strokeWidth="2" strokeDasharray="4 3" /></svg>
-            미장착
-          </span>
         </div>
       </div>
       {isRelationMapVisible && !isIsometric && !isMotherboard ? (
@@ -530,42 +515,38 @@ function RelationMapBoardBody({
     <div
       data-testid="slot-board"
       data-visual-mode="relation-map"
-      className="relative min-h-0 flex-1 overflow-auto bg-white px-4 pb-4 pt-3"
+      className="relative flex min-h-0 flex-1 flex-col overflow-hidden bg-white p-3"
     >
-      <div className="w-full min-w-[660px]">
-        <div className="mx-auto mt-2 w-full max-w-[1120px]">
-          <div className="relative h-[560px] rounded-lg bg-white">
-            <RelationMapEdges
-              items={items}
-              graph={graph}
+      <div data-testid="relation-map-stage" className="relative min-h-0 w-full min-w-0 flex-1 rounded-lg bg-white">
+        <RelationMapEdges
+          items={items}
+          graph={graph}
+          focusCategory={focusCategory}
+          selectedCategory={selectedCategory}
+        />
+        {RELATION_MAP_NODE_ORDER.map((category) => {
+          const slot = slotConfigFor(category);
+          if (!slot) return null;
+          const categoryItems = items.filter((item) => item.category === category);
+          return (
+            <RelationMapNode
+              key={category}
+              slot={slot}
+              items={categoryItems}
               focusCategory={focusCategory}
               selectedCategory={selectedCategory}
+              nextCategory={nextCategory}
+              status={statusByCategory.get(category)}
+              reason={reasonByCategory.get(category)}
+              isAiSpotlighted={aiFocusCategories.includes(category)}
+              isAiDimmed={aiFocusCategories.length > 0 && !aiFocusCategories.includes(category)}
+              isFlashing={flashingCategories.has(category)}
+              onSelect={() => onSlotSelect(category)}
+              onRemoveItem={onRemoveItem}
+              isRemovePending={isRemovePending}
             />
-            {RELATION_MAP_NODE_ORDER.map((category) => {
-              const slot = slotConfigFor(category);
-              if (!slot) return null;
-              const categoryItems = items.filter((item) => item.category === category);
-              return (
-                <RelationMapNode
-                  key={category}
-                  slot={slot}
-                  items={categoryItems}
-                  focusCategory={focusCategory}
-                  selectedCategory={selectedCategory}
-                  nextCategory={nextCategory}
-                  status={statusByCategory.get(category)}
-                  reason={reasonByCategory.get(category)}
-                  isAiSpotlighted={aiFocusCategories.includes(category)}
-                  isAiDimmed={aiFocusCategories.length > 0 && !aiFocusCategories.includes(category)}
-                  isFlashing={flashingCategories.has(category)}
-                  onSelect={() => onSlotSelect(category)}
-                  onRemoveItem={onRemoveItem}
-                  isRemovePending={isRemovePending}
-                />
-              );
-            })}
-          </div>
-        </div>
+          );
+        })}
       </div>
     </div>
   );
@@ -705,34 +686,34 @@ function RelationMapNode({
         aria-label={`${slot.label} 선택`}
         aria-pressed={isSelected}
         title={fullNameTitle}
-        className="flex h-full w-full flex-col justify-center gap-1 rounded-md px-3.5 py-2.5 text-left focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-blue"
+        className="grid h-full w-full min-h-0 grid-cols-[auto_minmax(0,1fr)] grid-rows-[minmax(0,1fr)_auto] items-center gap-x-[clamp(0.25rem,0.6vw,0.75rem)] overflow-hidden rounded-md px-[clamp(0.25rem,0.7vw,0.875rem)] py-[clamp(0.15rem,0.45vh,0.4rem)] text-left focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-blue"
       >
-        <span className="flex w-full min-w-0 items-center gap-3">
-          <span className={`grid h-14 w-14 shrink-0 place-items-center overflow-hidden rounded ${
+        <span className={`row-span-2 grid h-[clamp(1.75rem,5vh,3.5rem)] w-[clamp(1.75rem,5vh,3.5rem)] shrink-0 place-items-center overflow-hidden rounded ${
             filled ? 'border border-slate-100 bg-slate-50' : 'border border-slate-300 bg-slate-50 shadow-inner'
           }`}>
-            <img
-              src={imageSrc}
-              alt=""
-              aria-hidden="true"
-              onError={(event) => {
-                event.currentTarget.src = slot.glyph;
-              }}
-              className="h-full w-full object-contain p-1"
-            />
+          <img
+            src={imageSrc}
+            alt=""
+            aria-hidden="true"
+            onError={(event) => {
+              event.currentTarget.src = slot.glyph;
+            }}
+            className="h-full w-full object-contain p-1"
+          />
+        </span>
+        <span className="min-w-0 self-end">
+          <span className="block truncate text-[clamp(0.68rem,1.55vh,0.9375rem)] font-black leading-tight text-slate-700">
+            {slot.label}
           </span>
-          <span className="min-w-0 flex-1">
-            <span className="block text-[15px] font-black leading-tight text-slate-700">{slot.label}</span>
+          <span
+            title={fullNameTitle}
+            className={`block truncate text-[clamp(0.56rem,1.25vh,0.8125rem)] font-bold leading-tight ${filled ? 'text-commerce-ink' : 'text-slate-400'}`}
+          >
+            {itemTitle}
           </span>
         </span>
-        <span
-          title={fullNameTitle}
-          className={`block w-full truncate pb-0.5 text-[13px] font-bold leading-5 ${filled ? 'text-commerce-ink' : 'text-slate-400'}`}
-        >
-          {itemTitle}
-        </span>
-        <span className="flex w-full justify-end">
-          <span className={`max-w-full whitespace-nowrap rounded px-2 py-0.5 text-[12px] font-black ${
+        <span className="flex min-w-0 self-start justify-end">
+          <span className={`max-w-full truncate rounded px-1.5 py-px text-[clamp(0.52rem,1.1vh,0.75rem)] font-black leading-tight ${
             isFocused
               ? 'bg-blue-50 text-brand-blue'
               : status === 'FAIL'
@@ -757,7 +738,7 @@ function RelationMapNode({
             event.stopPropagation();
             onRemoveItem(primaryItem.partId);
           }}
-          className="absolute right-1.5 top-1.5 z-30 rounded border border-slate-200 bg-white px-2 py-0.5 text-[12px] font-black text-slate-400 opacity-0 transition group-hover:opacity-100 focus-visible:opacity-100 hover:border-commerce-sale hover:text-commerce-sale disabled:cursor-wait"
+          className="absolute right-1 top-1 z-30 rounded border border-slate-200 bg-white px-1.5 py-px text-[10px] font-black text-slate-400 opacity-0 transition group-hover:opacity-100 focus-visible:opacity-100 hover:border-commerce-sale hover:text-commerce-sale disabled:cursor-wait"
         >
           빼기
         </button>

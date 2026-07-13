@@ -42,53 +42,12 @@ export function SlotStatusBar({
   const hasItems = items.length > 0;
 
   if (compact) {
-    const statusMessage = hasItems && hasCompatibilityFail
-      ? '안 맞는 부품이 있어 구매할 수 없습니다. 문제 슬롯을 교체해 주세요.'
-      : !hasToken
-        ? '로그인하면 슬롯에 담은 부품이 견적 장바구니에 저장됩니다.'
-        : isDraftLoading
-          ? '내 견적 장바구니를 불러오는 중입니다.'
-          : isDraftError
-            ? '견적 장바구니를 불러오지 못했습니다.'
-            : emptyCount > 0
-              ? `미장착 슬롯 ${emptyCount}개가 있습니다`
-              : '필수 슬롯 장착이 완료됐습니다.';
+    if (!isSaveSuccess && !isSaveError) {
+      return null;
+    }
 
     return (
       <section data-testid="slot-status-bar" className="space-y-1.5">
-        <div className="panel flex min-h-[46px] flex-wrap items-center justify-between gap-2 px-3 py-1.5">
-          <div className="flex min-w-0 items-center gap-3">
-            <div className="shrink-0">
-              <div className="text-[9px] font-bold text-slate-400">견적 합계</div>
-              <div className="text-sm font-black leading-none text-brand-blue">{totalPrice.toLocaleString()}원</div>
-            </div>
-            <div className="shrink-0 text-[10px] font-black text-slate-500">장착 {filledCount}/{SLOT_COUNT}</div>
-            <div className={`truncate text-[10px] font-bold ${hasCompatibilityFail ? 'text-red-600' : 'text-slate-500'}`}>
-              {statusMessage}
-              {!hasToken ? (
-                <Link to={loginHref} className="ml-1 font-black text-brand-blue hover:underline">로그인</Link>
-              ) : null}
-            </div>
-          </div>
-          <div className="flex shrink-0 items-center gap-1.5">
-            <button
-              type="button"
-              onClick={() => openAiAssistant()}
-              className="inline-flex min-h-8 items-center gap-1 rounded-md border border-commerce-line bg-white px-2.5 text-[10px] font-black text-slate-700 hover:border-commerce-ink"
-            >
-              <MessageCircle size={13} className="text-brand-blue" />
-              AI 상담
-            </button>
-            {showCheckoutActions ? (
-              <QuoteCheckoutActions
-                hasItems={hasItems}
-                hasCompatibilityFail={hasCompatibilityFail}
-                onSave={onSave}
-                isSavePending={isSavePending}
-              />
-            ) : null}
-          </div>
-        </div>
         {isSaveSuccess ? (
           <div className="flex items-center justify-between rounded-md border border-emerald-200 bg-emerald-50 px-3 py-1 text-[10px] font-black text-emerald-700">
             <span>내 견적함에 추가했습니다.</span>
@@ -173,14 +132,25 @@ type QuoteCheckoutActionsProps = {
   hasCompatibilityFail: boolean;
   onSave: () => void;
   isSavePending: boolean;
+  compact?: boolean;
 };
 
 export function QuoteCheckoutActions({
   hasItems,
   hasCompatibilityFail,
   onSave,
-  isSavePending
+  isSavePending,
+  compact = false
 }: QuoteCheckoutActionsProps) {
+  const saveClassName = compact
+    ? 'inline-flex min-h-8 items-center gap-1 rounded-md border border-slate-300 bg-white px-2 text-[11px] font-black text-slate-700 hover:border-commerce-ink disabled:cursor-wait disabled:opacity-60'
+    : 'inline-flex min-h-10 items-center gap-1.5 rounded-md border border-slate-300 bg-white px-4 text-sm font-black text-slate-700 hover:border-commerce-ink disabled:cursor-wait disabled:opacity-60';
+  const purchaseClassName = compact
+    ? 'inline-flex min-h-8 items-center gap-1 rounded-md bg-brand-blue px-2.5 text-[11px] font-black text-white hover:bg-blue-700'
+    : 'inline-flex min-h-10 items-center gap-2 rounded-md bg-brand-blue px-5 text-sm font-black text-white hover:bg-blue-700';
+  const disabledPurchaseClassName = compact
+    ? 'inline-flex min-h-8 cursor-not-allowed items-center gap-1 rounded-md bg-slate-200 px-2.5 text-[11px] font-black text-slate-400'
+    : 'inline-flex min-h-10 cursor-not-allowed items-center gap-2 rounded-md bg-slate-200 px-5 text-sm font-black text-slate-400';
   return (
     <>
       {hasItems ? (
@@ -188,7 +158,7 @@ export function QuoteCheckoutActions({
           type="button"
           onClick={onSave}
           disabled={isSavePending}
-          className="inline-flex min-h-10 items-center gap-1.5 rounded-md border border-slate-300 bg-white px-4 text-sm font-black text-slate-700 hover:border-commerce-ink disabled:cursor-wait disabled:opacity-60"
+          className={saveClassName}
         >
           <FolderPlus size={15} />
           {isSavePending ? '추가 중' : '내 견적함에 추가'}
@@ -197,7 +167,7 @@ export function QuoteCheckoutActions({
       {hasItems && !hasCompatibilityFail ? (
         <Link
           to="/checkout"
-          className="inline-flex min-h-10 items-center gap-2 rounded-md bg-brand-blue px-5 text-sm font-black text-white hover:bg-blue-700"
+          className={purchaseClassName}
         >
           <ShoppingCart size={16} />
           구매하기
@@ -206,7 +176,10 @@ export function QuoteCheckoutActions({
         <button
           type="button"
           disabled
-          className="inline-flex min-h-10 cursor-not-allowed items-center gap-2 rounded-md bg-slate-200 px-5 text-sm font-black text-slate-400"
+          title={hasItems && hasCompatibilityFail
+            ? '안 맞는 부품이 있어 구매할 수 없습니다. 문제 슬롯을 교체해 주세요.'
+            : '견적에 부품을 추가해 주세요.'}
+          className={disabledPurchaseClassName}
         >
           <ShoppingCart size={16} />
           구매하기
