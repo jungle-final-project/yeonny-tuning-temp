@@ -629,4 +629,4 @@ CI 실패 시 먼저 확인할 GitHub Actions step:
 | `Validate Docker Compose` | `compose.yaml` 문법, service, volume, port 설정 오류 |
 | `Run API runtime smoke test` | PostgreSQL health, API jar 실행, `/api/health` DB 연결 오류 |
 
-CI가 안정적으로 통과하면 다음 단계로 Docker image build 검증을 추가합니다. 이 단계는 이미지를 registry에 push하지 않고 `docker build`만 실행해 Dockerfile이 깨졌는지 확인합니다. CD와 AWS 배포 자동화는 CI가 안정화된 뒤 별도 workflow로 설계합니다.
+`main` 배포는 CI 전체가 성공한 뒤 `.github/workflows/deploy-compose.yml`에서 같은 commit SHA를 EC2에 반영합니다. 현재 `main`보다 오래된 CI 실행은 배포를 건너뛰며, 수동 실행도 현재 `main`의 CI 성공 여부를 확인합니다. 운영 절차는 `docs/aws-compose-deploy.md`를 따릅니다.

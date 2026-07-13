@@ -1,21 +1,88 @@
 name: Deploy EC2 Compose
 
 on:
-  push:
+  workflow_run:
+    workflows:
+      - CI
+    types:
+      - completed
     branches:
       - main
   workflow_dispatch:
 
 permissions:
   contents: read
+  actions: read
 
 concurrency:
-  group: deploy-compose-${{ github.ref }}
+  group: deploy-compose-main
   cancel-in-progress: true
 
 jobs:
+  resolve:
+    name: deployment-gate
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (github.event_name == 'workflow_run' &&
+       github.event.workflow_run.conclusion == 'success' &&
+       github.event.workflow_run.event == 'push' &&
+       github.event.workflow_run.head_branch == 'main')
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      deploy: ${{ steps.target.outputs.deploy }}
+      sha: ${{ steps.target.outputs.sha }}
+
+    steps:
+      - name: Resolve CI-approved deploy target
+        id: target
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          WORKFLOW_RUN_SHA: ${{ github.event.workflow_run.head_sha }}
+        run: |
+          set -euo pipefail
+
+          current_main_sha="$(gh api "repos/${GITHUB_REPOSITORY}/git/ref/heads/main" --jq '.object.sha')"
+
+          if [ "$GITHUB_EVENT_NAME" = "workflow_run" ]; then
+            target_sha="$WORKFLOW_RUN_SHA"
+            if [ "$target_sha" != "$current_main_sha" ]; then
+              echo "deploy=false" >> "$GITHUB_OUTPUT"
+              echo "sha=$target_sha" >> "$GITHUB_OUTPUT"
+              {
+                echo "### Stale deployment skipped"
+                echo
+                echo "CI passed for \`$target_sha\`, but current main is \`$current_main_sha\`."
+                echo "A newer main commit must own the production deployment."
+              } >> "$GITHUB_STEP_SUMMARY"
+              exit 0
+            fi
+          else
+            target_sha="$current_main_sha"
+            ci_conclusion="$(
+              gh api --method GET "repos/${GITHUB_REPOSITORY}/actions/workflows/ci.yml/runs" \
+                -f branch=main \
+                -f event=push \
+                -f status=completed \
+                -f head_sha="$target_sha" \
+                -f per_page=1 |
+                jq -r '.workflow_runs[0].conclusion // ""'
+            )"
+            if [ "$ci_conclusion" != "success" ]; then
+              echo "::error::Current main $target_sha has no successful completed CI push run."
+              exit 1
+            fi
+          fi
+
+          echo "deploy=true" >> "$GITHUB_OUTPUT"
+          echo "sha=$target_sha" >> "$GITHUB_OUTPUT"
+          echo "Deploying CI-approved main commit \`$target_sha\`." >> "$GITHUB_STEP_SUMMARY"
+
   deploy:
     name: deploy
+    needs: resolve
+    if: needs.resolve.outputs.deploy == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 45
     env:
@@ -27,6 +94,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.resolve.outputs.sha }}
 
       - name: Set up Node.js
         uses: actions/setup-node@v4
@@ -58,7 +127,6 @@ jobs:
         run: docker compose -f compose.prod.yaml --env-file .env.prod.example config --quiet
 
       - name: Check deployment secrets
-        id: deploy_config
         shell: bash
         run: |
           set -euo pipefail
@@ -68,19 +136,13 @@ jobs:
           [ -n "${EC2_APP_DIR:-}" ] || missing+=("EC2_APP_DIR")
           [ -n "${EC2_SSH_KEY:-}" ] || missing+=("EC2_SSH_KEY")
           if [ "${#missing[@]}" -gt 0 ]; then
-            echo "Missing deployment secrets: ${missing[*]}"
-            if [ "$GITHUB_EVENT_NAME" = "workflow_dispatch" ]; then
-              exit 1
-            fi
-            echo "enabled=false" >> "$GITHUB_OUTPUT"
-            exit 0
+            echo "::error::Missing deployment secrets: ${missing[*]}"
+            exit 1
           fi
-          echo "enabled=true" >> "$GITHUB_OUTPUT"
         env:
           EC2_SSH_KEY: ${{ secrets.EC2_SSH_KEY }}
 
       - name: Prepare SSH
-        if: steps.deploy_config.outputs.enabled == 'true'
         shell: bash
         run: |
           set -euo pipefail
@@ -96,12 +158,10 @@ jobs:
           EC2_SSH_KEY: ${{ secrets.EC2_SSH_KEY }}
 
       - name: Prepare remote app directory
-        if: steps.deploy_config.outputs.enabled == 'true'
         shell: bash
         run: ssh -i "$SSH_KEY_PATH" "$EC2_USER@$EC2_HOST" "mkdir -p '$EC2_APP_DIR'"
 
       - name: Sync repository to EC2
-        if: steps.deploy_config.outputs.enabled == 'true'
         shell: bash
         run: |
           set -euo pipefail
@@ -124,7 +184,6 @@ jobs:
             ./ "$EC2_USER@$EC2_HOST:$EC2_APP_DIR/"
 
       - name: Restart production compose on EC2
-        if: steps.deploy_config.outputs.enabled == 'true'
         shell: bash
         run: |
           set -euo pipefail
@@ -132,5 +191,36 @@ jobs:
             "cd '$EC2_APP_DIR' && \
              test -f .env.prod && \
              docker compose -f compose.prod.yaml --env-file .env.prod config --quiet && \
-             docker compose -f compose.prod.yaml --env-file .env.prod up -d --build --remove-orphans && \
-             docker image prune -f"
+             docker compose -f compose.prod.yaml --env-file .env.prod up -d --build --remove-orphans"
+
+      - name: Verify production health
+        shell: bash
+        run: |
+          set -euo pipefail
+          ssh -i "$SSH_KEY_PATH" "$EC2_USER@$EC2_HOST" \
+            "cd '$EC2_APP_DIR' && \
+             for attempt in \$(seq 1 60); do \
+               if curl -fsS http://localhost/api/health; then \
+                 exit 0; \
+               fi; \
+               sleep 5; \
+             done; \
+             docker compose -f compose.prod.yaml --env-file .env.prod ps; \
+             docker compose -f compose.prod.yaml --env-file .env.prod logs --tail=200 api web; \
+             exit 1"
+
+      - name: Prune unused Docker images
+        shell: bash
+        run: ssh -i "$SSH_KEY_PATH" "$EC2_USER@$EC2_HOST" "docker image prune -f"
+
+      - name: Record successful deployment
+        if: success()
+        shell: bash
+        run: |
+          {
+            echo
+            echo "### Deployment succeeded"
+            echo
+            echo "- Commit: \`${{ needs.resolve.outputs.sha }}\`"
+            echo "- Health: \`/api/health\` returned success"
+          } >> "$GITHUB_STEP_SUMMARY"

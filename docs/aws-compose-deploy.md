@@ -88,14 +88,22 @@ Repository secrets:
 - `EC2_SSH_KEY`: EC2 접속 private key 전체
 - `EC2_APP_DIR`: `/opt/buildgraph`
 
-`main`에 push하면 `.github/workflows/deploy-compose.yml`이 다음 순서로 실행된다.
+`main`에 push하면 `CI` workflow가 먼저 실행된다. 모든 CI job이 성공한 경우에만
+`.github/workflows/deploy-compose.yml`이 같은 commit SHA를 대상으로 다음 순서로 실행된다.
 
-1. web build
-2. API bootJar
-3. `compose.prod.yaml` config 검증
-4. EC2로 rsync
-5. EC2에서 `docker compose -f compose.prod.yaml --env-file .env.prod up -d --build --remove-orphans`
-6. 사용하지 않는 Docker image prune
+1. CI를 통과한 SHA가 현재 `main` HEAD인지 확인
+2. web build
+3. API bootJar
+4. `compose.prod.yaml` config 검증
+5. EC2로 rsync
+6. EC2에서 `docker compose -f compose.prod.yaml --env-file .env.prod up -d --build --remove-orphans`
+7. EC2 내부 `http://localhost/api/health` 확인
+8. health 확인 성공 후 사용하지 않는 Docker image prune
+
+CI가 진행되는 동안 더 최신 commit이 `main`에 들어오면 이전 SHA 배포는 자동으로 건너뛴다.
+수동 재배포는 `Deploy EC2 Compose`의 `Run workflow`를 사용하며, 현재 `main`에 성공한 CI가
+없으면 배포가 거부된다. 이 게이트 적용 전에 생성된 과거 Deploy 실행은 구버전 workflow를
+사용하므로 재실행하지 않는다.
 
 ## 검증
 
