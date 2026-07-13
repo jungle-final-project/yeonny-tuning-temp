@@ -11,5 +11,9 @@ public interface AiChatEngine {
         return respondLlmRequired(request);
     }
 
+    default AiChatEngineResponse explainBuildAssessment(AiChatEngineRequest request, String requestedAiProfile) {
+        return respondLlmRequired(request, requestedAiProfile);
+    }
+
     QuoteRequirementAnalysisResult analyzeQuoteRequirement(QuoteRequirementAnalysisRequest request);
 }

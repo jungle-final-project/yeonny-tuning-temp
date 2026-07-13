@@ -68,6 +68,9 @@ class BuildGraphServiceTest {
 
         assertThat(graph.get("mode")).isEqualTo("PART_IMPACT");
         assertThat(castMap(graph.get("compositeScore")).get("score")).isInstanceOf(Integer.class);
+        assertThat(castMap(graph.get("buildAssessment")))
+                .containsEntry("type", "COMPOSITE_SCORE_EXPLANATION")
+                .containsEntry("score", castMap(graph.get("compositeScore")).get("score"));
         assertThat((String) graph.get("summary")).contains("GPU");
         List<Map<String, Object>> nodes = castList(graph.get("nodes"));
         assertThat(nodes).anySatisfy(node -> {
@@ -245,6 +248,11 @@ class BuildGraphServiceTest {
         Map<String, Object> compositeScore = castMap(graph.get("compositeScore"));
         assertThat(compositeScore.get("score")).isEqualTo(0);
         assertThat(compositeScore.get("label")).isEqualTo("구성 재검토");
+        assertThat(castMap(graph.get("buildAssessment"))).containsEntry("score", 0);
+        assertThat(castList(castMap(graph.get("buildAssessment")).get("cautions")))
+                .first()
+                .extracting(item -> item.get("severity"))
+                .isEqualTo("FAIL");
         List<Map<String, Object>> edges = castList(graph.get("edges"));
         assertThat(edges).anySatisfy(edge -> {
             assertThat(edge.get("id")).isEqualTo("edge-cpu-board-socket");

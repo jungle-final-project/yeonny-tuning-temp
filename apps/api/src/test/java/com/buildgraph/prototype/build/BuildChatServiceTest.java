@@ -21,6 +21,7 @@ import com.buildgraph.prototype.agent.AiChatEngine;
 import com.buildgraph.prototype.agent.AiChatEngineRequest;
 import com.buildgraph.prototype.agent.AiChatEngineResponse;
 import com.buildgraph.prototype.agent.AiChatIntent;
+import com.buildgraph.prototype.part.ToolBuildPart;
 import com.buildgraph.prototype.part.ToolCheckService;
 import com.buildgraph.prototype.recommendation.CandidateReranker;
 import com.buildgraph.prototype.user.CurrentUserService;
@@ -34,6 +35,92 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.web.server.ResponseStatusException;
 
 class BuildChatServiceTest {
+    @Test
+    void scoreExplanationUsesServerEvaluationAndReturnsReadOnlyAssessment() {
+        JdbcTemplate jdbcTemplate = mock(JdbcTemplate.class);
+        ToolCheckService toolCheckService = mock(ToolCheckService.class);
+        AiChatEngine aiChatEngine = mock(AiChatEngine.class);
+        BuildEvaluationService evaluationService = mock(BuildEvaluationService.class);
+        Map<String, Object> assessment = scoreAssessment();
+        when(evaluationService.evaluateCurrentDraft(eq(42L), nullable(Integer.class), nullable(String.class), nullable(String.class)))
+                .thenReturn(new BuildEvaluationService.BuildEvaluation(List.of(), 2_000_000, 2_000_000, List.of(), Map.of(), assessment));
+        when(aiChatEngine.explainBuildAssessment(any(AiChatEngineRequest.class), eq("BUILD_CHAT_54_MINI_FAST")))
+                .thenReturn(new AiChatEngineResponse(
+                        "현재 견적은 CPU 체급 대비 GPU가 낮아 GPU 상향을 먼저 검토하는 편이 좋습니다.",
+                        AiChatIntent.EXPLAIN,
+                        List.of(),
+                        List.of(),
+                        List.of(),
+                        Map.of(),
+                        List.of(),
+                        List.of(),
+                        "session-score"
+                ));
+        BuildChatService service = new BuildChatService(
+                jdbcTemplate,
+                toolCheckService,
+                aiChatEngine,
+                BuildChatCacheService.disabled(),
+                null,
+                null,
+                null,
+                new BuildChatIntentRouter(),
+                BuildChatSemanticCacheService.disabled(),
+                evaluationService
+        );
+        CurrentUserService.CurrentUser user = new CurrentUserService.CurrentUser(42L, "user-id", "user@example.com", "사용자", "USER", null);
+
+        Map<String, Object> response = service.chat(Map.of(
+                "message", "왜 이 견적의 종합 점수가 낮아?",
+                "currentQuoteDraft", Map.of("items", List.of(Map.of(
+                        "partId", "client-forged-part",
+                        "category", "GPU",
+                        "price", 1
+                ))),
+                "assessmentContext", Map.of("source", "QUOTE_DRAFT_CURRENT", "focusType", "SCORE")
+        ), user);
+
+        assertThat(response).containsEntry("answerType", "GENERAL").containsEntry("buildAssessment", assessment);
+        assertThat(response.get("builds")).asList().isEmpty();
+        assertThat(response.get("simulation")).isNull();
+        assertThat(response).doesNotContainKey("actions");
+        assertThat(response.get("quickReplies")).asList().contains("현재 견적에 맞는 상위 GPU 추천해줘");
+        verify(aiChatEngine).explainBuildAssessment(any(AiChatEngineRequest.class), eq("BUILD_CHAT_54_MINI_FAST"));
+        verifyNoInteractions(jdbcTemplate, toolCheckService);
+    }
+
+    @Test
+    void scoreExplanationFallsBackToDeterministicCardWhenLlmFails() {
+        JdbcTemplate jdbcTemplate = mock(JdbcTemplate.class);
+        ToolCheckService toolCheckService = mock(ToolCheckService.class);
+        AiChatEngine aiChatEngine = mock(AiChatEngine.class);
+        BuildEvaluationService evaluationService = mock(BuildEvaluationService.class);
+        Map<String, Object> assessment = scoreAssessment();
+        when(evaluationService.evaluateCurrentDraft(eq(42L), nullable(Integer.class), nullable(String.class), nullable(String.class)))
+                .thenReturn(new BuildEvaluationService.BuildEvaluation(List.of(), 2_000_000, 2_000_000, List.of(), Map.of(), assessment));
+        when(aiChatEngine.explainBuildAssessment(any(AiChatEngineRequest.class), eq("BUILD_CHAT_54_MINI_FAST")))
+                .thenThrow(new IllegalStateException("LLM unavailable"));
+        BuildChatService service = new BuildChatService(
+                jdbcTemplate,
+                toolCheckService,
+                aiChatEngine,
+                BuildChatCacheService.disabled(),
+                null,
+                null,
+                null,
+                new BuildChatIntentRouter(),
+                BuildChatSemanticCacheService.disabled(),
+                evaluationService
+        );
+        CurrentUserService.CurrentUser user = new CurrentUserService.CurrentUser(42L, "user-id", "user@example.com", "사용자", "USER", null);
+
+        Map<String, Object> response = service.chat(Map.of("message", "이 견적 병목 설명해줘"), user);
+
+        assertThat(String.valueOf(response.get("message"))).contains("742/1000점");
+        assertThat(response.get("warnings")).asList().contains("SCORE_EXPLANATION_LLM_FALLBACK");
+        assertThat(response).containsEntry("buildAssessment", assessment);
+    }
+
     @Test
     void boardLocationFastPathReturnsReadOnlyFocusWithoutCallingLlm() {
         JdbcTemplate jdbcTemplate = mock(JdbcTemplate.class);
@@ -61,6 +148,39 @@ class BuildChatServiceTest {
                 .containsEntry("type", "PART_LOCATION")
                 .containsEntry("categories", List.of("RAM"));
         verifyNoInteractions(aiChatEngine, jdbcTemplate, toolCheckService);
+    }
+
+    private static Map<String, Object> scoreAssessment() {
+        return Map.of(
+                "type", "COMPOSITE_SCORE_EXPLANATION",
+                "score", 742,
+                "maxScore", 1000,
+                "grade", "C",
+                "label", "기본형",
+                "summary", "CPU 체급에 비해 GPU 성능 균형이 낮습니다.",
+                "strengths", List.of(Map.of(
+                        "code", "HIGH_CPU_TIER",
+                        "severity", "PASS",
+                        "title", "CPU 성능 여유",
+                        "description", "현재 CPU는 상위권 구성입니다.",
+                        "relatedCategories", List.of("CPU")
+                )),
+                "cautions", List.of(Map.of(
+                        "code", "CPU_GPU_IMBALANCE",
+                        "severity", "WARN",
+                        "title", "CPU와 GPU 성능 균형",
+                        "description", "CPU 체급에 비해 GPU가 낮습니다.",
+                        "relatedCategories", List.of("CPU", "GPU")
+                )),
+                "recommendations", List.of(Map.of(
+                        "priority", 1,
+                        "category", "GPU",
+                        "title", "GPU 상향 우선",
+                        "reason", "현재 구성에서 가장 큰 성능 제한 요소입니다.",
+                        "prompt", "현재 견적에 맞는 상위 GPU 추천해줘"
+                )),
+                "evaluatedAt", "2026-07-13T00:00:00Z"
+        );
     }
 
     @Test
@@ -766,6 +886,105 @@ class BuildChatServiceTest {
     }
 
     @Test
+    void exactSingletonPartAddChipBuildsReplacementPreviewWithoutCallingLlm() {
+        JdbcTemplate jdbcTemplate = mock(JdbcTemplate.class);
+        ToolCheckService toolCheckService = mock(ToolCheckService.class);
+        when(toolCheckService.checkBuild(anyList(), anyInt())).thenReturn(List.of());
+        AiChatEngine aiChatEngine = mock(AiChatEngine.class);
+        String targetName = "NZXT H9 Flow 2025 넉넉한 케이스";
+        doAnswer(invocation -> {
+            String sql = invocation.getArgument(0, String.class);
+            if (!sql.contains("LOWER(BTRIM(name))")) {
+                return List.<Map<String, Object>>of();
+            }
+            return List.of(new java.util.HashMap<String, Object>(Map.of(
+                    "internal_id", 20L,
+                    "id", "case-roomy",
+                    "category", "CASE",
+                    "name", targetName,
+                    "manufacturer", "NZXT",
+                    "price", 334_130,
+                    "attributes", Map.of("maxGpuLengthMm", 459, "maxPsuLengthMm", 240)
+            )));
+        }).when(jdbcTemplate).queryForList(anyString(), any(Object[].class));
+        BuildChatService service = new BuildChatService(
+                jdbcTemplate,
+                toolCheckService,
+                aiChatEngine,
+                BuildChatCacheService.disabled()
+        );
+
+        Map<String, Object> response = service.chat(Map.of(
+                "message", targetName + " 견적에 담아줘",
+                "currentQuoteDraft", Map.of("items", List.of(
+                        Map.of("partId", "cpu-current", "category", "CPU", "name", "현재 CPU", "quantity", 1, "price", 500_000),
+                        Map.of("partId", "case-current", "category", "CASE", "name", "현재 케이스", "quantity", 1, "price", 300_000)
+                ))
+        ));
+
+        @SuppressWarnings("unchecked")
+        List<Map<String, Object>> builds = (List<Map<String, Object>>) response.get("builds");
+        assertThat(builds).hasSize(1);
+        @SuppressWarnings("unchecked")
+        List<Map<String, Object>> items = (List<Map<String, Object>>) builds.get(0).get("items");
+        assertThat(items).extracting(item -> item.get("partId"))
+                .containsExactlyInAnyOrder("cpu-current", "case-roomy")
+                .doesNotContain("case-current");
+        assertThat(items).filteredOn(item -> "CASE".equals(item.get("category"))).hasSize(1);
+        assertThat(response.get("message").toString()).contains("교체:").contains(targetName);
+
+        Map<String, Object> samePartResponse = service.chat(Map.of(
+                "message", targetName + " 견적에 담아줘",
+                "currentQuoteDraft", Map.of("items", List.of(
+                        Map.of("partId", "case-roomy", "category", "CASE", "name", targetName, "quantity", 1, "price", 334_130)
+                ))
+        ));
+        assertThat(samePartResponse.get("builds")).asList().isEmpty();
+        assertThat(samePartResponse.get("message").toString()).contains("이미 현재 견적에 선택되어 있습니다");
+        verifyNoInteractions(aiChatEngine);
+    }
+
+    @Test
+    void singletonAddFromLlmIsCoercedToReplacementPreview() {
+        JdbcTemplate jdbcTemplate = mock(JdbcTemplate.class);
+        ToolCheckService toolCheckService = mock(ToolCheckService.class);
+        when(toolCheckService.checkBuild(anyList(), anyInt())).thenReturn(List.of());
+        AiChatEngine aiChatEngine = mock(AiChatEngine.class);
+        BuildChatCacheService cacheService = mock(BuildChatCacheService.class);
+        when(cacheService.lookup(any(), any(), any())).thenReturn(Optional.empty());
+        when(aiChatEngine.respondLlmRequired(any(), any())).thenReturn(new AiChatEngineResponse(
+                "선택한 케이스를 추가하겠습니다.",
+                AiChatIntent.BUILD_MODIFY,
+                List.of(),
+                List.of(),
+                List.of(part("CASE", "case-target", 350_000)),
+                Map.of("draftEdit", Map.of("operation", "ADD", "category", "CASE")),
+                List.of(),
+                List.of(),
+                null
+        ));
+        BuildChatService service = new BuildChatService(jdbcTemplate, toolCheckService, aiChatEngine, cacheService);
+
+        Map<String, Object> response = service.chat(Map.of(
+                "message", "선택한 케이스로 변경해줘",
+                "currentQuoteDraft", Map.of("items", List.of(
+                        Map.of("partId", "cpu-current", "category", "CPU", "name", "현재 CPU", "quantity", 1, "price", 500_000),
+                        Map.of("partId", "case-current", "category", "CASE", "name", "현재 케이스", "quantity", 1, "price", 300_000)
+                ))
+        ));
+
+        @SuppressWarnings("unchecked")
+        List<Map<String, Object>> builds = (List<Map<String, Object>>) response.get("builds");
+        @SuppressWarnings("unchecked")
+        List<Map<String, Object>> items = (List<Map<String, Object>>) builds.get(0).get("items");
+        assertThat(items).extracting(item -> item.get("partId"))
+                .containsExactlyInAnyOrder("cpu-current", "case-target")
+                .doesNotContain("case-current");
+        assertThat(items).filteredOn(item -> "CASE".equals(item.get("category"))).hasSize(1);
+        assertThat(response.get("message").toString()).contains("교체:");
+    }
+
+    @Test
     void buildChatDoesNotOfferDraftEditPreviewWhenToolCheckFails() {
         JdbcTemplate jdbcTemplate = mock(JdbcTemplate.class);
         ToolCheckService toolCheckService = mock(ToolCheckService.class);
@@ -1408,6 +1627,104 @@ class BuildChatServiceTest {
         assertThat(response.get("quickReplies")).asList()
                 .contains("메쉬 통풍 케이스 A 견적에 담아줘");
         assertThat(response).doesNotContainKey("simulation");
+    }
+
+    @Test
+    void caseScoreImprovementExcludesCurrentAndEqualFitCasesAndReturnsOnlyVerifiedScoreGains() {
+        JdbcTemplate jdbcTemplate = mock(JdbcTemplate.class);
+        ToolCheckService toolCheckService = mock(ToolCheckService.class);
+        AiChatEngine aiChatEngine = mock(AiChatEngine.class);
+        BuildChatCacheService cacheService = mock(BuildChatCacheService.class);
+        when(cacheService.lookup(any(), any(), any())).thenReturn(Optional.empty());
+        doAnswer(invocation -> {
+            String sql = invocation.getArgument(0, String.class);
+            if (sql.contains("FROM parts") && sql.contains("ORDER BY price ASC")) {
+                return List.of(
+                        partRow("case-current", "CASE", "현재 H9 Flow", 320_000,
+                                Map.of("maxGpuLengthMm", 459, "maxCpuCoolerHeightMm", 185,
+                                        "maxPsuLengthMm", 200, "airflowFocus", true), 0),
+                        partRow("case-equal", "CASE", "장착 수치가 같은 H9 파생 모델", 330_000,
+                                Map.of("maxGpuLengthMm", 459, "maxCpuCoolerHeightMm", 185,
+                                        "maxPsuLengthMm", 200, "airflowFocus", true), 0),
+                        partRow("case-roomy", "CASE", "파워 여유 30mm 케이스", 269_000,
+                                Map.of("maxGpuLengthMm", 512, "maxCpuCoolerHeightMm", 185,
+                                        "maxPsuLengthMm", 230, "airflowFocus", true), 0),
+                        partRow("case-blocked", "CASE", "파워가 들어가지 않는 케이스", 150_000,
+                                Map.of("maxGpuLengthMm", 500, "maxCpuCoolerHeightMm", 185,
+                                        "maxPsuLengthMm", 180, "airflowFocus", true), 0)
+                );
+            }
+            return List.of();
+        }).when(jdbcTemplate).queryForList(anyString(), any(Object[].class));
+        doAnswer(invocation -> {
+            @SuppressWarnings("unchecked")
+            List<ToolBuildPart> parts = invocation.getArgument(0, List.class);
+            ToolBuildPart pcCase = parts.stream().filter(part -> "CASE".equals(part.category())).findFirst().orElseThrow();
+            int maxPsuLength = ((Number) pcCase.attributes().get("maxPsuLengthMm")).intValue();
+            String sizeStatus = maxPsuLength < 200 ? "FAIL" : "PASS";
+            return List.of(
+                    Map.of("tool", "compatibility", "status", "PASS", "summary", "호환 가능", "details", Map.of()),
+                    Map.of("tool", "power", "status", "PASS", "summary", "파워 충분",
+                            "details", Map.of("ratedHeadroomW", 700, "ratedLoadPercent", 52)),
+                    Map.of("tool", "size", "status", sizeStatus, "summary", "장착 치수 확인",
+                            "details", Map.of("gpuLengthMm", 340, "maxGpuLengthMm", pcCase.attributes().get("maxGpuLengthMm"),
+                                    "psuDepthMm", 200, "maxPsuLengthMm", maxPsuLength)),
+                    Map.of("tool", "performance", "status", "PASS", "summary", "성능 확인",
+                            "details", Map.of("cpuBenchmarkScore", 100, "gpuBenchmarkScore", 100)),
+                    Map.of("tool", "price", "status", "PASS", "summary", "가격 확인", "details", Map.of())
+            );
+        }).when(toolCheckService).checkBuild(anyList(), anyInt());
+        when(aiChatEngine.respondLlmRequired(any(AiChatEngineRequest.class), nullable(String.class)))
+                .thenReturn(new AiChatEngineResponse(
+                        "통풍형 케이스를 추천합니다.",
+                        AiChatIntent.BUILD_MODIFY,
+                        List.of(),
+                        List.of(),
+                        List.of(part("CASE", "case-equal", 330_000)),
+                        Map.of(
+                                "partConstraint", Map.of("category", "CASE", "airflowFocused", true),
+                                "draftEdit", Map.of("operation", "REPLACE", "category", "CASE")
+                        ),
+                        List.of(),
+                        List.of(),
+                        null
+                ));
+        BuildChatService service = new BuildChatService(jdbcTemplate, toolCheckService, aiChatEngine, cacheService);
+        List<Map<String, Object>> draftItems = List.of(
+                draftItem("cpu-current", "CPU", "Ryzen 9", 1,
+                        Map.of("socket", "AM5", "cpuClass", "RYZEN_9_X3D", "coreCount", 16, "threadCount", 32, "tdpW", 170)),
+                draftItem("board-current", "MOTHERBOARD", "X870E", 1,
+                        Map.of("socket", "AM5", "memoryType", "DDR5", "chipset", "X870E", "pcieGeneration", 5, "hasWifi", true)),
+                draftItem("ram-current", "RAM", "DDR5 64GB", 1,
+                        Map.of("memoryType", "DDR5", "capacityGb", 64, "moduleCount", 2, "speedMhz", 6400)),
+                draftItem("gpu-current", "GPU", "RTX 5090", 1,
+                        Map.of("gpuClass", "RTX_5090", "vramGb", 32, "lengthMm", 340, "requiredSystemPowerW", 1000)),
+                draftItem("ssd-current", "STORAGE", "PCIe 5 SSD", 1,
+                        Map.of("capacityGb", 2000, "generation", 5, "readMbps", 12000, "writeMbps", 10000)),
+                draftItem("psu-current", "PSU", "1500W PSU", 1,
+                        Map.of("capacityW", 1500, "depthMm", 200, "efficiency", "PLATINUM", "atxSpec", "ATX 3.1")),
+                draftItem("case-current", "CASE", "현재 H9 Flow", 1,
+                        Map.of("maxGpuLengthMm", 459, "maxCpuCoolerHeightMm", 185,
+                                "maxPsuLengthMm", 200, "airflowFocus", true)),
+                draftItem("cooler-current", "COOLER", "360 AIO", 1,
+                        Map.of("coolerType", "LIQUID", "tdpW", 320, "radiatorLengthMm", 360))
+        );
+
+        Map<String, Object> response = service.chat(Map.of(
+                "message", "에어 플로우가 부족하다면 더 여유 있는 케이스 추천해줘",
+                "currentQuoteDraft", draftWithItems(draftItems)
+        ));
+
+        assertThat(response.get("message").toString())
+                .contains("통풍 부족으로 감점된 상태가 아닙니다")
+                .contains("파워", "0mm")
+                .contains("실제로 높아지고")
+                .doesNotContain("장착 수치가 같은 H9 파생 모델");
+        assertThat(response.get("quickReplies")).asList()
+                .containsExactly("파워 여유 30mm 케이스 견적에 담아줘");
+        assertThat(response.get("builds")).asList().isEmpty();
+        assertThat(response.get("simulation")).isNull();
+        verifyNoInteractions(aiChatEngine);
     }
 
     @Test

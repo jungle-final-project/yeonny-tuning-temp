@@ -1,13 +1,15 @@
 import { useEffect, useRef, useState } from 'react';
 import type { BuildCompositeScore } from '../aiSelection';
 
-type CompositeScoreGaugeSize = 'large' | 'medium' | 'mini';
+type CompositeScoreGaugeSize = 'large' | 'medium' | 'compact' | 'mini';
 
 type CompositeScoreGaugeProps = {
   score: BuildCompositeScore;
   size?: CompositeScoreGaugeSize;
   highlight?: boolean;
   className?: string;
+  scoreTextClassName?: string;
+  showLabel?: boolean;
   scoreTestId?: string;
   gaugeTestId?: string;
 };
@@ -50,6 +52,18 @@ const SIZE_STYLES: Record<CompositeScoreGaugeSize, {
     showSummary: false,
     showEndpoints: true
   },
+  compact: {
+    shell: 'w-[160px]',
+    svg: 'h-[72px]',
+    strokeWidth: 12,
+    center: 'bottom-0.5',
+    scoreText: 'text-2xl',
+    maxText: 'text-[10px]',
+    labelText: 'text-[10px]',
+    endpointText: 'text-[8px]',
+    showSummary: false,
+    showEndpoints: false
+  },
   mini: {
     shell: 'w-[96px]',
     svg: 'h-[58px]',
@@ -69,6 +83,8 @@ export function CompositeScoreGauge({
   size = 'large',
   highlight = false,
   className = '',
+  scoreTextClassName,
+  showLabel = true,
   scoreTestId,
   gaugeTestId = 'composite-score-gauge'
 }: CompositeScoreGaugeProps) {
@@ -86,7 +102,8 @@ export function CompositeScoreGauge({
   const displayScore = Math.max(0, Math.round(animated.score));
   const percent = Math.max(0, Math.min(100, animated.percent));
   const fillClass = score.score <= 0 ? 'stroke-red-500' : highlight ? 'stroke-emerald-500' : 'stroke-brand-blue';
-  const textClass = score.score <= 0 ? 'text-red-600' : highlight ? 'text-emerald-600' : scoreTextTone(score.score);
+  const textClass = scoreTextClassName
+    ?? (score.score <= 0 ? 'text-red-600' : highlight ? 'text-emerald-600' : scoreTextTone(score.score));
 
   useEffect(() => {
     const previousTarget = targetRef.current;
@@ -174,9 +191,11 @@ export function CompositeScoreGauge({
             {displayScore.toLocaleString('ko-KR')}
             <span className={`ml-1 font-black text-slate-400 ${styles.maxText}`}>/ {score.maxScore.toLocaleString('ko-KR')}</span>
           </div>
-          <div className={`mt-1 truncate font-black text-commerce-ink ${styles.labelText}`} title={`${score.grade} · ${score.label}`}>
-            {score.grade} · {score.label}
-          </div>
+          {showLabel ? (
+            <div className={`mt-1 truncate font-black text-commerce-ink ${styles.labelText}`} title={`${score.grade} · ${score.label}`}>
+              {score.grade} · {score.label}
+            </div>
+          ) : null}
         </div>
       </div>
 

@@ -1,4 +1,4 @@
-import { Fragment, useEffect, useRef, useState, type CSSProperties, type FocusEvent } from 'react';
+import { Fragment, useEffect, useLayoutEffect, useRef, useState, type CSSProperties, type FocusEvent, type RefObject } from 'react';
 import type { PartCategory } from '../../../quote/aiSelection';
 import type { QuoteDraftItem } from '../../types';
 import {
@@ -53,6 +53,8 @@ export function FusedPlateArt({
   const ramDecreaseAction = ramSlotCount > 1 ? findRamDecreaseAction(ramItems, ramSlotCount) : null;
   const isActionPending = isRemovePending || isQuantityPending;
   const [hoveredCategory, setHoveredCategory] = useState<PartCategory | null>(null);
+  const stageContainerRef = useRef<HTMLDivElement | null>(null);
+  const stageSize = useContainedPlateSize(stageContainerRef);
   const aiFocusSet = new Set(aiFocusCategories);
   const hasAiFocus = aiFocusSet.size > 0;
   const hasHoveredLayer = hoveredCategory
@@ -110,8 +112,11 @@ export function FusedPlateArt({
   };
 
   return (
-    <div data-testid="slot-board-fused-plate" className="absolute inset-0 hidden items-center justify-center bg-[#f6f7f9] lg:flex">
-      <div className="relative aspect-[1672/941] w-full max-h-full">
+    <div ref={stageContainerRef} data-testid="slot-board-fused-plate" className="absolute inset-0 hidden items-center justify-center bg-[#f6f7f9] lg:flex">
+      <div
+        className="relative shrink-0"
+        style={stageSize ?? { height: '100%', aspectRatio: `${FUSED_BOARD_SIZE.width} / ${FUSED_BOARD_SIZE.height}`, maxWidth: '100%' }}
+      >
         <img
           src={FUSED_PLATE_BG}
           alt=""
@@ -304,6 +309,39 @@ export function FusedPlateArt({
       </div>
     </div>
   );
+}
+
+// 부모가 판보다 가로로 좁거나 세로로 낮아져도 원본 비율을 유지한 채 contain 크기를 계산한다.
+// 이미지·레이어·번호·클릭 영역이 모두 이 무대를 기준으로 배치되므로 어느 화면에서도 좌표가 함께 움직인다.
+function useContainedPlateSize(containerRef: RefObject<HTMLDivElement>): CSSProperties | null {
+  const [size, setSize] = useState<{ width: number; height: number } | null>(null);
+
+  useLayoutEffect(() => {
+    const container = containerRef.current;
+    if (!container) return;
+
+    const update = () => {
+      const containerWidth = container.clientWidth;
+      const containerHeight = container.clientHeight;
+      if (containerWidth <= 0 || containerHeight <= 0) return;
+
+      const ratio = FUSED_BOARD_SIZE.width / FUSED_BOARD_SIZE.height;
+      const width = Math.min(containerWidth, containerHeight * ratio);
+      const height = width / ratio;
+      setSize((current) => (
+        current && Math.abs(current.width - width) < 0.5 && Math.abs(current.height - height) < 0.5
+          ? current
+          : { width, height }
+      ));
+    };
+
+    update();
+    const observer = new ResizeObserver(update);
+    observer.observe(container);
+    return () => observer.disconnect();
+  }, [containerRef]);
+
+  return size;
 }
 
 function useMountingRamSlots(ramSlotCount: number) {

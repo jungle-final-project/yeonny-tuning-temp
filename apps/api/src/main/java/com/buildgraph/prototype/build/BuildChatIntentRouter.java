@@ -83,6 +83,20 @@ public class BuildChatIntentRouter {
             return boardLocation;
         }
 
+        if (isBuildScoreExplanation(body, message, normalized, category)) {
+            return decision(
+                    BuildChatIntent.EXPLAIN_BUILD_SCORE,
+                    "HIGH",
+                    "NONE",
+                    category,
+                    partQuery,
+                    "LIVE_BUILD_ASSESSMENT",
+                    "NONE",
+                    null,
+                    List.of()
+            );
+        }
+
         // 화면 이동/탐색과 설명 요청은 축소 정책상 미지원 — 모호 구매의향(명확화)으로 흡수되지 않게 먼저 자른다
         if (isNavigationCommand(normalized) || isExplanationQuestion(normalized)) {
             return unsupported(category, partQuery);
@@ -113,6 +127,44 @@ public class BuildChatIntentRouter {
 
     private static boolean isExplanationQuestion(String normalized) {
         return containsAny(normalized, "왜", "이유", "설명", "호환", "괜찮아", "병목");
+    }
+
+    private static boolean isBuildScoreExplanation(
+            Map<String, Object> body,
+            String message,
+            String normalized,
+            String category
+    ) {
+        Map<String, Object> assessmentContext = objectMap(body.get("assessmentContext"));
+        boolean explicitAssessmentContext = "QUOTE_DRAFT_CURRENT".equalsIgnoreCase(text(assessmentContext.get("source")))
+                && ("SCORE".equalsIgnoreCase(text(assessmentContext.get("focusType")))
+                        || "ISSUE".equalsIgnoreCase(text(assessmentContext.get("focusType"))));
+        if (explicitAssessmentContext) {
+            return true;
+        }
+
+        boolean currentBuildSignal = containsAny(normalized,
+                "현재견적", "이견적", "담긴견적", "내견적", "지금견적", "현재구성", "이구성", "지금구성");
+        boolean scoreSignal = containsAny(normalized,
+                "종합점수", "총점", "이점수", "점수가", "점수왜", "점수설명", "점수낮", "점수높");
+        boolean weaknessSignal = containsAny(normalized,
+                "병목", "약점", "부족한부분", "아쉬운부분", "문제점", "균형", "밸런스");
+        boolean prioritySignal = containsAny(normalized,
+                "뭐부터업그레이드", "무엇부터업그레이드", "뭘먼저업그레이드", "업그레이드우선", "먼저바꿀");
+        boolean cpuGpuContrast = containsAny(normalized, "cpu", "씨피유", "프로세서")
+                && containsAny(normalized, "gpu", "그래픽카드", "글카")
+                && containsAny(normalized, "왜", "이유", "낮", "높", "차이", "균형", "밸런스");
+
+        if (!(scoreSignal || weaknessSignal || prioritySignal || (currentBuildSignal && isExplanationQuestion(normalized)) || cpuGpuContrast)) {
+            return false;
+        }
+        // 단일 상품의 독립 점수 질문은 현재 견적 1000점 설명으로 가져오지 않는다.
+        return currentBuildSignal
+                || scoreSignal && !hasSpecificPartSignal(message)
+                || weaknessSignal
+                || prioritySignal
+                || cpuGpuContrast
+                || category == null;
     }
 
     // 구매 의향/견적 관심은 있지만 예산·용도가 없는 요청 — 차단 대신 되묻기로 대화를 잇는다.

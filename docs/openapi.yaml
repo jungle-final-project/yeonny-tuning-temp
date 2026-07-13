@@ -4272,6 +4272,11 @@ components:
             - $ref: "#/components/schemas/QuoteDraftDto"
         uiContext:
           $ref: "#/components/schemas/AiBuildChatUiContext"
+        assessmentContext:
+          nullable: true
+          description: 현재 로그인 사용자의 active quote draft 종합 점수 또는 특정 Tool 문제 설명 요청. 서버는 클라이언트의 점수·경고를 신뢰하지 않고 현재 DB 견적을 다시 평가한다.
+          allOf:
+            - $ref: "#/components/schemas/AiBuildAssessmentContext"
         clarificationContext:
           nullable: true
           description: 직전 되묻기(clarification) 응답의 originalMessage 에코. 서버는 이 값과 message를 합성해 한 문장처럼 라우팅한다(무상태 왕복, 되묻기 최대 1회 — 합성 후에도 정보가 부족하면 기본 예산을 가정하지 않고 사용자 원문을 인용해 한 번 더 정확히 묻는다). 라우터 되묻기 외에 LLM이 스스로 되물은 턴과 시뮬레이션 교체 대상 미해상 턴의 clarification에도 같은 방식으로 에코한다.
@@ -4297,11 +4302,16 @@ components:
           description: 부품을 실제로 바꾸지 않고 성능/FPS/스펙 변화를 보여주는 읽기 전용 시뮬레이션 결과. 교체 시뮬레이션 외에 속성 요청(수랭/공랭·PCIe 세대·통풍)에 대한 '현재 부품 vs 속성 충족 최저가 후보' 1:1 비교에도 재사용된다(이때 answerType=GENERAL, quickReplies 없음).
           allOf:
             - $ref: "#/components/schemas/AiPerformanceSimulationDto"
+        buildAssessment:
+          nullable: true
+          description: 현재 로그인 사용자의 active quote draft를 Tool과 종합 점수 정책으로 다시 평가한 읽기 전용 설명 카드. builds는 빈 배열이고 quote draft를 변경하지 않는다.
+          allOf:
+            - $ref: "#/components/schemas/AiBuildAssessmentDto"
         warnings:
           type: array
           items:
             type: string
-          description: 상태 코드 문자열. 주요 값 — LOW_INFORMATION(되묻기), UNSUPPORTED_INTENT(LLM 실패 시 거절), PART_CONSTRAINT_NOT_FOUND(요청 스펙 부품 미보유), PART_BUDGET_SHORTFALL(스펙은 있으나 예산 부족), BUDGET_BELOW_MINIMUM(최소 구성가 미달), BUDGET_BELOW_USAGE_MINIMUM(GPU 필수 용도의 최소 구성가 미달 — 용도 인지 시 BUDGET_BELOW_MINIMUM을 대체), SIMULATION_TARGET_NOT_FOUND(교체 대상 미해상). ASSUMED_DEFAULT_BUDGET은 폐지되었다.
+          description: 상태 코드 문자열. 주요 값 — LOW_INFORMATION(되묻기), UNSUPPORTED_INTENT(LLM 실패 시 거절), PART_CONSTRAINT_NOT_FOUND(요청 스펙 부품 미보유), PART_BUDGET_SHORTFALL(스펙은 있으나 예산 부족), BUDGET_BELOW_MINIMUM(최소 구성가 미달), BUDGET_BELOW_USAGE_MINIMUM(GPU 필수 용도의 최소 구성가 미달 — 용도 인지 시 BUDGET_BELOW_MINIMUM을 대체), SIMULATION_TARGET_NOT_FOUND(교체 대상 미해상), SCORE_EXPLANATION_LLM_FALLBACK(문장 다듬기 실패로 Tool 기반 기본 문장 사용). ASSUMED_DEFAULT_BUDGET은 폐지되었다.
         evidenceIds:
           type: array
           items:
@@ -4356,6 +4366,93 @@ components:
           items:
             type: string
             enum: [BOARD_PART_FOCUS]
+    AiBuildAssessmentContext:
+      type: object
+      required: [source, focusType]
+      properties:
+        source:
+          type: string
+          enum: [QUOTE_DRAFT_CURRENT]
+        focusType:
+          type: string
+          enum: [SCORE, ISSUE]
+        category:
+          $ref: "#/components/schemas/PartCategory"
+        tool:
+          type: string
+          enum: [compatibility, power, size, performance, price]
+    AiBuildAssessmentDto:
+      type: object
+      required: [type, score, maxScore, grade, label, summary, strengths, cautions, recommendations, evaluatedAt]
+      properties:
+        type:
+          type: string
+          enum: [COMPOSITE_SCORE_EXPLANATION]
+        score:
+          type: integer
+          minimum: 0
+          maximum: 1000
+        maxScore:
+          type: integer
+          example: 1000
+        grade:
+          type: string
+        label:
+          type: string
+        summary:
+          type: string
+        strengths:
+          type: array
+          maxItems: 3
+          items:
+            $ref: "#/components/schemas/AiBuildAssessmentItemDto"
+        cautions:
+          type: array
+          maxItems: 3
+          items:
+            $ref: "#/components/schemas/AiBuildAssessmentItemDto"
+        recommendations:
+          type: array
+          maxItems: 3
+          items:
+            $ref: "#/components/schemas/AiBuildAssessmentRecommendationDto"
+        evaluatedAt:
+          type: string
+          format: date-time
+    AiBuildAssessmentItemDto:
+      type: object
+      required: [code, severity, title, description, relatedCategories]
+      properties:
+        code:
+          type: string
+        severity:
+          type: string
+          enum: [PASS, WARN, FAIL]
+        title:
+          type: string
+        description:
+          type: string
+        relatedCategories:
+          type: array
+          uniqueItems: true
+          items:
+            $ref: "#/components/schemas/PartCategory"
+    AiBuildAssessmentRecommendationDto:
+      type: object
+      required: [priority, category, title, reason, prompt]
+      properties:
+        priority:
+          type: integer
+          minimum: 1
+          maximum: 3
+        category:
+          $ref: "#/components/schemas/PartCategory"
+        title:
+          type: string
+        reason:
+          type: string
+        prompt:
+          type: string
     AiBoardFocusDto:
       type: object
       required: [type, categories, label]
@@ -5193,6 +5290,8 @@ components:
             $ref: "#/components/schemas/BuildGraphInsightDto"
         compositeScore:
           $ref: "#/components/schemas/BuildCompositeScoreDto"
+        buildAssessment:
+          $ref: "#/components/schemas/AiBuildAssessmentDto"
         toolResults:
           type: array
           items:

@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState, type SyntheticEvent } from 'react
 import { useQueries, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import {
+  ArrowRight,
   Bot,
   Box,
   Boxes,
@@ -12,7 +13,9 @@ import {
   HardDrive,
   MemoryStick,
   Monitor,
+  ShieldCheck,
   Sparkles,
+  Wrench,
   X,
   Zap,
   type LucideIcon
@@ -26,12 +29,15 @@ import {
   openAiAssistant,
   type AiAssistantVisibilityDetail
 } from '../../../lib/events';
+import { partImageUrl } from '../../parts/partDisplay';
 import {
   applyAiBuildToQuoteDraft,
   getPart,
-  listParts
+  listHomeRecommendedParts,
+  listParts,
+  recordRecommendationEvent
 } from '../../parts/partsApi';
-import type { PartPage, PartRow } from '../../parts/types';
+import type { HomeRecommendedPart, PartPage, PartRow } from '../../parts/types';
 import {
   AI_ASSISTANT_SESSION_CHANGED_EVENT,
   normalizeAiRecommendedBuild,
@@ -47,8 +53,7 @@ import {
   HomeFeaturedBuildPreview,
   type HomeFeaturedBuildPreviewItem
 } from '../components/HomeFeaturedBuildPreview';
-import { HomeProductShelf } from '../components/HomeProductShelf';
-import { HomeSelfQuoteStatusBoard } from '../components/HomeSelfQuoteStatusBoard';
+import { HomeQuickStartPanel } from '../components/HomeQuickStartPanel';
 import { resolveBuildGraph } from '../quoteApi';
 
 type CategoryItem = {
@@ -410,11 +415,61 @@ export function HomePage() {
     <div className="screen-shell modern-home-screen min-h-screen">
       <AppHeader />
       <main id="main-content" className="modern-home-main mx-auto w-full max-w-[1320px] px-4 pb-20 pt-8 sm:px-6 lg:px-8 xl:px-0">
-        <HomeProductShelf />
+        <section className="modern-home-hero grid items-stretch gap-6 rounded-xl border border-slate-200 bg-white/80 p-4 sm:p-6 xl:grid-cols-[minmax(0,1fr)_420px]">
+          <div className="modern-home-intro flex min-h-[560px] flex-col justify-center rounded-xl border border-blue-100 bg-[#f7fbff] p-6 sm:p-8 lg:p-12">
+            <div className="max-w-[680px]">
+              <div className="inline-flex items-center gap-2 text-sm font-bold text-brand-blue">
+                <ShieldCheck size={18} aria-hidden="true" />
+                견적 · 검증 · AS
+              </div>
+              <h1 className="mt-6 max-w-[14ch] text-3xl font-black leading-[1.08] tracking-[-0.03em] text-commerce-ink sm:text-4xl">
+                견적부터 조립 후 AS까지, 한 흐름으로
+              </h1>
+              <p className="mt-5 text-sm font-medium text-slate-600 sm:text-base">예산과 용도만 말하면 시작됩니다.</p>
+
+              <div data-testid="home-hero-process-flow" className="mt-8 flex flex-wrap items-center gap-2 sm:gap-3">
+                <div className="inline-flex min-h-14 items-center gap-3 rounded-lg border border-slate-200 bg-white px-4 font-black text-commerce-ink">
+                  <span className="grid h-8 w-8 place-items-center rounded-lg bg-blue-50 text-brand-blue"><Bot size={17} aria-hidden="true" /></span>
+                  <span className="text-sm">AI 견적</span>
+                </div>
+                <ArrowRight size={16} className="text-slate-400" aria-hidden="true" />
+                <div className="inline-flex min-h-14 items-center gap-3 rounded-lg border border-slate-200 bg-white px-4 font-black text-commerce-ink">
+                  <span className="grid h-8 w-8 place-items-center rounded-lg bg-blue-50 text-brand-blue"><ShieldCheck size={17} aria-hidden="true" /></span>
+                  <span className="text-sm">호환성 검증</span>
+                </div>
+                <ArrowRight size={16} className="text-slate-400" aria-hidden="true" />
+                <div className="inline-flex min-h-14 items-center gap-3 rounded-lg border border-blue-200 bg-white px-4 font-black text-commerce-ink">
+                  <span className="grid h-8 w-8 place-items-center rounded-lg bg-brand-blue text-white"><Wrench size={17} aria-hidden="true" /></span>
+                  <span className="text-sm">조립 후 AS</span>
+                </div>
+              </div>
+
+              <div className="mt-8 flex flex-col gap-3 sm:flex-row">
+              <button
+                type="button"
+                onClick={() => openAiAssistant({ placement: 'side' })}
+                className="inline-flex min-h-11 items-center justify-center gap-2 rounded-lg bg-commerce-ink px-5 text-sm font-black text-white transition hover:bg-brand-blue focus:outline-none focus:ring-4 focus:ring-blue-100"
+              >
+                <Bot size={18} aria-hidden="true" />
+                AI로 견적 만들기
+              </button>
+              <Link
+                to="/self-quote"
+                className="inline-flex min-h-11 items-center justify-center gap-2 rounded-lg border border-slate-300 bg-white px-5 text-sm font-black text-commerce-ink transition hover:border-commerce-ink focus:outline-none focus:ring-4 focus:ring-blue-100"
+              >
+                직접 구성하기
+                <ArrowRight size={17} aria-hidden="true" />
+              </Link>
+              </div>
+            </div>
+          </div>
+
+          <div className="order-first min-w-0 sm:order-none xl:w-[420px]">
+            <HomeQuickStartPanel />
+          </div>
+        </section>
 
         <CategoryRail />
-
-        <HomeSelfQuoteStatusBoard />
 
         <section className="modern-home-recommendations mt-16" aria-labelledby="home-recommendations-title">
           <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
@@ -476,6 +531,7 @@ export function HomePage() {
           </div>
         </section>
 
+        <PopularPartsSection />
         <EvidenceSection />
       </main>
       {showHomeChoicePrompt ? (
@@ -707,6 +763,107 @@ function CategoryRail() {
         ))}
       </div>
     </nav>
+  );
+}
+
+function PopularPartsSection() {
+  const impressedIdsRef = useRef(new Set<string>());
+  const partsQuery = useQuery({
+    queryKey: ['recommendations', 'modern-home-parts', 8],
+    queryFn: () => listHomeRecommendedParts(8),
+    staleTime: 60_000
+  });
+
+  useEffect(() => {
+    for (const item of partsQuery.data?.items ?? []) {
+      if (impressedIdsRef.current.has(item.recommendationId)) continue;
+      impressedIdsRef.current.add(item.recommendationId);
+      void recordRecommendationEvent({
+        eventType: 'IMPRESSION',
+        sourceSurface: 'HOME_RECOMMENDED_PARTS',
+        recommendationId: item.recommendationId,
+        partId: item.part.id,
+        category: item.part.category,
+        rankPosition: item.rankPosition,
+        idempotencyKey: `home-impression-${item.recommendationId}`
+      }).catch(() => undefined);
+    }
+  }, [partsQuery.data]);
+
+  return (
+    <section data-testid="home-parts-section" className="mt-16" aria-labelledby="popular-parts-title">
+      <div className="flex items-end justify-between gap-4">
+        <div>
+          <h2 id="popular-parts-title" className="text-2xl font-black text-commerce-ink">추천하는 부품</h2>
+        </div>
+        <Link to="/parts" className="hidden min-h-11 items-center gap-1 text-sm font-black text-brand-blue hover:underline sm:inline-flex">
+          전체 부품 보기
+          <ArrowRight size={16} aria-hidden="true" />
+        </Link>
+      </div>
+
+      {partsQuery.isLoading ? (
+        <div className="mt-6 grid grid-cols-2 gap-4 sm:grid-cols-4 lg:grid-cols-6" aria-label="추천 부품 불러오는 중">
+          {Array.from({ length: 6 }, (_, index) => (
+            <div key={index} className="h-64 animate-pulse rounded-lg bg-slate-200" />
+          ))}
+        </div>
+      ) : null}
+      {partsQuery.isError ? (
+        <div role="alert" className="mt-6 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm font-bold text-amber-800">
+          인기 부품을 불러오지 못했습니다. 전체 부품에서 다시 확인해 주세요.
+        </div>
+      ) : null}
+      {partsQuery.data?.items.length ? (
+        <div className="modern-home-product-rail mt-6 flex gap-4 overflow-x-auto pb-3">
+          {partsQuery.data.items.map((item) => (
+            <PopularPartCard key={item.recommendationId} item={item} />
+          ))}
+        </div>
+      ) : null}
+    </section>
+  );
+}
+
+function PopularPartCard({ item }: { item: HomeRecommendedPart }) {
+  const href = `/parts/${item.part.id}?recId=${encodeURIComponent(item.recommendationId)}&recSurface=HOME_RECOMMENDED_PARTS&rank=${item.rankPosition}`;
+  const reason = item.reasonTags?.includes('benchmark') ? '벤치마크 점수 포함' : '내부 데이터 추천';
+  return (
+    <Link
+      to={href}
+      aria-label={`인기 부품 ${item.rankPosition + 1}번 보기`}
+      onClick={() => {
+        void recordRecommendationEvent({
+          eventType: 'CLICK',
+          sourceSurface: 'HOME_RECOMMENDED_PARTS',
+          recommendationId: item.recommendationId,
+          partId: item.part.id,
+          category: item.part.category,
+          rankPosition: item.rankPosition,
+          idempotencyKey: `home-click-${item.recommendationId}`
+        }).catch(() => undefined);
+      }}
+      className="group w-[210px] shrink-0 rounded-lg focus:outline-none focus:ring-4 focus:ring-blue-100"
+    >
+      <div className="grid h-[176px] place-items-center overflow-hidden rounded-lg border border-commerce-line bg-white p-3 transition group-hover:border-slate-400">
+        <img
+          src={partImageUrl(item.part)}
+          alt={`${item.part.name} 제품 사진`}
+          loading="lazy"
+          onError={handleProductImageError}
+          className="h-full w-full object-contain transition duration-200 group-hover:scale-[1.03]"
+        />
+      </div>
+      <div className="pt-3">
+        <div className="text-xs font-bold text-brand-blue">{item.part.category}</div>
+        <h3 className="mt-1 line-clamp-2 min-h-10 text-sm font-black leading-5 text-commerce-ink">{item.part.name}</h3>
+        <div className="mt-2 text-base font-black tabular-nums text-commerce-ink">{item.part.price.toLocaleString()}원</div>
+        <div className="mt-2 flex items-center justify-between gap-2 text-xs text-slate-500">
+          <span>{reason}</span>
+          <span className="font-bold text-brand-blue">상품 정보 확인</span>
+        </div>
+      </div>
+    </Link>
   );
 }
 

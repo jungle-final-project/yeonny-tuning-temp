@@ -32,6 +32,7 @@ public class DefaultAiChatEngine implements AiChatEngine {
     private static final int ENTHUSIAST_OPEN_BUDGET = 12_000_000;
     private static final String REQUIREMENT_PARSE_SCHEMA_NAME = "buildgraph_quote_requirement_profile";
     private static final String BUILD_CHAT_SCHEMA_NAME = "buildgraph_ai_build_chat_plan";
+    private static final String BUILD_ASSESSMENT_SCHEMA_NAME = "buildgraph_build_assessment_explanation";
     private static final String CHAT_RAG_ROOT_ID = "00000000-0000-0000-0000-000000000000";
     private static final String REQUIREMENT_PARSE_SYSTEM_PROMPT = """
             당신은 BuildGraph AI의 견적 생성 입력서를 만드는 엔진입니다.
@@ -71,6 +72,13 @@ public class DefaultAiChatEngine implements AiChatEngine {
             예산이 없으면 budget은 null입니다. 일반 성능 목표는 budgetPolicy=UNSPECIFIED이고, 예산 없는 최고급/끝판왕/명시 5090 의도만 OPEN_BUDGET입니다.
             명시 예산이 있으면 “최고급” 표현이 있어도 budgetPolicy=USER_BUDGET이며, “이하/안으로/넘지 않게”는 budgetMode=MAX, “이상/최소/부터”는 MIN, 일반 “으로/짜리/정도”는 TARGET입니다.
             context.serverFacts.budgetWon이 없고 현재 견적(드래프트)도 없이 용도만 있는 요청은 조합을 지어내지 말고 intent=ASK_FOLLOW_UP으로 예산대를 되물으십시오. 단 예산 무관·끝판왕·명시적 고성능 요청이면 FULL_BUILD_RECOMMEND로 바로 추천하십시오.
+            출력은 서버가 제공한 JSON schema를 반드시 따릅니다.
+            """;
+    private static final String BUILD_ASSESSMENT_SYSTEM_PROMPT = """
+            당신은 BuildGraph 현재 견적 점수 설명 문장 편집기입니다.
+            serverFacts.buildAssessment에 이미 확정된 사실만 사용해 짧은 한국어 문장 한두 개를 작성하십시오.
+            제공되지 않은 숫자, 상품명, 원인, 조치를 만들지 마십시오.
+            부품을 교체·저장·적용했다고 말하지 마십시오.
             출력은 서버가 제공한 JSON schema를 반드시 따릅니다.
             """;
     private static final List<String> BUILD_CATEGORIES = List.of(
@@ -205,6 +213,65 @@ public class DefaultAiChatEngine implements AiChatEngine {
         };
         base = withRouteAction(base, routeIntent);
         return withLlmMetadata(base, assistantMessage, parsedContext, evidenceIds);
+    }
+
+    @Override
+    public AiChatEngineResponse explainBuildAssessment(AiChatEngineRequest request, String requestedAiProfile) {
+        String message = requireText(request == null ? null : request.message(), "챗봇 메시지가 필요합니다.");
+        if (!openAiResponsesClient.isConfigured()) {
+            throw new ResponseStatusException(HttpStatus.PRECONDITION_REQUIRED, "OPENAI_API_KEY가 필요합니다.");
+        }
+        AiProfileDefinition profile = requireBuildChatProfile(requestedAiProfile);
+        Map<String, Object> context = request == null || request.context() == null ? Map.of() : request.context();
+        Map<String, Object> serverFacts = objectMap(context.get("serverFacts"));
+        Map<String, Object> assessment = objectMap(serverFacts.get("buildAssessment"));
+        if (assessment.isEmpty()) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "현재 견적 평가 결과가 필요합니다.");
+        }
+        LlmResponseResult result = openAiResponsesClient.createStructuredJsonResult(
+                BUILD_ASSESSMENT_SYSTEM_PROMPT,
+                json(MockData.map(
+                        "userQuestion", message,
+                        "serverFacts", MockData.map("buildAssessment", assessment)
+                )),
+                BUILD_ASSESSMENT_SCHEMA_NAME,
+                buildAssessmentExplanationSchema(),
+                profile.model(),
+                profile.reasoningEffort(),
+                Math.min(180, profile.maxOutputTokens())
+        );
+        Map<String, Object> output = parseJsonObject(result.text());
+        String assistantMessage = requireText(output.get("assistantMessage"), "견적 점수 설명 문장이 필요합니다.");
+        log.info(
+                "Build assessment explanation latencyMs={} model={} reasoningEffort={} outputTokens={} reasoningTokens={}",
+                result.latencyMs(),
+                result.model(),
+                result.reasoningEffort(),
+                result.outputTokens(),
+                result.reasoningTokens()
+        );
+        return new AiChatEngineResponse(
+                assistantMessage,
+                AiChatIntent.EXPLAIN,
+                List.of(),
+                List.of(),
+                List.of(),
+                Map.of("buildAssessment", assessment),
+                List.of(),
+                List.of(),
+                null
+        );
+    }
+
+    private static Map<String, Object> buildAssessmentExplanationSchema() {
+        return MockData.map(
+                "type", "object",
+                "additionalProperties", false,
+                "properties", MockData.map(
+                        "assistantMessage", MockData.map("type", "string")
+                ),
+                "required", List.of("assistantMessage")
+        );
     }
 
     @Override

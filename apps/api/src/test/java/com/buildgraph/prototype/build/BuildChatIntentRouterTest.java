@@ -142,9 +142,13 @@ class BuildChatIntentRouterTest {
                 draft("GPU 더 좋은 걸로 바꿔줘", BuildChatIntent.UNSUPPORTED),
                 draft("메인보드 MSI 걸로 맞춰줘", BuildChatIntent.UNSUPPORTED),
                 draft("케이스 리안리 216 모델꺼로 맞춰줘", BuildChatIntent.UNSUPPORTED),
-                // 일반 설명/상담 — 제거된 기능
-                c("이 견적 왜 좋아?", BuildChatIntent.UNSUPPORTED),
-                c("지금 견적 호환 괜찮아?", BuildChatIntent.UNSUPPORTED),
+                // 현재 견적 종합 점수·약점 설명 — 서버 Tool 재평가 경로
+                c("이 견적 왜 좋아?", BuildChatIntent.EXPLAIN_BUILD_SCORE),
+                c("지금 견적 호환 괜찮아?", BuildChatIntent.EXPLAIN_BUILD_SCORE),
+                c("왜 종합 점수가 낮아?", BuildChatIntent.EXPLAIN_BUILD_SCORE),
+                c("이 견적의 약점이 뭐야?", BuildChatIntent.EXPLAIN_BUILD_SCORE),
+                c("뭐부터 업그레이드해야 해?", BuildChatIntent.EXPLAIN_BUILD_SCORE),
+                c("5090 자체 점수 알려줘", BuildChatIntent.UNSUPPORTED),
                 c("예산 없이 끝판왕으로", BuildChatIntent.BUILD_RECOMMEND),
                 // 오통과 방어 — 스윕에서 발견된 케이스
                 draft("이 구성에서 램만 64기가로 올려줘", BuildChatIntent.UNSUPPORTED),
@@ -152,7 +156,7 @@ class BuildChatIntentRouterTest {
                 c("게이밍 노트북 추천해줘", BuildChatIntent.UNSUPPORTED),
                 c("32기가 램 추천 좀 해주세요", BuildChatIntent.UNSUPPORTED),
                 c("30만원대에서 살만한 CPU 하나만 골라줘", BuildChatIntent.UNSUPPORTED),
-                c("지금 견적에 병목 없는지 한번 봐줘", BuildChatIntent.UNSUPPORTED)
+                c("지금 견적에 병목 없는지 한번 봐줘", BuildChatIntent.EXPLAIN_BUILD_SCORE)
         );
 
         assertThat(cases).hasSizeGreaterThanOrEqualTo(40);

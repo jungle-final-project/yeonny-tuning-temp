@@ -201,7 +201,7 @@ public class BuildCompositeScoreService {
             cap = Math.min(cap, motherboardCap);
             caps.add(cap("LOW_MOTHERBOARD_TIER", motherboardCap, "고성능 CPU/GPU 조합 대비 메인보드 플랫폼 체급이 낮아 최고 점수를 제한합니다."));
         }
-        int caseCap = caseQualityCap(
+        CaseQualityAssessment caseAssessment = caseQualityAssessment(
                 first(byCategory, "CPU"),
                 first(byCategory, "GPU"),
                 first(byCategory, "COOLER"),
@@ -210,9 +210,9 @@ public class BuildCompositeScoreService {
                 details(toolByName, "SIZE"),
                 details(toolByName, "PERFORMANCE")
         );
-        if (caseCap < rawScore) {
-            cap = Math.min(cap, caseCap);
-            caps.add(cap("LOW_CASE_CLEARANCE", caseCap, "장착은 가능하지만 케이스 여유나 airflow 근거가 낮아 최고 점수를 제한합니다."));
+        if (caseAssessment.maxScore() < rawScore) {
+            cap = Math.min(cap, caseAssessment.maxScore());
+            caps.add(cap(caseAssessment.code(), caseAssessment.maxScore(), caseAssessment.reason()));
         }
         List<String> missing = missingCategories(byCategory);
         if (!missing.isEmpty()) {
@@ -307,7 +307,7 @@ public class BuildCompositeScoreService {
         return new BoardProfile(premium, modernMainstream, mainstream, entry);
     }
 
-    private static int caseQualityCap(
+    private static CaseQualityAssessment caseQualityAssessment(
             ToolBuildPart cpu,
             ToolBuildPart gpu,
             ToolBuildPart cooler,
@@ -316,23 +316,25 @@ public class BuildCompositeScoreService {
             Map<String, Object> sizeDetails,
             Map<String, Object> perfDetails
     ) {
-        if (pcCase == null) return 1000;
-        int cap = 1000;
-        cap = Math.min(cap, clearanceCap(
+        if (pcCase == null) return CaseQualityAssessment.none();
+        CaseQualityAssessment assessment = clearanceAssessment(
+                "그래픽카드",
                 firstPositiveInt(integer(sizeDetails.get("gpuLengthMm"), 0), integer(attrs(gpu).get("lengthMm"), 0)),
                 firstPositiveInt(integer(sizeDetails.get("maxGpuLengthMm"), 0), integer(attrs(pcCase).get("maxGpuLengthMm"), 0)),
                 5,
                 20,
                 40
-        ));
-        cap = Math.min(cap, clearanceCap(
+        );
+        assessment = lowerCaseAssessment(assessment, clearanceAssessment(
+                "CPU 쿨러",
                 firstPositiveInt(integer(sizeDetails.get("coolerHeightMm"), 0), integer(attrs(cooler).get("heightMm"), 0)),
                 firstPositiveInt(integer(sizeDetails.get("maxCpuCoolerHeightMm"), 0), integer(attrs(pcCase).get("maxCpuCoolerHeightMm"), 0)),
                 3,
                 10,
                 20
         ));
-        cap = Math.min(cap, clearanceCap(
+        assessment = lowerCaseAssessment(assessment, clearanceAssessment(
+                "파워",
                 firstPositiveInt(integer(sizeDetails.get("psuDepthMm"), 0), integer(attrs(psu).get("depthMm"), 0)),
                 firstPositiveInt(integer(sizeDetails.get("maxPsuLengthMm"), 0), integer(attrs(pcCase).get("maxPsuLengthMm"), 0)),
                 5,
@@ -346,21 +348,56 @@ public class BuildCompositeScoreService {
         boolean extremeBuild = gpuRaw >= 99.5 && cpuProfile.endgameCapable();
         boolean highEndBuild = gpuRaw >= 94.0 || cpuProfile.blendedRaw() >= 94.0;
         if (extremeBuild && Boolean.FALSE.equals(airflowStrong)) {
-            cap = Math.min(cap, 929);
+            assessment = lowerCaseAssessment(assessment, new CaseQualityAssessment(
+                    929,
+                    "LOW_CASE_AIRFLOW",
+                    "고발열 부품 조합인데 현재 케이스가 통풍 강조형으로 확인되지 않아 최고 점수를 제한합니다."
+            ));
         } else if (highEndBuild && Boolean.FALSE.equals(airflowStrong)) {
-            cap = Math.min(cap, 960);
+            assessment = lowerCaseAssessment(assessment, new CaseQualityAssessment(
+                    960,
+                    "LOW_CASE_AIRFLOW",
+                    "고성능 부품 조합인데 현재 케이스가 통풍 강조형으로 확인되지 않아 최고 점수를 제한합니다."
+            ));
         }
-        return cap;
+        return assessment;
     }
 
-    private static int clearanceCap(int actualMm, int limitMm, int narrowMm, int normalMm, int comfortableMm) {
-        if (actualMm <= 0 || limitMm <= 0) return 1000;
+    private static CaseQualityAssessment clearanceAssessment(
+            String componentLabel,
+            int actualMm,
+            int limitMm,
+            int narrowMm,
+            int normalMm,
+            int comfortableMm
+    ) {
+        if (actualMm <= 0 || limitMm <= 0) return CaseQualityAssessment.none();
         int headroom = limitMm - actualMm;
-        if (headroom < 0) return 0;
-        if (headroom < narrowMm) return 880;
-        if (headroom < normalMm) return 920;
-        if (headroom < comfortableMm) return 960;
-        return 1000;
+        int maxScore = headroom < 0 ? 0
+                : headroom < narrowMm ? 880
+                : headroom < normalMm ? 920
+                : headroom < comfortableMm ? 960
+                : 1000;
+        if (maxScore == 1000) return CaseQualityAssessment.none();
+        String reason;
+        if (headroom == 0) {
+            reason = componentLabel + " 길이 " + actualMm + "mm와 케이스 허용 " + limitMm
+                    + "mm가 같아 장착 여유가 0mm입니다.";
+        } else if (headroom < 0) {
+            reason = componentLabel + " 길이 " + actualMm + "mm가 케이스 허용 " + limitMm
+                    + "mm를 " + Math.abs(headroom) + "mm 초과합니다.";
+        } else {
+            reason = componentLabel + " 길이 " + actualMm + "mm 대비 케이스 허용 " + limitMm
+                    + "mm로 장착 여유가 " + headroom + "mm에 불과합니다.";
+        }
+        return new CaseQualityAssessment(maxScore, "LOW_CASE_CLEARANCE", reason);
+    }
+
+    private static CaseQualityAssessment lowerCaseAssessment(
+            CaseQualityAssessment current,
+            CaseQualityAssessment candidate
+    ) {
+        return candidate.maxScore() < current.maxScore() ? candidate : current;
     }
 
     private static Boolean caseAirflowStrong(ToolBuildPart pcCase) {
@@ -670,7 +707,12 @@ public class BuildCompositeScoreService {
         Boolean airflowStrong = caseAirflowStrong(pcCase);
         double gpu = gpuClearance >= 420 ? 100 : gpuClearance >= 380 ? 88 : gpuClearance >= 340 ? 72 : gpuClearance >= 300 ? 56 : 38;
         double cooler = coolerClearance >= 180 ? 94 : coolerClearance >= 165 ? 80 : coolerClearance >= 155 ? 66 : 45;
-        double airflow = airflowStrong == null ? 70 : airflowStrong ? 90 : 62;
+        if (airflowStrong == null) {
+            // 저장되지 않은 airflow 값을 임의 중립점수로 넣으면 사실상 누락 데이터 감점이 된다.
+            // 확인 가능한 GPU/쿨러 장착 여유에 기존 상대 가중치(45:30)를 재분배한다.
+            return weightedAverage(List.of(gpu, cooler), List.of(0.60, 0.40));
+        }
+        double airflow = airflowStrong ? 90 : 62;
         return weightedAverage(List.of(gpu, cooler, airflow), List.of(0.45, 0.30, 0.25));
     }
 
@@ -922,5 +964,11 @@ public class BuildCompositeScoreService {
     }
 
     private record BoardProfile(boolean premium, boolean modernMainstream, boolean mainstream, boolean entry) {
+    }
+
+    private record CaseQualityAssessment(int maxScore, String code, String reason) {
+        static CaseQualityAssessment none() {
+            return new CaseQualityAssessment(1000, null, null);
+        }
     }
 }

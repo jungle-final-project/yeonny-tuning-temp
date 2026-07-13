@@ -1,9 +1,9 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { keepPreviousData, useQuery, useQueryClient } from '@tanstack/react-query';
-import { ChevronDown } from 'lucide-react';
+import { ChevronDown, Sparkles } from 'lucide-react';
 import { PART_CATEGORY_LABELS, type BuildGraphResolveResponse, type PartCategory } from '../../../quote/aiSelection';
 import { CompositeScoreGauge } from '../../../quote/components/CompositeScoreGauge';
-import type { PerfCompareTarget } from '../../../../lib/events';
+import { openAiAssistant, type PerfCompareTarget } from '../../../../lib/events';
 import { checkBuildPerformance, resolveBuildGraph, type GameFpsEvidence } from '../../../quote/quoteApi';
 import { listParts } from '../../partsApi';
 import type { PartCompatibility } from '../../types';
@@ -47,7 +47,12 @@ export function QuotePerformancePanel({
   comparison = null,
   onClearComparison,
   onStartComparison,
-  onApplyComparison
+  onApplyComparison,
+  checkoutActions,
+  isLoading = false,
+  isError = false,
+  onRetry,
+  compact = false
 }: {
   graph?: BuildGraphResolveResponse;
   items: PerfItem[];
@@ -55,17 +60,30 @@ export function QuotePerformancePanel({
   onClearComparison?: () => void;
   onStartComparison?: (target: PerfCompareTarget) => void;
   onApplyComparison?: (target: PerfCompareTarget) => Promise<unknown>;
+  checkoutActions?: ReactNode;
+  isLoading?: boolean;
+  isError?: boolean;
+  onRetry?: () => void;
+  compact?: boolean;
 }) {
   const compositeScore = graph?.compositeScore;
   if (!compositeScore) {
-    return null;
+    return compact ? (
+      <CompactPerformancePlaceholder
+        hasItems={items.length > 0}
+        isLoading={isLoading}
+        isError={isError}
+        onRetry={onRetry}
+        checkoutActions={checkoutActions}
+      />
+    ) : null;
   }
   // FPS 참고범위는 GPU가 있어야 의미 있다 — CPU·GPU만 조회에 넘긴다.
   const hasGpu = items.some((item) => item.category === 'GPU');
   const perfItems = items.filter((item) => item.category === 'CPU' || item.category === 'GPU');
 
   return (
-    <section data-testid="quote-performance-panel" className="panel p-4">
+    <section data-testid="quote-performance-panel">
       <PerfPanelBody
         compositeScore={compositeScore}
         perfItems={perfItems}
@@ -75,7 +93,71 @@ export function QuotePerformancePanel({
         onClearComparison={onClearComparison}
         onStartComparison={onStartComparison}
         onApplyComparison={onApplyComparison}
+        checkoutActions={checkoutActions}
+        compact={compact}
       />
+    </section>
+  );
+}
+
+function CompactPerformancePlaceholder({
+  hasItems,
+  isLoading,
+  isError,
+  onRetry,
+  checkoutActions
+}: {
+  hasItems: boolean;
+  isLoading: boolean;
+  isError: boolean;
+  onRetry?: () => void;
+  checkoutActions?: ReactNode;
+}) {
+  const statusText = !hasItems
+    ? '부품을 담으면 계산됩니다'
+    : isError
+      ? '점수를 확인하지 못했습니다'
+      : isLoading
+        ? '견적을 분석하고 있습니다'
+        : '점수 계산을 준비하고 있습니다';
+
+  return (
+    <section data-testid="quote-performance-panel" data-state={isError ? 'error' : isLoading ? 'loading' : 'empty'}>
+      <div data-testid="quote-performance-grid" className="rounded-lg border border-commerce-line bg-white px-3 py-2 lg:min-h-[108px]">
+        <div className="grid gap-3 lg:grid-cols-[190px_minmax(0,1fr)_auto] lg:items-center">
+          <div className="border-b border-commerce-line pb-2 lg:border-b-0 lg:border-r lg:pb-0 lg:pr-3">
+            <div className="text-[10px] font-black text-slate-500">종합 점수</div>
+            <div className="mt-1 flex items-baseline gap-1">
+              <strong className="text-2xl font-black text-slate-300">—</strong>
+              <span className="text-[10px] font-bold text-slate-300">/ 1,000</span>
+            </div>
+            <div className="mt-1 text-[10px] font-bold text-slate-400">{statusText}</div>
+          </div>
+
+          <div className="min-w-0">
+            <div className="text-[11px] font-black text-slate-600">게임 예상 성능</div>
+            <div className="mt-1.5 h-1.5 overflow-hidden rounded-full bg-slate-100">
+              <div className={`h-full rounded-full bg-slate-200 ${isLoading ? 'w-2/5 animate-pulse' : 'w-0'}`} />
+            </div>
+            {isError && onRetry ? (
+              <button
+                type="button"
+                data-testid="quote-performance-retry"
+                onClick={onRetry}
+                className="mt-2 rounded border border-commerce-line bg-white px-2.5 py-1 text-[10px] font-black text-slate-600 transition hover:border-brand-blue hover:text-brand-blue"
+              >
+                다시 계산
+              </button>
+            ) : null}
+          </div>
+
+          {checkoutActions ? (
+            <div data-testid="quote-checkout-actions" className="flex flex-wrap items-center justify-end gap-2 border-t border-commerce-line pt-2 lg:border-l lg:border-t-0 lg:pl-3 lg:pt-0">
+              {checkoutActions}
+            </div>
+          ) : null}
+        </div>
+      </div>
     </section>
   );
 }
@@ -90,7 +172,9 @@ function PerfPanelBody({
   comparison,
   onClearComparison,
   onStartComparison,
-  onApplyComparison
+  onApplyComparison,
+  checkoutActions,
+  compact
 }: {
   compositeScore: NonNullable<BuildGraphResolveResponse['compositeScore']>;
   perfItems: PerfItem[];
@@ -100,6 +184,8 @@ function PerfPanelBody({
   onClearComparison?: () => void;
   onStartComparison?: (target: PerfCompareTarget) => void;
   onApplyComparison?: (target: PerfCompareTarget) => Promise<unknown>;
+  checkoutActions?: ReactNode;
+  compact: boolean;
 }) {
   const queryClient = useQueryClient();
   const [gameKey, setGameKey] = useState<string>(FPS_GAMES[0].key);
@@ -211,11 +297,30 @@ function PerfPanelBody({
   // 종합점수 아크 — 왼쪽 카드 첫 칸. 비교 활성 + 변경 조합 점수가 준비되면
   // CompositeScoreGauge(공용, 수정 금지) 대신 패널 로컬 고스트 아크로 기존(회색)/변경(파랑)을 겹쳐 보여준다.
   const compositeCard = (
-    <div data-testid="quote-composite-score-card">
-      <div className="mb-1 flex flex-wrap items-center justify-between gap-2 text-[11px]">
-        <span className="font-black text-slate-600">종합 점수</span>
-        <span className="font-bold text-slate-400">호환·성능·여유 종합 1000점</span>
-      </div>
+      <div data-testid="quote-composite-score-card">
+        <div className="mb-1 flex flex-wrap items-center justify-between gap-2 text-[11px]">
+          <span className="font-black text-slate-600">종합 점수</span>
+          {hasWorkspace ? (
+            <span className="inline-flex items-center gap-2">
+              <span className="hidden font-bold text-slate-400 xl:inline">호환·성능·여유 종합 1000점</span>
+            <button
+              type="button"
+              data-testid="quote-score-ai-explain"
+              onClick={() => openAiAssistant({
+                prefill: '왜 이 견적의 종합 점수가 이렇게 나왔는지 설명해줘',
+                autoSubmit: true,
+                assessmentContext: { source: 'QUOTE_DRAFT_CURRENT', focusType: 'SCORE' }
+              })}
+              className="inline-flex items-center gap-1 rounded border border-blue-200 bg-blue-50 px-2 py-1 font-black text-brand-blue transition hover:border-brand-blue hover:bg-blue-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-200"
+            >
+              <Sparkles size={12} aria-hidden="true" />
+              AI에게 설명
+            </button>
+          </span>
+          ) : (
+            <span className="font-bold text-slate-400">호환·성능·여유 종합 1000점</span>
+          )}
+        </div>
       {activeComparison && hasGhostScore ? (
         <CompositeGhostArc
           baseScore={compositeScore.score}
@@ -237,11 +342,276 @@ function PerfPanelBody({
           {requestFitLabel(compositeScore.requestFit)}
         </div>
       ) : null}
-      <p className="mt-2 text-[10px] leading-relaxed text-slate-400">
-        종합 점수는 공개 벤치마크·공식 스펙·호환성 검증 기반 참고값입니다 — 실제 성능이나 정확한 FPS를 보장하지 않습니다.
-      </p>
     </div>
   );
+
+  // 셀프 견적의 한 화면 캔버스에서는 상세 카드 대신 결과 요약 바를 쓴다.
+  // 점수·FPS·교체 선택·저장/구매 동작은 유지하고, 설명과 큰 게이지만 덜어 보드와 채팅 높이를 확보한다.
+  if (compact) {
+    const resultAvg = activeComparison && hasCompareAvg ? compareAvg : hasAvg ? animatedAvg : null;
+    const resultLabel = activeComparison && hasCompareAvg ? '변경 예상' : '현재 예상';
+
+    return (
+      <div
+        data-testid="quote-performance-grid"
+        className="rounded-lg border border-commerce-line bg-white px-3 py-2 lg:min-h-[108px]"
+      >
+        <div className={`grid gap-3 lg:items-center ${
+          activeComparison ? 'lg:grid-cols-[240px_minmax(0,1fr)_auto]' : 'lg:grid-cols-[190px_minmax(0,1fr)_auto]'
+        }`}>
+          <div className={`flex items-center justify-center border-b border-commerce-line pb-2 lg:border-b-0 lg:border-r lg:pb-0 lg:pr-3 ${
+            activeComparison ? 'min-h-[112px]' : 'min-h-[82px]'
+          }`}>
+            <div className="w-full min-w-0">
+              <div className="flex items-center justify-between gap-2 text-[9px] font-black">
+                <span className="text-slate-600">종합 점수</span>
+                {hasWorkspace ? (
+                  <span className="flex min-w-0 items-center gap-1">
+                    <span className="truncate text-slate-400">호환·성능·여유 종합 1000점</span>
+                    <button
+                      type="button"
+                      data-testid="quote-score-ai-explain"
+                      title="AI에게 종합 점수 설명 요청"
+                      aria-label="AI에게 종합 점수 설명 요청"
+                      onClick={() => openAiAssistant({
+                        prefill: '왜 이 견적의 종합 점수가 이렇게 나왔는지 설명해줘',
+                        autoSubmit: true,
+                        assessmentContext: { source: 'QUOTE_DRAFT_CURRENT', focusType: 'SCORE' }
+                      })}
+                      className="grid h-5 w-5 shrink-0 place-items-center rounded border border-blue-200 bg-blue-50 text-brand-blue transition hover:border-brand-blue hover:bg-blue-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-200"
+                    >
+                      <Sparkles size={10} aria-hidden="true" />
+                    </button>
+                  </span>
+                ) : (
+                  <span className="truncate text-slate-400">호환·성능·여유 종합 1000점</span>
+                )}
+              </div>
+              {activeComparison && hasGhostScore ? (
+                <CompactCompositeGhostArc
+                  baseScore={compositeScore.score}
+                  compareScore={ghostScore as number}
+                  maxScore={compositeScore.maxScore}
+                  compareKey={activeComparison.partId}
+                />
+              ) : (
+                <CompositeScoreGauge
+                  score={compositeScore}
+                  size="compact"
+                  className="mx-auto"
+                  scoreTextClassName="text-amber-600"
+                  showLabel={false}
+                  scoreTestId="quote-composite-score"
+                  gaugeTestId="quote-composite-score-gauge"
+                />
+              )}
+            </div>
+          </div>
+
+          <div data-testid="quote-fps-section" className="min-w-0">
+            <div className="flex flex-wrap items-center justify-between gap-1.5">
+              <div className="flex min-w-0 items-baseline gap-2">
+                <span className="shrink-0 text-[11px] font-black text-slate-600">
+                  {activeComparison ? '가격·성능 향상' : '게임 예상 성능'}
+                </span>
+                {!activeComparison && hasGpu ? (
+                  resultAvg !== null ? (
+                    <span className="truncate text-[10px] font-bold text-slate-500">
+                      {game.label} · {resolution.label} · {resultLabel}
+                      <strong data-testid="fps-avg" className="ml-1 text-base font-black text-commerce-ink">
+                        {Math.round(resultAvg)} FPS
+                      </strong>
+                    </span>
+                  ) : (
+                    <span className="truncate text-[10px] font-bold text-slate-400">
+                      {isFetching ? '성능을 계산하고 있어요' : '참고 자료 없음'}
+                    </span>
+                  )
+                ) : !activeComparison ? (
+                  <span className="truncate text-[10px] font-bold text-slate-400">GPU를 담으면 표시됩니다</span>
+                ) : null}
+              </div>
+
+              <div className="flex flex-wrap items-center justify-end gap-1.5">
+                {hasWorkspace && onStartComparison ? (
+                  <CandidateCombo
+                    perfItems={perfItems}
+                    activeComparison={activeComparison}
+                    onStartComparison={onStartComparison}
+                    onClearComparison={onClearComparison}
+                    compact
+                  />
+                ) : null}
+                <div className="flex gap-0.5 rounded-md border border-commerce-line bg-slate-50 p-0.5" role="group" aria-label="해상도 선택">
+                  {FPS_RESOLUTIONS.map((res) => (
+                    <button
+                      key={res.key}
+                      type="button"
+                      data-testid={`fps-res-${res.key}`}
+                      aria-pressed={resKey === res.key}
+                      onClick={() => setResKey(res.key)}
+                      className={`rounded px-2 py-0.5 text-[9px] font-black transition ${
+                        resKey === res.key ? 'bg-white text-commerce-ink shadow-sm' : 'text-slate-400 hover:text-slate-600'
+                      }`}
+                    >
+                      {res.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            {activeComparison ? (
+              <div className="mt-1.5 grid min-w-0 gap-2 xl:grid-cols-[minmax(230px,0.9fr)_minmax(260px,1.1fr)]">
+                <div className="min-w-0">
+                  {isCompareReady ? (
+                    <>
+                      <div data-testid="cost-effect-block" className="perf-block-in rounded-md border border-commerce-line bg-slate-50/60 px-2 py-1.5">
+                        <CostEffectBars
+                          currentPrice={currentPart?.currentPrice}
+                          targetPrice={activeComparison.price}
+                          baseAvg={avg}
+                          compareAvg={compareAvg}
+                        />
+                      </div>
+                      <div className="perf-block-in mt-1 flex min-w-0 flex-wrap items-baseline gap-x-2 gap-y-0.5">
+                        <CostEffectEmphasis {...costEffectDisplay(currentPart?.currentPrice, activeComparison.price)} compact />
+                        <span data-testid="cost-effect-fps" className="truncate text-[9px] font-bold text-slate-500">
+                          예상 FPS {fpsRangeText(avg, hasLow ? low : undefined)} → {fpsRangeText(compareAvg, hasCompareLow ? compareLow : undefined)}
+                        </span>
+                      </div>
+                    </>
+                  ) : isCompareLoading ? (
+                    <div className="h-[58px] animate-pulse rounded-md bg-slate-100" />
+                  ) : (
+                    <div data-testid="cost-effect-empty" className="rounded-md border border-dashed border-slate-200 bg-slate-50/40 px-2 py-1.5">
+                      <EffectBar testId="effect-bar-price" label="가격" percent={null} scale={EFFECT_SCALE_MIN} barClass="bg-slate-300" textClass="text-slate-400" />
+                      <div className="mt-1">
+                        <EffectBar testId="effect-bar-perf" label="성능" percent={null} scale={EFFECT_SCALE_MIN} barClass="bg-slate-300" textClass="text-slate-400" />
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                <div className="min-w-0 border-t border-commerce-line pt-1.5 xl:border-l xl:border-t-0 xl:pl-2 xl:pt-0">
+                  <div className="flex min-w-0 items-center gap-2">
+                    <div className="flex shrink-0 gap-1" role="group" aria-label="게임 선택">
+                      {FPS_GAMES.map((g) => (
+                        <button
+                          key={g.key}
+                          type="button"
+                          data-testid={`fps-game-${g.key}`}
+                          aria-pressed={gameKey === g.key}
+                          onClick={() => setGameKey(g.key)}
+                          className={`rounded-full border px-2 py-0.5 text-[9px] font-black transition ${
+                            gameKey === g.key
+                              ? 'border-brand-blue bg-brand-blue text-white'
+                              : 'border-commerce-line bg-white text-slate-500 hover:border-brand-blue'
+                          }`}
+                        >
+                          {g.label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                  {isCompareReady ? (
+                    <div className="mt-1.5 grid grid-cols-[auto_1fr] items-center gap-x-2 gap-y-1">
+                      <span className="text-[10px] font-black text-slate-500">FPS</span>
+                      <div className="flex items-baseline gap-1 font-black leading-none">
+                        <span data-testid="fps-avg" className="text-sm text-slate-400">{Math.round(avg)}</span>
+                        <span className="text-[10px] text-slate-400">→</span>
+                        <span data-testid="fps-compare-avg" className="text-base text-brand-blue">{Math.round(compareAvg)}</span>
+                        <span data-testid="fps-compare-delta" className={`rounded-full border px-1 py-0.5 text-[9px] ${deltaBadgeTone(percentDelta(avg, compareAvg))}`}>
+                          {formatSignedPercent(percentDelta(avg, compareAvg))}
+                        </span>
+                      </div>
+                      <span className="text-[9px] font-bold text-slate-400">기존</span>
+                      <div className="h-1.5 overflow-hidden rounded-full bg-slate-100">
+                        <div className="h-full rounded-full bg-slate-400" style={{ width: `${Math.max(3, fpsPercent(avg))}%` }} />
+                      </div>
+                      <span className="text-[9px] font-black text-brand-blue">변경</span>
+                      <div className="h-1.5 overflow-hidden rounded-full bg-slate-100">
+                        <div className="perf-bar-grow h-full rounded-full bg-brand-blue" style={{ width: `${Math.max(3, fpsPercent(compareAvg))}%` }} />
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="mt-1.5 text-[10px] font-bold text-slate-400">
+                      {isCompareLoading ? '비교 성능을 계산하고 있어요' : '변경 조합의 참고 자료가 없습니다'}
+                    </div>
+                  )}
+                </div>
+              </div>
+            ) : (
+              <div className="mt-1.5 flex min-w-0 items-center gap-2">
+                <div className="flex shrink-0 gap-1" role="group" aria-label="게임 선택">
+                  {FPS_GAMES.map((g) => (
+                    <button
+                      key={g.key}
+                      type="button"
+                      data-testid={`fps-game-${g.key}`}
+                      aria-pressed={gameKey === g.key}
+                      onClick={() => setGameKey(g.key)}
+                      className={`rounded-full border px-2 py-0.5 text-[9px] font-black transition ${
+                        gameKey === g.key
+                          ? 'border-brand-blue bg-brand-blue text-white'
+                          : 'border-commerce-line bg-white text-slate-500 hover:border-brand-blue'
+                      }`}
+                    >
+                      {g.label}
+                    </button>
+                  ))}
+                </div>
+                <div className="hidden h-1.5 min-w-16 flex-1 overflow-hidden rounded-full bg-slate-100 xl:block">
+                  <div
+                    className="h-full rounded-full bg-gradient-to-r from-brand-blue to-emerald-300 transition-[width] duration-500"
+                    style={{ width: `${resultAvg === null ? 0 : Math.min(100, (resultAvg / FPS_CAP) * 100)}%` }}
+                  />
+                </div>
+              </div>
+            )}
+          </div>
+
+          <div className="flex flex-wrap items-center justify-end gap-2 border-t border-commerce-line pt-2 lg:border-l lg:border-t-0 lg:pl-3 lg:pt-0">
+            {activeComparison ? (
+              <>
+                {onApplyComparison ? (
+                  <button
+                    type="button"
+                    data-testid="perf-apply-replace"
+                    disabled={isApplying}
+                    onClick={() => void applyComparison()}
+                    className="rounded bg-brand-blue px-3 py-2 text-[11px] font-black text-white transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60"
+                  >
+                    {isApplying ? '교체 중…' : '교체해 담기'}
+                  </button>
+                ) : null}
+                {onClearComparison ? (
+                  <button
+                    type="button"
+                    data-testid="compare-clear"
+                    onClick={onClearComparison}
+                    className="rounded border border-commerce-line bg-white px-2.5 py-2 text-[11px] font-black text-slate-600"
+                  >
+                    비교 해제
+                  </button>
+                ) : null}
+              </>
+            ) : null}
+            {checkoutActions ? (
+              <div data-testid="quote-checkout-actions" className="flex flex-wrap justify-end gap-2">
+                {checkoutActions}
+              </div>
+            ) : null}
+          </div>
+        </div>
+        {applyError ? (
+          <div data-testid="perf-apply-error" className="mt-2 rounded-md border border-red-100 bg-red-50/70 px-2.5 py-1.5 text-[11px] font-bold text-red-600">
+            {applyError}
+          </div>
+        ) : null}
+      </div>
+    );
+  }
 
   // 게임 예상 성능 — 원래 수평 막대 스타일(큰 FPS 숫자 + 그라데이션 바 + 1% low 마커 + 체감 라벨).
   // 비교 중엔 단일 모드와 같은 결의 0→값 게이지 바 2줄(기존 회색/변경 파랑)로 두 조합을 나란히 본다.
@@ -249,21 +619,33 @@ function PerfPanelBody({
     <div data-testid="quote-fps-section">
       <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
         <span className="text-[11px] font-black text-slate-600">게임 예상 성능 <span className="text-slate-400">(참고)</span></span>
-        <div className="flex gap-0.5 rounded-md border border-commerce-line bg-slate-50 p-0.5" role="group" aria-label="해상도 선택">
-          {FPS_RESOLUTIONS.map((res) => (
-            <button
-              key={res.key}
-              type="button"
-              data-testid={`fps-res-${res.key}`}
-              aria-pressed={resKey === res.key}
-              onClick={() => setResKey(res.key)}
-              className={`rounded px-2 py-0.5 text-[10px] font-black transition ${
-                resKey === res.key ? 'bg-white text-commerce-ink shadow-sm' : 'text-slate-400 hover:text-slate-600'
-              }`}
-            >
-              {res.label}
-            </button>
-          ))}
+        <div className="flex flex-wrap items-center justify-end gap-2">
+          {hasWorkspace && onStartComparison ? (
+            <CandidateCombo
+              perfItems={perfItems}
+              activeComparison={activeComparison}
+              onStartComparison={onStartComparison}
+              onClearComparison={onClearComparison}
+            />
+          ) : (
+            <span className="text-[10px] font-bold text-slate-400">공개 자료 기준 참고치</span>
+          )}
+          <div className="flex gap-0.5 rounded-md border border-commerce-line bg-slate-50 p-0.5" role="group" aria-label="해상도 선택">
+            {FPS_RESOLUTIONS.map((res) => (
+              <button
+                key={res.key}
+                type="button"
+                data-testid={`fps-res-${res.key}`}
+                aria-pressed={resKey === res.key}
+                onClick={() => setResKey(res.key)}
+                className={`rounded px-2 py-0.5 text-[10px] font-black transition ${
+                  resKey === res.key ? 'bg-white text-commerce-ink shadow-sm' : 'text-slate-400 hover:text-slate-600'
+                }`}
+              >
+                {res.label}
+              </button>
+            ))}
+          </div>
         </div>
       </div>
 
@@ -364,9 +746,6 @@ function PerfPanelBody({
         </div>
       )}
 
-      <p className="mt-2 text-[10px] leading-relaxed text-slate-400">
-        공개 자료 기준 참고 범위입니다 — 실제 FPS는 게임 설정·패치·드라이버에 따라 달라집니다.
-      </p>
     </div>
   ) : (
     <div data-testid="fps-no-gpu" className="rounded-lg border border-dashed border-slate-300 bg-white p-4 text-center text-[11px] font-bold text-slate-500">
@@ -376,29 +755,6 @@ function PerfPanelBody({
 
   return (
     <>
-      {/* 헤더 한 줄: 타이틀·적합 배지(왼쪽) + [CPU|GPU 토글 + 교체 후보 선택 ▾] 콤보(오른쪽 끝).
-          본문은 데이터 시각화만 남긴다 — 콤보가 없는 사용처(저장 견적 등)는 참고치 캡션만 둔다. */}
-      <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-        <div className="flex items-center gap-2">
-          <h2 className="text-sm font-black text-commerce-ink">담긴 견적 성능</h2>
-          <span
-            data-testid="quote-performance-fit"
-            className={`rounded-full border px-2 py-0.5 text-[10px] font-black ${scoreBadgeTone(compositeScore.score)}`}
-          >
-            {compositeScore.label}
-          </span>
-        </div>
-        {hasWorkspace && onStartComparison ? (
-          <CandidateCombo
-            perfItems={perfItems}
-            activeComparison={activeComparison}
-            onStartComparison={onStartComparison}
-          />
-        ) : (
-          <span className="text-[10px] font-bold text-slate-400">공개 자료 기준 참고치</span>
-        )}
-      </div>
-
       <div
         data-testid="quote-performance-grid"
         className={`grid gap-3 lg:items-start ${
@@ -407,7 +763,7 @@ function PerfPanelBody({
       >
         {/* 왼쪽 카드 하나 = [종합점수 아크 | 가격·성능 향상 그래프] 가로 배치(모바일은 세로 스택) — 구분은 얇은 디바이더만.
             작업창이 없는 사용처(저장 견적 등)는 향상 그래프 없이 종합점수만 둔다. */}
-        <div className="rounded-lg border border-commerce-line bg-white p-3">
+        <div className="rounded-lg border border-commerce-line bg-white p-2.5">
           {hasWorkspace ? (
             <div className="grid gap-3 sm:grid-cols-2">
               {compositeCard}
@@ -416,7 +772,6 @@ function PerfPanelBody({
               <div data-testid="price-effect-panel" className="flex flex-col border-t border-commerce-line pt-3 sm:border-l sm:border-t-0 sm:pl-3 sm:pt-0">
                 <div className="mb-1 flex flex-wrap items-center justify-between gap-2 text-[11px]">
                   <span className="font-black text-slate-600">가격·성능 향상</span>
-                  <span className="font-bold text-slate-400">교체 비교 기준</span>
                 </div>
                 <div className="flex min-h-0 grow flex-col justify-center">
                   {isCompareReady && activeComparison ? (
@@ -450,15 +805,6 @@ function PerfPanelBody({
                           <EffectBar testId="effect-bar-perf" label="성능" percent={null} scale={EFFECT_SCALE_MIN} barClass="bg-slate-300" textClass="text-slate-400" />
                         </div>
                       </div>
-                      <div className="mt-2">
-                        <CostEffectEmphasis value="—" tone="text-slate-300" />
-                      </div>
-                      <p
-                        data-testid={activeComparison ? 'perf-compare-no-data' : 'perf-compare-idle'}
-                        className="mt-2 text-[10px] font-bold leading-relaxed text-slate-400"
-                      >
-                        {activeComparison ? '변경 조합 자료가 없어 향상 폭을 계산할 수 없어요.' : '교체 후보를 고르면 채워져요.'}
-                      </p>
                     </>
                   )}
                 </div>
@@ -472,11 +818,23 @@ function PerfPanelBody({
         {/* 오른쪽 열: 게임 예상 성능 작업창 — 선택기는 헤더 콤보로 올라갔고, 여기는 데이터 시각화만 남는다.
             "교체 비교 · A → B" 텍스트 배너는 제거 — 후보명은 헤더 콤보가 이미 보여줘 중복이었다. */}
         {hasWorkspace ? (
-          <div data-testid="perf-compare-workspace" className="rounded-lg border border-commerce-line bg-white p-3">
+          <div data-testid="perf-compare-workspace" className="rounded-lg border border-commerce-line bg-white p-2.5">
             {fpsSection}
+            {checkoutActions ? (
+              <div data-testid="quote-checkout-actions" className="mt-3 flex flex-wrap justify-end gap-2 border-t border-commerce-line pt-3">
+                {checkoutActions}
+              </div>
+            ) : null}
           </div>
         ) : (
-          <div className="rounded-lg border border-commerce-line bg-white p-3">{fpsSection}</div>
+          <div className="rounded-lg border border-commerce-line bg-white p-2.5">
+            {fpsSection}
+            {checkoutActions ? (
+              <div data-testid="quote-checkout-actions" className="mt-3 flex flex-wrap justify-end gap-2 border-t border-commerce-line pt-3">
+                {checkoutActions}
+              </div>
+            ) : null}
+          </div>
         )}
       </div>
 
@@ -526,11 +884,15 @@ const PERF_PICKER_CATEGORIES: Array<PerfCompareTarget['category']> = ['CPU', 'GP
 function CandidateCombo({
   perfItems,
   activeComparison,
-  onStartComparison
+  onStartComparison,
+  onClearComparison,
+  compact = false
 }: {
   perfItems: PerfItem[];
   activeComparison: PerfCompareTarget | null;
   onStartComparison: (target: PerfCompareTarget) => void;
+  onClearComparison?: () => void;
+  compact?: boolean;
 }) {
   const [category, setCategory] = useState<PerfCompareTarget['category']>(activeComparison?.category ?? 'GPU');
   const [isPickerOpen, setIsPickerOpen] = useState(false);
@@ -582,6 +944,7 @@ function CandidateCombo({
     staleTime: 30_000
   });
   const candidates = candidateQuery.data?.items ?? [];
+  const categoryComparison = activeComparison?.category === category ? activeComparison : null;
 
   return (
     // 헤더 오른쪽 끝에 붙는다 — 좁은 화면에서 줄바꿈되면 자기 줄에서 오른쪽 정렬을 유지한다.
@@ -593,8 +956,13 @@ function CandidateCombo({
             type="button"
             data-testid={`perf-candidate-category-${pickerCategory}`}
             aria-pressed={category === pickerCategory}
-            onClick={() => setCategory(pickerCategory)}
-            className={`rounded px-2.5 py-1 text-[10px] font-black transition ${
+            onClick={() => {
+              setCategory(pickerCategory);
+              if (activeComparison && activeComparison.category !== pickerCategory) {
+                onClearComparison?.();
+              }
+            }}
+            className={`rounded font-black transition ${compact ? 'px-2 py-0.5 text-[9px]' : 'px-2.5 py-1 text-[10px]'} ${
               category === pickerCategory ? 'bg-brand-blue text-white shadow-sm' : 'text-slate-400 hover:text-slate-600'
             }`}
           >
@@ -602,17 +970,19 @@ function CandidateCombo({
           </button>
         ))}
       </div>
-      <div className="relative w-44 sm:w-56">
+      <div className={`relative ${compact ? 'w-36 sm:w-44' : 'w-44 sm:w-56'}`}>
         <button
           type="button"
           data-testid="perf-candidate-select"
           aria-expanded={isPickerOpen}
           aria-haspopup="true"
           onClick={() => setIsPickerOpen((open) => !open)}
-          className="flex w-full items-center justify-between gap-2 rounded-md border border-commerce-line bg-white px-2.5 py-1.5 text-left text-[11px] font-black text-commerce-ink transition hover:border-brand-blue"
+          className={`flex w-full items-center justify-between gap-2 rounded-md border border-commerce-line bg-white text-left font-black text-commerce-ink transition hover:border-brand-blue ${
+            compact ? 'px-2 py-1 text-[10px]' : 'px-2.5 py-1.5 text-[11px]'
+          }`}
         >
-          <span className={`truncate ${activeComparison ? '' : 'text-slate-400'}`}>
-            {activeComparison ? activeComparison.name : '교체 후보 선택'}
+          <span className={`truncate ${categoryComparison ? '' : 'text-slate-400'}`}>
+            {categoryComparison ? categoryComparison.name : '교체 후보 선택'}
           </span>
           <ChevronDown className={`h-3.5 w-3.5 shrink-0 text-slate-400 transition-transform ${isPickerOpen ? 'rotate-180' : ''}`} aria-hidden="true" />
         </button>
@@ -644,7 +1014,7 @@ function CandidateCombo({
                   const status = part.compatibility?.status;
                   const isFail = status === 'FAIL';
                   const isCurrent = part.id === categoryCurrentPart.partId;
-                  const isSelected = activeComparison?.partId === part.id;
+                  const isSelected = categoryComparison?.partId === part.id;
                   return (
                     <button
                       key={part.id}
@@ -724,6 +1094,90 @@ function isPartCategory(category: string): category is PartCategory {
 
 // CompositeScoreGauge와 같은 반원 아크 경로(공용 컴포넌트는 수정 금지라 패널 로컬로 둔다).
 const COMPOSITE_ARC_PATH = 'M 24 112 A 86 86 0 0 1 196 112';
+const COMPOSITE_INNER_ARC_PATH = 'M 36 112 A 74 74 0 0 1 184 112';
+
+// 한 화면용 비교 게이지 — 기준 점수는 바깥 회색 아크, 변경 점수는 안쪽 파란 아크에 그려
+// 작은 카드에서도 두 값이 겹치지 않는다. 상세 게이지와 같은 숫자·델타 구조는 유지한다.
+function CompactCompositeGhostArc({
+  baseScore,
+  compareScore,
+  maxScore,
+  compareKey
+}: {
+  baseScore: number;
+  compareScore: number;
+  maxScore: number;
+  compareKey: string;
+}) {
+  const safeMax = Math.max(1, maxScore);
+  const displayCompare = useAnimatedNumber(compareScore, baseScore);
+  const basePercent = Math.max(0, Math.min(100, (Math.max(0, baseScore) / safeMax) * 100));
+  const comparePercent = Math.max(0, Math.min(100, (Math.max(0, displayCompare) / safeMax) * 100));
+  const delta = Math.round(compareScore) - Math.round(baseScore);
+
+  return (
+    <div
+      data-testid="quote-composite-ghost-gauge"
+      className="mx-auto w-[220px] text-center"
+      aria-label={`종합 점수 기존 ${Math.round(baseScore).toLocaleString('ko-KR')}점 → 변경 ${Math.round(compareScore).toLocaleString('ko-KR')}점`}
+    >
+      <div className="relative h-[78px]">
+        <svg className="h-[78px] w-full overflow-visible" viewBox="0 0 220 132" role="img" aria-hidden="true">
+          <path
+            d={COMPOSITE_ARC_PATH}
+            fill="none"
+            className="stroke-slate-200"
+            strokeWidth={14}
+            strokeLinecap="butt"
+            pathLength={100}
+          />
+          <path
+            d={COMPOSITE_ARC_PATH}
+            fill="none"
+            className="stroke-slate-400"
+            strokeWidth={6}
+            strokeLinecap="butt"
+            pathLength={100}
+            strokeDasharray={`${basePercent} 100`}
+          />
+          <path
+            d={COMPOSITE_INNER_ARC_PATH}
+            fill="none"
+            className="stroke-brand-blue"
+            strokeWidth={9}
+            strokeLinecap="butt"
+            pathLength={100}
+            strokeDasharray={`${comparePercent} 100`}
+          />
+        </svg>
+        <div className="absolute inset-x-0 bottom-0 z-10 px-1">
+          <div className="mx-auto flex w-fit min-w-[118px] items-baseline justify-center gap-1 rounded-md bg-white px-2 py-0.5 font-black leading-none">
+            <span data-testid="quote-composite-ghost-base" className="text-base text-slate-400">
+              {Math.round(baseScore).toLocaleString('ko-KR')}
+            </span>
+            <span aria-hidden="true" className="text-xs text-slate-400">→</span>
+            <span data-testid="quote-composite-compare-score" className="text-2xl text-brand-blue">
+              {Math.round(displayCompare).toLocaleString('ko-KR')}
+            </span>
+          </div>
+        </div>
+      </div>
+      <div className="-mt-0.5 flex justify-center">
+        <span
+          key={compareKey}
+          data-testid="quote-composite-compare-delta"
+          className={`perf-pop-in rounded-full border px-1.5 py-0.5 text-[9px] font-black ${deltaBadgeTone(delta)}`}
+        >
+          {delta > 0 ? '+' : ''}{delta}점
+        </span>
+      </div>
+      <div className="-mt-1 flex items-center justify-between px-3 text-[8px] font-bold text-slate-400" aria-hidden="true">
+        <span>0</span>
+        <span>{safeMax.toLocaleString('ko-KR')}</span>
+      </div>
+    </div>
+  );
+}
 
 // 종합점수 고스트 비교 아크 — 기존 점수는 회색 반투명 아크, 변경 조합 점수는 파랑 아크(살짝 좁게 겹쳐 위계),
 // 중앙 "기존 → 변경" 숫자 + 델타 배지(하락 빨강). 변경 점수는 기존 값에서 rAF easeOut 스윕으로 차오르며
@@ -988,11 +1442,11 @@ function costEffectDisplay(currentPrice: number | undefined, targetPrice: number
 }
 
 // 추가 비용은 이 블록의 결론이라 블록 내 최대 급 텍스트로 강조한다 — 빈 상태에서도 "추가 비용 —" 자리를 고정한다.
-function CostEffectEmphasis({ value, tone, note }: { value: string; tone: string; note?: string }) {
+function CostEffectEmphasis({ value, tone, note, compact = false }: { value: string; tone: string; note?: string; compact?: boolean }) {
   return (
     <div data-testid="cost-effect-extra" className="flex flex-wrap items-baseline gap-x-1.5 gap-y-0.5">
       <span className="text-[10px] font-black text-slate-500">추가 비용</span>{' '}
-      <span className={`text-xl font-black leading-none ${tone}`}>{value}</span>
+      <span className={`${compact ? 'text-base' : 'text-xl'} font-black leading-none ${tone}`}>{value}</span>
       {note ? <> <span className="text-[10px] font-bold text-slate-400">{note}</span></> : null}
     </div>
   );

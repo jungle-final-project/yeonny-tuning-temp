@@ -184,7 +184,7 @@ export function ThreeDAssemblyView({
             ? renderedCategories.filter((category) => !aiFocusCategories.includes(category)).join(',')
             : ''}
           data-occluding-categories={occludingCategories.join(',')}
-          className="relative min-h-0 flex-1"
+          className="relative min-h-0 flex-1 overflow-hidden"
           onPointerDown={() => {
             if (aiFocusCategories.length > 0) onClearAiFocus?.();
           }}

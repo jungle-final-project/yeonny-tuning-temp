@@ -17,6 +17,8 @@ type SlotStatusBarProps = {
   isSavePending: boolean;
   isSaveSuccess: boolean;
   isSaveError: boolean;
+  showCheckoutActions?: boolean;
+  compact?: boolean;
 };
 
 export function SlotStatusBar({
@@ -29,13 +31,78 @@ export function SlotStatusBar({
   onSave,
   isSavePending,
   isSaveSuccess,
-  isSaveError
+  isSaveError,
+  showCheckoutActions = true,
+  compact = false
 }: SlotStatusBarProps) {
   const items = quoteDraft?.items ?? [];
   const totalPrice = quoteDraft?.totalPrice ?? 0;
   const filledCount = SLOT_CONFIGS.filter((slot) => items.some((item) => item.category === slot.category)).length;
   const emptyCount = SLOT_COUNT - filledCount;
   const hasItems = items.length > 0;
+
+  if (compact) {
+    const statusMessage = hasItems && hasCompatibilityFail
+      ? '안 맞는 부품이 있어 구매할 수 없습니다. 문제 슬롯을 교체해 주세요.'
+      : !hasToken
+        ? '로그인하면 슬롯에 담은 부품이 견적 장바구니에 저장됩니다.'
+        : isDraftLoading
+          ? '내 견적 장바구니를 불러오는 중입니다.'
+          : isDraftError
+            ? '견적 장바구니를 불러오지 못했습니다.'
+            : emptyCount > 0
+              ? `미장착 슬롯 ${emptyCount}개가 있습니다`
+              : '필수 슬롯 장착이 완료됐습니다.';
+
+    return (
+      <section data-testid="slot-status-bar" className="space-y-1.5">
+        <div className="panel flex min-h-[46px] flex-wrap items-center justify-between gap-2 px-3 py-1.5">
+          <div className="flex min-w-0 items-center gap-3">
+            <div className="shrink-0">
+              <div className="text-[9px] font-bold text-slate-400">견적 합계</div>
+              <div className="text-sm font-black leading-none text-brand-blue">{totalPrice.toLocaleString()}원</div>
+            </div>
+            <div className="shrink-0 text-[10px] font-black text-slate-500">장착 {filledCount}/{SLOT_COUNT}</div>
+            <div className={`truncate text-[10px] font-bold ${hasCompatibilityFail ? 'text-red-600' : 'text-slate-500'}`}>
+              {statusMessage}
+              {!hasToken ? (
+                <Link to={loginHref} className="ml-1 font-black text-brand-blue hover:underline">로그인</Link>
+              ) : null}
+            </div>
+          </div>
+          <div className="flex shrink-0 items-center gap-1.5">
+            <button
+              type="button"
+              onClick={() => openAiAssistant()}
+              className="inline-flex min-h-8 items-center gap-1 rounded-md border border-commerce-line bg-white px-2.5 text-[10px] font-black text-slate-700 hover:border-commerce-ink"
+            >
+              <MessageCircle size={13} className="text-brand-blue" />
+              AI 상담
+            </button>
+            {showCheckoutActions ? (
+              <QuoteCheckoutActions
+                hasItems={hasItems}
+                hasCompatibilityFail={hasCompatibilityFail}
+                onSave={onSave}
+                isSavePending={isSavePending}
+              />
+            ) : null}
+          </div>
+        </div>
+        {isSaveSuccess ? (
+          <div className="flex items-center justify-between rounded-md border border-emerald-200 bg-emerald-50 px-3 py-1 text-[10px] font-black text-emerald-700">
+            <span>내 견적함에 추가했습니다.</span>
+            <Link to="/my/quotes" className="hover:underline">내 견적함 보기</Link>
+          </div>
+        ) : null}
+        {isSaveError ? (
+          <div className="rounded-md border border-amber-200 bg-amber-50 px-3 py-1 text-[10px] font-black text-amber-700">
+            내 견적함 추가 실패 — 잠시 후 다시 시도해 주세요.
+          </div>
+        ) : null}
+      </section>
+    );
+  }
 
   return (
     <section data-testid="slot-status-bar" className="space-y-3">
@@ -75,35 +142,14 @@ export function SlotStatusBar({
             <MessageCircle size={15} className="text-brand-blue" />
             AI 상담
           </button>
-          {hasItems ? (
-            <button
-              type="button"
-              onClick={onSave}
-              disabled={isSavePending}
-              className="inline-flex min-h-10 items-center gap-1.5 rounded-md border border-slate-300 bg-white px-4 text-sm font-black text-slate-700 hover:border-commerce-ink disabled:cursor-wait disabled:opacity-60"
-            >
-              <FolderPlus size={15} />
-              {isSavePending ? '추가 중' : '내 견적함에 추가'}
-            </button>
+          {showCheckoutActions ? (
+            <QuoteCheckoutActions
+              hasItems={hasItems}
+              hasCompatibilityFail={hasCompatibilityFail}
+              onSave={onSave}
+              isSavePending={isSavePending}
+            />
           ) : null}
-          {hasItems && !hasCompatibilityFail ? (
-            <Link
-              to="/checkout"
-              className="inline-flex min-h-10 items-center gap-2 rounded-md bg-brand-blue px-5 text-sm font-black text-white hover:bg-blue-700"
-            >
-              <ShoppingCart size={16} />
-              구매하기
-            </Link>
-          ) : (
-            <button
-              type="button"
-              disabled
-              className="inline-flex min-h-10 cursor-not-allowed items-center gap-2 rounded-md bg-slate-200 px-5 text-sm font-black text-slate-400"
-            >
-              <ShoppingCart size={16} />
-              구매하기
-            </button>
-          )}
         </div>
       </div>
 
@@ -119,5 +165,53 @@ export function SlotStatusBar({
         <StateMessage type="warn" title="내 견적함 추가 실패" body="현재 견적을 저장하지 못했습니다. 잠시 후 다시 시도해 주세요." />
       ) : null}
     </section>
+  );
+}
+
+type QuoteCheckoutActionsProps = {
+  hasItems: boolean;
+  hasCompatibilityFail: boolean;
+  onSave: () => void;
+  isSavePending: boolean;
+};
+
+export function QuoteCheckoutActions({
+  hasItems,
+  hasCompatibilityFail,
+  onSave,
+  isSavePending
+}: QuoteCheckoutActionsProps) {
+  return (
+    <>
+      {hasItems ? (
+        <button
+          type="button"
+          onClick={onSave}
+          disabled={isSavePending}
+          className="inline-flex min-h-10 items-center gap-1.5 rounded-md border border-slate-300 bg-white px-4 text-sm font-black text-slate-700 hover:border-commerce-ink disabled:cursor-wait disabled:opacity-60"
+        >
+          <FolderPlus size={15} />
+          {isSavePending ? '추가 중' : '내 견적함에 추가'}
+        </button>
+      ) : null}
+      {hasItems && !hasCompatibilityFail ? (
+        <Link
+          to="/checkout"
+          className="inline-flex min-h-10 items-center gap-2 rounded-md bg-brand-blue px-5 text-sm font-black text-white hover:bg-blue-700"
+        >
+          <ShoppingCart size={16} />
+          구매하기
+        </Link>
+      ) : (
+        <button
+          type="button"
+          disabled
+          className="inline-flex min-h-10 cursor-not-allowed items-center gap-2 rounded-md bg-slate-200 px-5 text-sm font-black text-slate-400"
+        >
+          <ShoppingCart size={16} />
+          구매하기
+        </button>
+      )}
+    </>
   );
 }
