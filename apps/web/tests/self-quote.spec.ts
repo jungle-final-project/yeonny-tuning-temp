@@ -268,6 +268,28 @@ async function mockEmptyPriceHistory(route: Parameters<Parameters<Page['route']>
 }
 
 test.beforeEach(async ({ page }) => {
+  // E2E는 실행 환경의 실제 API 인증 상태에 의존하지 않는다. AppHeader의 부수 인증 요청이
+  // fixture 토큰을 401로 지워 견적·3D·체크아웃 테스트를 빈 상태로 만드는 연쇄 실패를 막는다.
+  await page.route('**/api/auth/me', async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({ id: 'user-test', email: 'user@example.com', name: 'Demo User', role: 'USER' })
+    });
+  });
+  await page.route('**/api/technician/profile', async (route) => {
+    await route.fulfill({ status: 404, contentType: 'application/json', body: JSON.stringify({ message: 'not applied' }) });
+  });
+  await page.route('**/api/support/chat-sessions/current**', async (route) => {
+    await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ contact: null, messages: [] }) });
+  });
+  await page.route('**/api/build-graph-layouts/default', async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({ layoutKey: 'DEFAULT', source: 'TEST_DEFAULT', positions: {}, anchors: {} })
+    });
+  });
   await page.route('**/api/build-graphs/resolve', async (route) => {
     const body = JSON.parse(route.request().postData() ?? '{}');
     await route.fulfill({
@@ -1048,12 +1070,9 @@ test('renders the quote checklist with progress, next-slot guide, and total', as
   await expect(page.getByTestId('slot-RAM')).toHaveAttribute('data-next', 'true');
   await expect(page.getByTestId('quote-next-guide')).toContainText('다음: 3. RAM을 선택해 주세요');
 
-  // 담은 부품 견적 테이블 — 체크리스트 아래 별도 박스에 상품별 행(부품/수량/금액)으로 나온다.
-  const itemsTable = page.getByTestId('quote-items-table');
-  await expect(itemsTable).toContainText('담은 부품 2개');
-  await expect(itemsTable.getByTestId('quote-items-row-CPU')).toContainText('체크 CPU');
-  await expect(itemsTable.getByTestId('quote-items-row-CPU')).toContainText('300,000원');
-  await expect(itemsTable.getByTestId('quote-items-row-MOTHERBOARD')).toContainText('체크 보드');
+  // 승인된 단일 화면 계약: 중복 품목 표는 숨기고 체크리스트와 요약 지표가 같은 정보를 담당한다.
+  await expect(page.getByTestId('quote-items-table')).toHaveCount(0);
+  await expect(page.getByTestId('quote-summary-bar')).toContainText('500,000원');
 
   // 체크리스트 클릭 = 해당 아코디언 후보 목록 열기 (가이드는 강제가 아니라서 아무 항목이나 열 수 있다).
   await checklist.getByTestId('checklist-PSU').click();
@@ -1258,6 +1277,16 @@ test('shows graph edge labels on the fallback topology relationships', async ({ 
   // graph 응답에 없는 정상 관계선도 점으로만 표시된다.
   await expect(page.getByTestId('slot-edge-MOTHERBOARD-RAM')).toHaveText('');
   await expect(page.getByTestId('slot-edge-GPU-CASE')).toHaveText('');
+
+  // 최신 main의 영향 지도는 위치만 유지하는 것이 아니라 진입·종료와 노드/관계 렌더링까지 보존한다.
+  await page.getByTestId('relation-map-open').click();
+  await expect(page.getByTestId('slot-board')).toHaveAttribute('data-visual-mode', 'relation-map');
+  await expect(page.getByTestId('relation-map-node-CPU')).toBeVisible();
+  await expect(page.getByTestId('relation-map-edges')).toBeVisible();
+  await expect(page.getByTestId('relation-map-bottom-banner')).toBeVisible();
+  await page.getByTestId('relation-map-open').click();
+  await expect(page.getByTestId('slot-board')).toHaveAttribute('data-visual-mode', 'fused');
+  await expect(page.getByTestId('slot-board-fused-plate')).toBeVisible();
 });
 
 test('keeps fallback topology edges when the graph api fails', async ({ page }) => {
@@ -1354,27 +1383,21 @@ test('shows the current build performance panel from the resolve performance too
   await expect(panel.getByTestId('perf-tab-game')).toHaveCount(0);
   // CPU/GPU 개별 점수 대신 완성 견적 1000점 종합 점수만 대표로 노출한다.
   await expect(panel.getByTestId('quote-performance-grid')).toBeVisible();
-  await expect(panel.getByTestId('quote-performance-fit')).toHaveText('기본형');
+  // 승인된 압축형에서는 별도 "담긴 견적 성능/기본형" 외곽 헤더를 두지 않는다.
+  await expect(panel.getByTestId('quote-performance-fit')).toHaveCount(0);
   await expect(panel.getByTestId('quote-composite-score-gauge')).toBeVisible();
   await expect(panel.getByTestId('quote-composite-score')).toContainText('734');
   await expect(panel).toContainText('호환·성능·여유 종합 1000점');
   await expect(panel.getByTestId('quote-composite-score-bar')).toHaveCount(0);
   await expect(panel.getByTestId('quote-performance-cpu-score')).toHaveCount(0);
   await expect(panel.getByTestId('quote-performance-gpu-score')).toHaveCount(0);
-  // 정책: 정확 FPS·실성능 보장 아님 문구 노출.
-  await expect(panel).toContainText('보장하지 않습니다');
-
-  // 후보 선택 콤보는 카드 헤더 줄 오른쪽 끝으로 이동 — 본문 작업창엔 게임 FPS 섹션(자료 없음 문구)만 남는다.
+  // 후보 선택 콤보와 게임 예상 성능은 압축 핵심 지표 안에서 함께 동작한다.
   await expect(panel.getByTestId('perf-candidate-select')).toContainText('교체 후보 선택');
-  await expect(panel.getByTestId('perf-compare-workspace')).toBeVisible();
-  await expect(panel.getByTestId('perf-compare-workspace')).toContainText('게임 예상 성능');
   await expect(panel.getByTestId('quote-fps-section')).toBeVisible();
-  await expect(panel.getByTestId('fps-empty')).toContainText('이 조합의 공개 참고 자료가 아직 없어요');
-  // 왼쪽 카드의 아크 옆 = 가격·성능 향상 자리 — 미선택 시에도 빈 막대 구조(회색 트랙+라벨)가 고정으로 보인다.
-  await expect(panel.getByTestId('price-effect-panel')).toContainText('가격·성능 향상');
-  await expect(panel.getByTestId('cost-effect-empty')).toContainText('가격');
-  await expect(panel.getByTestId('cost-effect-empty')).toContainText('성능');
-  await expect(panel.getByTestId('perf-compare-idle')).toContainText('교체 후보를 고르면 채워져요');
+  await expect(panel.getByTestId('quote-fps-section')).toContainText('참고 자료 없음');
+  // 미선택 상태에서는 중복 설명·빈 비교 그래프를 노출하지 않는다.
+  await expect(panel.getByTestId('cost-effect-empty')).toHaveCount(0);
+  await expect(panel.getByTestId('quote-checkout-actions')).toBeVisible();
 });
 
 test('shows game FPS reference in the performance panel with game and resolution selectors', async ({ page }) => {
@@ -1446,24 +1469,15 @@ test('shows game FPS reference in the performance panel with game and resolution
   await expect(fps).toBeVisible();
   await expect(page.getByTestId('quote-performance-grid')).toBeVisible();
   // 기본: 배그 · QHD → 130fps, '매우 부드러움', 프리셋 한글화, 하위 1% 평균(1% low).
-  await expect(fps.getByTestId('fps-avg')).toHaveText('130');
-  // 원래 수평 막대 스타일 — 그라데이션 바 + 1% low 마커(아크 게이지는 제거됨).
-  await expect(fps.getByTestId('fps-gauge')).toBeVisible();
-  await expect(fps.getByTestId('fps-arc-gauge')).toHaveCount(0);
-  await expect(fps.getByTestId('fps-result')).toContainText('매우 부드러움');
-  await expect(fps.getByTestId('fps-result')).toContainText('중간 옵션');
-  await expect(fps.getByTestId('fps-result')).toContainText('최저 약 91 FPS');
-  // 정책 문구.
-  await expect(fps).toContainText('공개 자료 기준 참고 범위');
+  await expect(fps.getByTestId('fps-avg')).toHaveText('130 FPS');
 
   // 해상도 4K 전환 → 55fps, '무난'.
   await fps.getByTestId('fps-res-4K').click();
-  await expect(fps.getByTestId('fps-avg')).toHaveText('55');
-  await expect(fps.getByTestId('fps-result')).toContainText('무난');
+  await expect(fps.getByTestId('fps-avg')).toHaveText('55 FPS');
 
   // 게임 발로란트 전환(컴팩트 칩 버튼) → 240fps.
   await fps.getByTestId('fps-game-valorant').click();
-  await expect(fps.getByTestId('fps-avg')).toHaveText('240');
+  await expect(fps.getByTestId('fps-avg')).toHaveText('240 FPS');
 });
 
 test('switches the game with compact chips next to the composite gauge', async ({ page }) => {
@@ -1517,9 +1531,8 @@ test('switches the game with compact chips next to the composite gauge', async (
   await page.goto('/self-quote');
   const fps = page.getByTestId('quote-fps-section');
 
-  // 종합점수 아크 + 오른쪽 작업창의 수평 막대 FPS 게이지, 게임 선택은 컴팩트 칩 5개.
+  // 종합점수 게이지 + 게임 선택 컴팩트 칩 5개가 같은 핵심 지표에 남는다.
   await expect(page.getByTestId('quote-composite-score-gauge')).toBeVisible();
-  await expect(fps.getByTestId('fps-gauge')).toBeVisible();
   await expect(fps.locator('[data-testid^="fps-game-"]')).toHaveCount(5);
   await expect(fps.getByTestId('fps-game-pubg')).toHaveAttribute('aria-pressed', 'true');
   // '다른 게임 한눈에' 리스트는 제거됐다.
@@ -1528,13 +1541,13 @@ test('switches the game with compact chips next to the composite gauge', async (
 
   // 칩 클릭 = 그 게임 선택 → 게이지가 그 게임 기준으로 갱신된다.
   await fps.getByTestId('fps-game-valorant').click();
-  await expect(fps.getByTestId('fps-avg')).toHaveText('240');
+  await expect(fps.getByTestId('fps-avg')).toHaveText('240 FPS');
   await expect(fps.getByTestId('fps-game-valorant')).toHaveAttribute('aria-pressed', 'true');
   await expect(fps.getByTestId('fps-game-pubg')).toHaveAttribute('aria-pressed', 'false');
 
   // 자료 없는 게임(로스트아크)을 고르면 숨기지 않고 '자료 없음' 안내를 보여준다.
   await fps.getByTestId('fps-game-lost-ark').click();
-  await expect(fps.getByTestId('fps-empty')).toContainText('이 조합의 공개 참고 자료가 아직 없어요');
+  await expect(fps).toContainText('참고 자료 없음');
 
   // 해상도 토글은 그대로 유지된다.
   await expect(fps.getByTestId('fps-res-QHD')).toHaveAttribute('aria-pressed', 'true');
@@ -1637,7 +1650,7 @@ test('picks a replacement candidate in the performance panel, compares, and appl
 
   // 카드 헤더 줄의 한 줄 콤보: [CPU|GPU 토글] + [교체 후보 선택 ▾] — 클릭하면 팝오버로 호환 후보 리스트.
   const panel = page.getByTestId('quote-performance-panel');
-  const workspace = panel.getByTestId('perf-compare-workspace');
+  const workspace = panel.getByTestId('quote-fps-section');
   await expect(workspace).toBeVisible();
   await expect(workspace).toContainText('게임 예상 성능');
   await expect(panel.getByTestId('perf-candidate-category-GPU')).toHaveAttribute('aria-pressed', 'true');
@@ -1665,17 +1678,13 @@ test('picks a replacement candidate in the performance panel, compares, and appl
   await expect(panel.getByTestId('perf-candidate-select')).toContainText('인텔 245K');
   // "교체 비교 · A → B" 텍스트 배너는 제거됐다 — 후보명은 헤더 콤보가 보여줘 비교 중에도 배너가 없다.
   await expect(workspace.getByTestId('fps-compare-banner')).toHaveCount(0);
-  // 게임 예상 성능이 비교 표시로 전환: 기존→변경 숫자 + 델타 배지 + 기존/변경 0→값 게이지 바 2줄(약 N FPS 라벨).
-  await expect(workspace.getByTestId('fps-result')).toBeVisible();
+  // 게임 예상 성능이 비교 표시로 전환: 기존→변경 숫자 + 델타와 두 상태 막대를 유지한다.
   await expect(workspace.getByTestId('fps-avg')).toHaveText('243');
   await expect(workspace.getByTestId('fps-compare-avg')).toHaveText('281');
   await expect(workspace.getByTestId('fps-compare-delta')).toHaveText('+16%');
-  await expect(workspace.getByTestId('fps-compare-gauge-base')).toContainText('기존');
-  await expect(workspace.getByTestId('fps-compare-gauge-base')).toContainText('약 243 FPS');
-  await expect(workspace.getByTestId('fps-compare-gauge-changed')).toContainText('변경');
-  await expect(workspace.getByTestId('fps-compare-gauge-changed')).toContainText('약 281 FPS');
-  // 왼쪽 카드의 아크 옆 = 가격·성능 향상 그래프: 0 기준 분기형 막대(양수는 오른쪽) + 추가 비용 강조 + 예상 FPS 화살표.
-  await expect(panel.getByTestId('price-effect-panel')).toContainText('가격·성능 향상');
+  await expect(workspace).toContainText('기존');
+  await expect(workspace).toContainText('변경');
+  // 압축 비교 영역의 0 기준 분기형 막대 + 추가 비용 강조 + 예상 FPS 화살표.
   await expect(panel.getByTestId('cost-effect-block')).toBeVisible();
   await expect(panel.getByTestId('effect-bar-price')).toHaveAttribute('data-effect-direction', 'up');
   await expect(panel.getByTestId('effect-bar-price')).toContainText('+17%');
@@ -1684,16 +1693,16 @@ test('picks a replacement candidate in the performance panel, compares, and appl
   await expect(panel.getByTestId('cost-effect-extra')).toContainText('추가 비용 +50,000원');
   await expect(panel.getByTestId('cost-effect-fps')).toContainText('예상 FPS 200~243 → 220~281');
 
-  // 보면서 담기: 패널 하단 전체 폭 액션 줄의 '이 제품으로 교체해 담기' → 실제 교체(PUT) + 비교 해제 + 게이지가 새 조합 값으로 스윕.
-  await expect(panel.getByTestId('perf-action-row')).toBeVisible();
+  // 보면서 담기: 압축 성능 영역의 '교체해 담기' → 실제 교체(PUT) + 비교 해제 + 점수가 새 조합으로 갱신.
+  await expect(panel.getByTestId('perf-apply-replace')).toBeVisible();
   await panel.getByTestId('perf-apply-replace').click();
   await expect(workspace.getByTestId('fps-compare-delta')).toHaveCount(0);
-  await expect(panel.getByTestId('perf-compare-idle')).toBeVisible();
+  await expect(panel.getByTestId('compare-clear')).toHaveCount(0);
   expect(replaceRequests).toHaveLength(1);
   expect(replaceRequests[0].url).toContain('/api/quote-drafts/current/items/cand-cpu-1');
   expect(replaceRequests[0].body).toMatchObject({ quantity: 1 });
   await expect(page.getByTestId('checklist-CPU')).toContainText('인텔 245K');
-  await expect(panel.getByTestId('fps-avg')).toHaveText('281');
+  await expect(panel.getByTestId('fps-avg')).toHaveText('281 FPS');
 
   // AI 변경 미리보기 연동(창 이벤트)은 그대로 유지된다 — 같은 비교 모드가 켜지고 카테고리도 따라간다.
   await page.evaluate(() => {
@@ -1876,15 +1885,10 @@ test('drives the candidate popover: open, dismiss without picking, pick WARN, an
 
   // 미선택 빈 상태: 향상 그래프 자리는 빈 막대 구조가 고정으로 보이고, 액션 줄은 없다.
   const panel = page.getByTestId('quote-performance-panel');
-  const workspace = page.getByTestId('perf-compare-workspace');
+  const workspace = page.getByTestId('quote-fps-section');
   await expect(workspace).toBeVisible();
-  await expect(page.getByTestId('perf-compare-idle')).toBeVisible();
-  await expect(page.getByTestId('cost-effect-empty')).toBeVisible();
-  // 빈 상태에도 분기형 트랙과 "추가 비용 —" 자리가 고정으로 보인다.
-  await expect(page.getByTestId('cost-effect-empty').getByTestId('effect-bar-price')).toHaveAttribute('data-effect-direction', 'empty');
-  await expect(panel.getByTestId('cost-effect-extra')).toContainText('추가 비용');
-  await expect(panel.getByTestId('cost-effect-extra')).toContainText('—');
-  await expect(panel.getByTestId('perf-action-row')).toHaveCount(0);
+  await expect(page.getByTestId('cost-effect-empty')).toHaveCount(0);
+  await expect(panel.getByTestId('compare-clear')).toHaveCount(0);
 
   // 헤더 콤보 열기 → Escape로 닫기: 선택 없이 닫혀도 빈 상태가 유지된다.
   await panel.getByTestId('perf-candidate-select').click();
@@ -1893,12 +1897,12 @@ test('drives the candidate popover: open, dismiss without picking, pick WARN, an
   await expect(popover.getByTestId('perf-candidate-current')).toContainText('RTX 5060');
   await page.keyboard.press('Escape');
   await expect(panel.getByTestId('perf-candidate-popover')).toHaveCount(0);
-  await expect(page.getByTestId('perf-compare-idle')).toBeVisible();
+  await expect(panel.getByTestId('compare-clear')).toHaveCount(0);
 
   // 다시 열고 팝오버 바깥 클릭으로 닫기.
   await panel.getByTestId('perf-candidate-select').click();
   await expect(popover).toBeVisible();
-  await page.getByTestId('quote-composite-score-card').click();
+  await page.getByTestId('quote-composite-score-gauge').click();
   await expect(panel.getByTestId('perf-candidate-popover')).toHaveCount(0);
 
   // WARN 후보는 '간섭 주의'를 단 채 선택 가능 — 고르면 팝오버가 닫히고 비교가 켜진다.
@@ -1910,14 +1914,12 @@ test('drives the candidate popover: open, dismiss without picking, pick WARN, an
   await expect(panel.getByTestId('perf-candidate-popover')).toHaveCount(0);
   // 배너 없이 헤더 콤보가 비교 중인 후보명을 보여준다.
   await expect(panel.getByTestId('perf-candidate-select')).toContainText('대형 3팬 GPU');
-  await expect(workspace.getByTestId('fps-compare-gauge-changed')).toContainText('약 152 FPS');
   await expect(page.getByTestId('fps-compare-avg')).toHaveText('152');
 
-  // 비교 해제(하단 액션 줄) → 다시 미선택 빈 상태로 복귀하고 게이지도 기존 값만 남는다.
+  // 비교 해제 → 다시 단일 성능 상태로 복귀하고 기존 값만 남는다.
   await panel.getByTestId('compare-clear').click();
-  await expect(panel.getByTestId('perf-action-row')).toHaveCount(0);
-  await expect(page.getByTestId('perf-compare-idle')).toBeVisible();
-  await expect(page.getByTestId('fps-avg')).toHaveText('130');
+  await expect(panel.getByTestId('compare-clear')).toHaveCount(0);
+  await expect(page.getByTestId('fps-avg')).toHaveText('130 FPS');
 });
 
 test('highlights WARN and FAIL slots with edges and blocks purchase on FAIL', async ({ page }) => {
@@ -1986,12 +1988,13 @@ test('highlights WARN and FAIL slots with edges and blocks purchase on FAIL', as
 
   // FAIL이 있으면 구매하기는 비활성화되고 사유를 보여준다.
   const statusBar = page.getByTestId('slot-status-bar');
-  await expect(statusBar.getByRole('button', { name: '구매하기' })).toBeDisabled();
-  await expect(statusBar.getByRole('link', { name: '구매하기' })).toHaveCount(0);
+  const checkoutActions = page.getByTestId('quote-checkout-actions');
+  await expect(checkoutActions.getByRole('button', { name: '구매하기' })).toBeDisabled();
+  await expect(checkoutActions.getByRole('link', { name: '구매하기' })).toHaveCount(0);
   await expect(statusBar.getByText('안 맞는 부품이 있어 구매할 수 없습니다. 문제 슬롯을 교체해 주세요.')).toBeVisible();
 
   // 내 견적함 저장은 FAIL이 있어도 허용한다.
-  const saveButton = statusBar.getByRole('button', { name: '내 견적함에 추가' });
+  const saveButton = checkoutActions.getByRole('button', { name: '내 견적함에 추가' });
   await expect(saveButton).toBeEnabled();
   await saveButton.click();
   await expect.poll(() => saveRequests.length).toBe(1);
@@ -2015,8 +2018,7 @@ test('keeps purchase enabled when the current quote has only WARN issues', async
   const psuSlot = page.getByTestId('slot-PSU');
   await expect(psuSlot).toHaveAttribute('data-status', 'WARN');
   await expect(psuSlot.getByText('간섭 주의')).toBeVisible();
-  const statusBar = page.getByTestId('slot-status-bar');
-  await expect(statusBar.getByRole('link', { name: '구매하기' })).toHaveAttribute('href', '/checkout');
+  await expect(page.getByTestId('quote-checkout-actions').getByRole('link', { name: '구매하기' })).toHaveAttribute('href', '/checkout');
 });
 
 test('marks fallback topology edges as pending while a related slot is empty', async ({ page }) => {
@@ -2796,7 +2798,7 @@ test('opens checkout from self quote purchase CTA without using the build result
 
   await page.goto('/self-quote');
 
-  const purchaseLink = page.getByTestId('slot-status-bar').getByRole('link', { name: '구매하기' });
+  const purchaseLink = page.getByTestId('quote-checkout-actions').getByRole('link', { name: '구매하기' });
   await expect(purchaseLink).toHaveAttribute('href', '/checkout');
   await purchaseLink.click();
 
@@ -2822,7 +2824,7 @@ test('saves current self quote slots into my quotes', async ({ page }) => {
 
   await page.goto('/self-quote');
   const statusBar = page.getByTestId('slot-status-bar');
-  await statusBar.getByRole('button', { name: '내 견적함에 추가' }).click();
+  await page.getByTestId('quote-checkout-actions').getByRole('button', { name: '내 견적함에 추가' }).click();
 
   await expect.poll(() => saveRequests.length).toBe(1);
   expect(saveRequests[0]).toMatchObject({
@@ -2842,6 +2844,27 @@ test('saves current self quote slots into my quotes', async ({ page }) => {
   await expect(page).toHaveURL('/self-quote');
   await expect(statusBar.getByText('내 견적함에 추가했습니다.')).toBeVisible();
   await expect(statusBar.getByRole('link', { name: '내 견적함 보기' })).toHaveAttribute('href', '/my/quotes');
+});
+
+test('shows save failure feedback while keeping the current self quote', async ({ page }) => {
+  await loginAsUser(page);
+  await page.route('**/api/quote-drafts/current**', async (route) => {
+    await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(checkoutDraft) });
+  });
+  await page.route('**/api/builds/from-chat', async (route) => {
+    await route.fulfill({ status: 500, contentType: 'application/json', body: JSON.stringify({ message: 'save failed' }) });
+  });
+  await page.route('**/api/parts**', async (route) => {
+    await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ items: [], page: 0, size: 20, total: 0 }) });
+  });
+
+  await page.goto('/self-quote');
+  await page.getByTestId('quote-checkout-actions').getByRole('button', { name: '내 견적함에 추가' }).click();
+
+  const statusBar = page.getByTestId('slot-status-bar');
+  await expect(statusBar.getByText('내 견적함 추가 실패 — 잠시 후 다시 시도해 주세요.')).toBeVisible();
+  await expect(page).toHaveURL('/self-quote');
+  await expect(page.getByTestId('checklist-GPU')).toContainText('RTX 5070 구매 테스트');
 });
 
 test('persists an assembly request, selects an offer, completes virtual payment, and reloads from the API', async ({ page }) => {
@@ -3228,9 +3251,9 @@ test.skip('opens GPU candidate panel from self quote nav link', async ({ page })
   await expect(panel.getByText('홈테스트몰')).toBeVisible();
 });
 
-test('compares recent AI recommendation builds side by side and applies one', async ({ page }) => {
-  // R1 견적 비교: 챗봇이 sessionStorage에 남긴 최근 추천 배치(3안)를 나란히 보여주고,
-  // 현재 견적 대비 diff(동일/교체됨/추가됨)를 표시하며, 기존 일괄 적용 API로 안을 적용한다.
+test('applies a recent AI recommendation from the assistant without rendering duplicate comparison panels', async ({ page }) => {
+  // 승인된 단일 화면 계약: 최근 추천안은 AI 어시스턴트 카드에서 적용하고,
+  // 별도 비교/선택 패널은 기본 화면에 중복 노출하지 않는다.
   const compareBuild = (tier: string, tierLabel: string, gpuPartId: string, gpuName: string, cpuPartId: string, cpuName: string, totalPrice: number) => ({
     id: `ai-${tier}`,
     tier,
@@ -3298,28 +3321,21 @@ test('compares recent AI recommendation builds side by side and applies one', as
 
   await page.goto('/self-quote');
 
-  // 트리거 → 패널 열기
-  await page.getByTestId('quote-compare-open').click();
-  const panel = page.getByTestId('quote-compare-panel');
-  await expect(panel).toBeVisible();
+  await expect(page.getByTestId('quote-compare-open')).toHaveCount(0);
+  await expect(page.getByTestId('quote-compare-panel')).toHaveCount(0);
+  await expect(page.getByTestId('ai-selected-build-panel')).toHaveCount(0);
 
-  // 3안이 티어 순서로 나란히, 총액 표시
-  await expect(panel.getByTestId('quote-compare-column-budget')).toHaveAttribute('data-tier', 'budget');
-  await expect(panel.getByTestId('quote-compare-total-budget')).toHaveText('1,500,000원');
-  await expect(panel.getByTestId('quote-compare-total-performance')).toHaveText('2,400,000원');
+  const assistant = page.getByTestId('ai-chatbot-panel');
+  const budgetCard = assistant.locator('article').filter({ hasText: '가성비형 추천 조합' });
+  await expect(budgetCard).toContainText('1,500,000원');
+  await expect(assistant.locator('article').filter({ hasText: '고성능형 추천 조합' })).toContainText('2,400,000원');
 
-  // diff: 균형안의 GPU는 현재 장착과 동일(same), 가성비안의 GPU는 교체됨(changed), CPU는 드래프트에 없어 추가됨(added)
-  await expect(panel.getByTestId('quote-compare-column-balanced').locator('[data-diff="same"]')).toHaveCount(1);
-  await expect(panel.getByTestId('quote-compare-column-budget').locator('[data-diff="changed"]')).toHaveCount(1);
-  await expect(panel.getByTestId('quote-compare-column-budget').locator('[data-diff="added"]')).toHaveCount(1);
-
-  // 가성비안 적용 → 기존 일괄 적용 API 호출 + 해당 컬럼이 '현재 적용됨'으로 전환
-  await panel.getByTestId('quote-compare-apply-budget').click();
+  // 가성비안 적용 → 기존 일괄 적용 API 호출 + 체크리스트에 실제 적용 결과 반영.
+  await budgetCard.getByRole('button', { name: '이 조합으로 셀프 견적 보기' }).click();
   await expect.poll(() => applyRequests).toEqual([{ buildId: 'ai-budget', itemCount: 2 }]);
-  await expect(panel.getByTestId('quote-compare-column-budget')).toHaveAttribute('data-current', 'true');
-  await expect(panel.getByTestId('quote-compare-apply-budget')).toBeDisabled();
-  // 적용 후 선택 빌드 패널도 나타난다(챗봇 선택과 같은 경로).
-  await expect(page.getByTestId('ai-selected-build-panel')).toBeVisible();
+  await expect(page.getByTestId('checklist-GPU')).toContainText('가성비 GPU');
+  await expect(page.getByTestId('checklist-CPU')).toContainText('가성비 CPU');
+  await expect(page.getByTestId('ai-selected-build-panel')).toHaveCount(0);
 });
 
 test('hides the compare entry when there is no recent AI recommendation batch', async ({ page }) => {
@@ -3431,7 +3447,7 @@ test.skip('upgrade advisor guides to mount the category first when it is missing
   await expect(page.getByTestId('slot-candidate-panel')).toBeVisible();
 });
 
-test('shows selected AI build separately from the slot board and marks duplicate parts', async ({ page }) => {
+test('keeps the applied draft visible without rendering a duplicate selected AI build panel', async ({ page }) => {
   await page.addInitScript(() => {
     localStorage.setItem('buildgraph.token', 'jwt-user-token');
     localStorage.setItem('buildgraph.authUser', JSON.stringify({
@@ -3506,21 +3522,15 @@ test('shows selected AI build separately from the slot board and marks duplicate
 
   await page.goto('/self-quote?category=GPU');
 
-  const aiPanel = page.getByTestId('ai-selected-build-panel');
-  await expect(aiPanel).toBeVisible();
-  await expect(aiPanel.getByRole('heading', { name: 'AI 선택 조합' })).toBeVisible();
-  await expect(aiPanel.getByText('균형 추천 조합')).toBeVisible();
-  await expect(aiPanel.getByText('GPU 반영됨')).toBeVisible();
-  await expect(aiPanel.getByText('실제 장바구니 적용 기록')).toBeVisible();
-  await expect(aiPanel.getByText('현재 견적 합계')).toBeVisible();
-  await expect(aiPanel.getByText('최초 AI 조합: 1,310,000원')).toBeVisible();
-  await expect(aiPanel.getByText('담김', { exact: true })).toBeVisible();
-  await expect(aiPanel.getByText('미반영', { exact: true })).toBeVisible();
+  await expect(page.getByTestId('ai-selected-build-panel')).toHaveCount(0);
+  await expect(page.getByTestId('ai-chatbot-panel')).toBeVisible();
+  await expect(page.getByTestId('checklist-GPU')).toContainText('RTX 4070 SUPER 테스트');
+  await expect(page.getByTestId('checklist-CPU')).toContainText('+ 부품 선택');
   await expect(page.getByRole('heading', { name: '셀프 견적 · 구성 관계도' })).toBeVisible();
-  await expect(page.getByText('견적 합계', { exact: true })).toBeVisible();
+  await expect(page.getByTestId('quote-summary-bar')).toContainText('890,000원');
 });
 
-test('keeps selected AI build current total without slot board AI price movement summary', async ({ page }) => {
+test('keeps the current draft total without rendering the removed AI price panel', async ({ page }) => {
   await page.addInitScript(() => {
     localStorage.setItem('buildgraph.token', 'jwt-user-token');
     localStorage.setItem('buildgraph.authUser', JSON.stringify({
@@ -3601,16 +3611,15 @@ test('keeps selected AI build current total without slot board AI price movement
 
   await page.goto('/self-quote');
 
-  const aiPanel = page.getByTestId('ai-selected-build-panel');
   const statusBar = page.getByTestId('slot-status-bar');
 
-  await expect(aiPanel.getByTestId('ai-selected-build-current-total')).toHaveText('1,260,000원');
-  await expect(aiPanel.getByText('현재 견적 합계')).toBeVisible();
-  await expect(aiPanel.getByText('최초 AI 조합: 1,310,000원')).toBeVisible();
+  await expect(page.getByTestId('ai-selected-build-panel')).toHaveCount(0);
+  await expect(page.getByTestId('quote-summary-bar')).toContainText('1,260,000원');
+  await expect(page.getByTestId('checklist-GPU')).toContainText('RTX 가격 비교 GPU');
+  await expect(page.getByTestId('checklist-CPU')).toContainText('Ryzen 가격 비교 CPU');
   await expect(statusBar.getByTestId('quote-price-change-summary')).toHaveCount(0);
   await expect(statusBar.getByTestId('quote-price-change-list')).toHaveCount(0);
   await expect(statusBar.getByText(/AI 추천 시점 대비/)).toHaveCount(0);
-  await expect(aiPanel.getByText(/절감|상승|변동 없음/)).toHaveCount(0);
 });
 
 test('does not show selected AI build increase summary in the slot status bar', async ({ page }) => {
@@ -3755,7 +3764,7 @@ test('does not show selected AI build no-movement summary in the slot status bar
   await expect(statusBar.getByText(/AI 추천 시점 대비/)).toHaveCount(0);
 });
 
-test('syncs selected AI panel total and item state after chatbot part replacement', async ({ page }) => {
+test('shows the chatbot replacement in the draft without rendering the removed selected panel', async ({ page }) => {
   await page.addInitScript(() => {
     localStorage.setItem('buildgraph.token', 'jwt-user-token');
     localStorage.setItem('buildgraph.authUser', JSON.stringify({
@@ -3838,13 +3847,9 @@ test('syncs selected AI panel total and item state after chatbot part replacemen
 
   await page.goto('/self-quote?category=GPU');
 
-  const aiPanel = page.getByTestId('ai-selected-build-panel');
-  await expect(aiPanel.getByText('현재 견적 합계')).toBeVisible();
-  await expect(aiPanel.getByText('8,682,340원')).toBeVisible();
-  await expect(aiPanel).toContainText('교체');
-  await expect(aiPanel).toContainText('RTX 5080');
-  await expect(page.getByText('견적 합계', { exact: true })).toBeVisible();
-  await expect(page.getByText('8,682,340원').first()).toBeVisible();
+  await expect(page.getByTestId('ai-selected-build-panel')).toHaveCount(0);
+  await expect(page.getByTestId('checklist-GPU')).toContainText('RTX 5080');
+  await expect(page.getByTestId('quote-summary-bar')).toContainText('8,682,340원');
 });
 
 test('shows price trend chart on product detail page', async ({ page }) => {

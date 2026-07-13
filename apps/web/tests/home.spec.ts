@@ -1389,13 +1389,10 @@ test('selects a home AI recommendation through batch API and shows applied cart 
   expect((applyRequests[0] as { conflictPolicy?: string; items?: unknown[] }).conflictPolicy).toBe('REPLACE');
   expect((applyRequests[0] as { items?: unknown[] }).items).toHaveLength(8);
   await expect(page).toHaveURL('/self-quote');
-  const selectedBuildPanel = page.getByTestId('ai-selected-build-panel');
-  await expect(selectedBuildPanel).toBeVisible();
-  await expect(page.getByRole('heading', { name: 'AI 선택 조합' })).toBeVisible();
-  await expect(selectedBuildPanel.getByText('200만원 균형형')).toBeVisible();
-  await expect(selectedBuildPanel.getByText(`${expectedTotal}원`)).toBeVisible();
-  await expect(selectedBuildPanel.getByText('GPU 반영됨')).toBeVisible();
-  await expect(page.getByText('서버 반영 RTX 5070 서버 GPU').first()).toBeVisible();
+  // 승인된 셀프견적 UI는 중복 선택 패널 대신 실제 드래프트와 핵심 합계를 보여준다.
+  await expect(page.getByTestId('ai-selected-build-panel')).toHaveCount(0);
+  await expect(page.getByTestId('checklist-GPU')).toContainText('서버 반영 RTX 5070 서버 GPU');
+  await expect(page.getByTestId('quote-summary-bar')).toContainText(`${expectedTotal}원`);
   await expect(page.getByRole('heading', { name: '셀프 견적 · 구성 관계도' })).toBeVisible();
 });
 
@@ -1769,7 +1766,8 @@ test('opens self quote from the drawer graph card without replacing the current 
   await expect(page.getByRole('dialog', { name: '셀프 견적 교체 확인' })).toHaveCount(0);
   expect(applyRequests).toHaveLength(0);
   await expect(page).toHaveURL('/self-quote');
-  await expect(page.getByTestId('ai-selected-build-panel')).toContainText(latestBuilds[0].title);
+  await expect(page.getByTestId('ai-selected-build-panel')).toHaveCount(0);
+  await expect(page.getByTestId('ai-chatbot-panel')).toBeVisible();
   await expect(page.getByTestId('checklist-GPU')).toContainText('기존 장바구니 GPU');
 });
 
@@ -1791,7 +1789,9 @@ test('opens self quote from the drawer graph card when the current cart is empty
   await expect(page.getByRole('dialog', { name: '셀프 견적 교체 확인' })).toHaveCount(0);
   expect(applyRequests).toHaveLength(0);
   await expect(page).toHaveURL('/self-quote');
-  await expect(page.getByTestId('ai-selected-build-panel')).toContainText(latestBuilds[0].title);
+  await expect(page.getByTestId('ai-selected-build-panel')).toHaveCount(0);
+  await expect(page.getByTestId('ai-chatbot-panel')).toBeVisible();
+  await expect(page.getByTestId('quote-start-banner')).toBeVisible();
 });
 
 test('keeps hover preview graph read-only and uses only the drawer graph card as navigation', async ({ page }) => {
