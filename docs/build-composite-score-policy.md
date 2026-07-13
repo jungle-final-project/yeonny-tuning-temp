@@ -60,6 +60,7 @@
 - `compatibility`, `power`, `size` 중 하나라도 `FAIL`이면 최종 `compositeScore.score=0`이다.
 - `FAIL`이 없으면 기본적으로 호환·장착 안전성은 만점이다.
 - 다만 GPU 길이, CPU 쿨러 높이, PSU 깊이처럼 장착 자체는 가능하지만 여유가 좁은 `size WARN`은 장착 여유에 따라 일부 감점한다.
+- `size WARN`의 장착 여유 기준은 GPU `20mm 미만`, 공랭 CPU 쿨러 `5mm 미만`, PSU `10mm 미만`이다. Tool 판정과 배치도 관계선은 이 기준을 함께 사용하며, `높이 157mm` 같은 부품 스펙 자체를 경고 사유로 표시하지 않는다.
 - 케이스는 성능 벤치마크 부품이 아니다. 장착 불가는 0점, 장착 가능 후에는 GPU 길이, CPU 쿨러 높이, PSU 길이 여유 mm가 핵심이다.
 - airflow는 `frontMesh`, `airflowFocus`, `airflow=HIGH`처럼 내부 자산에 명시된 경우에만 보조 cap 근거로 사용한다. 제품명에 `AIR`, `MESH`, `FLOW`가 들어간다는 이유만으로 airflow를 추정하지 않는다. airflow 근거가 없으면 임의 감점하지 않고 근거 신뢰도에서만 해석한다.
 - airflow 필드가 아예 없으면 확장·운영 여유 점수에서도 임의 중립값을 넣지 않는다. 확인 가능한 GPU·CPU 쿨러 장착 여유에 기존 상대 가중치를 재분배한다.

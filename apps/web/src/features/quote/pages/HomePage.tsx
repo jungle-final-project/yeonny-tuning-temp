@@ -1,31 +1,45 @@
-import { useEffect, useRef, useState, type SyntheticEvent } from 'react';
-import ReactFullpage from '@fullpage/react-fullpage';
+import { useEffect, useMemo, useRef, useState, type SyntheticEvent } from 'react';
 import { useQueries, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
-import 'fullpage.js/dist/fullpage.min.css';
 import {
+  ArrowRight,
   Bot,
+  Box,
   Boxes,
-  ChevronLeft,
-  ChevronRight,
+  CircuitBoard,
+  Cpu,
+  Fan,
   FileText,
-  LifeBuoy,
-  PackageCheck,
+  HardDrive,
+  MemoryStick,
+  Monitor,
+  ShieldCheck,
+  Sparkles,
+  Wrench,
   X,
+  Zap,
   type LucideIcon
 } from 'lucide-react';
 import { AppHeader } from '../../../components/ui';
 import { useLockedPageScroll } from '../../../hooks/useHiddenPageScrollbar';
 import { AUTH_CHANGED_EVENT } from '../../../lib/api';
-import { AI_BUILD_ASSISTANT_VISIBILITY_CHANGED_EVENT, isAiAssistantOpen, openAiAssistant, type AiAssistantVisibilityDetail } from '../../../lib/events';
+import {
+  AI_BUILD_ASSISTANT_VISIBILITY_CHANGED_EVENT,
+  isAiAssistantOpen,
+  openAiAssistant,
+  type AiAssistantVisibilityDetail
+} from '../../../lib/events';
 import { partImageUrl } from '../../parts/partDisplay';
-import { applyAiBuildToQuoteDraft, getPart, listHomeRecommendedParts, listParts, recordRecommendationEvent } from '../../parts/partsApi';
-import type { HomeRecommendedPart, PartRow } from '../../parts/types';
-import { HomeAiBuildPreview } from '../components/HomeAiBuildPreview';
-import { HomeFeaturedBuildPreview } from '../components/HomeFeaturedBuildPreview';
+import {
+  applyAiBuildToQuoteDraft,
+  getPart,
+  listHomeRecommendedParts,
+  listParts,
+  recordRecommendationEvent
+} from '../../parts/partsApi';
+import type { HomeRecommendedPart, PartPage, PartRow } from '../../parts/types';
 import {
   AI_ASSISTANT_SESSION_CHANGED_EVENT,
-  clearLegacyAiStorage,
   normalizeAiRecommendedBuild,
   readAssistantSession,
   recentBuildsForChatContext,
@@ -34,70 +48,63 @@ import {
   type AiRecommendedBuild,
   type PartCategory
 } from '../aiSelection';
+import { HomeAiBuildPreview } from '../components/HomeAiBuildPreview';
+import {
+  HomeFeaturedBuildPreview,
+  type HomeFeaturedBuildPreviewItem
+} from '../components/HomeFeaturedBuildPreview';
+import { HomeQuickStartPanel } from '../components/HomeQuickStartPanel';
 import { resolveBuildGraph } from '../quoteApi';
 
-// 부품 이미지 로드 실패 시 보여줄 대체 이미지(partImageUrl placeholder와 동일 톤).
-const PART_IMAGE_PLACEHOLDER = `data:image/svg+xml;utf8,${encodeURIComponent(
-  '<svg xmlns="http://www.w3.org/2000/svg" width="112" height="112" viewBox="0 0 112 112"><rect width="112" height="112" rx="14" fill="#f8fafc"/><rect x="12" y="20" width="88" height="56" rx="10" fill="#334155" opacity="0.92"/><rect x="20" y="28" width="72" height="40" rx="6" fill="#ffffff" opacity="0.16"/><text x="56" y="54" text-anchor="middle" font-family="Arial, sans-serif" font-size="16" font-weight="700" fill="#ffffff">NO IMAGE</text><rect x="24" y="84" width="64" height="6" rx="3" fill="#cbd5e1"/></svg>'
-)}`;
-
-// onError 재귀 방지 가드: dataset으로 1회만 대체 이미지로 교체해 무한 루프를 막는다.
-function handlePartImageError(event: SyntheticEvent<HTMLImageElement>) {
-  const target = event.currentTarget;
-  if (!target.dataset.fallback) {
-    target.dataset.fallback = '1';
-    target.src = PART_IMAGE_PLACEHOLDER;
-  }
-}
-
-type HeroAction = {
+type CategoryItem = {
+  value: PartCategory;
   label: string;
-  detail: string;
-  to: string;
-  icon: LucideIcon;
-  accent: 'primary' | 'blue' | 'green' | 'slate';
+  Icon: LucideIcon;
 };
 
-type PromoSlide = {
-  title: string;
-  subtitle: string;
-  badge: string;
-  src?: string;
-  alt?: string;
-  tone: string;
-};
+type CuratedBuild = HomeFeaturedBuildPreviewItem['build'];
 
-type HomePromoTile = {
-  title: string;
-  body: string;
-  to: string;
-  icon: LucideIcon;
-  tone: string;
-};
+const PART_CATEGORIES: CategoryItem[] = [
+  { value: 'CPU', label: 'CPU', Icon: Cpu },
+  { value: 'GPU', label: 'GPU', Icon: Monitor },
+  { value: 'MOTHERBOARD', label: '메인보드', Icon: CircuitBoard },
+  { value: 'RAM', label: '메모리', Icon: MemoryStick },
+  { value: 'STORAGE', label: '저장장치', Icon: HardDrive },
+  { value: 'PSU', label: '파워', Icon: Zap },
+  { value: 'CASE', label: '케이스', Icon: Box },
+  { value: 'COOLER', label: '쿨러', Icon: Fan }
+];
 
-type FeaturedBuild = {
-  id: string;
-  name: string;
-  tag: string;
-  spec: string;
-  summary: string;
-  tone: string;
-  partSearches: FeaturedBuildPartSearch[];
-};
+const BUILD_CATEGORY_ORDER: PartCategory[] = ['CPU', 'MOTHERBOARD', 'RAM', 'GPU', 'STORAGE', 'PSU', 'CASE', 'COOLER'];
 
-type FeaturedBuildPartSearch = {
-  category: PartCategory;
-  searchQuery: string;
-};
+const CURATED_BUILD_TEMPLATES: Array<Omit<CuratedBuild, 'partSearches'>> = [
+  {
+    id: 'home-featured-qhd-gaming',
+    name: 'QHD 게이밍 추천팩',
+    tag: 'BEST',
+    spec: 'QHD 게임 · 개발 · 안정성 균형',
+    summary: '게임과 개발을 함께 사용하는 사용자를 위한 균형형 구성입니다.',
+    tone: 'from-white via-white to-white'
+  },
+  {
+    id: 'home-featured-creator',
+    name: '크리에이터 작업팩',
+    tag: '작업',
+    spec: '영상 편집 · 렌더링 · 넉넉한 저장공간',
+    summary: '고해상도 편집과 렌더링을 고려해 CPU와 메모리 여유를 높였습니다.',
+    tone: 'from-white via-white to-white'
+  },
+  {
+    id: 'home-featured-reliable',
+    name: '신뢰성 우선 추천팩',
+    tag: '안정성',
+    spec: '호환성 · 전력 여유 · 업그레이드',
+    summary: '부품 간 호환성과 전력 여유를 우선해 오래 사용하기 좋은 구성입니다.',
+    tone: 'from-white via-white to-white'
+  }
+];
 
-type FeaturedBuildResolvedPart = {
-  search: FeaturedBuildPartSearch;
-  part: PartRow;
-};
-
-type RecommendationTab = 'popular' | 'ai';
-
-const HOME_RECOMMENDED_PART_LIMIT = 8;
+const FALLBACK_PRODUCT_IMAGE = '/assets/home-banners/pc-build-festa.png';
 const HOME_LOGIN_CHOICE_DISMISSED_KEY = 'buildgraph.homeLoginChoice.dismissed';
 
 function readHomeLoginChoiceDismissed() {
@@ -112,7 +119,7 @@ function dismissHomeLoginChoice() {
   try {
     localStorage.setItem(HOME_LOGIN_CHOICE_DISMISSED_KEY, 'true');
   } catch {
-    // localStorage가 막힌 환경에서는 현재 화면에서만 닫히도록 둔다.
+    // localStorage가 막힌 환경에서는 현재 화면에서만 닫힌 상태로 둔다.
   }
 }
 
@@ -128,336 +135,146 @@ function shouldShowHomeLoginChoice(skipPrompt: boolean) {
   return !skipPrompt && !isAiAssistantOpen() && !readHomeLoginChoiceDismissed();
 }
 
-const promoSlides: PromoSlide[] = [
-  {
-    src: '/assets/home-banners/battle-ground-build.png',
-    alt: '배틀그라운드 조립 PC 광고',
-    title: '배틀그라운드 추천 PC',
-    subtitle: '144Hz로 쾌적한 플레이 환경을 누리세요',
-    badge: 'FPS 추천',
-    tone: 'from-orange-950 via-slate-950 to-black'
-  },
-  {
-    src: '/assets/home-banners/tactical-fps-build.png',
-    alt: '발로란트 조립 PC 광고',
-    title: '발로란트 추천 PC',
-    subtitle: '레이턴시와 프레임 두 마리 토끼를 잡은 FPS 맞춤형 PC입니다',
-    badge: 'TACTICAL FPS',
-    tone: 'from-red-950 via-slate-950 to-cyan-950'
-  },
-  {
-    src: '/assets/home-banners/crimson-desert-build.png',
-    alt: '붉은사막 조립 PC 광고',
-    title: '붉은사막 최적화 PC',
-    subtitle: '고성능 CPU와 그래픽카드로 오픈월드를 자유롭게 누비세요',
-    badge: 'RPG 추천',
-    tone: 'from-red-950 via-black to-slate-950'
-  },
-  {
-    src: '/assets/home-banners/diablo4-build.png',
-    alt: '디아블로4 조립 PC 광고',
-    title: '디아블로4 추천 PC',
-    subtitle: '압도적인 그래픽으로 몰입감이 MAX!',
-    badge: 'HIGH-END',
-    tone: 'from-red-950 via-stone-950 to-black'
-  },
-  {
-    src: '/assets/home-banners/league-build.png',
-    alt: '리그오브레전드 조립 PC 광고',
-    title: '리그오브레전드 추천 PC',
-    subtitle: '최적의 사양으로 최고의 플레이를 즐겨보세요',
-    badge: 'MOBA 추천',
-    tone: 'from-blue-950 via-slate-950 to-yellow-950'
-  },
-  {
-    src: '/assets/home-banners/lostark-build.png',
-    alt: '로스트아크 조립 PC 광고',
-    title: '로스트아크 추천 PC',
-    subtitle: '대한민국 최고의 MMORPG에 걸맞은 최적의 사양!',
-    badge: 'MMORPG 추천',
-    tone: 'from-blue-950 via-slate-950 to-black'
-  }
-];
-
-const homePromoTiles: HomePromoTile[] = [
-  {
-    title: 'AI로 견적 맞춰보기',
-    body: '예산과 용도를 입력하면 조합 후보를 바로 비교합니다.',
-    to: '/requirements/new',
-    icon: Bot,
-    tone: 'bg-blue-100 text-blue-950'
-  },
-  {
-    title: 'PC 부품 살펴보기',
-    body: '최신 데이터를 기준으로 부품 현황을 살펴봅니다.',
-    to: '/self-quote',
-    icon: Boxes,
-    tone: 'bg-emerald-100 text-emerald-950'
-  }
-];
-
-const heroActions: HeroAction[] = [
-  { label: 'PC 견적', detail: '요구사항으로 추천받기', to: '/requirements/new', icon: Bot, accent: 'primary' },
-  { label: '전체 부품', detail: '내부 DB 부품 보기', to: '/self-quote?view=list', icon: Boxes, accent: 'blue' },
-  { label: 'AS 접수', detail: '문제 증상 접수하기', to: '/support/new', icon: LifeBuoy, accent: 'green' },
-  { label: '내 견적함', detail: '저장한 견적 확인', to: '/my/quotes', icon: FileText, accent: 'slate' }
-];
-
-const featuredBuilds: FeaturedBuild[] = [
-  {
-    id: 'home-featured-qhd-gaming',
-    name: 'QHD 게이밍 추천팩',
-    tag: 'BEST',
-    spec: 'RTX 5070 · Ryzen 7 · DDR5 32GB',
-    summary: 'QHD 게임과 개발 병행을 위한 균형형 조합입니다.',
-    tone: 'from-blue-50 via-white to-white',
-    partSearches: [
-      { category: 'CPU', searchQuery: 'Ryzen 7' },
-      { category: 'MOTHERBOARD', searchQuery: 'B850' },
-      { category: 'RAM', searchQuery: 'DDR5 32GB' },
-      { category: 'GPU', searchQuery: 'RTX 5070' },
-      { category: 'STORAGE', searchQuery: 'NVMe 1TB' },
-      { category: 'PSU', searchQuery: '850W' },
-      { category: 'CASE', searchQuery: 'FRAME 4000D' },
-      { category: 'COOLER', searchQuery: 'Phantom Spirit' }
-    ]
-  },
-  {
-    id: 'home-featured-ai-cuda',
-    name: 'AI CUDA 실습팩',
-    tag: 'AI 추천',
-    spec: 'VRAM 우선 · 850W PSU · 2TB SSD',
-    summary: 'CUDA 실습과 모델 테스트를 고려한 GPU 우선 조합입니다.',
-    tone: 'from-indigo-50 via-white to-white',
-    partSearches: [
-      { category: 'CPU', searchQuery: 'Ryzen 9' },
-      { category: 'MOTHERBOARD', searchQuery: 'X870E' },
-      { category: 'RAM', searchQuery: 'DDR5 64GB' },
-      { category: 'GPU', searchQuery: 'RTX 5070 Ti' },
-      { category: 'STORAGE', searchQuery: 'NVMe 2TB' },
-      { category: 'PSU', searchQuery: '1000W' },
-      { category: 'CASE', searchQuery: 'H9 Flow' },
-      { category: 'COOLER', searchQuery: 'Liquid Freezer III' }
-    ]
-  },
-  {
-    id: 'home-featured-low-noise',
-    name: '저소음 작업팩',
-    tag: '저소음',
-    spec: '듀얼타워 공랭 · 흡기형 케이스',
-    summary: '장시간 개발 작업에서 소음과 발열을 낮추는 구성입니다.',
-    tone: 'from-emerald-50 via-white to-white',
-    partSearches: [
-      { category: 'CPU', searchQuery: 'Ryzen 7' },
-      { category: 'MOTHERBOARD', searchQuery: 'B850' },
-      { category: 'RAM', searchQuery: 'DDR5 32GB' },
-      { category: 'GPU', searchQuery: 'RTX 5070' },
-      { category: 'STORAGE', searchQuery: 'NVMe 2TB' },
-      { category: 'PSU', searchQuery: '850W' },
-      { category: 'CASE', searchQuery: 'LIGHT BASE 900' },
-      { category: 'COOLER', searchQuery: 'Dark Rock Pro 5' }
-    ]
-  },
-  {
-    id: 'home-featured-fps-value',
-    name: 'FPS 입문 추천팩',
-    tag: 'FPS',
-    spec: 'RTX 5060 Ti · Ryzen 5 · NVMe 1TB',
-    summary: '빠른 반응속도와 안정적인 프레임을 우선한 게이밍 조합입니다.',
-    tone: 'from-amber-50 via-white to-white',
-    partSearches: [
-      { category: 'CPU', searchQuery: '9600X' },
-      { category: 'MOTHERBOARD', searchQuery: 'TUF' },
-      { category: 'RAM', searchQuery: 'G.SKILL' },
-      { category: 'GPU', searchQuery: 'RTX 5060 Ti' },
-      { category: 'STORAGE', searchQuery: 'NVMe 1TB' },
-      { category: 'PSU', searchQuery: 'RM750e' },
-      { category: 'CASE', searchQuery: 'Meshify 3 XL' },
-      { category: 'COOLER', searchQuery: 'Phantom Spirit' }
-    ]
-  },
-  {
-    id: 'home-featured-creator',
-    name: '크리에이터 작업팩',
-    tag: '작업',
-    spec: 'Ryzen 9 · RTX 5090 · PCIe 5.0 SSD',
-    summary: '영상 편집과 렌더링, AI 실습을 함께 고려한 고성능 조합입니다.',
-    tone: 'from-violet-50 via-white to-white',
-    partSearches: [
-      { category: 'CPU', searchQuery: '9900X3D' },
-      { category: 'MOTHERBOARD', searchQuery: 'STRIX X870E-A' },
-      { category: 'RAM', searchQuery: 'T-CREATE' },
-      { category: 'GPU', searchQuery: 'RTX 5090' },
-      { category: 'STORAGE', searchQuery: 'Platinum P51' },
-      { category: 'PSU', searchQuery: 'VERTEX GX-1200' },
-      { category: 'CASE', searchQuery: 'H9 Flow 2025' },
-      { category: 'COOLER', searchQuery: 'Kraken Elite 360' }
-    ]
-  },
-  {
-    id: 'home-featured-white-tuning',
-    name: '화이트 튜닝 추천팩',
-    tag: '튜닝',
-    spec: 'LIGHT BASE 900 · White RAM · RTX 5080',
-    summary: '내부가 잘 보이는 케이스와 안정적인 부품 구성을 맞춘 조합입니다.',
-    tone: 'from-slate-50 via-white to-white',
-    partSearches: [
-      { category: 'CPU', searchQuery: '9800X3D' },
-      { category: 'MOTHERBOARD', searchQuery: 'B850I' },
-      { category: 'RAM', searchQuery: 'Crucial DDR5-6000' },
-      { category: 'GPU', searchQuery: 'RTX 5080 WHITE' },
-      { category: 'STORAGE', searchQuery: 'WD BLACK SN8100' },
-      { category: 'PSU', searchQuery: 'HX1200i' },
-      { category: 'CASE', searchQuery: 'LIGHT BASE 900' },
-      { category: 'COOLER', searchQuery: 'ARCTIC Liquid Freezer III PRO' }
-    ]
-  }
-];
-
 export function HomePage() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
-  const [searchParams, setSearchParams] = useSearchParams();
+  const [searchParams] = useSearchParams();
   const skipHomeChoicePromptRef = useRef(searchParams.get('assistant') === 'open');
-  const homeMainRef = useRef<HTMLElement | null>(null);
   const [assistantSession, setAssistantSession] = useState<AiAssistantSession>(() => readAssistantSession());
-  const [recommendationTab, setRecommendationTab] = useState<RecommendationTab>(() => readAssistantSession().latestBuilds.length > 0 ? 'ai' : 'popular');
-  const [selectedFeaturedBuildId, setSelectedFeaturedBuildId] = useState<string | null>(null);
+  const [selectedCuratedBuildId, setSelectedCuratedBuildId] = useState<string | null>(null);
   const [selectedAiBuildId, setSelectedAiBuildId] = useState<string | null>(null);
   const [applyingBuildId, setApplyingBuildId] = useState<string | null>(null);
-  const [applyingFeaturedBuildId, setApplyingFeaturedBuildId] = useState<string | null>(null);
   const [applyError, setApplyError] = useState<string | null>(null);
   const [showHomeChoicePrompt, setShowHomeChoicePrompt] = useState(() => shouldShowHomeLoginChoice(skipHomeChoicePromptRef.current));
   const [showAiFlowChoicePrompt, setShowAiFlowChoicePrompt] = useState(false);
   const [neverShowHomeChoice, setNeverShowHomeChoice] = useState(false);
   useLockedPageScroll(showHomeChoicePrompt || showAiFlowChoicePrompt);
-  const latestHomeAiBuilds = recentBuildsForChatContext(assistantSession);
-  const selectedAiBuild = selectedAiBuildId
-    ? latestHomeAiBuilds.find((build) => build.id === selectedAiBuildId) ?? null
-    : null;
-  const featuredBuildPartQueries = useQueries({
-    queries: featuredBuilds.map((build) => ({
-      queryKey: ['parts', 'home-featured-build', build.id],
-      queryFn: async (): Promise<FeaturedBuildResolvedPart[]> => {
-        const partPages = await Promise.all(
-          build.partSearches.map((part) => listParts({ category: part.category, q: part.searchQuery, page: 0, size: 1, sort: 'price_desc' }))
-        );
 
-        return partPages
-          .map((page, index) => {
-            const part = page.items[0];
-            if (!part) return null;
-            return {
-              search: build.partSearches[index],
-              part
-            };
-          })
-          .filter((item): item is FeaturedBuildResolvedPart => Boolean(item));
-      },
-      // 인기상품 탭이 활성일 때만 발사한다. 게이트가 없으면 마운트 시 6빌드×8부품=48개 요청이
-      // 무조건 나가, 인기상품 탭을 보지 않는 AI-탭 사용자에게도 불필요한 fan-out이 발생한다.
-      enabled: recommendationTab === 'popular',
+  const categoryPartQueries = useQueries({
+    queries: PART_CATEGORIES.map((category) => ({
+      queryKey: ['parts', 'modern-home-curated', category.value],
+      queryFn: () => listParts({ category: category.value, status: 'ACTIVE', page: 0, size: 3, sort: 'price_desc' as const }),
       staleTime: 60_000
     }))
   });
-  const selectedFeaturedBuildIndex = selectedFeaturedBuildId
-    ? featuredBuilds.findIndex((build) => build.id === selectedFeaturedBuildId)
-    : -1;
-  const selectedFeaturedBuild = selectedFeaturedBuildIndex >= 0 ? featuredBuilds[selectedFeaturedBuildIndex] : null;
-  const selectedFeaturedBuildParts = selectedFeaturedBuildIndex >= 0 ? featuredBuildPartQueries[selectedFeaturedBuildIndex]?.data ?? [] : [];
-  const selectedFeaturedBuildPartCount = selectedFeaturedBuild?.partSearches.length ?? 0;
-  const selectedFeaturedBuildTotalPrice = selectedFeaturedBuildPartCount > 0 && selectedFeaturedBuildParts.length === selectedFeaturedBuildPartCount
-    ? selectedFeaturedBuildParts.reduce((sum, item) => sum + item.part.price, 0)
-    : null;
-  const featuredBuildGraphQuery = useQuery({
-    queryKey: [
-      'build-graph',
-      'home-featured-build-preview',
-      selectedFeaturedBuild?.id ?? 'none',
-      featuredBuildGraphSignature(selectedFeaturedBuildParts)
-    ],
-    queryFn: () => resolveBuildGraph({
-      source: 'AI_BUILD',
-      view: 'FOCUSED',
-      items: selectedFeaturedBuildParts.map(({ search, part }) => ({
-        partId: part.id,
-        category: search.category,
-        quantity: 1
-      })),
-      budgetWon: selectedFeaturedBuildTotalPrice ?? undefined,
-      focus: {
-        mode: 'BUILD_OVERVIEW',
-        tool: 'price'
-      }
-    }),
-    enabled: recommendationTab === 'popular' && Boolean(selectedFeaturedBuild) && selectedFeaturedBuildPartCount > 0 && selectedFeaturedBuildParts.length === selectedFeaturedBuildPartCount,
-    staleTime: 60_000
-  });
-  const featuredPreviewItems = featuredBuilds.map((build, index) => {
-    const buildParts = featuredBuildPartQueries[index]?.data ?? [];
-    const casePart = buildParts.find((item) => item.part.category === 'CASE')?.part;
-    const assetTotalPrice = buildParts.length === build.partSearches.length
-      ? buildParts.reduce((sum, item) => sum + item.part.price, 0)
-      : null;
 
-    return {
-      build,
-      buildParts,
-      casePart,
-      assetTotalPrice
-    };
-  });
-  const aiBuildImagePartQueries = useQueries({
-    queries: latestHomeAiBuilds.map((build) => {
-      const imageItem = aiBuildPreviewImageItem(build, latestHomeAiBuilds);
+  const curatedPreviewItems = useMemo<HomeFeaturedBuildPreviewItem[]>(() => (
+    CURATED_BUILD_TEMPLATES.map((template, buildIndex) => {
+      const buildParts = PART_CATEGORIES.map((category, categoryIndex) => {
+        const page = categoryPartQueries[categoryIndex]?.data as PartPage | undefined;
+        const candidates = page?.items ?? [];
+        const part = candidates[buildIndex] ?? candidates[0];
+        if (!part) return null;
+        return {
+          search: { category: category.value, searchQuery: part.name },
+          part
+        };
+      })
+        .filter((item): item is NonNullable<typeof item> => Boolean(item))
+        .sort((left, right) => BUILD_CATEGORY_ORDER.indexOf(left.search.category) - BUILD_CATEGORY_ORDER.indexOf(right.search.category));
+      const casePart = buildParts.find((item) => item.search.category === 'CASE')?.part;
+      const isComplete = buildParts.length === PART_CATEGORIES.length;
       return {
-        queryKey: ['parts', 'home-ai-build-image-part', build.id, imageItem?.partId],
-        queryFn: () => imageItem ? getPart(imageItem.partId) : Promise.resolve(null),
-        enabled: Boolean(imageItem),
+        build: {
+          ...template,
+          partSearches: BUILD_CATEGORY_ORDER.map((category) => ({
+            category,
+            searchQuery: PART_CATEGORIES.find((item) => item.value === category)?.label ?? category
+          }))
+        },
+        buildParts,
+        casePart,
+        assetTotalPrice: isComplete
+          ? buildParts.reduce((sum, item) => sum + item.part.price, 0)
+          : null
+      };
+    })
+  ), [categoryPartQueries]);
+
+  const latestHomeAiBuilds = useMemo(
+    () => recentBuildsForChatContext(assistantSession),
+    [assistantSession]
+  );
+  const selectedCuratedBuild = selectedCuratedBuildId
+    ? curatedPreviewItems.find((item) => item.build.id === selectedCuratedBuildId) ?? null
+    : null;
+  const selectedAiBuild = selectedAiBuildId
+    ? latestHomeAiBuilds.find((build) => build.id === selectedAiBuildId) ?? null
+    : null;
+
+  const aiImageQueries = useQueries({
+    queries: latestHomeAiBuilds.map((build) => {
+      const imageItem = build.items.find((item) => item.category === 'CASE')
+        ?? build.items.find((item) => item.category === 'GPU')
+        ?? build.items[0];
+      return {
+        queryKey: ['parts', 'modern-home-ai-image', build.id, imageItem?.partId ?? 'none'],
+        queryFn: () => getPart(imageItem!.partId),
+        enabled: Boolean(imageItem?.partId),
         staleTime: 60_000
       };
     })
   });
+
   const aiPreviewItems = latestHomeAiBuilds.map((build, index) => ({
     build,
-    imagePart: aiBuildImagePartQueries[index]?.data ?? null
+    imagePart: (aiImageQueries[index]?.data as PartRow | undefined) ?? null
   }));
-  const graphQuery = useQuery({
-    queryKey: [
-      'build-graph',
-      'home-ai-build',
-      selectedAiBuild?.id,
-      selectedAiBuild?.items.map((item) => item.partId).join(',')
-    ],
+
+  const curatedGraphItems = selectedCuratedBuild?.buildParts.map(({ search, part }) => ({
+    partId: part.id,
+    category: search.category,
+    quantity: 1
+  })) ?? [];
+  const curatedGraphSignature = curatedGraphItems.map((item) => `${item.category}:${item.partId}`).sort().join('|');
+  const curatedGraphQuery = useQuery({
+    queryKey: ['build-graph', 'modern-home-curated', selectedCuratedBuild?.build.id, curatedGraphSignature],
     queryFn: () => resolveBuildGraph({
       source: 'AI_BUILD',
       view: 'FOCUSED',
-      items: selectedAiBuild?.items.map((item) => ({
-        partId: item.partId,
-        category: item.category,
-        quantity: item.quantity
-      })),
-      budgetWon: selectedAiBuild?.budgetWon,
-      focus: {
-        mode: 'BUILD_OVERVIEW',
-        tool: 'price'
-      }
+      budgetWon: selectedCuratedBuild?.assetTotalPrice ?? undefined,
+      items: curatedGraphItems
     }),
-    enabled: recommendationTab === 'ai' && Boolean(selectedAiBuild),
-    staleTime: 60_000
+    enabled: Boolean(selectedCuratedBuild && curatedGraphItems.length === PART_CATEGORIES.length),
+    staleTime: 30_000
   });
 
-  // '/?assistant=open' 진입(추천 결과 빈 상태 CTA 등) 시 챗봇을 바로 연다.
-  // 전역 챗봇 리스너가 늦게 마운트되는 첫 진입에도 이벤트가 유실되지 않도록 한 틱 늦춰 발사하고,
-  // 뒤로 가기 시 재실행되지 않게 파라미터는 즉시 제거한다.
+  const aiGraphItems = selectedAiBuild?.items.map((item) => ({
+    partId: item.partId,
+    category: item.category,
+    quantity: item.quantity
+  })) ?? [];
+  const aiGraphSignature = aiGraphItems.map((item) => `${item.category}:${item.partId}:${item.quantity}`).sort().join('|');
+  const aiGraphQuery = useQuery({
+    queryKey: ['build-graph', 'modern-home-ai', selectedAiBuild?.id, aiGraphSignature],
+    queryFn: () => resolveBuildGraph({
+      source: 'AI_BUILD',
+      view: 'FOCUSED',
+      budgetWon: selectedAiBuild?.budgetWon,
+      items: aiGraphItems
+    }),
+    enabled: Boolean(selectedAiBuild && aiGraphItems.length > 0),
+    staleTime: 30_000
+  });
+
+  useEffect(() => {
+    const syncSession = () => setAssistantSession(readAssistantSession());
+    window.addEventListener(AI_ASSISTANT_SESSION_CHANGED_EVENT, syncSession);
+    window.addEventListener('storage', syncSession);
+    return () => {
+      window.removeEventListener(AI_ASSISTANT_SESSION_CHANGED_EVENT, syncSession);
+      window.removeEventListener('storage', syncSession);
+    };
+  }, []);
+
   useEffect(() => {
     if (searchParams.get('assistant') !== 'open') return;
-    const timer = window.setTimeout(() => openAiAssistant(), 0);
-    const nextParams = new URLSearchParams(searchParams);
-    nextParams.delete('assistant');
-    setSearchParams(nextParams, { replace: true });
+    skipHomeChoicePromptRef.current = true;
+    setShowHomeChoicePrompt(false);
+    setShowAiFlowChoicePrompt(false);
+    const timer = window.setTimeout(() => openAiAssistant({ placement: 'side' }), 0);
     return () => window.clearTimeout(timer);
-  }, [searchParams, setSearchParams]);
+  }, [searchParams]);
 
   useEffect(() => {
     const syncHomeChoicePrompt = () => {
@@ -471,9 +288,7 @@ export function HomePage() {
 
     const closeChoicesForAiAssistant = (event: Event) => {
       const detail = event instanceof CustomEvent ? event.detail as AiAssistantVisibilityDetail | undefined : undefined;
-      if (!detail?.open) {
-        return;
-      }
+      if (!detail?.open) return;
       setShowHomeChoicePrompt(false);
       setShowAiFlowChoicePrompt(false);
     };
@@ -490,97 +305,15 @@ export function HomePage() {
   }, []);
 
   useEffect(() => {
-    const syncAssistantSession = () => {
-      clearLegacyAiStorage();
-      const nextSession = readAssistantSession();
-      setAssistantSession(nextSession);
-      if (nextSession.latestBuilds.length > 0) {
-        setRecommendationTab('ai');
-      } else {
-        setRecommendationTab('popular');
-        setSelectedAiBuildId(null);
-      }
-    };
-    syncAssistantSession();
-    window.addEventListener(AI_ASSISTANT_SESSION_CHANGED_EVENT, syncAssistantSession);
-    window.addEventListener(AUTH_CHANGED_EVENT, syncAssistantSession);
-    window.addEventListener('storage', syncAssistantSession);
-    return () => {
-      window.removeEventListener(AI_ASSISTANT_SESSION_CHANGED_EVENT, syncAssistantSession);
-      window.removeEventListener(AUTH_CHANGED_EVENT, syncAssistantSession);
-      window.removeEventListener('storage', syncAssistantSession);
-    };
-  }, []);
-
-  useEffect(() => {
     if (selectedAiBuildId && !latestHomeAiBuilds.some((build) => build.id === selectedAiBuildId)) {
       setSelectedAiBuildId(null);
     }
   }, [latestHomeAiBuilds, selectedAiBuildId]);
 
-  useEffect(() => {
-    const main = homeMainRef.current;
-    const screen = main?.closest('.screen-shell');
-    if (!main || !screen) return;
-
-    const updateHomeHeaderHeight = () => {
-      const headerHeight = Math.max(0, Math.round(main.getBoundingClientRect().top));
-      main.style.setProperty('--home-header-height', `${headerHeight}px`);
-      const fullpageApi = (window as Window & { fullpage_api?: { reBuild?: () => void } }).fullpage_api;
-      fullpageApi?.reBuild?.();
-    };
-
-    updateHomeHeaderHeight();
-    window.addEventListener('resize', updateHomeHeaderHeight);
-
-    const resizeObserver = new ResizeObserver(updateHomeHeaderHeight);
-    Array.from(screen.children).forEach((child) => {
-      if (child !== main) {
-        resizeObserver.observe(child);
-      }
-    });
-
-    return () => {
-      window.removeEventListener('resize', updateHomeHeaderHeight);
-      resizeObserver.disconnect();
-    };
-  }, []);
-
-  async function selectAiBuild(build: AiRecommendedBuild) {
-    if (applyingBuildId || applyingFeaturedBuildId) return;
-    const normalizedBuild = normalizeAiRecommendedBuild(build);
-    saveSelectedAiBuild(normalizedBuild);
+  async function applyCuratedBuild(build: CuratedBuild, buildParts: HomeFeaturedBuildPreviewItem['buildParts']) {
+    if (applyingBuildId || buildParts.length !== PART_CATEGORIES.length) return;
+    setApplyingBuildId(build.id);
     setApplyError(null);
-    setApplyingBuildId(normalizedBuild.id);
-    try {
-      const appliedDraft = await applyAiBuildToQuoteDraft({
-        buildId: normalizedBuild.id,
-        conflictPolicy: 'REPLACE',
-        items: normalizedBuild.items.map((item) => ({
-          partId: item.partId,
-          category: item.category,
-          quantity: item.quantity
-        }))
-      });
-      queryClient.setQueryData(['quote-draft', 'current'], appliedDraft);
-      void queryClient.invalidateQueries({ queryKey: ['quote-draft', 'current'] });
-      navigate('/self-quote');
-    } catch {
-      setApplyError('AI 추천 조합을 셀프 견적 장바구니에 적용하지 못했습니다.');
-    } finally {
-      setApplyingBuildId(null);
-    }
-  }
-
-  async function selectFeaturedBuild(build: FeaturedBuild, buildParts: FeaturedBuildResolvedPart[]) {
-    if (applyingFeaturedBuildId || applyingBuildId) return;
-    setApplyError(null);
-    if (buildParts.length < build.partSearches.length) {
-      setApplyError('추천상품 견적 정보를 아직 불러오는 중입니다. 잠시 후 다시 선택해 주세요.');
-      return;
-    }
-
-    setApplyingFeaturedBuildId(build.id);
     try {
       const appliedDraft = await applyAiBuildToQuoteDraft({
         buildId: build.id,
@@ -595,9 +328,35 @@ export function HomePage() {
       void queryClient.invalidateQueries({ queryKey: ['quote-draft', 'current'] });
       navigate('/self-quote');
     } catch {
-      setApplyError('추천상품 견적을 셀프 견적 장바구니에 담지 못했습니다. 잠시 후 다시 시도해 주세요.');
+      setApplyError('추천 조합을 현재 견적에 담지 못했습니다. 잠시 후 다시 시도해 주세요.');
     } finally {
-      setApplyingFeaturedBuildId(null);
+      setApplyingBuildId(null);
+    }
+  }
+
+  async function applyAiBuild(build: AiRecommendedBuild) {
+    if (applyingBuildId) return;
+    const normalizedBuild = normalizeAiRecommendedBuild(build);
+    setApplyingBuildId(normalizedBuild.id);
+    setApplyError(null);
+    try {
+      const appliedDraft = await applyAiBuildToQuoteDraft({
+        buildId: normalizedBuild.id,
+        conflictPolicy: 'REPLACE',
+        items: normalizedBuild.items.map((item) => ({
+          partId: item.partId,
+          category: item.category,
+          quantity: item.quantity
+        }))
+      });
+      saveSelectedAiBuild(normalizedBuild);
+      queryClient.setQueryData(['quote-draft', 'current'], appliedDraft);
+      void queryClient.invalidateQueries({ queryKey: ['quote-draft', 'current'] });
+      navigate('/self-quote');
+    } catch {
+      setApplyError('AI 추천 조합을 현재 견적에 담지 못했습니다. 잠시 후 다시 시도해 주세요.');
+    } finally {
+      setApplyingBuildId(null);
     }
   }
 
@@ -653,116 +412,127 @@ export function HomePage() {
   }
 
   return (
-    <div className="screen-shell home-screen-shell">
+    <div className="screen-shell modern-home-screen min-h-screen">
       <AppHeader />
-      <main ref={homeMainRef} className="home-screen-main mx-auto w-full max-w-[1550px] px-4 sm:px-6 lg:px-8 xl:px-0">
-      <div data-testid="home-fullpage-scroll" className="home-fullpage-shell">
-        <ReactFullpage
-          licenseKey=""
-          anchors={['storefront', 'recommended-builds', 'popular-parts']}
-          scrollingSpeed={1000}
-          navigation
-          navigationTooltips={['홈', '추천상품', '인기 부품']}
-          credits={{ enabled: false }}
-          verticalCentered={false}
-          bigSectionsDestination="top"
-          fitToSection
-          keyboardScrolling
-          lockAnchors
-          recordHistory={false}
-          responsiveWidth={768}
-          scrollOverflow={false}
-          render={() => (
-            <ReactFullpage.Wrapper>
-              <section className="section home-fullpage-section home-fullpage-section--hero">
-                <HomeStorefront />
-              </section>
-
-              <section className="section home-fullpage-section home-fullpage-section--center">
-          <div className="panel home-fit-panel home-recommended-panel p-4 sm:p-5">
-            <div className="mb-3 flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
-              <div>
-                <div className="text-xs font-black text-brand-blue"></div>
-                <h2 className="mt-1 text-xl font-black text-commerce-ink">추천상품</h2>
-                <p className="mt-1 text-sm text-slate-500">우측 토글을 클릭하여 인기상품과 AI 추천을 함께 살펴보세요.</p>
+      <main id="main-content" className="modern-home-main mx-auto w-full max-w-[1320px] px-4 pb-20 pt-8 sm:px-6 lg:px-8 xl:px-0">
+        <section className="modern-home-hero grid items-stretch gap-6 rounded-xl border border-slate-200 bg-white/80 p-4 sm:p-6 xl:grid-cols-[minmax(0,1fr)_420px]">
+          <div className="modern-home-intro flex min-h-[560px] flex-col justify-center rounded-xl border border-blue-100 bg-[#f7fbff] p-6 sm:p-8 lg:p-12">
+            <div className="max-w-[680px]">
+              <div className="inline-flex items-center gap-2 text-sm font-bold text-brand-blue">
+                <ShieldCheck size={18} aria-hidden="true" />
+                견적 · 검증 · AS
               </div>
-              <div role="tablist" aria-label="홈 추천상품 탭" className="inline-flex rounded-lg border border-commerce-line bg-slate-50 p-1">
-                <button
-                  type="button"
-                  role="tab"
-                  aria-selected={recommendationTab === 'popular'}
-                  onClick={() => setRecommendationTab('popular')}
-                  className={`min-h-10 rounded-md px-4 text-sm font-black transition ${recommendationTab === 'popular' ? 'bg-commerce-ink text-white shadow-product' : 'text-slate-600 hover:bg-white hover:text-commerce-ink'}`}
-                >
-                  인기상품
-                </button>
-                <button
-                  type="button"
-                  role="tab"
-                  aria-selected={recommendationTab === 'ai'}
-                  onClick={() => setRecommendationTab('ai')}
-                  className={`min-h-10 rounded-md px-4 text-sm font-black transition ${recommendationTab === 'ai' ? 'bg-commerce-ink text-white shadow-product' : 'text-slate-600 hover:bg-white hover:text-commerce-ink'}`}
-                >
-                  AI 추천상품
-                </button>
+              <h1 className="mt-6 max-w-[14ch] text-3xl font-black leading-[1.08] tracking-[-0.03em] text-commerce-ink sm:text-4xl">
+                견적부터 조립 후 AS까지, 한 흐름으로
+              </h1>
+              <p className="mt-5 text-sm font-medium text-slate-600 sm:text-base">예산과 용도만 말하면 시작됩니다.</p>
+
+              <div data-testid="home-hero-process-flow" className="mt-8 flex flex-wrap items-center gap-2 sm:gap-3">
+                <div className="inline-flex min-h-14 items-center gap-3 rounded-lg border border-slate-200 bg-white px-4 font-black text-commerce-ink">
+                  <span className="grid h-8 w-8 place-items-center rounded-lg bg-blue-50 text-brand-blue"><Bot size={17} aria-hidden="true" /></span>
+                  <span className="text-sm">AI 견적</span>
+                </div>
+                <ArrowRight size={16} className="text-slate-400" aria-hidden="true" />
+                <div className="inline-flex min-h-14 items-center gap-3 rounded-lg border border-slate-200 bg-white px-4 font-black text-commerce-ink">
+                  <span className="grid h-8 w-8 place-items-center rounded-lg bg-blue-50 text-brand-blue"><ShieldCheck size={17} aria-hidden="true" /></span>
+                  <span className="text-sm">호환성 검증</span>
+                </div>
+                <ArrowRight size={16} className="text-slate-400" aria-hidden="true" />
+                <div className="inline-flex min-h-14 items-center gap-3 rounded-lg border border-blue-200 bg-white px-4 font-black text-commerce-ink">
+                  <span className="grid h-8 w-8 place-items-center rounded-lg bg-brand-blue text-white"><Wrench size={17} aria-hidden="true" /></span>
+                  <span className="text-sm">조립 후 AS</span>
+                </div>
+              </div>
+
+              <div className="mt-8 flex flex-col gap-3 sm:flex-row">
+              <button
+                type="button"
+                onClick={() => openAiAssistant({ placement: 'side' })}
+                className="inline-flex min-h-11 items-center justify-center gap-2 rounded-lg bg-commerce-ink px-5 text-sm font-black text-white transition hover:bg-brand-blue focus:outline-none focus:ring-4 focus:ring-blue-100"
+              >
+                <Bot size={18} aria-hidden="true" />
+                AI로 견적 만들기
+              </button>
+              <Link
+                to="/self-quote"
+                className="inline-flex min-h-11 items-center justify-center gap-2 rounded-lg border border-slate-300 bg-white px-5 text-sm font-black text-commerce-ink transition hover:border-commerce-ink focus:outline-none focus:ring-4 focus:ring-blue-100"
+              >
+                직접 구성하기
+                <ArrowRight size={17} aria-hidden="true" />
+              </Link>
               </div>
             </div>
-            {applyError ? (
-              <div role="alert" className="mb-3 rounded-md border border-red-100 bg-red-50 px-4 py-3 text-sm font-bold text-red-700">
-                {applyError}
+          </div>
+
+          <div className="order-first min-w-0 sm:order-none xl:w-[420px]">
+            <HomeQuickStartPanel />
+          </div>
+        </section>
+
+        <CategoryRail />
+
+        <section className="modern-home-recommendations mt-16" aria-labelledby="home-recommendations-title">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+            <div>
+              <div className="flex items-center gap-2 text-sm font-bold text-brand-blue">
+                <Sparkles size={17} aria-hidden="true" />
+                {latestHomeAiBuilds.length ? '방금 나눈 대화로 새 추천을 만들었어요' : '내부 부품 데이터로 미리 검증했습니다'}
               </div>
+              <h2 id="home-recommendations-title" className="mt-2 text-2xl font-black text-commerce-ink">검증된 추천 조합</h2>
+              <p className="mt-2 text-base text-slate-600">가장 잘 맞는 조합을 먼저 보여드려요. 다른 후보로 바꾸면 무엇이 달라지는지도 함께 보여드릴게요.</p>
+            </div>
+            {latestHomeAiBuilds.length ? (
+              <button
+                type="button"
+                onClick={() => openAiAssistant({ placement: 'side' })}
+                className="inline-flex min-h-11 items-center gap-2 self-start rounded-lg border border-blue-200 bg-blue-50 px-4 text-sm font-black text-brand-blue hover:border-brand-blue focus:outline-none focus:ring-4 focus:ring-blue-100 sm:self-auto"
+              >
+                AI와 조건 더 다듬기
+              </button>
             ) : null}
-            {recommendationTab === 'popular' ? (
-              <HomeFeaturedBuildPreview
-                items={featuredPreviewItems}
-                selectedBuildId={selectedFeaturedBuild?.id ?? null}
-                applyingBuildId={applyingFeaturedBuildId}
-                graph={featuredBuildGraphQuery.data}
-                isGraphLoading={featuredBuildGraphQuery.isLoading}
-                isGraphError={featuredBuildGraphQuery.isError}
-                onSelectBuild={setSelectedFeaturedBuildId}
-                onClearSelection={() => setSelectedFeaturedBuildId(null)}
-                onApplyBuild={selectFeaturedBuild}
-                onImageError={handlePartImageError}
-              />
-            ) : (
+          </div>
+
+          {applyError ? (
+            <div role="alert" className="mt-5 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm font-bold text-red-700">
+              {applyError}
+            </div>
+          ) : null}
+
+          <div className="mt-6">
+            {latestHomeAiBuilds.length ? (
               <div data-testid="home-ai-recommendations" className="home-ai-recommendations">
-                {latestHomeAiBuilds.length > 0 ? (
-                  <HomeAiBuildPreview
-                    items={aiPreviewItems}
-                    selectedBuildId={selectedAiBuild?.id ?? null}
-                    applyingBuildId={applyingBuildId}
-                    graph={graphQuery.data}
-                    isGraphLoading={graphQuery.isLoading}
-                    isGraphError={graphQuery.isError}
-                    onSelectBuild={setSelectedAiBuildId}
-                    onClearSelection={() => setSelectedAiBuildId(null)}
-                    onApplyBuild={selectAiBuild}
-                    onImageError={handlePartImageError}
-                  />
-                ) : (
-                  <div className="rounded-lg border border-dashed border-blue-200 bg-blue-50/60 p-6 text-center">
-                    <div className="mx-auto grid h-12 w-12 place-items-center rounded-xl bg-white text-brand-blue shadow-product">
-                      <Bot size={24} />
-                    </div>
-                    <h3 className="mt-3 text-base font-black text-commerce-ink">AI 추천상품 대기 중</h3>
-                    <p className="mx-auto mt-2 max-w-lg break-keep text-sm leading-6 text-slate-500">
-                      AI에게 예산이나 부품을 물어보면 추천상품 3개가 여기에 표시됩니다.
-                    </p>
-                  </div>
-                )}
+                <HomeAiBuildPreview
+                  items={aiPreviewItems}
+                  selectedBuildId={selectedAiBuild?.id ?? null}
+                  applyingBuildId={applyingBuildId}
+                  graph={aiGraphQuery.data}
+                  isGraphLoading={aiGraphQuery.isLoading}
+                  isGraphError={aiGraphQuery.isError}
+                  onSelectBuild={setSelectedAiBuildId}
+                  onClearSelection={() => setSelectedAiBuildId(null)}
+                  onApplyBuild={applyAiBuild}
+                  onImageError={handleProductImageError}
+                />
               </div>
+            ) : (
+              <HomeFeaturedBuildPreview
+                items={curatedPreviewItems}
+                selectedBuildId={selectedCuratedBuild?.build.id ?? null}
+                applyingBuildId={applyingBuildId}
+                graph={curatedGraphQuery.data}
+                isGraphLoading={curatedGraphQuery.isLoading}
+                isGraphError={curatedGraphQuery.isError}
+                onSelectBuild={setSelectedCuratedBuildId}
+                onClearSelection={() => setSelectedCuratedBuildId(null)}
+                onApplyBuild={applyCuratedBuild}
+                onImageError={handleProductImageError}
+              />
             )}
           </div>
         </section>
 
-              <section className="section home-fullpage-section home-fullpage-section--center">
-                <PopularPartsSection />
-              </section>
-            </ReactFullpage.Wrapper>
-          )}
-        />
-      </div>
+        <PopularPartsSection />
+        <EvidenceSection />
       </main>
       {showHomeChoicePrompt ? (
         <HomeLoginChoiceDialog
@@ -813,65 +583,65 @@ function HomeLoginChoiceDialog({
         aria-labelledby="home-login-choice-title"
         aria-describedby="home-login-choice-description"
         data-testid="home-login-choice-dialog"
-        className="relative w-full max-w-[1064px]"
+        className="relative w-full max-w-[760px]"
       >
         <button
           type="button"
           aria-label="선택지 닫기"
           onClick={onClose}
-          className="absolute -top-12 right-0 grid h-11 w-11 place-items-center rounded-full bg-white text-slate-600 shadow-lg transition hover:bg-slate-100 hover:text-commerce-ink focus:outline-none focus:ring-4 focus:ring-blue-100"
+          className="absolute -top-12 right-0 grid h-10 w-10 place-items-center rounded-full bg-white text-slate-600 shadow-lg transition hover:bg-slate-100 hover:text-commerce-ink focus:outline-none focus:ring-4 focus:ring-blue-100"
         >
-          <X size={20} />
+          <X size={18} aria-hidden="true" />
         </button>
-        <div className="mx-auto flex max-w-[868px] items-start gap-4 rounded-2xl bg-white p-8 shadow-lg sm:p-9">
-          <div className="grid h-[62px] w-[62px] shrink-0 place-items-center rounded-xl bg-commerce-ink text-white" aria-hidden="true">
-            <Bot size={31} strokeWidth={2.3} />
+        <div className="mx-auto flex max-w-[620px] items-start gap-3 rounded-2xl bg-white p-6 shadow-lg sm:p-7">
+          <div className="grid h-11 w-11 shrink-0 place-items-center rounded-xl bg-commerce-ink text-white" aria-hidden="true">
+            <Bot size={23} strokeWidth={2.3} />
           </div>
           <div>
-            <h2 id="home-login-choice-title" className="text-[28px] font-black leading-9 text-commerce-ink">
+            <h2 id="home-login-choice-title" className="text-xl font-black leading-7 text-commerce-ink">
               어떤 방식으로 PC를 맞춰볼까요?
             </h2>
-            <p id="home-login-choice-description" className="mt-2 break-keep text-[20px] leading-8 text-slate-600">
+            <p id="home-login-choice-description" className="mt-1 break-keep text-sm leading-6 text-slate-600">
               처음이라면 AI 추천으로 빠르게 시작하거나, 전체 부품 목록에서 직접 비교할 수 있습니다.
             </p>
           </div>
         </div>
 
-        <div className="mt-7 grid gap-5 sm:grid-cols-2">
+        <div className="mt-5 grid gap-4 sm:grid-cols-2">
           <button
             type="button"
             autoFocus
             onClick={onChooseAi}
             data-testid="home-login-choice-ai"
-            className="group flex min-h-[249px] flex-col items-start rounded-2xl bg-white p-7 text-left shadow-lg transition hover:-translate-y-0.5 hover:bg-blue-50 focus:outline-none focus:ring-4 focus:ring-blue-100"
+            className="group flex min-h-[178px] flex-col items-start rounded-2xl bg-white p-5 text-left shadow-lg transition hover:-translate-y-0.5 hover:bg-blue-50 focus:outline-none focus:ring-4 focus:ring-blue-100"
           >
-            <span className="grid h-[62px] w-[62px] place-items-center rounded-xl bg-brand-blue text-white transition group-hover:bg-blue-700" aria-hidden="true">
-              <Bot size={31} strokeWidth={2.3} />
+            <span className="grid h-11 w-11 place-items-center rounded-lg bg-brand-blue text-white transition group-hover:bg-blue-700" aria-hidden="true">
+              <Bot size={22} strokeWidth={2.3} />
             </span>
-            <span className="mt-6 text-[22px] font-black leading-8 text-commerce-ink">AI로 부품 맞춰보기</span>
-            <span className="mt-2 break-keep text-[20px] leading-8 text-slate-600">예산과 용도를 말하면 추천 조합을 바로 만들어줍니다.</span>
+            <span className="mt-4 text-base font-black text-commerce-ink">AI로 부품 맞춰보기</span>
+            <span className="mt-1 break-keep text-sm leading-5 text-slate-600">예산과 용도를 말하면 추천 조합을 바로 만들어줍니다.</span>
           </button>
 
           <button
             type="button"
             onClick={onChooseParts}
             data-testid="home-login-choice-parts"
-            className="group flex min-h-[249px] flex-col items-start rounded-2xl bg-white p-7 text-left shadow-lg transition hover:-translate-y-0.5 hover:bg-emerald-50 focus:outline-none focus:ring-4 focus:ring-emerald-100"
+            className="group flex min-h-[178px] flex-col items-start rounded-2xl bg-white p-5 text-left shadow-lg transition hover:-translate-y-0.5 hover:bg-emerald-50 focus:outline-none focus:ring-4 focus:ring-emerald-100"
           >
-            <span className="grid h-[62px] w-[62px] place-items-center rounded-xl bg-emerald-600 text-white transition group-hover:bg-emerald-700" aria-hidden="true">
-              <Boxes size={31} strokeWidth={2.3} />
+            <span className="grid h-11 w-11 place-items-center rounded-lg bg-emerald-600 text-white transition group-hover:bg-emerald-700" aria-hidden="true">
+              <Boxes size={22} strokeWidth={2.3} />
             </span>
-            <span className="mt-6 text-[22px] font-black leading-8 text-commerce-ink">부품 보러가기</span>
-            <span className="mt-2 break-keep text-[20px] leading-8 text-slate-600">전체 부품 페이지에서 카테고리와 가격을 직접 살펴봅니다.</span>
+            <span className="mt-4 text-base font-black text-commerce-ink">부품 보러가기</span>
+            <span className="mt-1 break-keep text-sm leading-5 text-slate-600">전체 부품 페이지에서 카테고리와 가격을 직접 살펴봅니다.</span>
           </button>
         </div>
 
-        <label className="mx-auto mt-6 flex w-fit items-center gap-3 rounded-2xl bg-white px-5 py-4 text-[20px] font-bold text-slate-700 shadow-lg">
+        <label className="mx-auto mt-4 flex w-fit items-center gap-2 rounded-2xl bg-white px-4 py-3 text-sm font-bold text-slate-700 shadow-lg">
           <input
             type="checkbox"
             checked={neverShow}
             onChange={(event) => onNeverShowChange(event.currentTarget.checked)}
-            className="h-5 w-5 accent-blue-600"
+            className="h-4 w-4 accent-blue-600"
           />
           다시는 표시하지 않기
         </label>
@@ -906,69 +676,69 @@ function HomeAiFlowChoiceDialog({
         aria-labelledby="home-ai-flow-choice-title"
         aria-describedby="home-ai-flow-choice-description"
         data-testid="home-ai-flow-choice-dialog"
-        className="relative w-full max-w-[1316px]"
+        className="relative w-full max-w-[940px]"
       >
         <button
           type="button"
           aria-label="선택지 닫기"
           onClick={onClose}
-          className="absolute -top-12 right-0 grid h-11 w-11 place-items-center rounded-full bg-white text-slate-600 shadow-lg transition hover:bg-slate-100 hover:text-commerce-ink focus:outline-none focus:ring-4 focus:ring-blue-100"
+          className="absolute -top-12 right-0 grid h-10 w-10 place-items-center rounded-full bg-white text-slate-600 shadow-lg transition hover:bg-slate-100 hover:text-commerce-ink focus:outline-none focus:ring-4 focus:ring-blue-100"
         >
-          <X size={20} />
+          <X size={18} aria-hidden="true" />
         </button>
-        <div className="mx-auto flex max-w-[868px] items-start gap-4 rounded-2xl bg-white p-8 shadow-lg sm:p-9">
-          <div className="grid h-[62px] w-[62px] shrink-0 place-items-center rounded-xl bg-brand-blue text-white" aria-hidden="true">
-            <Bot size={31} strokeWidth={2.3} />
+        <div className="mx-auto flex max-w-[620px] items-start gap-3 rounded-2xl bg-white p-6 shadow-lg sm:p-7">
+          <div className="grid h-11 w-11 shrink-0 place-items-center rounded-xl bg-brand-blue text-white" aria-hidden="true">
+            <Bot size={23} strokeWidth={2.3} />
           </div>
           <div>
-            <h2 id="home-ai-flow-choice-title" className="text-[28px] font-black leading-9 text-commerce-ink">
+            <h2 id="home-ai-flow-choice-title" className="text-xl font-black leading-7 text-commerce-ink">
               견적을 어떤 방식으로 시작할까요?
             </h2>
-            <p id="home-ai-flow-choice-description" className="mt-2 break-keep text-[20px] leading-8 text-slate-600">
+            <p id="home-ai-flow-choice-description" className="mt-1 break-keep text-sm leading-6 text-slate-600">
               AI에게 바로 맡기거나, 직접 담아보면서 비교할 수 있습니다.
             </p>
           </div>
         </div>
 
-        <div className="mt-7 grid gap-5 md:grid-cols-3">
+        <div className="mt-5 grid gap-4 md:grid-cols-3">
           <button
             type="button"
             autoFocus
             onClick={onChooseAi}
             data-testid="home-ai-flow-choice-ai"
-            className="group flex min-h-[249px] flex-col items-start rounded-2xl bg-white p-7 text-left shadow-lg transition hover:-translate-y-0.5 hover:bg-blue-50 focus:outline-none focus:ring-4 focus:ring-blue-100"
+            className="group flex min-h-[178px] flex-col items-start rounded-2xl bg-white p-5 text-left shadow-lg transition hover:-translate-y-0.5 hover:bg-blue-50 focus:outline-none focus:ring-4 focus:ring-blue-100"
           >
-            <span className="grid h-[62px] w-[62px] place-items-center rounded-xl bg-brand-blue text-white transition group-hover:bg-blue-700" aria-hidden="true">
-              <Bot size={31} strokeWidth={2.3} />
+            <span className="grid h-11 w-11 place-items-center rounded-lg bg-brand-blue text-white transition group-hover:bg-blue-700" aria-hidden="true">
+              <Bot size={22} strokeWidth={2.3} />
             </span>
-            <span className="mt-6 text-[22px] font-black leading-8 text-commerce-ink">AI로 맞춰보기</span>
-            <span className="mt-2 break-keep text-[20px] leading-8 text-slate-600">예산과 용도를 말하면 중앙 창에서 추천을 시작합니다.</span>
+            <span className="mt-4 text-base font-black text-commerce-ink">AI로 맞춰보기</span>
+            <span className="mt-1 break-keep text-sm leading-5 text-slate-600">예산과 용도를 말하면 홈 채팅에서 추천을 시작합니다.</span>
           </button>
 
           <button
             type="button"
             onClick={onChooseSelfQuote}
             data-testid="home-ai-flow-choice-self-quote"
-            className="group flex min-h-[249px] flex-col items-start rounded-2xl bg-white p-7 text-left shadow-lg transition hover:-translate-y-0.5 hover:bg-slate-50 focus:outline-none focus:ring-4 focus:ring-blue-100"
+            className="group flex min-h-[178px] flex-col items-start rounded-2xl bg-white p-5 text-left shadow-lg transition hover:-translate-y-0.5 hover:bg-slate-50 focus:outline-none focus:ring-4 focus:ring-blue-100"
           >
-            <span className="grid h-[62px] w-[62px] place-items-center rounded-xl bg-commerce-ink text-white transition group-hover:bg-slate-700" aria-hidden="true">
-              <FileText size={31} strokeWidth={2.3} />
+            <span className="grid h-11 w-11 place-items-center rounded-lg bg-commerce-ink text-white transition group-hover:bg-slate-700" aria-hidden="true">
+              <FileText size={22} strokeWidth={2.3} />
             </span>
-            <span className="mt-6 text-[22px] font-black leading-8 text-commerce-ink">셀프견적</span>
-            <span className="mt-2 break-keep text-[20px] leading-8 text-slate-600">견적판에서 부품을 직접 담고 조합을 확인합니다.</span>
+            <span className="mt-4 text-base font-black text-commerce-ink">셀프견적</span>
+            <span className="mt-1 break-keep text-sm leading-5 text-slate-600">견적판에서 부품을 직접 담고 조합을 확인합니다.</span>
           </button>
 
           <button
             type="button"
             onClick={onChooseAllParts}
             data-testid="home-ai-flow-choice-all-parts"
-            className="group flex min-h-[249px] flex-col items-start rounded-2xl bg-white p-7 text-left shadow-lg transition hover:-translate-y-0.5 hover:bg-emerald-50 focus:outline-none focus:ring-4 focus:ring-emerald-100"
+            className="group flex min-h-[178px] flex-col items-start rounded-2xl bg-white p-5 text-left shadow-lg transition hover:-translate-y-0.5 hover:bg-emerald-50 focus:outline-none focus:ring-4 focus:ring-emerald-100"
           >
-            <span className="grid h-[62px] w-[62px] place-items-center rounded-xl bg-emerald-600 text-white transition group-hover:bg-emerald-700" aria-hidden="true">
-              <Boxes size={31} strokeWidth={2.3} />
+            <span className="grid h-11 w-11 place-items-center rounded-lg bg-emerald-600 text-white transition group-hover:bg-emerald-700" aria-hidden="true">
+              <Boxes size={22} strokeWidth={2.3} />
             </span>
-            <span className="mt-6 text-[22px] font-black leading-8 text-commerce-ink">전체부품</span>
-            <span className="mt-2 break-keep text-[20px] leading-8 text-slate-600">전체 부품 목록에서 카테고리별로 먼저 살펴봅니다.</span>
+            <span className="mt-4 text-base font-black text-commerce-ink">전체부품</span>
+            <span className="mt-1 break-keep text-sm leading-5 text-slate-600">전체 부품 목록에서 카테고리별로 먼저 살펴봅니다.</span>
           </button>
         </div>
       </section>
@@ -976,264 +746,38 @@ function HomeAiFlowChoiceDialog({
   );
 }
 
-function featuredBuildGraphSignature(buildParts: FeaturedBuildResolvedPart[]) {
-  return buildParts
-    .map(({ search, part }) => `${search.category}:${part.id}:1`)
-    .sort()
-    .join('|');
-}
-
-function aiBuildPreviewImageItem(
-  build: AiRecommendedBuild,
-  allBuilds: AiRecommendedBuild[]
-): AiRecommendedBuild['items'][number] | undefined {
-  const categoryPriority: PartCategory[] = ['GPU', 'CASE', 'CPU', 'COOLER', 'MOTHERBOARD', 'RAM', 'STORAGE', 'PSU'];
-  const variedCategory = categoryPriority.find((category) => {
-    const partIds = allBuilds
-      .map((candidate) => candidate.items.find((item) => item.category === category)?.partId)
-      .filter((partId): partId is string => Boolean(partId));
-    return partIds.length > 0 && new Set(partIds).size > 1 && build.items.some((item) => item.category === category);
-  });
-  const displayPriority = variedCategory
-    ? [variedCategory, ...categoryPriority.filter((category) => category !== variedCategory)]
-    : categoryPriority;
-
-  for (const category of displayPriority) {
-    const item = build.items.find((part) => part.category === category);
-    if (item) {
-      return item;
-    }
-  }
-  return build.items[0];
-}
-
-function HomeStorefront() {
+function CategoryRail() {
   return (
-    <div className="home-storefront-fit space-y-6">
-      <PromoBanner />
-      <HeroActionGrid />
-      <HomePromoTileStrip />
-    </div>
-  );
-}
-
-function PromoBanner() {
-  const [activeIndex, setActiveIndex] = useState(0);
-
-  useEffect(() => {
-    const timer = window.setInterval(() => {
-      goToNextSlide();
-    }, 4_000);
-
-    return () => window.clearInterval(timer);
-  }, []);
-
-  function goToPreviousSlide() {
-    setActiveIndex((current) => (current - 1 + promoSlides.length) % promoSlides.length);
-  }
-
-  function goToNextSlide() {
-    setActiveIndex((current) => (current + 1) % promoSlides.length);
-  }
-
-  return (
-    <section className="relative" aria-label="홈 광고 배너">
-      <div className="home-promo-stage relative h-[430px] overflow-hidden sm:h-[500px] lg:h-[560px] xl:h-[600px]">
-        {promoSlides.map((slide, index) => {
-          const offset = carouselOffset(index, activeIndex, promoSlides.length);
-          const isActive = activeIndex === index;
-          const isSide = Math.abs(offset) === 1;
-          const isVisible = isActive || isSide;
-
-          return (
-            <button
-              key={slide.title}
-              type="button"
-              aria-label={`${index + 1}번 광고 보기: ${slide.title}`}
-              aria-current={isActive ? 'true' : undefined}
-              onClick={() => setActiveIndex(index)}
-              className={`group absolute top-1/2 overflow-hidden rounded-2xl bg-gradient-to-br ${slide.tone} text-left shadow-product transition-all duration-700 ease-out focus:outline-none focus:ring-4 focus:ring-blue-100 ${isVisible ? 'pointer-events-auto' : 'pointer-events-none'} ${isActive ? 'ring-2 ring-commerce-ink' : 'ring-1 ring-white/20'}`}
-              style={{
-                left: `${50 + offset * 34}%`,
-                width: isActive ? '58%' : '30%',
-                height: isActive ? '92%' : '72%',
-                zIndex: isActive ? 30 : isSide ? 20 : 0,
-                opacity: isActive ? 1 : isSide ? 0.68 : 0,
-                transform: `translate(-50%, -50%) scale(${isActive ? 1 : 0.9})`
-              }}
-            >
-              {slide.src ? (
-                <img
-                  src={slide.src}
-                  alt={slide.alt}
-                  className={`absolute inset-0 h-full w-full object-contain transition duration-500 group-hover:scale-[1.01] ${isActive ? 'opacity-100' : 'opacity-90 brightness-75'}`}
-                  draggable={false}
-                />
-              ) : (
-                <div className={`${isActive ? 'h-20 w-20' : 'h-14 w-14'} absolute right-6 top-6 grid place-items-center rounded-2xl bg-white/10 text-white/80 ring-1 ring-white/20`}>
-                  <PackageCheck size={isActive ? 42 : 30} strokeWidth={1.8} />
-                </div>
-              )}
-              <div className="absolute inset-0 bg-gradient-to-t from-black/85 via-black/35 to-black/5" />
-              <div className={`relative flex h-full flex-col justify-end text-white ${isActive ? 'p-8' : 'p-5'}`}>
-                <span className={`mb-3 w-fit rounded-full bg-white/15 font-black text-white ring-1 ring-white/20 ${isActive ? 'px-4 py-1.5 text-xs' : 'px-3 py-1 text-[10px]'}`}>
-                  {slide.badge}
-                </span>
-                <h2 className={`font-black leading-tight tracking-tight ${isActive ? 'text-3xl lg:text-5xl' : 'text-xl lg:text-2xl'}`}>{slide.title}</h2>
-                <p className={`mt-3 line-clamp-2 font-semibold leading-6 text-white/80 ${isActive ? 'text-base lg:text-lg' : 'text-xs lg:text-sm'}`}>{slide.subtitle}</p>
-              </div>
-            </button>
-          );
-        })}
-        <button
-          type="button"
-          aria-label="이전 광고 보기"
-          onClick={goToPreviousSlide}
-          className="absolute left-[18%] top-1/2 z-40 grid h-11 w-11 -translate-y-1/2 place-items-center rounded-full bg-white/90 text-commerce-ink shadow-product transition hover:bg-white focus:outline-none focus:ring-4 focus:ring-blue-100"
-        >
-          <ChevronLeft size={24} />
-        </button>
-        <button
-          type="button"
-          aria-label="다음 광고 보기"
-          onClick={goToNextSlide}
-          className="absolute right-[18%] top-1/2 z-40 grid h-11 w-11 -translate-y-1/2 place-items-center rounded-full bg-white/90 text-commerce-ink shadow-product transition hover:bg-white focus:outline-none focus:ring-4 focus:ring-blue-100"
-        >
-          <ChevronRight size={24} />
-        </button>
-      </div>
-      <div className="mt-2 flex items-center justify-center gap-2">
-        {promoSlides.map((slide, index) => (
-          <button
-            key={slide.title}
-            type="button"
-            aria-label={`${index + 1}번 광고 보기`}
-            aria-current={activeIndex === index ? 'true' : undefined}
-            onClick={() => setActiveIndex(index)}
-            className={`h-1.5 rounded-full transition-all ${activeIndex === index ? 'w-16 bg-commerce-ink' : 'w-7 bg-slate-300 hover:bg-slate-400'}`}
-          />
+    <nav aria-label="PC 부품 카테고리" className="modern-home-category-rail mt-6 overflow-x-auto rounded-xl border border-commerce-line bg-white">
+      <div className="grid min-w-[760px] grid-cols-8">
+        {PART_CATEGORIES.map(({ value, label, Icon }, index) => (
+          <Link
+            key={value}
+            to={`/parts?category=${value}`}
+            aria-label={label}
+            className={`flex min-h-[88px] flex-col items-center justify-center gap-2 px-3 text-sm font-bold text-commerce-ink transition hover:bg-blue-50 hover:text-brand-blue focus:outline-none focus:ring-4 focus:ring-inset focus:ring-blue-100 ${index > 0 ? 'border-l border-commerce-line' : ''}`}
+          >
+            <Icon size={25} strokeWidth={1.8} aria-hidden="true" />
+            <span>{label}</span>
+          </Link>
         ))}
       </div>
-    </section>
+    </nav>
   );
-}
-
-function carouselOffset(index: number, activeIndex: number, slideCount: number) {
-  let offset = index - activeIndex;
-  if (offset > slideCount / 2) {
-    offset -= slideCount;
-  }
-  if (offset < -slideCount / 2) {
-    offset += slideCount;
-  }
-  return offset;
-}
-
-function HeroActionGrid() {
-  return (
-    <div className="home-action-grid flex flex-wrap justify-center gap-7 sm:gap-10">
-      {heroActions.map((item) => {
-        const tone = heroActionTone(item.accent);
-        return (
-          <Link
-            key={item.label}
-            aria-label={`${item.label}: ${item.detail}`}
-            to={item.to}
-            className="home-action-link group flex w-[92px] flex-col items-center gap-2.5 rounded-md text-center transition hover:-translate-y-0.5 focus:outline-none focus:ring-4 focus:ring-blue-100 sm:w-[106px]"
-          >
-            <div className={`home-action-icon grid h-16 w-16 place-items-center rounded-2xl transition group-hover:shadow-product ${tone.icon}`}>
-              <item.icon size={29} strokeWidth={2.3} />
-            </div>
-            <span className="w-full truncate text-sm font-black text-commerce-ink">{item.label}</span>
-          </Link>
-        );
-      })}
-    </div>
-  );
-}
-
-function HomePromoTileStrip() {
-  return (
-    <div className="home-promo-tile-strip mx-auto grid w-full max-w-[1120px] gap-4 md:grid-cols-2">
-      {homePromoTiles.map((tile) => {
-        const className = `home-promo-tile group relative min-h-[118px] overflow-hidden rounded-xl px-7 py-6 text-left shadow-product transition hover:-translate-y-0.5 hover:shadow-xl focus:outline-none focus:ring-4 focus:ring-blue-100 ${tile.tone}`;
-        const content = (
-          <div className="flex items-center justify-between gap-4">
-            <div>
-              <div className="text-lg font-black">{tile.title}</div>
-              <div className="mt-2 max-w-[360px] break-keep text-sm font-semibold opacity-75">{tile.body}</div>
-            </div>
-            <div className="home-promo-tile-icon grid h-14 w-14 shrink-0 place-items-center rounded-2xl bg-white/60 transition group-hover:scale-[1.03]">
-              <tile.icon size={26} strokeWidth={2.2} />
-            </div>
-          </div>
-        );
-
-        if (tile.to === '/requirements/new') {
-          return (
-            <button
-              key={tile.title}
-              type="button"
-              onClick={() => openAiAssistant()}
-              className={className}
-            >
-              {content}
-            </button>
-          );
-        }
-
-        return (
-          <Link
-            key={tile.title}
-            to={tile.to}
-            className={className}
-          >
-            {content}
-          </Link>
-        );
-      })}
-    </div>
-  );
-}
-
-function heroActionTone(accent: HeroAction['accent']) {
-  const tones = {
-    primary: {
-      icon: 'bg-commerce-ink text-white'
-    },
-    blue: {
-      icon: 'bg-blue-50 text-brand-blue'
-    },
-    green: {
-      icon: 'bg-emerald-50 text-emerald-600'
-    },
-    slate: {
-      icon: 'bg-slate-100 text-commerce-ink'
-    }
-  };
-  return tones[accent];
 }
 
 function PopularPartsSection() {
-  const eventSessionId = useRef(`home-parts-${Date.now()}-${Math.random().toString(36).slice(2)}`);
-  const recordedImpressions = useRef(new Set<string>());
-  const homePartsQuery = useQuery({
-    queryKey: ['recommendations', 'home-parts', HOME_RECOMMENDED_PART_LIMIT],
-    queryFn: () => listHomeRecommendedParts(HOME_RECOMMENDED_PART_LIMIT),
+  const impressedIdsRef = useRef(new Set<string>());
+  const partsQuery = useQuery({
+    queryKey: ['recommendations', 'modern-home-parts', 8],
+    queryFn: () => listHomeRecommendedParts(8),
     staleTime: 60_000
   });
-  const homeParts = homePartsQuery.data?.items ?? [];
-  const displayItems: Array<(typeof homeParts)[number] | null> = homePartsQuery.isLoading
-    ? Array.from({ length: HOME_RECOMMENDED_PART_LIMIT }, () => null)
-    : homeParts;
 
   useEffect(() => {
-    homeParts.forEach((item) => {
-      const key = item.recommendationId;
-      if (recordedImpressions.current.has(key)) {
-        return;
-      }
-      recordedImpressions.current.add(key);
+    for (const item of partsQuery.data?.items ?? []) {
+      if (impressedIdsRef.current.has(item.recommendationId)) continue;
+      impressedIdsRef.current.add(item.recommendationId);
       void recordRecommendationEvent({
         eventType: 'IMPRESSION',
         sourceSurface: 'HOME_RECOMMENDED_PARTS',
@@ -1241,136 +785,119 @@ function PopularPartsSection() {
         partId: item.part.id,
         category: item.part.category,
         rankPosition: item.rankPosition,
-        idempotencyKey: `${eventSessionId.current}:impression:${item.recommendationId}`,
-        eventPayload: {
-          scoreSource: item.scoreSource,
-          modelVersion: item.modelVersion,
-          reasonTags: item.reasonTags
-        }
+        idempotencyKey: `home-impression-${item.recommendationId}`
       }).catch(() => undefined);
-    });
-  }, [homeParts]);
-
-  function recordClick(item: (typeof homeParts)[number]) {
-    void recordRecommendationEvent({
-      eventType: 'CLICK',
-      sourceSurface: 'HOME_RECOMMENDED_PARTS',
-      recommendationId: item.recommendationId,
-      partId: item.part.id,
-      category: item.part.category,
-      rankPosition: item.rankPosition,
-      idempotencyKey: `${eventSessionId.current}:click:${item.recommendationId}`,
-      eventPayload: {
-        scoreSource: item.scoreSource,
-        modelVersion: item.modelVersion,
-        reasonTags: item.reasonTags
-      }
-    }).catch(() => undefined);
-  }
+    }
+  }, [partsQuery.data]);
 
   return (
-    <section className="panel home-fit-panel home-parts-panel p-5 sm:p-6">
-      <div className="mb-5 flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
+    <section data-testid="home-parts-section" className="mt-16" aria-labelledby="popular-parts-title">
+      <div className="flex items-end justify-between gap-4">
         <div>
-          <div className="text-xs font-black text-brand-blue">Part ranking</div>
-          <h2 className="mt-1 text-xl font-black text-commerce-ink">인기 부품 랭킹</h2>
-          <p className="mt-1 text-sm text-slate-500">최신 데이터를 반영하여 선정된 인기 부품입니다.</p>
+          <h2 id="popular-parts-title" className="text-2xl font-black text-commerce-ink">추천하는 부품</h2>
         </div>
-        <Link to="/self-quote" aria-label="셀프 견적 전체 보기" className="text-sm font-black text-brand-blue hover:underline">셀프 견적 전체 보기</Link>
+        <Link to="/parts" className="hidden min-h-11 items-center gap-1 text-sm font-black text-brand-blue hover:underline sm:inline-flex">
+          전체 부품 보기
+          <ArrowRight size={16} aria-hidden="true" />
+        </Link>
       </div>
-      <div className="home-parts-grid grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-        {displayItems.map((item, index) => {
-          const matchedPart = item?.part ?? null;
-          const partDetailPath = matchedPart && item ? homeRecommendedPartPath(item) : '.';
-          const saleLabel = index === 0 ? 'BEST' : matchedPart?.benchmarkSummary ? 'PASS' : '추천';
-          const reasonLabels = item ? homeReasonLabels(item.reasonTags ?? []) : [];
 
-          return (
-            <Link
-              key={matchedPart?.id ?? `home-part-loading-${index}`}
-              to={partDetailPath}
-              aria-label={`인기 부품 ${index + 1}번 보기`}
-              aria-disabled={matchedPart ? undefined : true}
-              onClick={() => {
-                if (matchedPart && item) {
-                  recordClick(item);
-                }
-              }}
-              className={`home-part-card group rounded-lg border border-commerce-line bg-white p-3 transition hover:-translate-y-0.5 hover:border-commerce-ink hover:shadow-product focus:outline-none focus:ring-4 focus:ring-blue-100 ${matchedPart ? '' : 'pointer-events-none animate-pulse cursor-wait opacity-70'}`}
-            >
-              <div className="mb-2 flex items-center justify-between">
-                <span className="flex h-7 w-7 items-center justify-center rounded-full bg-commerce-ink text-xs font-black text-white">{index + 1}</span>
-                <span className={`rounded px-2 py-1 text-[11px] font-black ${index === 0 ? 'bg-commerce-sale text-white' : 'bg-slate-100 text-slate-700'}`}>{saleLabel}</span>
-              </div>
-              <div className="overflow-hidden rounded-md border border-commerce-line bg-slate-50 text-brand-blue">
-                {matchedPart ? (
-                  <img
-                    src={partImageUrl(matchedPart)}
-                    alt={`${matchedPart.name} 제품 사진`}
-                    onError={handlePartImageError}
-                    className="home-part-image h-40 w-full object-contain p-3 sm:h-44 xl:h-40"
-                  />
-                ) : (
-                  <div className="home-part-image grid h-40 place-items-center sm:h-44 xl:h-40">
-                    <PackageCheck size={30} />
-                  </div>
-                )}
-              </div>
-              <div className="mt-3 text-xs font-black text-brand-blue">{matchedPart?.category ?? '추천'}</div>
-              <h3 className="mt-1 min-h-10 text-sm font-black leading-5 text-commerce-ink">{matchedPart?.name ?? '추천 부품을 불러오는 중'}</h3>
-              <p className="home-part-detail mt-1 text-xs text-slate-500">{matchedPart ? homePartDetail(matchedPart) : '내부 자산 랭킹 계산 중입니다.'}</p>
-              {reasonLabels.length > 0 ? (
-                <div className="home-part-tags mt-3 flex flex-wrap gap-1.5">
-                  {reasonLabels.slice(0, 3).map((label) => (
-                    <span key={label} className="rounded bg-blue-50 px-2 py-1 text-[11px] font-black text-brand-blue">
-                      {label}
-                    </span>
-                  ))}
-                </div>
-              ) : null}
-              <div className="mt-3 flex items-center justify-between gap-2">
-                <span className="text-lg font-black text-commerce-ink">{matchedPart ? `${matchedPart.price.toLocaleString()}원` : '가격 확인 중'}</span>
-              </div>
-            </Link>
-          );
-        })}
-      </div>
-      {homePartsQuery.isError ? (
-        <p className="mt-3 text-xs font-bold text-amber-600">추천 부품을 불러오지 못했습니다. 잠시 후 다시 확인해 주세요.</p>
+      {partsQuery.isLoading ? (
+        <div className="mt-6 grid grid-cols-2 gap-4 sm:grid-cols-4 lg:grid-cols-6" aria-label="추천 부품 불러오는 중">
+          {Array.from({ length: 6 }, (_, index) => (
+            <div key={index} className="h-64 animate-pulse rounded-lg bg-slate-200" />
+          ))}
+        </div>
+      ) : null}
+      {partsQuery.isError ? (
+        <div role="alert" className="mt-6 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm font-bold text-amber-800">
+          인기 부품을 불러오지 못했습니다. 전체 부품에서 다시 확인해 주세요.
+        </div>
+      ) : null}
+      {partsQuery.data?.items.length ? (
+        <div className="modern-home-product-rail mt-6 flex gap-4 overflow-x-auto pb-3">
+          {partsQuery.data.items.map((item) => (
+            <PopularPartCard key={item.recommendationId} item={item} />
+          ))}
+        </div>
       ) : null}
     </section>
   );
 }
 
-function homeRecommendedPartPath(item: HomeRecommendedPart) {
-  const search = new URLSearchParams({
-    recId: item.recommendationId,
-    recSurface: 'HOME_RECOMMENDED_PARTS',
-    rank: String(item.rankPosition)
-  });
-  return `/parts/${item.part.id}?${search.toString()}`;
+function PopularPartCard({ item }: { item: HomeRecommendedPart }) {
+  const href = `/parts/${item.part.id}?recId=${encodeURIComponent(item.recommendationId)}&recSurface=HOME_RECOMMENDED_PARTS&rank=${item.rankPosition}`;
+  const reason = item.reasonTags?.includes('benchmark') ? '벤치마크 점수 포함' : '내부 데이터 추천';
+  return (
+    <Link
+      to={href}
+      aria-label={`인기 부품 ${item.rankPosition + 1}번 보기`}
+      onClick={() => {
+        void recordRecommendationEvent({
+          eventType: 'CLICK',
+          sourceSurface: 'HOME_RECOMMENDED_PARTS',
+          recommendationId: item.recommendationId,
+          partId: item.part.id,
+          category: item.part.category,
+          rankPosition: item.rankPosition,
+          idempotencyKey: `home-click-${item.recommendationId}`
+        }).catch(() => undefined);
+      }}
+      className="group w-[210px] shrink-0 rounded-lg focus:outline-none focus:ring-4 focus:ring-blue-100"
+    >
+      <div className="grid h-[176px] place-items-center overflow-hidden rounded-lg border border-commerce-line bg-white p-3 transition group-hover:border-slate-400">
+        <img
+          src={partImageUrl(item.part)}
+          alt={`${item.part.name} 제품 사진`}
+          loading="lazy"
+          onError={handleProductImageError}
+          className="h-full w-full object-contain transition duration-200 group-hover:scale-[1.03]"
+        />
+      </div>
+      <div className="pt-3">
+        <div className="text-xs font-bold text-brand-blue">{item.part.category}</div>
+        <h3 className="mt-1 line-clamp-2 min-h-10 text-sm font-black leading-5 text-commerce-ink">{item.part.name}</h3>
+        <div className="mt-2 text-base font-black tabular-nums text-commerce-ink">{item.part.price.toLocaleString()}원</div>
+        <div className="mt-2 flex items-center justify-between gap-2 text-xs text-slate-500">
+          <span>{reason}</span>
+          <span className="font-bold text-brand-blue">상품 정보 확인</span>
+        </div>
+      </div>
+    </Link>
+  );
 }
 
-function homeReasonLabels(tags: string[]) {
-  const labels: Record<string, string> = {
-    benchmark: '벤치마크 점수 포함',
-    fps: 'FPS 성능 검증됨',
-    toolReady: '호환성 검증 가능',
-    image: '상품 정보 확인',
-    freshPrice: '최근 가격 반영됨',
-    userReaction: '유저 리뷰 포함',
-    internalAsset: '자체 수집 데이터'
-  };
-  return tags.map((tag) => labels[tag]).filter((label): label is string => Boolean(label));
+function EvidenceSection() {
+  return (
+    <section className="modern-home-evidence mt-16 rounded-xl border border-commerce-line bg-[#f8fbff] px-5 py-6 sm:px-8" aria-labelledby="home-evidence-title">
+      <div className="grid gap-6 lg:grid-cols-[minmax(220px,0.8fr)_minmax(0,2.2fr)] lg:items-center">
+        <div>
+          <div className="text-sm font-bold text-brand-blue">다짜줘의 검증 원칙</div>
+          <h2 id="home-evidence-title" className="mt-2 text-xl font-black text-commerce-ink">추천 결과보다 근거를 먼저 봅니다</h2>
+          <p className="mt-3 text-sm leading-6 text-slate-600">정확한 성능이나 최저가를 보장하지 않고, 현재 확인 가능한 데이터와 주의점을 함께 제공합니다.</p>
+        </div>
+        <div className="grid gap-5 sm:grid-cols-3 sm:divide-x sm:divide-commerce-line">
+          <EvidenceItem title="공식 사양" body="제조사 규격과 현재 등록된 부품 속성을 대조합니다." />
+          <EvidenceItem title="검증 도구" body="호환성, 전력, 장착 규격, 성능 범위, 가격을 분리해 확인합니다." />
+          <EvidenceItem title="신뢰도 표시" body="근거가 부족하거나 주의가 필요하면 경고 상태로 명확히 표시합니다." />
+        </div>
+      </div>
+    </section>
+  );
 }
 
-function homePartDetail(part: PartRow) {
-  const score = part.benchmarkSummary?.score;
-  if (score !== undefined && score !== null) {
-    return `${part.manufacturer ?? part.category} · 벤치/스펙 점수 ${score} (참고용)`;
-  }
-  if (part.externalOffer?.supplierName) {
-    return `${part.manufacturer ?? part.category} · ${part.externalOffer.supplierName} 기준`;
-  }
-  return `${part.manufacturer ?? part.category} · 내부 자산 추천`;
+function EvidenceItem({ title, body }: { title: string; body: string }) {
+  return (
+    <div className="sm:px-5 first:pl-0 last:pr-0">
+      <div className="text-sm font-black text-commerce-ink">{title}</div>
+      <p className="mt-2 text-sm leading-6 text-slate-600">{body}</p>
+    </div>
+  );
+}
+
+function handleProductImageError(event: SyntheticEvent<HTMLImageElement>) {
+  const image = event.currentTarget;
+  if (image.dataset.fallback === 'true') return;
+  image.dataset.fallback = 'true';
+  image.src = FALLBACK_PRODUCT_IMAGE;
 }

@@ -819,7 +819,6 @@ test('shows 3D problem markers, problem reasons, and overlay preference', async 
   const popover = page.getByTestId('slot-problem-popover');
   await expect(popover).toBeVisible();
   await expect(popover).toContainText('장착 불가');
-  await expect(popover).toContainText('파워 용량이 부족합니다.');
   await expect(popover).toContainText('GPU 권장 정격 파워보다 PSU 용량이 부족합니다.');
   await expect(popover).toContainText('GPU 교체 전에 850W 이상 파워를 먼저 검토하세요.');
   await expect(popover.getByTestId('slot-problem-ai-explain')).toBeVisible();
@@ -1469,6 +1468,98 @@ test('submits the server-authoritative score explanation and renders the assessm
   await expect(page.getByTestId('ai-build-assessment')).toContainText('GPU 상향 우선');
   expect(chatRequest['assessmentContext']).toEqual({ source: 'QUOTE_DRAFT_CURRENT', focusType: 'SCORE' });
   await expect(page.getByTestId('ai-build-assessment')).not.toContainText('성능 430');
+});
+
+test('shows the measured fit reason in the board banner and sends the same Tool focus to AI', async ({ page }) => {
+  await loginAsUser(page);
+  await page.addInitScript(() => {
+    localStorage.setItem('buildgraph.authUser', JSON.stringify({
+      id: 'user-fit-explanation',
+      email: 'user@example.com',
+      name: 'Fit Explanation User',
+      role: 'USER'
+    }));
+  });
+  let chatRequest: Record<string, unknown> = {};
+  const base = buildGraphResponse();
+  const fitSummary = '쿨러 높이 157mm / 케이스 허용 160mm입니다. 여유 3mm로 장착은 가능하지만 간섭을 주의해야 합니다.';
+
+  await page.route('**/api/quote-drafts/current**', (route) => route.fulfill({
+    status: 200,
+    contentType: 'application/json',
+    body: JSON.stringify(fullDraft)
+  }));
+  await page.route('**/api/build-graphs/resolve', (route) => route.fulfill({
+    status: 200,
+    contentType: 'application/json',
+    body: JSON.stringify({
+      ...base,
+      nodes: base.nodes.map((node) => node.category === 'COOLER' || node.category === 'CASE'
+        ? { ...node, status: 'WARN', detail: node.category === 'COOLER' ? '높이 157mm' : 'CPU 쿨러 최대 160mm' }
+        : node),
+      edges: [{
+        id: 'edge-cooler-case-height',
+        source: 'part-COOLER',
+        target: 'part-CASE',
+        type: 'REQUIRES',
+        status: 'WARN',
+        label: '높이 간섭 주의',
+        summary: fitSummary
+      }],
+      toolResults: [{
+        tool: 'size',
+        status: 'WARN',
+        confidence: 'MEDIUM',
+        summary: '케이스 장착 여유가 낮아 추가 확인이 필요합니다.',
+        details: { coolerHeightMm: 157, maxCpuCoolerHeightMm: 160, coolerHeadroomMm: 3 }
+      }]
+    })
+  }));
+  await page.route('**/api/parts**', (route) => route.fulfill({
+    status: 200,
+    contentType: 'application/json',
+    body: JSON.stringify({ items: [], page: 0, size: 20, total: 0 })
+  }));
+  await page.route('**/api/ai/build-chat', async (route) => {
+    chatRequest = route.request().postDataJSON() as Record<string, unknown>;
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        answerType: 'GENERAL',
+        message: 'CPU 쿨러와 케이스 사이의 높이 여유가 3mm라 조립 시 간섭을 주의해야 합니다.',
+        builds: [],
+        simulation: null,
+        warnings: [],
+        quickReplies: []
+      })
+    });
+  });
+
+  await page.goto('/self-quote');
+
+  const banner = page.getByTestId('slot-board-problem-banner');
+  await expect(banner).toContainText(fitSummary);
+  await expect(banner).not.toHaveText('높이 157mm');
+  await banner.getByTestId('slot-problem-ai-explain').click();
+
+  await expect.poll(() => chatRequest['assessmentContext']).toEqual({
+    source: 'QUOTE_DRAFT_CURRENT',
+    focusType: 'ISSUE',
+    tool: 'size'
+  });
+
+  chatRequest = {};
+  await page.getByRole('radio', { name: '3D' }).click();
+  await page.getByTestId('iso-part-marker-COOLER').click();
+  await page.getByTestId('slot-problem-popover').getByTestId('slot-problem-ai-explain').click();
+
+  await expect.poll(() => chatRequest['assessmentContext']).toEqual({
+    source: 'QUOTE_DRAFT_CURRENT',
+    focusType: 'ISSUE',
+    category: 'COOLER',
+    tool: 'size'
+  });
 });
 
 test('shows game FPS reference in the performance panel with game and resolution selectors', async ({ page }) => {

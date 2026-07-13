@@ -43,7 +43,7 @@ class BuildGraphServiceTest {
                         MockData.map("socketMatched", true, "memoryTypeMatched", true, "coolerSocketMatched", true)),
                 tool("power", "WARN", "PSU 정격 출력 여유가 낮습니다.",
                         MockData.map("requiredRatedCapacityW", 750, "psuRatedCapacityW", 850, "ratedHeadroomW", 100, "vendorRecommendedPsuW", 750)),
-                tool("size", "PASS", "GPU 길이와 쿨러 높이가 케이스 제약 안에 있습니다.",
+                tool("size", "WARN", "GPU 장착 여유가 낮아 추가 확인이 필요합니다.",
                         MockData.map("gpuLengthMm", 304, "maxGpuLengthMm", 320, "coolerHeightMm", 155, "maxCpuCoolerHeightMm", 160)),
                 tool("performance", "PASS", "요구 작업에 무리가 적은 조합입니다.", MockData.map("gpu", "RTX 5070", "cpu", "Ryzen 7")),
                 tool("price", "PASS", "저장된 현재가 기준 예산 안에 들어옵니다.",
@@ -127,8 +127,9 @@ class BuildGraphServiceTest {
         });
         assertThat(edges).anySatisfy(edge -> {
             assertThat(edge.get("id")).isEqualTo("edge-cooler-case-height");
-            assertThat(edge.get("label")).isEqualTo("높이 간섭 주의");
-            assertThat(edge.get("summary")).isEqualTo("쿨러 높이 155mm / 케이스 허용 160mm입니다. 여유 5mm로 장착은 가능하지만 간섭을 주의해야 합니다.");
+            assertThat(edge.get("status")).isEqualTo("PASS");
+            assertThat(edge.get("label")).isEqualTo("높이 여유 5mm");
+            assertThat(edge.get("summary")).isEqualTo("쿨러 높이 155mm / 케이스 허용 160mm입니다. 여유 5mm입니다.");
         });
         assertThat(edges).anySatisfy(edge -> {
             assertThat(edge.get("id")).isEqualTo("edge-cpu-board-socket");
@@ -138,6 +139,39 @@ class BuildGraphServiceTest {
         assertThat(insights).anySatisfy(insight -> {
             assertThat(insight.get("title")).isEqualTo("파워 여유 확인");
             assertThat(insight.get("status")).isEqualTo("WARN");
+        });
+    }
+
+    @Test
+    void coolerSpecDetailDoesNotBecomeWarningWhenToolHeadroomPolicyPasses() {
+        stubPart("fit-case", part("fit-case", 701L, "CASE", "Height Fit Case", 150000,
+                MockData.map("maxCpuCoolerHeightMm", 165)));
+        stubPart("fit-cooler", part("fit-cooler", 702L, "COOLER", "157mm Air Cooler", 90000,
+                MockData.map("heightMm", 157)));
+        when(toolCheckService.checkBuild(anyList(), eq(240_000))).thenReturn(List.of(
+                tool("size", "PASS", "쿨러 높이가 케이스 제약 안에 있습니다.",
+                        MockData.map("coolerHeightMm", 157, "maxCpuCoolerHeightMm", 165))
+        ));
+
+        Map<String, Object> graph = buildGraphService.resolve(USER_TOKEN, Map.of(
+                "source", "AI_BUILD",
+                "budgetWon", 240_000,
+                "items", List.of(
+                        requestItem("fit-case", "CASE"),
+                        requestItem("fit-cooler", "COOLER")
+                )
+        ));
+
+        assertThat(castList(graph.get("edges"))).anySatisfy(edge -> {
+            assertThat(edge.get("id")).isEqualTo("edge-cooler-case-height");
+            assertThat(edge.get("status")).isEqualTo("PASS");
+            assertThat(edge.get("label")).isEqualTo("높이 여유 8mm");
+            assertThat(edge.get("summary")).isEqualTo("쿨러 높이 157mm / 케이스 허용 165mm입니다. 여유 8mm입니다.");
+        });
+        assertThat(castList(graph.get("nodes"))).anySatisfy(node -> {
+            assertThat(node.get("id")).isEqualTo("part-COOLER");
+            assertThat(node.get("status")).isEqualTo("PASS");
+            assertThat(node.get("detail")).isEqualTo("높이 157mm");
         });
     }
 

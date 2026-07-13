@@ -2,6 +2,7 @@ package com.buildgraph.prototype.build;
 
 import com.buildgraph.prototype.common.DbValueMapper;
 import com.buildgraph.prototype.common.MockData;
+import com.buildgraph.prototype.part.BuildSizeFitPolicy;
 import com.buildgraph.prototype.part.ToolBuildPart;
 import com.buildgraph.prototype.part.ToolCheckService;
 import com.buildgraph.prototype.user.CurrentUserService;
@@ -215,12 +216,30 @@ public class BuildGraphService {
         // 치수 엣지의 fallback은 size 툴 전체 status가 아니라 WARN(근거 부족)이다 — 툴 status를 상속하면
         // 무관한 검사(파워 깊이 등)의 FAIL이 쿨러/GPU 엣지에 '높이 간섭' 같은 엉뚱한 라벨로 실린다.
         // (엣지는 addEdgeIfPossible로 양쪽 부품이 있을 때만 생기므로, 데이터 결측 = 근거 부족 WARN이 맞다.)
-        String gpuLengthStatus = lengthStatus(sizeDetails, "gpuLengthMm", "maxGpuLengthMm", "WARN");
+        String gpuLengthStatus = lengthStatus(
+                sizeDetails,
+                "gpuLengthMm",
+                "maxGpuLengthMm",
+                BuildSizeFitPolicy.GPU_WARN_HEADROOM_MM,
+                "WARN"
+        );
         // 수랭(AIO)은 높이 대신 라디에이터 크기 vs 케이스 지원 목록으로 판정한다.
         String coolerCaseStatus = Boolean.TRUE.equals(booleanValue(sizeDetails.get("radiatorChecked")))
                 ? radiatorStatus(sizeDetails)
-                : lengthStatus(sizeDetails, "coolerHeightMm", "maxCpuCoolerHeightMm", "WARN");
-        String psuDepthStatus = lengthStatus(sizeDetails, "psuDepthMm", "maxPsuLengthMm", "WARN");
+                : lengthStatus(
+                        sizeDetails,
+                        "coolerHeightMm",
+                        "maxCpuCoolerHeightMm",
+                        BuildSizeFitPolicy.COOLER_WARN_HEADROOM_MM,
+                        "WARN"
+                );
+        String psuDepthStatus = lengthStatus(
+                sizeDetails,
+                "psuDepthMm",
+                "maxPsuLengthMm",
+                BuildSizeFitPolicy.PSU_WARN_HEADROOM_MM,
+                "WARN"
+        );
         // 보드 폼팩터 vs 케이스 지원 규격(P1-1) — checked 게이트로 결측이면 WARN(근거 부족).
         String boardFitStatus = boardFitStatus(sizeDetails);
         // M.2 SSD 장착 수 vs 보드 M.2 슬롯(P1-2) — 판정은 ToolCheckService.compatibility()가 단일 소스다.
@@ -827,18 +846,19 @@ public class BuildGraphService {
         return passed == null ? fallback : passed ? "PASS" : "FAIL";
     }
 
-    private static String lengthStatus(Map<String, Object> details, String currentKey, String maxKey, String fallback) {
-        Integer headroom = headroom(details, currentKey, maxKey);
-        if (headroom == null) {
-            return fallback;
-        }
-        if (headroom < 0) {
-            return "FAIL";
-        }
-        if (headroom < 30) {
-            return "WARN";
-        }
-        return "PASS";
+    private static String lengthStatus(
+            Map<String, Object> details,
+            String currentKey,
+            String maxKey,
+            int warnBelowMm,
+            String fallback
+    ) {
+        return BuildSizeFitPolicy.graphStatus(
+                numberValue(details.get(currentKey)),
+                numberValue(details.get(maxKey)),
+                warnBelowMm,
+                fallback
+        );
     }
 
     private static Integer powerHeadroom(Map<String, Object> details) {

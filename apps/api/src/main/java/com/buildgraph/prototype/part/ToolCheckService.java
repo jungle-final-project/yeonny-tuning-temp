@@ -277,11 +277,11 @@ public class ToolCheckService {
                         || (aioCooler && pcCase != null && (!radiatorChecked || !radiatorSupportKnown))
                         || (psu != null && pcCase != null && !psuKnown)
                         || (motherboard != null && pcCase != null && !boardFormFactorChecked)
-                        || (gpuKnown && gpuHeadroom < 20)
+                        || (gpuKnown && BuildSizeFitPolicy.hasLowHeadroom(gpuHeadroom, BuildSizeFitPolicy.GPU_WARN_HEADROOM_MM))
                         // known 게이트 필수 — 수랭(AIO)은 coolerKnown=false라 headroom이 0으로 남는데,
                         // 게이트 없이 0<5를 평가하면 라디에이터가 정확히 맞아도 영구 WARN이 된다.
-                        || (coolerKnown && coolerHeadroom < 5)
-                        || (psuKnown && psuHeadroom < 10)
+                        || (coolerKnown && BuildSizeFitPolicy.hasLowHeadroom(coolerHeadroom, BuildSizeFitPolicy.COOLER_WARN_HEADROOM_MM))
+                        || (psuKnown && BuildSizeFitPolicy.hasLowHeadroom(psuHeadroom, BuildSizeFitPolicy.PSU_WARN_HEADROOM_MM))
         );
         return tool("size",
                 fail ? "FAIL" : warn ? "WARN" : "PASS",
