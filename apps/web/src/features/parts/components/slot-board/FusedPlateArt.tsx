@@ -63,7 +63,7 @@ export function FusedPlateArt({
   const spotlightCategory = hasHoveredLayer ? hoveredCategory : null;
   const spotlightCategories = hasAiFocus
     ? aiFocusSet
-    : new Set<PartCategory>(spotlightCategory ? [spotlightCategory] : []);
+    : new Set<PartCategory>();
 
   useEffect(() => {
     FUSED_PRELOAD_URLS.forEach((src) => {
@@ -141,7 +141,6 @@ export function FusedPlateArt({
                 aria-hidden="true"
                 data-testid={`${testId}-problem-blur`}
                 data-visible={visible ? 'true' : 'false'}
-                data-hovered={hovered ? 'true' : 'false'}
                 data-spotlight={spotlighted ? 'true' : 'false'}
                 data-ai-spotlight={aiSpotlighted ? 'true' : 'false'}
                 data-dimmed={dimmed ? 'true' : 'false'}
@@ -149,7 +148,7 @@ export function FusedPlateArt({
                 src={layer.src}
                 alt=""
                 className="fused-part-problem-blur fused-part-problem-glow pointer-events-none absolute inset-0 h-full w-full select-none object-contain"
-                style={{ zIndex: focused || aiSpotlighted ? 19 : 9 }}
+                style={{ zIndex: 4 }}
               />
               <img
                 data-testid={testId}

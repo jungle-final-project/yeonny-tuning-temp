@@ -58,21 +58,34 @@
     hue-rotate(353deg)
     brightness(103%)
     contrast(92%)
-    blur(8px);
-  transform: scale(1.008);
+    blur(12px);
+  transform: scale(1.012);
   transform-origin: 50% 54%;
   transition:
     opacity 180ms ease,
     transform 220ms cubic-bezier(0.2, 0.8, 0.2, 1);
 }
 
+.fused-part-problem-blur[data-status='WARN'] {
+  filter:
+    brightness(0)
+    saturate(100%)
+    invert(69%)
+    sepia(96%)
+    saturate(2421%)
+    hue-rotate(352deg)
+    brightness(100%)
+    contrast(93%)
+    blur(12px);
+}
+
 @keyframes fused-part-problem-glow-pulse {
   0%,
   100% {
-    opacity: 0.2;
+    opacity: 0.3;
   }
   50% {
-    opacity: 0.66;
+    opacity: 0.99;
   }
 }
 
@@ -83,11 +96,6 @@
 
 .fused-part-problem-blur[data-visible='true'][data-dimmed='true'] {
   opacity: 0.16;
-}
-
-.fused-part-problem-blur[data-visible='true'][data-hovered='true'][data-status='WARN'],
-.fused-part-problem-blur[data-visible='true'][data-hovered='true'][data-status='FAIL'] {
-  transform: perspective(900px) translate3d(0, -4px, 20px) scale(1.012);
 }
 
 .fused-part-layer[data-visible='true'][data-mounting='true'] {
@@ -301,7 +309,7 @@
   .fused-part-problem-glow[data-visible='true'][data-status='WARN'],
   .fused-part-problem-glow[data-visible='true'][data-status='FAIL'] {
     animation: none;
-    opacity: 0.42;
+    opacity: 0.63;
   }
 
   .fused-part-layer[data-visible='true'][data-mounting='true'] {

@@ -263,6 +263,32 @@ background:
 .checklist-problem-fill-pulse {
   animation: checklist-problem-fill-pulse 2s ease-in-out infinite;
 }
+@keyframes checklist-warning-fill-pulse {
+  0%,
+  100% {
+    background-color: rgba(254, 243, 199, 0);
+  }
+  50% {
+    background-color: rgba(253, 230, 138, 0.68);
+  }
+}
+
+.checklist-warning-fill-pulse {
+  animation: checklist-warning-fill-pulse 2s ease-in-out infinite;
+}
+@keyframes slot-board-fail-banner-pulse {
+  0%,
+  100% {
+    box-shadow: 0 8px 18px rgba(239, 68, 68, 0.18);
+  }
+  50% {
+    box-shadow: 0 10px 26px rgba(239, 68, 68, 0.42);
+  }
+}
+
+.slot-board-fail-banner-pulse {
+  animation: slot-board-fail-banner-pulse 2s ease-in-out infinite;
+}
 
 /* 상태색 히어로 펄스: 장착된 슬롯을 상태색 링으로 숨쉬게 한다.
    쉬는 구간(0%/100%)에도 상시 보이는 실선 링 + 소프트 글로우를 유지하고, 50%에 바깥으로 퍼진다
@@ -322,7 +348,7 @@ background:
   overflow: hidden;
 }
 
-.slot-hint-shimmer::after {
+  .slot-hint-shimmer::after {
   content: '';
   position: absolute;
   top: -6px;
@@ -359,6 +385,8 @@ background:
   .slot-port-pulse,
   .slot-empty-pulse,
   .checklist-problem-fill-pulse,
+  .checklist-warning-fill-pulse,
+  .slot-board-fail-banner-pulse,
   .slot-pass-pulse,
   .slot-warn-pulse,
   .slot-fail-pulse,
