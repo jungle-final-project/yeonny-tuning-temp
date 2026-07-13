@@ -95,6 +95,12 @@ def validate_application_config(config: dict[str, Any]) -> list[str]:
             errors.append(
                 f"{dotted_path} must be configurable with {environment_name}"
             )
+
+    rabbitmq_addresses = nested_value(config, ("spring", "rabbitmq", "addresses"))
+    if "SPRING_RABBITMQ_HOST" not in str(rabbitmq_addresses or ""):
+        errors.append(
+            "spring.rabbitmq.addresses must keep SPRING_RABBITMQ_HOST as the Blue deployment fallback"
+        )
     return errors
 
 

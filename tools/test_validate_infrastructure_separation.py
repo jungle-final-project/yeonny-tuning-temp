@@ -34,7 +34,7 @@ class InfrastructureSeparationValidatorTest(unittest.TestCase):
                 # 정상 설정: Amazon MQ broker 주소와 TLS 여부를 주입한다.
                 # 단일 Docker 서비스 이름인 rabbitmq에만 의존하지 않는다.
                 "rabbitmq": {
-                    "addresses": "${SPRING_RABBITMQ_ADDRESSES:localhost:5672}",
+                    "addresses": "${SPRING_RABBITMQ_ADDRESSES:${SPRING_RABBITMQ_HOST:localhost}:5672}",
                     "username": "${SPRING_RABBITMQ_USERNAME:buildgraph}",
                     "password": "${SPRING_RABBITMQ_PASSWORD:buildgraph}",
                     "ssl": {
@@ -111,6 +111,16 @@ class InfrastructureSeparationValidatorTest(unittest.TestCase):
         # Amazon MQ 주소 목록과 TLS 설정이 없다는 오류가 나와야 한다.
         self.assertIn("SPRING_RABBITMQ_ADDRESSES", errors)
         self.assertIn("SPRING_RABBITMQ_SSL_ENABLED", errors)
+
+    def test_application_config_keeps_blue_rabbitmq_host_fallback(self) -> None:
+        config = self.application_config()
+        config["spring"]["rabbitmq"]["addresses"] = (
+            "${SPRING_RABBITMQ_ADDRESSES:localhost:5672}"
+        )
+
+        errors = "\n".join(validator.validate_application_config(config))
+
+        self.assertIn("SPRING_RABBITMQ_HOST", errors)
 
     def test_api_compose_accepts_only_api_runtime_services(self) -> None:
         # 정상 설정인 nginx/api/xgb-reranker만 있으면 오류가 없어야 한다.
