@@ -27,8 +27,8 @@ public class PartQueryCached {
         unless = "#result == null"
     )
     public ToolBuildPart partByPublicId(String partId) {
-
         dbQueryCount.incrementAndGet(); 
+        
         return jdbcTemplate.queryForObject(
             """
             SELECT id AS internal_id,
@@ -53,6 +53,7 @@ public class PartQueryCached {
         return dbQueryCount.get();
     }
 
+    /* db 접근 카운트 초기화하기 */
     public void resetDbQueryCount() {
         dbQueryCount.set(0);
     }

@@ -1,13 +1,11 @@
 package com.buildgraph.prototype.parts.part;
 
 import static com.buildgraph.prototype.parts.part.PartQueryUtil.orderBy;
-import static com.buildgraph.prototype.parts.part.PartQueryUtil.part;
 
 import java.util.ArrayList;
 import java.util.List;
-import java.util.concurrent.atomic.AtomicLong;
+import java.util.Objects;
 
-import org.springframework.cache.annotation.Cacheable;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Repository;
 
@@ -18,6 +16,8 @@ import lombok.RequiredArgsConstructor;
 
 @Repository
 @RequiredArgsConstructor
+/* Part 정보를 불러오기 위한 DB와의 접합부 입니다
+   : 실제 DB와 상호작용은 PartQueryCached가 수행합니다 */
 public class PartQuery {
     
     private final JdbcTemplate jdbcTemplate;
@@ -106,6 +106,6 @@ public class PartQuery {
                 LIMIT ? OFFSET ?
                 """.formatted(where, orderBy(search.sort()));
 
-        return jdbcTemplate.queryForList(sql, String.class, params.toArray());
+        return jdbcTemplate.queryForList(Objects.requireNonNull(sql), String.class, params.toArray());
     }
 }

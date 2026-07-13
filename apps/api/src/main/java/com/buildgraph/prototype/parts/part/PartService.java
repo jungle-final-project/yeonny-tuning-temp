@@ -478,29 +478,6 @@ public class PartService {
         return new SqlWhere("WHERE " + String.join(" AND ", clauses), params);
     }
 
-    private static String orderBy(String sort) {
-        return switch (sort) {
-            case "compatibility" -> "coalesce((p.attributes->>'toolReady')::boolean, false) DESC, p.price ASC, p.id ASC";
-            case "price_asc" -> "p.price ASC, p.id ASC";
-            case "price_desc" -> "p.price DESC, p.id ASC";
-            case "name" -> "p.name ASC, p.id ASC";
-            default -> """
-                    CASE p.category
-                      WHEN 'CPU' THEN 1
-                      WHEN 'MOTHERBOARD' THEN 2
-                      WHEN 'RAM' THEN 3
-                      WHEN 'GPU' THEN 4
-                      WHEN 'STORAGE' THEN 5
-                      WHEN 'PSU' THEN 6
-                      WHEN 'CASE' THEN 7
-                      WHEN 'COOLER' THEN 8
-                      ELSE 99
-                    END,
-                    p.id ASC
-                    """;
-        };
-    }
-
     private Map<String, Object> ruleFor(String toolName) {
         String category = categoryForTool(toolName);
         List<Map<String, Object>> rows = jdbcTemplate.queryForList("""

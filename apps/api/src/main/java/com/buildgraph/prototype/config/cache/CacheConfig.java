@@ -2,6 +2,7 @@ package com.buildgraph.prototype.config.cache;
 
 import java.util.concurrent.TimeUnit;
 
+
 import com.github.benmanes.caffeine.cache.Caffeine;
 
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
@@ -20,7 +21,6 @@ import org.springframework.context.annotation.Configuration;
 public class CacheConfig {
     
     @Bean
-    @SuppressWarnings("null")
     public CaffeineCacheManager caffeineCacheManager() {
         CaffeineCacheManager manager = new CaffeineCacheManager();
         manager.setCaffeine(caffeineCacheBuilder());

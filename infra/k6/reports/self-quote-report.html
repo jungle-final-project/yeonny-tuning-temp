@@ -30,12 +30,12 @@
   <h1>k6 Cache Comparison Report</h1>
   <p>각 시나리오 시작을 0초로 정규화 · Bucket: 10s · Source: infra/k6/results/self-quote.ndjson</p>
   <div class="summary">
-    <div class="metric none"><span>캐싱 없음 요청</span><strong>11825</strong></div>
-    <div class="metric none"><span>캐싱 없음 Median</span><strong>4012.08 ms</strong></div>
-    <div class="metric none"><span>캐싱 없음 p95</span><strong>9949.98 ms</strong></div>
-    <div class="metric caffeine"><span>캐싱 있음 요청</span><strong>28875</strong></div>
-    <div class="metric caffeine"><span>캐싱 있음 Median</span><strong>1153.39 ms</strong></div>
-    <div class="metric caffeine"><span>캐싱 있음 p95</span><strong>3228.27 ms</strong></div>
+    <div class="metric none"><span>캐싱 없음 요청</span><strong>16398</strong></div>
+    <div class="metric none"><span>캐싱 없음 Median</span><strong>2793.75 ms</strong></div>
+    <div class="metric none"><span>캐싱 없음 p95</span><strong>6473.27 ms</strong></div>
+    <div class="metric caffeine"><span>캐싱 있음 요청</span><strong>38544</strong></div>
+    <div class="metric caffeine"><span>캐싱 있음 Median</span><strong>203 ms</strong></div>
+    <div class="metric caffeine"><span>캐싱 있음 p95</span><strong>941.6 ms</strong></div>
   </div>
   <div class="chart-grid">
     <section class="chart-card">
@@ -60,27 +60,27 @@
       </tr>
     </thead>
     <tbody>
-      <tr><td>0s</td><td>543</td><td>28.36</td><td>118.3</td><td>483</td><td>24.03</td><td>2824.92</td></tr>
-<tr><td>10s</td><td>894</td><td>140.01</td><td>1208.71</td><td>1257</td><td>46.55</td><td>904.52</td></tr>
-<tr><td>20s</td><td>738</td><td>843.02</td><td>4022.23</td><td>1315</td><td>376.82</td><td>5477.38</td></tr>
-<tr><td>30s</td><td>800</td><td>1628.93</td><td>6021.89</td><td>1629</td><td>474.12</td><td>4613.68</td></tr>
-<tr><td>40s</td><td>611</td><td>3702.28</td><td>9637.87</td><td>2167</td><td>889.42</td><td>6827.54</td></tr>
-<tr><td>50s</td><td>863</td><td>3846.2</td><td>10463.29</td><td>2435</td><td>1171.27</td><td>3053.69</td></tr>
-<tr><td>60s</td><td>870</td><td>4565.79</td><td>9082.1</td><td>2675</td><td>1378.77</td><td>2759.45</td></tr>
-<tr><td>70s</td><td>828</td><td>5399.1</td><td>11005.65</td><td>2790</td><td>1453.47</td><td>2912.31</td></tr>
-<tr><td>80s</td><td>807</td><td>5417.59</td><td>11951.99</td><td>2697</td><td>1461.89</td><td>3168.77</td></tr>
-<tr><td>90s</td><td>980</td><td>4653.82</td><td>10494.9</td><td>2859</td><td>1445.07</td><td>2822.18</td></tr>
-<tr><td>100s</td><td>925</td><td>4726.63</td><td>11983.22</td><td>2873</td><td>1341.6</td><td>2552.81</td></tr>
-<tr><td>110s</td><td>804</td><td>4917.73</td><td>12297.6</td><td>2814</td><td>947.09</td><td>2384.36</td></tr>
-<tr><td>120s</td><td>954</td><td>4978.02</td><td>12653.39</td><td>2881</td><td>310.22</td><td>1522.92</td></tr>
-<tr><td>130s</td><td>732</td><td>5713.61</td><td>9893.99</td><td>-</td><td>-</td><td>-</td></tr>
-<tr><td>140s</td><td>476</td><td>6437.17</td><td>11186.58</td><td>-</td><td>-</td><td>-</td></tr>
+      <tr><td>0s</td><td>482</td><td>53.03</td><td>153.97</td><td>540</td><td>8.31</td><td>44</td></tr>
+<tr><td>10s</td><td>1067</td><td>121.23</td><td>678.81</td><td>1810</td><td>7</td><td>44</td></tr>
+<tr><td>20s</td><td>1119</td><td>691.65</td><td>2119.36</td><td>3327</td><td>24.08</td><td>136.41</td></tr>
+<tr><td>30s</td><td>1136</td><td>1324.38</td><td>3915.67</td><td>3600</td><td>112</td><td>529.75</td></tr>
+<tr><td>40s</td><td>1155</td><td>1995.38</td><td>4960.17</td><td>3655</td><td>158.95</td><td>607.42</td></tr>
+<tr><td>50s</td><td>1178</td><td>2784.62</td><td>6426.85</td><td>3730</td><td>203.38</td><td>790.93</td></tr>
+<tr><td>60s</td><td>1168</td><td>3549.86</td><td>6382.53</td><td>3799</td><td>241.51</td><td>850.87</td></tr>
+<tr><td>70s</td><td>1049</td><td>4201.98</td><td>8222.62</td><td>3712</td><td>298.39</td><td>1049.04</td></tr>
+<tr><td>80s</td><td>1081</td><td>4274.73</td><td>7973</td><td>3551</td><td>390.52</td><td>1388.91</td></tr>
+<tr><td>90s</td><td>1171</td><td>3874.18</td><td>10398.98</td><td>3652</td><td>422.54</td><td>1187.15</td></tr>
+<tr><td>100s</td><td>1093</td><td>4011.78</td><td>9943.33</td><td>3739</td><td>376.1</td><td>1184.46</td></tr>
+<tr><td>110s</td><td>1186</td><td>3998.69</td><td>8371.46</td><td>3379</td><td>153.62</td><td>971.35</td></tr>
+<tr><td>120s</td><td>1211</td><td>3720.11</td><td>6134.2</td><td>50</td><td>6</td><td>12.51</td></tr>
+<tr><td>130s</td><td>1160</td><td>3403.52</td><td>6379.27</td><td>-</td><td>-</td><td>-</td></tr>
+<tr><td>140s</td><td>1142</td><td>2565.86</td><td>5380.45</td><td>-</td><td>-</td><td>-</td></tr>
     </tbody>
   </table>
   <script>
     const labels = [0,10,20,30,40,50,60,70,80,90,100,110,120,130,140];
-    const noneRows = {"0":{"second":0,"count":543,"median":28.36,"p95":118.3},"10":{"second":10,"count":894,"median":140.01,"p95":1208.71},"20":{"second":20,"count":738,"median":843.02,"p95":4022.23},"30":{"second":30,"count":800,"median":1628.93,"p95":6021.89},"40":{"second":40,"count":611,"median":3702.28,"p95":9637.87},"50":{"second":50,"count":863,"median":3846.2,"p95":10463.29},"60":{"second":60,"count":870,"median":4565.79,"p95":9082.1},"70":{"second":70,"count":828,"median":5399.1,"p95":11005.65},"80":{"second":80,"count":807,"median":5417.59,"p95":11951.99},"90":{"second":90,"count":980,"median":4653.82,"p95":10494.9},"100":{"second":100,"count":925,"median":4726.63,"p95":11983.22},"110":{"second":110,"count":804,"median":4917.73,"p95":12297.6},"120":{"second":120,"count":954,"median":4978.02,"p95":12653.39},"130":{"second":130,"count":732,"median":5713.61,"p95":9893.99},"140":{"second":140,"count":476,"median":6437.17,"p95":11186.58}};
-    const caffeineRows = {"0":{"second":0,"count":483,"median":24.03,"p95":2824.92},"10":{"second":10,"count":1257,"median":46.55,"p95":904.52},"20":{"second":20,"count":1315,"median":376.82,"p95":5477.38},"30":{"second":30,"count":1629,"median":474.12,"p95":4613.68},"40":{"second":40,"count":2167,"median":889.42,"p95":6827.54},"50":{"second":50,"count":2435,"median":1171.27,"p95":3053.69},"60":{"second":60,"count":2675,"median":1378.77,"p95":2759.45},"70":{"second":70,"count":2790,"median":1453.47,"p95":2912.31},"80":{"second":80,"count":2697,"median":1461.89,"p95":3168.77},"90":{"second":90,"count":2859,"median":1445.07,"p95":2822.18},"100":{"second":100,"count":2873,"median":1341.6,"p95":2552.81},"110":{"second":110,"count":2814,"median":947.09,"p95":2384.36},"120":{"second":120,"count":2881,"median":310.22,"p95":1522.92}};
+    const noneRows = {"0":{"second":0,"count":482,"median":53.03,"p95":153.97},"10":{"second":10,"count":1067,"median":121.23,"p95":678.81},"20":{"second":20,"count":1119,"median":691.65,"p95":2119.36},"30":{"second":30,"count":1136,"median":1324.38,"p95":3915.67},"40":{"second":40,"count":1155,"median":1995.38,"p95":4960.17},"50":{"second":50,"count":1178,"median":2784.62,"p95":6426.85},"60":{"second":60,"count":1168,"median":3549.86,"p95":6382.53},"70":{"second":70,"count":1049,"median":4201.98,"p95":8222.62},"80":{"second":80,"count":1081,"median":4274.73,"p95":7973},"90":{"second":90,"count":1171,"median":3874.18,"p95":10398.98},"100":{"second":100,"count":1093,"median":4011.78,"p95":9943.33},"110":{"second":110,"count":1186,"median":3998.69,"p95":8371.46},"120":{"second":120,"count":1211,"median":3720.11,"p95":6134.2},"130":{"second":130,"count":1160,"median":3403.52,"p95":6379.27},"140":{"second":140,"count":1142,"median":2565.86,"p95":5380.45}};
+    const caffeineRows = {"0":{"second":0,"count":540,"median":8.31,"p95":44},"10":{"second":10,"count":1810,"median":7,"p95":44},"20":{"second":20,"count":3327,"median":24.08,"p95":136.41},"30":{"second":30,"count":3600,"median":112,"p95":529.75},"40":{"second":40,"count":3655,"median":158.95,"p95":607.42},"50":{"second":50,"count":3730,"median":203.38,"p95":790.93},"60":{"second":60,"count":3799,"median":241.51,"p95":850.87},"70":{"second":70,"count":3712,"median":298.39,"p95":1049.04},"80":{"second":80,"count":3551,"median":390.52,"p95":1388.91},"90":{"second":90,"count":3652,"median":422.54,"p95":1187.15},"100":{"second":100,"count":3739,"median":376.1,"p95":1184.46},"110":{"second":110,"count":3379,"median":153.62,"p95":971.35},"120":{"second":120,"count":50,"median":6,"p95":12.51}};
     const values = (rows, field) => labels.map((second) => rows[second]?.[field] ?? null);
 
     const commonOptions = (title) => ({
