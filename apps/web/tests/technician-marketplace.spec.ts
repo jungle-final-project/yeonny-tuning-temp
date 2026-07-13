@@ -33,6 +33,48 @@ const requestSummary = {
 test.beforeEach(async ({ page }) => {
   await page.addInitScript(() => localStorage.setItem('buildgraph.token', 'jwt-user-token'));
   await page.route('**/api/auth/me', (route) => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ id: 'user-tech', email: 'technician@example.com', name: 'Demo Technician', role: 'USER' }) }));
+  await page.route('**/api/support/chat-sessions/current**', (route) => route.fulfill({ status: 404, contentType: 'application/json', body: JSON.stringify({ code: 'NOT_FOUND', message: '상담방 없음' }) }));
+  await page.route('**/api/technician/profile', (route) => route.fulfill({ status: 404, contentType: 'application/json', body: JSON.stringify({ code: 'NOT_FOUND', message: '기사 프로필 없음' }) }));
+});
+
+test('refreshes checkout offers when a new technician offer arrives', async ({ page }) => {
+  let includeExternalOffer = false;
+  const liveRequest = () => ({
+    id: 'assembly-live-1',
+    requestNo: 'ASM-20990721-LIVE0001',
+    status: 'OFFERED',
+    serviceType: 'FULL_SERVICE',
+    region: '서울',
+    preferredDate: '2099-07-21',
+    deliveryMethod: 'DELIVERY',
+    note: '',
+    asPolicyAccepted: true,
+    estimatedPartsPrice: 1_400_000,
+    itemCount: 1,
+    selectedOfferId: null,
+    canCancel: true,
+    items: [{ partId: 'part-gpu', category: 'GPU', name: 'RTX 5070', manufacturer: 'NVIDIA', quantity: 1, unitPrice: 980_000, lineTotal: 980_000 }],
+    offers: [
+      { id: 'offer-internal', technicianId: 'tech-internal', technicianName: '내부 빠른 기사', initials: '내', rating: 4.9, completedJobs: 184, responseMinutes: 12, specialties: ['고성능 게이밍 PC'], standardAsAccepted: true, providerType: 'INTERNAL', verified: true, status: 'AVAILABLE', confirmedPartsPrice: 1_405_000, assemblyFee: 65_000, deliveryFee: 0, finalPrice: 1_470_000, leadTimeDays: 2, stockStatus: '주요 부품 재고 확인' },
+      ...(includeExternalOffer ? [{ id: 'offer-external-live', technicianId: 'tech-external-live', technicianName: '새 외부 기사', initials: '새', rating: 4.8, completedJobs: 44, responseMinutes: 10, specialties: ['저소음 조립'], standardAsAccepted: true, providerType: 'EXTERNAL', verified: true, status: 'AVAILABLE', confirmedPartsPrice: 1_398_000, assemblyFee: 72_000, deliveryFee: 12_000, finalPrice: 1_482_000, leadTimeDays: 2, stockStatus: '재고 확인 완료' }] : [])
+    ],
+    payment: null,
+    statusHistory: [{ fromStatus: null, toStatus: 'REQUESTED', note: '조립 요청 등록' }]
+  });
+  await page.route('**/api/assembly-requests/assembly-live-1', async (route) => {
+    await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(liveRequest()) });
+  });
+
+  await page.goto('/checkout/offers/assembly-live-1');
+
+  await expect(page.getByRole('heading', { name: '기사 제안 1건' })).toBeVisible();
+  await expect(page.getByText('내부 빠른 기사')).toBeVisible();
+
+  includeExternalOffer = true;
+
+  await expect(page.getByRole('heading', { name: '기사 제안 2건' })).toBeVisible({ timeout: 7000 });
+  await expect(page.getByText('새 외부 기사')).toBeVisible();
+  await expect(page.getByText('새 기사 제안 1건이 도착했습니다.')).toBeVisible();
 });
 
 test('submits a lightweight external technician application', async ({ page }) => {
