@@ -1,15 +1,19 @@
 import { useMutation, useQuery } from '@tanstack/react-query';
 import { ArrowLeft, Bell, CalendarDays, ClipboardCheck, ExternalLink, MapPin, ShieldCheck, ShoppingBag, Truck, Wrench } from 'lucide-react';
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type React from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { Panel, Screen, StateMessage } from '../../../components/ui';
+import { getCurrentUser } from '../../auth/authApi';
 import { resolveBuildGraph } from '../../quote/quoteApi';
 import type { BuildGraphResolveResponse } from '../../quote/aiSelection';
 import { createAssemblyRequest, type AssemblyDeliveryMethod, type AssemblyServiceType } from '../assemblyApi';
 import { handlePartImageError, partImageUrl, partShortSpec } from '../partDisplay';
 import { getCurrentQuoteDraft } from '../partsApi';
 import type { QuoteDraftItem } from '../types';
+
+const KAKAO_POSTCODE_SCRIPT_ID = 'kakao-postcode-script';
+const KAKAO_POSTCODE_SCRIPT_URL = 'https://t1.kakaocdn.net/mapjsapi/bundle/postcode/prod/postcode.v2.js';
 
 const CATEGORY_LABELS: Record<string, string> = {
   CPU: 'CPU',
@@ -24,8 +28,30 @@ const CATEGORY_LABELS: Record<string, string> = {
 
 const ASSEMBLY_REGIONS = ['서울', '경기', '인천', '대전', '대구', '부산', '광주'];
 
+type KakaoPostcodeData = {
+  zonecode: string;
+  address: string;
+  roadAddress: string;
+  jibunAddress: string;
+  userSelectedType: 'R' | 'J';
+  bname: string;
+  buildingName: string;
+  apartment: string;
+};
+
+type KakaoPostcodeConstructor = new (options: {
+  oncomplete: (data: KakaoPostcodeData) => void;
+}) => {
+  open: () => void;
+};
+
+let kakaoPostcodeScriptPromise: Promise<void> | null = null;
+
 export function CheckoutPage() {
   const navigate = useNavigate();
+  const preferredDateInputRef = useRef<HTMLInputElement>(null);
+  const addressLine2InputRef = useRef<HTMLInputElement>(null);
+  const contactDefaultsAppliedRef = useRef(false);
   const [serviceType, setServiceType] = useState<AssemblyServiceType>('FULL_SERVICE');
   const [region, setRegion] = useState('');
   const [preferredDate, setPreferredDate] = useState('');
@@ -38,6 +64,7 @@ export function CheckoutPage() {
   const [note, setNote] = useState('');
   const [asPolicyAccepted, setAsPolicyAccepted] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
+  const [addressSearchError, setAddressSearchError] = useState('');
   const [idempotencyKey] = useState(() => crypto.randomUUID());
   const { data: quoteDraft, isLoading, isError } = useQuery({
     queryKey: ['quote-draft', 'current'],
@@ -48,6 +75,12 @@ export function CheckoutPage() {
     queryFn: () => resolveBuildGraph({ source: 'QUOTE_DRAFT_CURRENT', view: 'FULL' }),
     enabled: Boolean(quoteDraft?.items.length),
     retry: false
+  });
+  const currentUserQuery = useQuery({
+    queryKey: ['checkout', 'current-user-contact-defaults'],
+    queryFn: getCurrentUser,
+    retry: false,
+    staleTime: 60_000
   });
   const createRequestMutation = useMutation({
     mutationFn: () => createAssemblyRequest({
@@ -66,6 +99,20 @@ export function CheckoutPage() {
     onSuccess: (request) => navigate(`/checkout/offers/${request.id}`),
     onError: (error) => setFormError(error instanceof Error ? error.message : '조립 요청을 저장하지 못했습니다.')
   });
+
+  useEffect(() => {
+    const user = currentUserQuery.data;
+    if (!user || contactDefaultsAppliedRef.current) {
+      return;
+    }
+
+    contactDefaultsAppliedRef.current = true;
+    setContactName((current) => current.trim() ? current : user.name);
+    setContactPhone((current) => current.trim() ? current : (user.phoneNumber ?? ''));
+    setPostalCode((current) => current.trim() ? current : (user.postalCode ?? ''));
+    setAddressLine1((current) => current.trim() ? current : (user.addressLine1 ?? ''));
+    setAddressLine2((current) => current.trim() ? current : (user.addressLine2 ?? ''));
+  }, [currentUserQuery.data]);
 
   if (isLoading) {
     return (
@@ -91,14 +138,44 @@ export function CheckoutPage() {
     );
   }
 
-  const purchasableCount = quoteDraft.items.filter((item) => Boolean(item.externalOffer?.offerUrl)).length;
-  const unavailableCount = quoteDraft.items.length - purchasableCount;
   const hasCompatibilityFail = graphHasBlockingFail(graphQuery.data);
   const formComplete = Boolean(
     region && preferredDate && asPolicyAccepted && contactName.trim() && contactPhone.trim()
-    && (deliveryMethod === 'PICKUP' || addressLine1.trim())
+    && (deliveryMethod === 'PICKUP' || (postalCode.trim() && addressLine1.trim()))
   );
   const canSubmit = formComplete && !graphQuery.isLoading && !graphQuery.isError && !hasCompatibilityFail && !createRequestMutation.isPending;
+
+  const openPreferredDatePicker = () => {
+    const input = preferredDateInputRef.current;
+    if (!input) return;
+
+    input.focus();
+    try {
+      (input as HTMLInputElement & { showPicker?: () => void }).showPicker?.();
+    } catch {
+      // Keep the focused input fallback for browsers that expose but reject showPicker().
+    }
+  };
+
+  const openAddressSearch = async () => {
+    setAddressSearchError('');
+    try {
+      await loadKakaoPostcodeScript();
+      const Postcode = getKakaoPostcodeConstructor();
+      if (!Postcode) {
+        throw new Error('Kakao postcode is unavailable.');
+      }
+      new Postcode({
+        oncomplete(data) {
+          setPostalCode(data.zonecode);
+          setAddressLine1(selectedAddressFromPostcode(data));
+          addressLine2InputRef.current?.focus();
+        }
+      }).open();
+    } catch {
+      setAddressSearchError('주소 검색 서비스를 불러오지 못했습니다. 네트워크 연결을 확인해 주세요.');
+    }
+  };
 
   const createRequest = () => {
     if (!formComplete) {
@@ -115,26 +192,19 @@ export function CheckoutPage() {
 
   return (
     <Screen>
-      <div className="mb-5 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
-        <div>
-          <Link to="/self-quote" className="inline-flex items-center gap-2 text-sm font-black text-brand-blue hover:underline">
-            <ArrowLeft size={16} />
-            셀프 견적으로 돌아가기
-          </Link>
-          <h1 className="mt-3 text-3xl font-black tracking-tight text-commerce-ink">조립 견적 요청</h1>
-          <p className="mt-2 max-w-2xl break-keep text-sm leading-6 text-slate-600">
-            현재 견적을 기준으로 기사에게 재고 확인과 조립·배송 제안을 요청합니다.
-          </p>
-        </div>
-        <div className="rounded-lg border border-commerce-line bg-white px-4 py-3 text-sm shadow-sm">
-          <div className="font-black text-commerce-ink">{quoteDraft.name}</div>
-          <div className="mt-1 text-xs font-bold text-slate-500">현재 장바구니 기준 · 예상가 {quoteDraft.totalPrice.toLocaleString()}원</div>
-        </div>
+      <div className="mb-5">
+        <Link to="/self-quote" className="inline-flex items-center gap-2 text-sm font-black text-brand-blue hover:underline">
+          <ArrowLeft size={16} />
+          셀프 견적으로 돌아가기
+        </Link>
+        <h1 className="mt-3 text-3xl font-black tracking-tight text-commerce-ink">조립 견적 요청</h1>
+        <p className="mt-2 max-w-2xl break-keep text-sm leading-6 text-slate-600">
+          현재 견적을 기준으로 기사에게 재고 확인과 조립·배송 제안을 요청합니다.
+        </p>
       </div>
 
       <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_380px]">
         <div className="min-w-0 space-y-5">
-          <CheckoutReadiness purchasableCount={purchasableCount} unavailableCount={unavailableCount} />
           <Panel title={`조립 대상 부품 ${quoteDraft.itemCount}개`} subtitle="기사는 이 구성을 기준으로 재고와 최종 가격을 다시 확인합니다.">
             <div className="space-y-3">
               {quoteDraft.items.map((item) => <CheckoutItemCard key={item.partId} item={item} />)}
@@ -173,12 +243,43 @@ export function CheckoutPage() {
                   <CheckoutTextInput label="연락처" value={contactPhone} onChange={setContactPhone} placeholder="010-1234-5678" required />
                 </div>
                 {deliveryMethod === 'DELIVERY' ? (
-                  <div className="grid gap-3 sm:grid-cols-[140px_minmax(0,1fr)]">
-                    <CheckoutTextInput label="우편번호" value={postalCode} onChange={setPostalCode} placeholder="06236" />
-                    <CheckoutTextInput label="주소" value={addressLine1} onChange={setAddressLine1} placeholder="도로명 주소" required />
-                    <div className="sm:col-start-2">
-                      <CheckoutTextInput label="상세 주소" value={addressLine2} onChange={setAddressLine2} placeholder="동·호수 등" />
+                  <div className="grid gap-3 sm:grid-cols-[minmax(0,260px)_minmax(0,1fr)]">
+                    <div className="text-xs font-black text-slate-600">
+                      <label htmlFor="checkout-postal-code">우편번호</label>
+                      <div className="mt-1.5 flex gap-2">
+                        <input
+                          id="checkout-postal-code"
+                          value={postalCode}
+                          placeholder="주소 찾기로 입력"
+                          readOnly
+                          required
+                          autoComplete="postal-code"
+                          className="h-11 min-w-0 flex-1 rounded-md border border-commerce-line bg-slate-50 px-3 text-sm font-bold text-commerce-ink outline-none focus:border-brand-blue focus:ring-4 focus:ring-blue-100"
+                        />
+                        <button
+                          type="button"
+                          onClick={openAddressSearch}
+                          className="h-11 shrink-0 rounded-md border border-brand-blue bg-white px-3 text-sm font-black text-brand-blue transition hover:bg-blue-50 focus:outline-none focus:ring-4 focus:ring-blue-100"
+                        >
+                          주소 찾기
+                        </button>
+                      </div>
                     </div>
+                    <label className="block text-xs font-black text-slate-600">
+                      주소<span className="ml-1 text-red-500">필수</span>
+                      <input
+                        value={addressLine1}
+                        placeholder="주소 찾기로 입력"
+                        readOnly
+                        required
+                        autoComplete="address-line1"
+                        className="mt-1.5 h-11 w-full rounded-md border border-commerce-line bg-slate-50 px-3 text-sm font-bold text-commerce-ink outline-none focus:border-brand-blue focus:ring-4 focus:ring-blue-100"
+                      />
+                    </label>
+                    <div className="sm:col-start-2">
+                      <CheckoutTextInput inputRef={addressLine2InputRef} label="상세 주소" value={addressLine2} onChange={setAddressLine2} placeholder="동·호수 등" autoComplete="address-line2" />
+                    </div>
+                    {addressSearchError ? <p className="text-xs font-bold text-red-600 sm:col-span-2">{addressSearchError}</p> : null}
                   </div>
                 ) : null}
                 <p className="text-xs font-bold leading-5 text-slate-500">연락처와 상세 주소는 선택한 기사에게 가상 결제 완료 후에만 공개됩니다.</p>
@@ -197,9 +298,9 @@ export function CheckoutPage() {
                 </label>
                 <label className="text-sm font-black text-commerce-ink">
                   희망 일정
-                  <span className="mt-2 flex min-h-11 items-center gap-2 rounded-md border border-commerce-line bg-white px-3">
+                  <span className="mt-2 flex min-h-11 cursor-pointer items-center gap-2 rounded-md border border-commerce-line bg-white px-3 focus-within:border-brand-blue focus-within:ring-4 focus-within:ring-blue-100" onClick={openPreferredDatePicker}>
                     <CalendarDays size={16} className="text-slate-400" />
-                    <input type="date" min={todayInputValue()} value={preferredDate} onChange={(event) => setPreferredDate(event.target.value)} className="min-w-0 flex-1 bg-transparent text-sm font-bold outline-none" aria-label="희망 일정" />
+                    <input ref={preferredDateInputRef} type="date" min={todayInputValue()} value={preferredDate} onChange={(event) => setPreferredDate(event.target.value)} className="min-w-0 flex-1 cursor-pointer bg-transparent text-sm font-bold outline-none" aria-label="희망 일정" />
                   </span>
                 </label>
               </div>
@@ -291,31 +392,6 @@ function EmptyCheckout() {
   );
 }
 
-function CheckoutReadiness({ purchasableCount, unavailableCount }: { purchasableCount: number; unavailableCount: number }) {
-  return (
-    <section className="rounded-lg border border-commerce-line bg-white p-5 shadow-sm">
-      <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
-        <div>
-          <h2 className="text-xl font-black text-commerce-ink">견적 준비 상태</h2>
-          <p className="mt-2 break-keep text-sm leading-6 text-slate-600">
-            기사 제안 전에 현재 부품 구성과 구매처 근거를 확인합니다.
-          </p>
-        </div>
-        <div className="grid grid-cols-2 gap-2 text-center text-xs font-black">
-          <div className="rounded-lg border border-emerald-100 bg-emerald-50 px-4 py-3 text-emerald-700">
-            <div className="text-xl">{purchasableCount}</div>
-            <div>구매처 링크</div>
-          </div>
-          <div className="rounded-lg border border-orange-100 bg-orange-50 px-4 py-3 text-orange-700">
-            <div className="text-xl">{unavailableCount}</div>
-            <div>정보 없음</div>
-          </div>
-        </div>
-      </div>
-    </section>
-  );
-}
-
 function CheckoutItemCard({ item }: { item: QuoteDraftItem }) {
   const offerUrl = item.externalOffer?.offerUrl;
   const supplierName = item.externalOffer?.supplierName ?? '저장된 구매처 없음';
@@ -379,20 +455,96 @@ function ChoiceButton({ label, description, selected, onClick }: { label: string
   );
 }
 
-function CheckoutTextInput({ label, value, onChange, placeholder, required = false }: { label: string; value: string; onChange: (value: string) => void; placeholder: string; required?: boolean }) {
+function CheckoutTextInput({
+  label,
+  value,
+  onChange,
+  placeholder,
+  required = false,
+  inputRef,
+  autoComplete
+}: {
+  label: string;
+  value: string;
+  onChange: (value: string) => void;
+  placeholder: string;
+  required?: boolean;
+  inputRef?: React.Ref<HTMLInputElement>;
+  autoComplete?: string;
+}) {
   return (
     <label className="block text-xs font-black text-slate-600">
       {label}{required ? <span className="ml-1 text-red-500">필수</span> : null}
       <input
+        ref={inputRef}
         aria-label={label}
         value={value}
         onChange={(event) => onChange(event.target.value)}
         placeholder={placeholder}
         required={required}
+        autoComplete={autoComplete}
         className="mt-1.5 h-11 w-full rounded-md border border-commerce-line bg-white px-3 text-sm font-bold text-commerce-ink outline-none focus:border-brand-blue focus:ring-4 focus:ring-blue-100"
       />
     </label>
   );
+}
+
+function getKakaoPostcodeConstructor() {
+  return (window as Window & { kakao?: { Postcode?: KakaoPostcodeConstructor } }).kakao?.Postcode;
+}
+
+function loadKakaoPostcodeScript() {
+  if (getKakaoPostcodeConstructor()) {
+    return Promise.resolve();
+  }
+  if (kakaoPostcodeScriptPromise) {
+    return kakaoPostcodeScriptPromise;
+  }
+
+  kakaoPostcodeScriptPromise = new Promise<void>((resolve, reject) => {
+    const existingScript = document.getElementById(KAKAO_POSTCODE_SCRIPT_ID) as HTMLScriptElement | null;
+    if (existingScript) {
+      existingScript.addEventListener('load', () => resolve(), { once: true });
+      existingScript.addEventListener('error', () => {
+        kakaoPostcodeScriptPromise = null;
+        reject(new Error('Kakao postcode script failed to load.'));
+      }, { once: true });
+      return;
+    }
+
+    const script = document.createElement('script');
+    script.id = KAKAO_POSTCODE_SCRIPT_ID;
+    script.src = KAKAO_POSTCODE_SCRIPT_URL;
+    script.async = true;
+    script.onload = () => resolve();
+    script.onerror = () => {
+      kakaoPostcodeScriptPromise = null;
+      script.remove();
+      reject(new Error('Kakao postcode script failed to load.'));
+    };
+    document.head.appendChild(script);
+  });
+
+  return kakaoPostcodeScriptPromise;
+}
+
+function selectedAddressFromPostcode(data: KakaoPostcodeData) {
+  const baseAddress = data.userSelectedType === 'R'
+    ? data.roadAddress
+    : data.jibunAddress;
+  const extraAddress = data.userSelectedType === 'R' ? roadAddressExtra(data) : '';
+  return `${baseAddress || data.address}${extraAddress}`.trim();
+}
+
+function roadAddressExtra(data: KakaoPostcodeData) {
+  const extraParts: string[] = [];
+  if (data.bname && /[동로가]$/.test(data.bname)) {
+    extraParts.push(data.bname);
+  }
+  if (data.buildingName && data.apartment === 'Y') {
+    extraParts.push(data.buildingName);
+  }
+  return extraParts.length > 0 ? ` (${extraParts.join(', ')})` : '';
 }
 
 function GraphGateStatus({ loading, error, failed }: { loading: boolean; error: boolean; failed: boolean }) {
