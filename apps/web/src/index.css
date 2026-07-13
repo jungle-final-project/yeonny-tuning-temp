@@ -1490,6 +1490,153 @@ body.fp-viewing-popular-parts .home-fullpage-shell .fullpage-wrapper {
   pointer-events: none;
 }
 
+/* Modern home — option 1: editorial validation workspace with a persistent AI assistant. */
+.modern-home-main {
+  font-kerning: normal;
+}
+
+.modern-home-intro {
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.8);
+}
+
+.modern-home-category-rail,
+.modern-home-product-rail {
+  scrollbar-width: thin;
+  scrollbar-color: #cbd5e1 transparent;
+}
+
+.modern-home-recommendations .home-featured-picker-grid,
+.modern-home-recommendations .home-ai-picker-grid {
+  display: grid;
+  min-height: 360px;
+  grid-template-columns: minmax(0, 1.65fr) repeat(2, minmax(0, 1fr));
+  grid-template-rows: minmax(360px, auto);
+  gap: 16px;
+}
+
+.modern-home-recommendations .home-featured-preview-card {
+  min-height: 0;
+  border: 1px solid #e4e7ec;
+  border-radius: 10px;
+  background: #ffffff !important;
+  box-shadow: none;
+}
+
+.modern-home-recommendations .home-featured-preview-card::after {
+  display: none;
+}
+
+.modern-home-recommendations .home-featured-preview-card:hover,
+.modern-home-recommendations .home-featured-preview-card:focus-visible {
+  border-color: #2563eb;
+  box-shadow: 0 6px 8px rgba(15, 23, 42, 0.08);
+  transform: translateY(-1px);
+}
+
+.modern-home-recommendations .home-featured-picker-grid .home-featured-preview-thumb-wrap,
+.modern-home-recommendations .home-ai-picker-grid .home-featured-preview-thumb-wrap {
+  height: 190px;
+  border: 0;
+  background: #f8fafc;
+}
+
+.modern-home-recommendations .home-featured-picker-grid > :first-child .home-featured-preview-thumb-wrap,
+.modern-home-recommendations .home-ai-picker-grid > :first-child .home-featured-preview-thumb-wrap {
+  height: 230px;
+}
+
+.modern-home-recommendations .home-featured-preview-thumb {
+  filter: none;
+  transform: none;
+}
+
+.modern-home-recommendations .home-featured-preview-card:hover .home-featured-preview-thumb {
+  transform: scale(1.025);
+}
+
+.modern-home-recommendations .home-featured-preview-price {
+  color: #111827 !important;
+  font-variant-numeric: tabular-nums;
+}
+
+.modern-home-recommendations .home-featured-preview-tag {
+  background: #eff6ff !important;
+  color: #2563eb !important;
+}
+
+.modern-home-recommendations .home-featured-preview-layout {
+  min-height: 560px;
+  grid-template-columns: minmax(300px, 0.8fr) minmax(0, 1.7fr);
+  gap: 16px;
+}
+
+.modern-home-recommendations .home-featured-selected-panel .home-featured-preview-thumb-wrap {
+  min-height: 260px;
+  background: #f8fafc;
+}
+
+.modern-home-evidence {
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.85);
+}
+
+@media (max-width: 1279px) {
+  .modern-home-intro {
+    min-height: auto !important;
+  }
+}
+
+@media (max-width: 1023px) {
+  .modern-home-recommendations .home-featured-picker-grid,
+  .modern-home-recommendations .home-ai-picker-grid {
+    display: flex;
+    min-height: 0;
+    flex-direction: column;
+  }
+
+  .modern-home-recommendations .home-featured-preview-layout {
+    display: flex;
+    min-height: 0;
+    flex-direction: column;
+  }
+
+  .modern-home-recommendations .home-featured-selected-panel {
+    min-height: 440px;
+  }
+
+  .modern-home-recommendations .home-featured-preview-graph {
+    min-height: 520px;
+  }
+}
+
+@media (max-width: 639px) {
+  .modern-home-main {
+    padding-top: 20px;
+  }
+
+  .modern-home-product-rail > a {
+    width: 176px;
+  }
+
+  .modern-home-recommendations .home-featured-selected-panel {
+    min-height: 400px;
+  }
+
+  .modern-home-recommendations .home-featured-preview-graph {
+    min-height: 460px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .modern-home-screen *,
+  .modern-home-screen *::before,
+  .modern-home-screen *::after {
+    scroll-behavior: auto !important;
+    transition-duration: 0.01ms !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+  }
+}
+
 /* 성능 패널 모션: 값이 어디서 어디로 변했는지 눈으로 따라가게 한다. 신규 의존성 없이 CSS keyframes만 사용한다. */
 
 /* 후보 선택 팝오버: 콤보 아래에서 가볍게 떠오른다 — 과한 슬라이드 금지. */
