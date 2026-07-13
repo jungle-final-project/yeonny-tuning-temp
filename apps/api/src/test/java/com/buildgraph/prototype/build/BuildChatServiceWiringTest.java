@@ -34,6 +34,9 @@ class BuildChatServiceWiringTest {
             .withBean(BuildChatCacheService.class)
             .withBean(BuildChatIntentRouter.class)
             .withBean(BuildChatSemanticCacheService.class, BuildChatSemanticCacheService::disabled)
+            .withBean(BuildCompositeScoreService.class)
+            .withBean(BuildScoreAdviceService.class)
+            .withBean(BuildEvaluationService.class)
             .withBean(BuildChatService.class);
 
     @Test
@@ -47,6 +50,8 @@ class BuildChatServiceWiringTest {
 
             assertThat(ReflectionTestUtils.getField(buildChatService, "buildChatCacheService"))
                     .isSameAs(cacheService);
+            assertThat(ReflectionTestUtils.getField(buildChatService, "buildEvaluationService"))
+                    .isSameAs(context.getBean(BuildEvaluationService.class));
         });
     }
 }

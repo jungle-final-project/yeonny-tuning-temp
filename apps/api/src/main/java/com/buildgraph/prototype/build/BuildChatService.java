@@ -15,6 +15,7 @@ import com.buildgraph.prototype.recommendation.CandidateReranker;
 import com.buildgraph.prototype.recommendation.NoopCandidateReranker;
 import com.buildgraph.prototype.user.CurrentUserService;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -49,6 +50,10 @@ public class BuildChatService {
     private static final Pattern EXPLICIT_CPU_MODEL = Pattern.compile("(?i)\\b\\d{4,5}x3d\\b|\\b\\d{4,5}x\\b|\\bi[3579]-?\\d{4,5}\\b");
     private static final Pattern CAPACITY_GB_PATTERN = Pattern.compile("(\\d+)\\s*(?:gb|기가|기가바이트)", Pattern.CASE_INSENSITIVE);
     private static final Pattern WATT_PATTERN = Pattern.compile("(\\d{3,4})\\s*w", Pattern.CASE_INSENSITIVE);
+    private static final Pattern EXACT_PART_ADD_SUFFIX = Pattern.compile(
+            "\\s*(?:견적(?:에|으로)?\\s*)?(?:담아\\s*줘|넣어\\s*줘|추가해\\s*줘|담아|넣어|추가해)\\s*[.!?]?\\s*$",
+            Pattern.CASE_INSENSITIVE
+    );
     // 팀 정책: 벤치마크 수치는 보장이 아니라 참고용이며, 제공 범위(내부 DB 등록 조합)를 함께 고지한다
     static final String SIMULATION_DISCLAIMER =
             "본 수치는 내부 벤치마크 DB 기준 참고용 추정치이며, 내부 DB에 등록된 부품·게임·해상도 조합에 한해 제공됩니다. "
@@ -72,6 +77,8 @@ public class BuildChatService {
     // RAM/SSD는 견적에 여러 상품을 함께 담을 수 있다. 구체 상품 추천 칩을 누른 경우에는
     // 다시 자연어 변경 요청으로 해석하지 않고, 사용자가 고른 상품을 1개 직접 추가한다.
     private static final Set<String> DIRECT_MULTI_ITEM_QUICK_REPLY_CATEGORIES = Set.of("RAM", "STORAGE");
+    private static final Set<String> SINGLE_ITEM_CATEGORIES = Set.of("CPU", "MOTHERBOARD", "GPU", "PSU", "CASE", "COOLER");
+    private static final String SCORE_EXPLANATION_PROFILE = "BUILD_CHAT_54_MINI_FAST";
     // dead-end 방지용 기능 안내 칩 — 우아한 거절과 종단 칩 플로어가 공유한다
     private static final List<String> FEATURE_GUIDE_QUICK_REPLIES =
             List.of("200만원 게이밍 PC 추천해줘", "지금 견적 나머지 채워줘", "CPU를 9700X로 바꾸면?");
@@ -92,6 +99,7 @@ public class BuildChatService {
     private final BuildChatIntentRouter intentRouter;
     private final BuildChatSemanticCacheService semanticCacheService;
     private final BuildChatFeasibilityService feasibilityService;
+    private final BuildEvaluationService buildEvaluationService;
 
     @Autowired
     public BuildChatService(
@@ -103,7 +111,8 @@ public class BuildChatService {
             CandidateReranker candidateReranker,
             PartRouteResolver partRouteResolver,
             BuildChatIntentRouter intentRouter,
-            BuildChatSemanticCacheService semanticCacheService
+            BuildChatSemanticCacheService semanticCacheService,
+            BuildEvaluationService buildEvaluationService
     ) {
         this.jdbcTemplate = jdbcTemplate;
         this.toolCheckService = toolCheckService;
@@ -115,6 +124,32 @@ public class BuildChatService {
         this.intentRouter = intentRouter;
         this.semanticCacheService = semanticCacheService;
         this.feasibilityService = new BuildChatFeasibilityService(jdbcTemplate);
+        this.buildEvaluationService = buildEvaluationService;
+    }
+
+    public BuildChatService(
+            JdbcTemplate jdbcTemplate,
+            ToolCheckService toolCheckService,
+            AiChatEngine aiChatEngine,
+            BuildChatCacheService buildChatCacheService,
+            PartReplacementRanker partReplacementRanker,
+            CandidateReranker candidateReranker,
+            PartRouteResolver partRouteResolver,
+            BuildChatIntentRouter intentRouter,
+            BuildChatSemanticCacheService semanticCacheService
+    ) {
+        this(
+                jdbcTemplate,
+                toolCheckService,
+                aiChatEngine,
+                buildChatCacheService,
+                partReplacementRanker,
+                candidateReranker,
+                partRouteResolver,
+                intentRouter,
+                semanticCacheService,
+                defaultBuildEvaluationService(jdbcTemplate, toolCheckService)
+        );
     }
 
     public BuildChatService(JdbcTemplate jdbcTemplate, ToolCheckService toolCheckService, AiChatEngine aiChatEngine, BuildChatCacheService buildChatCacheService) {
@@ -219,6 +254,11 @@ public class BuildChatService {
             logBuildChatPath("FAST_BOARD_FOCUS", startedNanos, userId, requestedAiProfile, false, BuildChatGuardStats.empty());
             return response;
         }
+        if (intentDecision.intent() == BuildChatIntent.EXPLAIN_BUILD_SCORE) {
+            Map<String, Object> response = buildScoreExplanationResponse(body, message, user, intentDecision);
+            logBuildChatPath("LIVE_BUILD_ASSESSMENT", startedNanos, userId, SCORE_EXPLANATION_PROFILE, false, BuildChatGuardStats.empty());
+            return response;
+        }
         if (intentDecision.intent() == BuildChatIntent.SIMULATE_REPLACEMENT) {
             Optional<Map<String, Object>> simulationCard = performanceSimulationResponse(body, message);
             // 카드가 못 나왔고(교체 대상 미해상) 속성 요청 가능성이 있으면 dead-end로 끝내지 않고 LLM 경로로
@@ -240,6 +280,18 @@ public class BuildChatService {
                 logBuildChatPath("FAST_SIMULATION", startedNanos, userId, requestedAiProfile, false, BuildChatGuardStats.empty());
                 return response;
             }
+        }
+        Optional<Map<String, Object>> exactPartPreview = exactSingletonPartPreviewResponse(body, message);
+        if (exactPartPreview.isPresent()) {
+            Map<String, Object> response = exactPartPreview.get();
+            logBuildChatPath("FAST_EXACT_PART_PREVIEW", startedNanos, userId, requestedAiProfile, false, BuildChatGuardStats.empty());
+            return response;
+        }
+        Optional<Map<String, Object>> fastCaseImprovement = fastCaseScoreImprovementResponse(body, message);
+        if (fastCaseImprovement.isPresent()) {
+            Map<String, Object> response = fastCaseImprovement.get();
+            logBuildChatPath("FAST_CASE_SCORE_IMPROVEMENT", startedNanos, userId, requestedAiProfile, false, BuildChatGuardStats.empty());
+            return response;
         }
         if (intentDecision.intent() == BuildChatIntent.ASK_CLARIFICATION) {
             Map<String, Object> response = clarificationResponse(message, rawMessage, intentDecision.ambiguityReasons(), clarificationFollowUp);
@@ -420,14 +472,20 @@ public class BuildChatService {
         // 범용 역제안 후처리 — LLM이 구조화한 제약을 부품 DB와 대조해, 불가능한 요청이면
         // dead-end 대신 실데이터 숫자(최저가·부족액·최소 구성가)와 다음 행동 칩을 제시한다.
         // 미리보기(변경)를 먼저 시도하고, 미리보기가 못 만들어진 변경 요청은 부품 제약 역제안이 이어받는다.
-        if (!readOnlySimulationFlow && !readOnlyBoardFocusFlow) {
+        // 단, "여유 있는 케이스 추천"은 LLM이 BUILD_MODIFY로 흔들려도 실제 개선 검증이 먼저다.
+        // 이 순서를 지키지 않으면 검증 전 추천 1개가 변경 미리보기로 확정된다.
+        boolean caseImprovementHandled = !readOnlyBoardFocusFlow
+                && applyCaseScoreImprovementProposal(response, engineResponse, message, body);
+        if (!readOnlySimulationFlow && !readOnlyBoardFocusFlow && !caseImprovementHandled) {
             applyDraftEditPreview(response, engineResponse, body);
         }
         if (!readOnlyBoardFocusFlow) {
             // 속성 요청(수랭/PCIe 세대/통풍) + 드래프트에 같은 카테고리 존재 → 1:1 스펙비교 카드로 답한다.
             // 카드가 못 나오면(비교 대상 없음·후보 없음) 아래 역제안이 후보 나열로 이어받는다.
-            applyAttributeSimulationCard(response, engineResponse, message, body);
-            applyPartConstraintCounterProposal(response, engineResponse, message, body);
+            if (!caseImprovementHandled) {
+                applyAttributeSimulationCard(response, engineResponse, message, body);
+                applyPartConstraintCounterProposal(response, engineResponse, message, body);
+            }
             applyUsageMinimumCounterProposal(response, engineResponse, rawBudgetIntent);
         }
         if (recommendFlow
@@ -476,6 +534,181 @@ public class BuildChatService {
         logBuildChatPath("LLM_FULL", startedNanos, userId, requestedAiProfile, false, guardStats,
                 "redisMs=" + redisMs + " deterministicMs=" + deterministicMs + " semanticMs=" + semanticMs + " engineMs=" + engineMs);
         return response;
+    }
+
+    private Map<String, Object> buildScoreExplanationResponse(
+            Map<String, Object> body,
+            String message,
+            CurrentUserService.CurrentUser user,
+            BuildChatIntentDecision decision
+    ) {
+        if (user == null) {
+            throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "로그인이 필요합니다.");
+        }
+        AssessmentFocus requestedFocus = assessmentFocus(body, decision);
+        BuildEvaluationService.BuildEvaluation evaluation = buildEvaluationService.evaluateCurrentDraft(
+                user.internalId(),
+                null,
+                requestedFocus.category(),
+                requestedFocus.tool()
+        );
+        AssessmentFocus verifiedFocus = verifiedAssessmentFocus(requestedFocus, evaluation);
+        if (!Objects.equals(verifiedFocus, requestedFocus)) {
+            evaluation = buildEvaluationService.evaluate(
+                    evaluation.parts(),
+                    evaluation.budgetWon(),
+                    verifiedFocus.category(),
+                    verifiedFocus.tool()
+            );
+        }
+        Map<String, Object> assessment = evaluation.buildAssessment();
+        String fallbackMessage = deterministicAssessmentMessage(assessment);
+        String assistantMessage = fallbackMessage;
+        List<String> warnings = new ArrayList<>();
+        List<String> evidenceIds = List.of();
+        String agentSessionId = null;
+        try {
+            Map<String, Object> engineContext = new LinkedHashMap<>();
+            engineContext.put("serverFacts", MockData.map(
+                    "buildAssessment", assessment,
+                    "responsePolicy", "Use only these facts. Write one short Korean sentence. Do not invent numbers, parts, or actions."
+            ));
+            engineContext.put("assessmentContext", body.get("assessmentContext"));
+            AiChatEngineResponse engineResponse = aiChatEngine.explainBuildAssessment(new AiChatEngineRequest(
+                    message,
+                    chatSurface(body),
+                    verifiedFocus.category(),
+                    text(body.get("buildId")),
+                    text(body.get("draftId")),
+                    engineContext,
+                    user.internalId()
+            ), SCORE_EXPLANATION_PROFILE);
+            assistantMessage = safeAssessmentMessage(engineResponse.assistantMessage(), assessment, fallbackMessage);
+            evidenceIds = engineResponse.evidenceIds() == null ? List.of() : engineResponse.evidenceIds();
+            agentSessionId = engineResponse.agentSessionId();
+        } catch (RuntimeException error) {
+            log.warn("Build score explanation LLM unavailable; returning deterministic assessment", error);
+            warnings.add("SCORE_EXPLANATION_LLM_FALLBACK");
+        }
+
+        return MockData.map(
+                "answerType", "GENERAL",
+                "message", assistantMessage,
+                "builds", List.of(),
+                "simulation", null,
+                "buildAssessment", assessment,
+                "warnings", warnings,
+                "quickReplies", assessmentQuickReplies(assessment),
+                "evidenceIds", evidenceIds,
+                "agentSessionId", agentSessionId
+        );
+    }
+
+    private static AssessmentFocus assessmentFocus(Map<String, Object> body, BuildChatIntentDecision decision) {
+        Map<String, Object> context = objectMap(body.get("assessmentContext"));
+        if (!context.isEmpty()) {
+            String source = text(context.get("source"));
+            String focusType = text(context.get("focusType"));
+            if (!"QUOTE_DRAFT_CURRENT".equals(source)
+                    || (!"SCORE".equals(focusType) && !"ISSUE".equals(focusType))) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "assessmentContext 값이 올바르지 않습니다.");
+            }
+        }
+        String category = normalizeAssessmentCategory(firstText(text(context.get("category")), decision.targetCategory()));
+        String tool = normalizeAssessmentTool(text(context.get("tool")));
+        return new AssessmentFocus(category, tool);
+    }
+
+    private static AssessmentFocus verifiedAssessmentFocus(
+        AssessmentFocus focus,
+        BuildEvaluationService.BuildEvaluation evaluation
+    ) {
+        String category = focus.category();
+        String requestedCategory = category;
+        boolean categoryPresent = requestedCategory == null || evaluation.parts().stream()
+                .map(part -> part.category() == null ? "" : part.category())
+                .anyMatch(requestedCategory::equalsIgnoreCase);
+        if (!categoryPresent) {
+            category = null;
+        }
+        String tool = focus.tool();
+        String requestedTool = tool;
+        boolean toolPresent = requestedTool == null || evaluation.toolResults().stream()
+                .map(result -> text(result.get("tool")))
+                .anyMatch(requestedTool::equalsIgnoreCase);
+        if (!toolPresent) {
+            tool = null;
+        }
+        return new AssessmentFocus(category, tool);
+    }
+
+    private static String deterministicAssessmentMessage(Map<String, Object> assessment) {
+        Integer scoreValue = firstNumber(assessment.get("score"));
+        Integer maxScoreValue = firstNumber(assessment.get("maxScore"));
+        int score = scoreValue == null ? 0 : scoreValue;
+        int maxScore = maxScoreValue == null ? 1000 : maxScoreValue;
+        String summary = firstText(text(assessment.get("summary")), "현재 견적의 확인 가능한 근거를 기준으로 평가했습니다.");
+        return "현재 견적의 종합 점수는 " + score + "/" + maxScore + "점입니다. " + summary;
+    }
+
+    private static String safeAssessmentMessage(String candidate, Map<String, Object> assessment, String fallback) {
+        if (candidate == null || candidate.isBlank() || candidate.length() > 280) {
+            return fallback;
+        }
+        String normalized = candidate.replaceAll("\\s+", " ").trim();
+        String lowered = normalized.toLowerCase(Locale.ROOT);
+        if (containsAnyText(lowered, "교체했습니다", "담았습니다", "저장했습니다", "적용했습니다", "삭제했습니다")) {
+            return fallback;
+        }
+        Map<String, Object> facts = new LinkedHashMap<>(assessment);
+        facts.remove("evaluatedAt");
+        Matcher numeric = Pattern.compile("\\d[\\d,.]*").matcher(normalized);
+        String factText = facts.toString().replace(",", "");
+        while (numeric.find()) {
+            String token = numeric.group().replace(",", "");
+            if (!factText.contains(token)) {
+                return fallback;
+            }
+        }
+        return normalized;
+    }
+
+    private static List<String> assessmentQuickReplies(Map<String, Object> assessment) {
+        List<String> prompts = objectMaps(assessment.get("recommendations")).stream()
+                .map(item -> text(item.get("prompt")))
+                .filter(value -> !value.isBlank())
+                .distinct()
+                .limit(3)
+                .toList();
+        return prompts.isEmpty()
+                ? List.of("현재 견적에서 더 개선할 수 있는 부분 알려줘")
+                : prompts;
+    }
+
+    private static String normalizeAssessmentCategory(String value) {
+        if (value == null) return null;
+        String normalized = value.trim().toUpperCase(Locale.ROOT);
+        return CATEGORY_LABELS.containsKey(normalized) ? normalized : null;
+    }
+
+    private static String normalizeAssessmentTool(String value) {
+        if (value == null) return null;
+        String normalized = value.trim().toLowerCase(Locale.ROOT);
+        return Set.of("compatibility", "power", "size", "performance", "price").contains(normalized)
+                ? normalized
+                : null;
+    }
+
+    private static BuildEvaluationService defaultBuildEvaluationService(
+            JdbcTemplate jdbcTemplate,
+            ToolCheckService toolCheckService
+    ) {
+        return new BuildEvaluationService(
+                jdbcTemplate,
+                toolCheckService,
+                new BuildCompositeScoreService(),
+                new BuildScoreAdviceService()
+        );
     }
 
     private static long elapsedMs(long startNanos) {
@@ -1808,6 +2041,250 @@ public class BuildChatService {
     }
 
     /**
+     * 종합 점수 설명에서 이어지는 케이스 개선 요청은 일반 TOP3가 아니라 현재 견적을 후보별로 다시
+     * 평가한다. 현재 케이스 또는 장착 여유가 같은 파생 상품을 다시 추천하는 순환을 막고, 실제 종합
+     * 점수 상승과 Tool 검증을 모두 통과한 후보만 사용자에게 보여준다.
+     */
+    private boolean applyCaseScoreImprovementProposal(
+            Map<String, Object> response,
+            AiChatEngineResponse engineResponse,
+            String message,
+            Map<String, Object> body
+    ) {
+        boolean recommendationIntent = engineResponse.intent() == AiChatIntent.PART_RECOMMEND
+                || (engineResponse.intent() == AiChatIntent.BUILD_MODIFY && isExplicitRecommendationRequest(message));
+        if (!recommendationIntent) {
+            return false;
+        }
+        BuildChatFeasibilityService.SpecConstraint constraint = mergedPartConstraint(
+                objectMap(engineResponse.parsedContext().get("partConstraint")),
+                message
+        );
+        return applyCaseScoreImprovementProposal(response, constraint, message, body);
+    }
+
+    private Optional<Map<String, Object>> fastCaseScoreImprovementResponse(
+            Map<String, Object> body,
+            String message
+    ) {
+        if (!"CASE".equals(detectPartCategory(message)) || !isExplicitRecommendationRequest(message)) {
+            return Optional.empty();
+        }
+        BuildChatFeasibilityService.SpecConstraint constraint = new BuildChatFeasibilityService.SpecConstraint(
+                "CASE",
+                null,
+                null,
+                null,
+                1,
+                null,
+                null,
+                null,
+                mentionsAirflow(message) ? Boolean.TRUE : null
+        );
+        if (!isCaseFitImprovementRequest(constraint, message)) {
+            return Optional.empty();
+        }
+        Map<String, Object> response = fastResponse("PART", "", List.of());
+        return applyCaseScoreImprovementProposal(response, constraint, message, body)
+                ? Optional.of(response)
+                : Optional.empty();
+    }
+
+    private boolean applyCaseScoreImprovementProposal(
+            Map<String, Object> response,
+            BuildChatFeasibilityService.SpecConstraint constraint,
+            String message,
+            Map<String, Object> body
+    ) {
+        if (constraint == null || !"CASE".equals(constraint.category())
+                || !isCaseFitImprovementRequest(constraint, message)) {
+            return false;
+        }
+        List<Map<String, Object>> draftItems = objectMaps(objectMap(body.get("currentQuoteDraft")).get("items"));
+        if (draftItems.isEmpty()) {
+            return false;
+        }
+
+        List<ToolBuildPart> currentParts = draftItems.stream()
+                .map(item -> toolPart(draftPartCandidate(item), draftQuantity(item)))
+                .toList();
+        ToolBuildPart currentCase = currentParts.stream()
+                .filter(part -> "CASE".equals(part.category()))
+                .findFirst()
+                .orElse(null);
+        if (currentCase == null) {
+            return false;
+        }
+
+        BuildEvaluationService.BuildEvaluation currentEvaluation = buildEvaluationService.evaluate(
+                currentParts,
+                null,
+                "CASE",
+                "size"
+        );
+        CaseScoreCap currentCaseCap = caseScoreCap(currentEvaluation.compositeScore());
+        boolean airflowRequested = Boolean.TRUE.equals(constraint.airflowFocused()) || mentionsAirflow(message);
+        boolean currentAirflowStrong = caseAirflowStrong(currentCase.attributes());
+        int currentScore = scoreValue(currentEvaluation.compositeScore());
+
+        // 케이스 관련 cap이 없고 현재 케이스도 통풍형이면 "통풍 부족"이라는 전제가 사실이 아니다.
+        // 같은 제품을 다시 추천하지 않고, 현 평가에서는 케이스 때문에 점수가 깎이지 않았음을 알린다.
+        if (currentCaseCap == null) {
+            if (airflowRequested && currentAirflowStrong) {
+                response.put("answerType", "PART");
+                response.put("message", "현재 케이스는 통풍형으로 확인되며, 현재 종합 점수도 케이스 통풍 때문에 제한된 상태가 아닙니다. "
+                        + "점수 개선 목적이라면 다른 주의 항목을 먼저 확인하는 편이 맞습니다.");
+                response.put("builds", List.of());
+                response.put("simulation", null);
+                response.put("quickReplies", List.of("현재 견적에서 무엇부터 개선해야 하는지 설명해줘"));
+                response.remove("quickReplyCommands");
+                response.remove("clarification");
+                return true;
+            }
+            return false;
+        }
+
+        int currentCaseCapScore = currentCaseCap.maxScore();
+        List<CaseImprovementCandidate> candidates = new ArrayList<>();
+        for (PartCandidate candidate : pricePartCandidates("CASE", 100)) {
+            if (Objects.equals(currentCase.publicId(), candidate.publicId())) {
+                continue;
+            }
+            List<ToolBuildPart> previewParts = new ArrayList<>();
+            for (ToolBuildPart part : currentParts) {
+                if (!"CASE".equals(part.category())) {
+                    previewParts.add(part);
+                }
+            }
+            previewParts.add(toolPart(candidate, currentCase.effectiveQuantity()));
+            BuildEvaluationService.BuildEvaluation candidateEvaluation = buildEvaluationService.evaluate(
+                    previewParts,
+                    null,
+                    "CASE",
+                    "size"
+            );
+            if (hasBlockingToolFailure(candidateEvaluation.toolResults())) {
+                continue;
+            }
+            int candidateScore = scoreValue(candidateEvaluation.compositeScore());
+            int candidateCaseCapScore = Optional.ofNullable(caseScoreCap(candidateEvaluation.compositeScore()))
+                    .map(CaseScoreCap::maxScore)
+                    .orElse(1000);
+            if (candidateCaseCapScore <= currentCaseCapScore || candidateScore <= currentScore) {
+                continue;
+            }
+            candidates.add(new CaseImprovementCandidate(candidate, candidateScore, candidateCaseCapScore));
+        }
+        candidates.sort(Comparator
+                .comparingInt(CaseImprovementCandidate::score).reversed()
+                .thenComparing(Comparator.comparingInt(CaseImprovementCandidate::caseCapScore).reversed())
+                .thenComparingInt(candidate -> candidate.part().price() == null ? Integer.MAX_VALUE : candidate.part().price()));
+        List<CaseImprovementCandidate> top = candidates.stream().limit(3).toList();
+
+        String correction = airflowRequested && currentAirflowStrong && "LOW_CASE_CLEARANCE".equals(currentCaseCap.code())
+                ? "현재 케이스는 통풍형으로 확인되어 통풍 부족으로 감점된 상태가 아닙니다. "
+                : "";
+        response.put("answerType", "PART");
+        response.put("builds", List.of());
+        response.put("simulation", null);
+        response.remove("clarification");
+        response.remove("quickReplyCommands");
+        if (top.isEmpty()) {
+            response.put("message", correction + "현재 점수 제한 원인은 " + currentCaseCap.reason()
+                    + " 현재 내부 자산 중 이 제한을 해소하면서 종합 점수를 실제로 높이고 자동 검증까지 통과하는 케이스는 없습니다.");
+            response.put("quickReplies", List.of("현재 견적에서 다른 개선점 설명해줘"));
+            return true;
+        }
+
+        response.put("message", correction + "현재 점수 제한 원인은 " + currentCaseCap.reason()
+                + " 현재 종합 점수 " + currentScore + "점보다 실제로 높아지고 자동 검증을 통과한 케이스 TOP"
+                + top.size() + "입니다. " + caseImprovementListText(top)
+                + " 원하는 제품을 선택하면 교체 미리보기를 보여드립니다.");
+        setPartRecommendationQuickReplies(response, "CASE", top.stream()
+                .map(candidate -> new BuildChatFeasibilityService.PartOption(
+                        candidate.part().publicId(),
+                        candidate.part().name(),
+                        candidate.part().price(),
+                        null,
+                        null,
+                        null
+                ))
+                .toList());
+        return true;
+    }
+
+    private static boolean isCaseFitImprovementRequest(
+            BuildChatFeasibilityService.SpecConstraint constraint,
+            String message
+    ) {
+        if (Boolean.TRUE.equals(constraint.airflowFocused())) {
+            return true;
+        }
+        String compact = firstText(message, "").toLowerCase(Locale.ROOT).replaceAll("\\s+", "");
+        return containsAnyText(compact, "장착여유", "여유있", "공간넉넉", "넉넉한케이스", "통풍", "에어플로우", "airflow");
+    }
+
+    private static boolean isExplicitRecommendationRequest(String message) {
+        String compact = firstText(message, "").toLowerCase(Locale.ROOT).replaceAll("\\s+", "");
+        boolean asksForCandidates = containsAnyText(compact, "추천", "후보", "골라", "어떤게좋", "뭐가좋");
+        boolean directMutation = containsAnyText(compact, "바꿔줘", "교체해줘", "담아줘", "넣어줘", "적용해줘");
+        return asksForCandidates && !directMutation;
+    }
+
+    private static boolean mentionsAirflow(String message) {
+        String compact = firstText(message, "").toLowerCase(Locale.ROOT).replaceAll("\\s+", "");
+        return containsAnyText(compact, "통풍", "에어플로우", "airflow");
+    }
+
+    private static boolean caseAirflowStrong(Map<String, Object> attributes) {
+        if (attributes == null || attributes.isEmpty()) {
+            return false;
+        }
+        return Boolean.TRUE.equals(attributes.get("frontMesh"))
+                || Boolean.TRUE.equals(attributes.get("airflowFocus"))
+                || firstText(text(attributes.get("airflow")), "").toUpperCase(Locale.ROOT).contains("HIGH");
+    }
+
+    private static CaseScoreCap caseScoreCap(Map<String, Object> compositeScore) {
+        return objectMaps(compositeScore.get("caps")).stream()
+                .filter(cap -> {
+                    String code = text(cap.get("code"));
+                    return "LOW_CASE_CLEARANCE".equals(code) || "LOW_CASE_AIRFLOW".equals(code);
+                })
+                .map(cap -> new CaseScoreCap(
+                        firstNumber(cap.get("maxScore")) == null ? 1000 : firstNumber(cap.get("maxScore")),
+                        text(cap.get("code")),
+                        firstText(text(cap.get("reason")), "케이스 장착 여유가 현재 종합 점수를 제한합니다.")
+                ))
+                .min(Comparator.comparingInt(CaseScoreCap::maxScore))
+                .orElse(null);
+    }
+
+    private static int scoreValue(Map<String, Object> compositeScore) {
+        Integer value = firstNumber(compositeScore.get("score"));
+        return value == null ? 0 : value;
+    }
+
+    private static int draftQuantity(Map<String, Object> item) {
+        Integer quantity = numberValue(item.get("quantity"));
+        return quantity == null || quantity < 1 ? 1 : quantity;
+    }
+
+    private static String caseImprovementListText(List<CaseImprovementCandidate> candidates) {
+        StringBuilder builder = new StringBuilder();
+        for (int index = 0; index < candidates.size(); index += 1) {
+            CaseImprovementCandidate candidate = candidates.get(index);
+            if (index > 0) {
+                builder.append(" ");
+            }
+            builder.append(index + 1).append(") ").append(candidate.part().name())
+                    .append(" — ").append(String.format("%,d원", candidate.part().price()))
+                    .append(" (예상 종합 ").append(candidate.score()).append("점)");
+        }
+        return builder.toString();
+    }
+
+    /**
      * 부품 후보 칩은 기존 문장형 quickReplies를 유지한다. 다만 RAM/SSD는 여러 상품을 함께 담을 수
      * 있으므로, 프론트가 안전하게 기존 quote draft API를 직접 호출할 수 있는 별도 메타데이터를 함께
      * 내려준다. 단일 카테고리는 기존 미리보기/명시 적용 정책을 유지한다.
@@ -2040,6 +2517,80 @@ public class BuildChatService {
         return "사무용";
     }
 
+    private Optional<Map<String, Object>> exactSingletonPartPreviewResponse(Map<String, Object> body, String message) {
+        List<Map<String, Object>> draftItems = objectMaps(objectMap(body.get("currentQuoteDraft")).get("items"));
+        if (draftItems.isEmpty() || message == null) {
+            return Optional.empty();
+        }
+        Matcher suffix = EXACT_PART_ADD_SUFFIX.matcher(message.trim());
+        if (!suffix.find() || suffix.start() <= 0) {
+            return Optional.empty();
+        }
+        String requestedName = message.trim().substring(0, suffix.start()).trim();
+        if (requestedName.length() < 3) {
+            return Optional.empty();
+        }
+        List<PartCandidate> matches = jdbcTemplate.queryForList("""
+                        SELECT id AS internal_id,
+                               public_id::text AS id,
+                               category,
+                               name,
+                               manufacturer,
+                               price,
+                               attributes
+                        FROM parts
+                        WHERE status = 'ACTIVE'
+                          AND deleted_at IS NULL
+                          AND LOWER(BTRIM(name)) = LOWER(?)
+                        LIMIT 2
+                        """, requestedName)
+                .stream()
+                .map(this::partCandidate)
+                .toList();
+        if (matches.size() != 1 || !SINGLE_ITEM_CATEGORIES.contains(matches.get(0).category())) {
+            return Optional.empty();
+        }
+
+        PartCandidate replacement = matches.get(0);
+        PartCandidate existing = draftItems.stream()
+                .map(this::draftPartCandidate)
+                .filter(item -> replacement.category().equals(item.category()))
+                .findFirst()
+                .orElse(null);
+        if (existing != null && Objects.equals(existing.publicId(), replacement.publicId())) {
+            Map<String, Object> response = fastResponse(
+                    "PART",
+                    replacement.name() + "은(는) 이미 현재 견적에 선택되어 있습니다.",
+                    List.of()
+            );
+            response.put("quickReplies", List.of(categoryLabel(replacement.category()) + " 다른 후보 추천해줘"));
+            return Optional.of(response);
+        }
+
+        String operation = existing == null ? "ADD" : "REPLACE";
+        AiChatEngineResponse directSelection = new AiChatEngineResponse(
+                "선택한 " + categoryLabel(replacement.category()) + " 변경안을 현재 견적과 비교했습니다.",
+                AiChatIntent.BUILD_MODIFY,
+                List.of(),
+                List.of(),
+                List.of(new AiChatEngineResponse.PartRecommendation(
+                        replacement.publicId(),
+                        replacement.category(),
+                        replacement.name(),
+                        replacement.manufacturer(),
+                        replacement.price() == null ? 0 : replacement.price(),
+                        replacement.attributes()
+                )),
+                Map.of("draftEdit", Map.of("operation", operation, "category", replacement.category())),
+                List.of(),
+                List.of(),
+                null
+        );
+        Map<String, Object> response = fastResponse("PART", directSelection.assistantMessage(), List.of());
+        applyDraftEditPreview(response, directSelection, body);
+        return Optional.of(response);
+    }
+
     // 부품 변경 요청 — 즉시 반영하지 않고, 변경을 반영한 전체 구성을 재검증해 미리보기 카드로 제시한다.
     // 카드의 적용 버튼(기존 REPLACE 전체 적용)을 눌러야 실제 견적이 바뀐다.
     private void applyDraftEditPreview(Map<String, Object> response, AiChatEngineResponse engineResponse, Map<String, Object> body) {
@@ -2056,10 +2607,24 @@ public class BuildChatService {
         if (operation == null || category == null || !List.of("ADD", "REPLACE", "REMOVE", "UPDATE_QUANTITY").contains(operation)) {
             return;
         }
+        boolean singletonAlreadyPresent = SINGLE_ITEM_CATEGORIES.contains(category)
+                && draftItems.stream().map(this::draftPartCandidate).anyMatch(item -> category.equals(item.category()));
+        if (singletonAlreadyPresent && "ADD".equals(operation)) {
+            operation = "REPLACE";
+        }
         PartCandidate replacement = engineResponse.partRecommendations() == null || engineResponse.partRecommendations().isEmpty()
                 ? null
                 : partCandidate(engineResponse.partRecommendations().get(0));
         if (replacement == null && !List.of("REMOVE", "UPDATE_QUANTITY").contains(operation)) {
+            return;
+        }
+        if ("REPLACE".equals(operation) && replacement != null && draftItems.stream()
+                .map(this::draftPartCandidate)
+                .anyMatch(item -> category.equals(item.category()) && Objects.equals(item.publicId(), replacement.publicId()))) {
+            response.put("answerType", "PART");
+            response.put("message", replacement.name() + "은(는) 이미 현재 견적에 선택되어 있습니다.");
+            response.put("builds", List.of());
+            response.put("quickReplies", List.of(categoryLabel(category) + " 다른 후보 추천해줘"));
             return;
         }
         Integer targetQuantity = numberValue(draftEdit.get("targetQuantity"));
@@ -3755,6 +4320,9 @@ public class BuildChatService {
     private record ExplicitPartSelection(String gpuClass, String modelOrVendorToken, String label) {
     }
 
+    private record AssessmentFocus(String category, String tool) {
+    }
+
     private static final class BuildChatGuardStats {
         int budgetGuardDropped;
         int blockingFailDropped;
@@ -3772,6 +4340,12 @@ public class BuildChatService {
     }
 
     private record BenchmarkSnapshot(Double score, String summary) {
+    }
+
+    private record CaseScoreCap(int maxScore, String code, String reason) {
+    }
+
+    private record CaseImprovementCandidate(PartCandidate part, int score, int caseCapScore) {
     }
 
     private record PartCandidate(

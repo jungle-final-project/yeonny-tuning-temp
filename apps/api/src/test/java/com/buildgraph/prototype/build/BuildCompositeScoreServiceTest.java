@@ -88,11 +88,43 @@ class BuildCompositeScoreServiceTest {
         assertThat(weakAirflowCase.score()).isLessThan(endgame.score());
         assertThat(weakAirflowCase.score()).isLessThanOrEqualTo(929);
         assertThat(unknownAirflowCase.score()).isGreaterThan(weakAirflowCase.score());
+        assertThat(componentScore(unknownAirflowCase, "upgrade"))
+                .as("미등록 airflow는 확인 가능한 장착 여유 점수에 임의 감점을 만들지 않는다")
+                .isGreaterThanOrEqualTo(componentScore(endgame, "upgrade"));
         assertThat(cooler240Aio.score()).isLessThan(endgame.score());
         assertThat(coolerPremiumAir.score()).isLessThanOrEqualTo(cooler240Aio.score());
         assertThat(coolerBasicAir.score()).isLessThan(coolerPremiumAir.score());
         assertThat(coolerBasicAir.score()).isLessThanOrEqualTo(930);
         writeReport(cases);
+    }
+
+    @Test
+    void exactPsuFitProducesNumericClearanceReasonWithoutClaimingAirflowShortage() {
+        List<ToolBuildPart> parts = new ArrayList<>(endgameParts());
+        parts.set(5, part(106, "psu-1500-depth-200", "PSU", "1500W PSU", 520_000,
+                attrs("capacityW", 1500, "depthMm", 200, "efficiency", "PLATINUM", "atxSpec", "ATX 3.1")));
+        parts.set(6, part(107, "case-psu-exact-fit", "CASE", "Airflow Case With Exact PSU Fit", 330_000,
+                attrs("maxGpuLengthMm", 459, "maxCpuCoolerHeightMm", 185, "maxPsuLengthMm", 200,
+                        "frontMesh", true, "airflowFocus", true)));
+        Map<String, Object> result = service.score(
+                parts,
+                standardTools(100, 100, "PASS", 700, 52,
+                        MockData.map("gpuLengthMm", 340, "maxGpuLengthMm", 459,
+                                "psuDepthMm", 200, "maxPsuLengthMm", 200)),
+                8_000_000,
+                7_900_000
+        );
+
+        @SuppressWarnings("unchecked")
+        List<Map<String, Object>> caps = (List<Map<String, Object>>) result.get("caps");
+        Map<String, Object> caseCap = caps.stream()
+                .filter(cap -> "LOW_CASE_CLEARANCE".equals(cap.get("code")))
+                .findFirst()
+                .orElseThrow();
+        assertThat(caseCap.get("maxScore")).isEqualTo(880);
+        assertThat(caseCap.get("reason").toString())
+                .contains("파워", "200mm", "0mm")
+                .doesNotContain("airflow", "통풍");
     }
 
     private CaseScore score(String name, List<ToolBuildPart> parts, List<Map<String, Object>> tools, int budget, int total) {

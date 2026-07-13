@@ -3,7 +3,6 @@ package com.buildgraph.prototype.build;
 import com.buildgraph.prototype.common.DbValueMapper;
 import com.buildgraph.prototype.common.MockData;
 import com.buildgraph.prototype.part.ToolBuildPart;
-import com.buildgraph.prototype.part.ToolApplicabilityPolicy;
 import com.buildgraph.prototype.part.ToolCheckService;
 import com.buildgraph.prototype.user.CurrentUserService;
 import java.util.ArrayList;
@@ -14,6 +13,7 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 import java.util.stream.Collectors;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
@@ -23,10 +23,22 @@ import org.springframework.web.server.ResponseStatusException;
 public class BuildGraphService {
     private static final Set<String> CATEGORIES = Set.of("CPU", "MOTHERBOARD", "RAM", "GPU", "STORAGE", "PSU", "CASE", "COOLER");
     private final JdbcTemplate jdbcTemplate;
-    private final ToolCheckService toolCheckService;
     private final CurrentUserService currentUserService;
     private final BuildGraphLayoutService buildGraphLayoutService;
-    private final BuildCompositeScoreService buildCompositeScoreService;
+    private final BuildEvaluationService buildEvaluationService;
+
+    @Autowired
+    public BuildGraphService(
+            JdbcTemplate jdbcTemplate,
+            CurrentUserService currentUserService,
+            BuildGraphLayoutService buildGraphLayoutService,
+            BuildEvaluationService buildEvaluationService
+    ) {
+        this.jdbcTemplate = jdbcTemplate;
+        this.currentUserService = currentUserService;
+        this.buildGraphLayoutService = buildGraphLayoutService;
+        this.buildEvaluationService = buildEvaluationService;
+    }
 
     public BuildGraphService(
             JdbcTemplate jdbcTemplate,
@@ -35,11 +47,17 @@ public class BuildGraphService {
             BuildGraphLayoutService buildGraphLayoutService,
             BuildCompositeScoreService buildCompositeScoreService
     ) {
-        this.jdbcTemplate = jdbcTemplate;
-        this.toolCheckService = toolCheckService;
-        this.currentUserService = currentUserService;
-        this.buildGraphLayoutService = buildGraphLayoutService;
-        this.buildCompositeScoreService = buildCompositeScoreService;
+        this(
+                jdbcTemplate,
+                currentUserService,
+                buildGraphLayoutService,
+                new BuildEvaluationService(
+                        jdbcTemplate,
+                        toolCheckService,
+                        buildCompositeScoreService,
+                        new BuildScoreAdviceService()
+                )
+        );
     }
 
     public Map<String, Object> resolve(String authorization, Map<String, Object> request) {
@@ -48,17 +66,35 @@ public class BuildGraphService {
         String view = firstText(text(body.get("view")), "FOCUSED").toUpperCase(Locale.ROOT);
         Map<String, Object> focus = objectMap(body.get("focus"));
         String mode = normalizedMode(text(focus.get("mode")));
-        List<ToolBuildPart> parts = switch (source) {
-            case "AI_BUILD" -> aiBuildParts(body);
-            case "QUOTE_DRAFT_CURRENT" -> currentQuoteDraftParts(authorization);
+        Integer requestedBudget = numberValue(body.get("budgetWon"));
+        BuildEvaluationService.BuildEvaluation evaluation = switch (source) {
+            case "AI_BUILD" -> buildEvaluationService.evaluate(
+                    aiBuildParts(body),
+                    requestedBudget,
+                    text(focus.get("category")),
+                    text(focus.get("tool"))
+            );
+            case "QUOTE_DRAFT_CURRENT" -> {
+                CurrentUserService.CurrentUser user = currentUserService.requireUser(authorization);
+                yield buildEvaluationService.evaluateCurrentDraft(
+                        user.internalId(),
+                        requestedBudget,
+                        text(focus.get("category")),
+                        text(focus.get("tool"))
+                );
+            }
             default -> throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "지원하지 않는 그래프 source입니다.");
         };
-        int total = total(parts);
-        int budget = firstNumber(body.get("budgetWon"), total);
-        List<Map<String, Object>> toolResults = parts.isEmpty() ? List.of() : toolCheckService.checkBuild(parts, budget);
-        List<Map<String, Object>> applicableToolResults = ToolApplicabilityPolicy.applicableToolResults(toolResults, parts);
-        Map<String, Object> compositeScore = buildCompositeScoreService.score(parts, applicableToolResults, budget, total);
-        GraphDraft draft = buildGraph(parts, applicableToolResults, mode, view, focus, budget, total);
+        List<ToolBuildPart> parts = evaluation.parts();
+        GraphDraft draft = buildGraph(
+                parts,
+                evaluation.toolResults(),
+                mode,
+                view,
+                focus,
+                evaluation.budgetWon(),
+                evaluation.totalPrice()
+        );
         List<Map<String, Object>> nodes = withLayoutPositions(draft.nodes(), buildGraphLayoutService.resolvePositions());
         return MockData.map(
                 "mode", mode,
@@ -67,8 +103,9 @@ public class BuildGraphService {
                 "edges", draft.edges(),
                 "focusNodeIds", draft.focusNodeIds(),
                 "insights", draft.insights(),
-                "compositeScore", compositeScore,
-                "toolResults", applicableToolResults
+                "compositeScore", evaluation.compositeScore(),
+                "buildAssessment", evaluation.buildAssessment(),
+                "toolResults", evaluation.toolResults()
         );
     }
 
@@ -135,55 +172,6 @@ public class BuildGraphService {
                 .findFirst()
                 .map(this::part)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "활성 부품을 찾을 수 없습니다."));
-    }
-
-    private List<ToolBuildPart> currentQuoteDraftParts(String authorization) {
-        CurrentUserService.CurrentUser user = currentUserService.requireUser(authorization);
-        List<Map<String, Object>> drafts = jdbcTemplate.queryForList("""
-                SELECT id AS internal_id,
-                       public_id::text AS id,
-                       status,
-                       name
-                FROM quote_drafts
-                WHERE user_id = ?
-                  AND status = 'ACTIVE'
-                  AND deleted_at IS NULL
-                ORDER BY updated_at DESC, id DESC
-                LIMIT 1
-                """, user.internalId());
-        if (drafts.isEmpty()) {
-            return List.of();
-        }
-        Long draftId = longValue(drafts.get(0).get("internal_id"));
-        return jdbcTemplate.queryForList("""
-                        SELECT p.id AS internal_id,
-                               p.public_id::text AS part_id,
-                               qdi.public_id::text AS id,
-                               p.category,
-                               p.name,
-                               p.manufacturer,
-                               p.price AS current_price,
-                               qdi.quantity,
-                               p.attributes
-                        FROM quote_draft_items qdi
-                        JOIN parts p ON p.id = qdi.part_id
-                        WHERE qdi.quote_draft_id = ?
-                          AND qdi.deleted_at IS NULL
-                          AND p.deleted_at IS NULL
-                        ORDER BY qdi.id
-                        """, draftId)
-                .stream()
-                .map(row -> new ToolBuildPart(
-                        longValue(row.get("internal_id")),
-                        DbValueMapper.string(row, "part_id"),
-                        DbValueMapper.string(row, "category"),
-                        DbValueMapper.string(row, "name"),
-                        DbValueMapper.string(row, "manufacturer"),
-                        numberValue(row.get("current_price")),
-                        objectMap(row.get("attributes")),
-                        numberValue(row.get("quantity"))
-                ))
-                .toList();
     }
 
     private GraphDraft buildGraph(

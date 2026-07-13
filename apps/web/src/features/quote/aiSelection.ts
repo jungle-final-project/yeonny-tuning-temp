@@ -194,7 +194,44 @@ export type BuildGraphResolveResponse = {
   focusNodeIds: string[];
   insights: BuildGraphInsight[];
   compositeScore?: BuildCompositeScore;
+  buildAssessment?: AiBuildAssessment;
   toolResults: AiToolResult[];
+};
+
+export type AiAssessmentContext = {
+  source: 'QUOTE_DRAFT_CURRENT';
+  focusType: 'SCORE' | 'ISSUE';
+  category?: PartCategory;
+  tool?: 'compatibility' | 'power' | 'size' | 'performance' | 'price';
+};
+
+export type AiBuildAssessmentItem = {
+  code: string;
+  severity: 'PASS' | 'WARN' | 'FAIL';
+  title: string;
+  description: string;
+  relatedCategories: PartCategory[];
+};
+
+export type AiBuildAssessmentRecommendation = {
+  priority: number;
+  category: PartCategory;
+  title: string;
+  reason: string;
+  prompt: string;
+};
+
+export type AiBuildAssessment = {
+  type: 'COMPOSITE_SCORE_EXPLANATION';
+  score: number;
+  maxScore: number;
+  grade: string;
+  label: string;
+  summary: string;
+  strengths: AiBuildAssessmentItem[];
+  cautions: AiBuildAssessmentItem[];
+  recommendations: AiBuildAssessmentRecommendation[];
+  evaluatedAt: string;
 };
 
 export type AiChatMessage = {
@@ -206,6 +243,7 @@ export type AiChatMessage = {
   budgetWon?: number;
   builds?: AiRecommendedBuild[];
   simulation?: AiPerformanceSimulation | null;
+  buildAssessment?: AiBuildAssessment;
   warnings?: string[];
   quickReplies?: string[];
   /** RAM/SSD처럼 다중 상품을 허용하는 구체 추천 칩의 직접 견적 추가 메타데이터. */
@@ -238,6 +276,7 @@ export type AiBuildChatRequest = {
     surface: 'HOME' | 'SELF_QUOTE';
     capabilities: Array<'BOARD_PART_FOCUS'>;
   };
+  assessmentContext?: AiAssessmentContext;
   /** 직전 되묻기(clarification)에 대한 답변임을 알리는 에코 — 서버가 원 요청과 합성한다. */
   clarificationContext?: { originalMessage: string };
 };
@@ -253,6 +292,7 @@ export type AiBuildChatResponse = {
   message: string;
   builds: AiRecommendedBuild[];
   simulation?: AiPerformanceSimulation | null;
+  buildAssessment?: AiBuildAssessment | null;
   warnings?: string[];
   /** 모호 요청 되묻기 시 함께 오는 선택지 칩 — 그 자체로 완전한 프롬프트다. */
   quickReplies?: string[];

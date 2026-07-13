@@ -1,3 +1,5 @@
+import type { AiAssessmentContext } from '../features/quote/aiSelection';
+
 export const AI_BUILD_ASSISTANT_OPEN_EVENT = 'buildgraph.aiAssistant.open';
 export const AI_BUILD_ASSISTANT_TOGGLE_EVENT = 'buildgraph.aiAssistant.toggle';
 export const AI_BUILD_ASSISTANT_CLOSE_EVENT = 'buildgraph.aiAssistant.close';
@@ -21,6 +23,7 @@ export type AiAssistantOpenDetail = {
   prefill?: string;
   autoSubmit?: boolean;
   placement?: 'side' | 'center';
+  assessmentContext?: AiAssessmentContext;
 };
 
 export type AiAssistantVisibilityDetail = {

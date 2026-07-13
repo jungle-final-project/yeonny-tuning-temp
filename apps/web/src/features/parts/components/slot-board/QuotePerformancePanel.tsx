@@ -1,9 +1,9 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { keepPreviousData, useQuery, useQueryClient } from '@tanstack/react-query';
-import { ChevronDown } from 'lucide-react';
+import { ChevronDown, Sparkles } from 'lucide-react';
 import { PART_CATEGORY_LABELS, type BuildGraphResolveResponse, type PartCategory } from '../../../quote/aiSelection';
 import { CompositeScoreGauge } from '../../../quote/components/CompositeScoreGauge';
-import type { PerfCompareTarget } from '../../../../lib/events';
+import { openAiAssistant, type PerfCompareTarget } from '../../../../lib/events';
 import { checkBuildPerformance, resolveBuildGraph, type GameFpsEvidence } from '../../../quote/quoteApi';
 import { listParts } from '../../partsApi';
 import type { PartCompatibility } from '../../types';
@@ -297,10 +297,30 @@ function PerfPanelBody({
   // 종합점수 아크 — 왼쪽 카드 첫 칸. 비교 활성 + 변경 조합 점수가 준비되면
   // CompositeScoreGauge(공용, 수정 금지) 대신 패널 로컬 고스트 아크로 기존(회색)/변경(파랑)을 겹쳐 보여준다.
   const compositeCard = (
-    <div data-testid="quote-composite-score-card">
-      <div className="mb-1 flex flex-wrap items-center justify-between gap-2 text-[11px]">
-        <span className="font-black text-slate-600">종합 점수</span>
-      </div>
+      <div data-testid="quote-composite-score-card">
+        <div className="mb-1 flex flex-wrap items-center justify-between gap-2 text-[11px]">
+          <span className="font-black text-slate-600">종합 점수</span>
+          {hasWorkspace ? (
+            <span className="inline-flex items-center gap-2">
+              <span className="hidden font-bold text-slate-400 xl:inline">호환·성능·여유 종합 1000점</span>
+            <button
+              type="button"
+              data-testid="quote-score-ai-explain"
+              onClick={() => openAiAssistant({
+                prefill: '왜 이 견적의 종합 점수가 이렇게 나왔는지 설명해줘',
+                autoSubmit: true,
+                assessmentContext: { source: 'QUOTE_DRAFT_CURRENT', focusType: 'SCORE' }
+              })}
+              className="inline-flex items-center gap-1 rounded border border-blue-200 bg-blue-50 px-2 py-1 font-black text-brand-blue transition hover:border-brand-blue hover:bg-blue-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-200"
+            >
+              <Sparkles size={12} aria-hidden="true" />
+              AI에게 설명
+            </button>
+          </span>
+          ) : (
+            <span className="font-bold text-slate-400">호환·성능·여유 종합 1000점</span>
+          )}
+        </div>
       {activeComparison && hasGhostScore ? (
         <CompositeGhostArc
           baseScore={compositeScore.score}
@@ -345,7 +365,27 @@ function PerfPanelBody({
             <div className="w-full min-w-0">
               <div className="flex items-center justify-between gap-2 text-[9px] font-black">
                 <span className="text-slate-600">종합 점수</span>
-                <span className="truncate text-slate-400">호환·성능·여유 종합 1000점</span>
+                {hasWorkspace ? (
+                  <span className="flex min-w-0 items-center gap-1">
+                    <span className="truncate text-slate-400">호환·성능·여유 종합 1000점</span>
+                    <button
+                      type="button"
+                      data-testid="quote-score-ai-explain"
+                      title="AI에게 종합 점수 설명 요청"
+                      aria-label="AI에게 종합 점수 설명 요청"
+                      onClick={() => openAiAssistant({
+                        prefill: '왜 이 견적의 종합 점수가 이렇게 나왔는지 설명해줘',
+                        autoSubmit: true,
+                        assessmentContext: { source: 'QUOTE_DRAFT_CURRENT', focusType: 'SCORE' }
+                      })}
+                      className="grid h-5 w-5 shrink-0 place-items-center rounded border border-blue-200 bg-blue-50 text-brand-blue transition hover:border-brand-blue hover:bg-blue-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-200"
+                    >
+                      <Sparkles size={10} aria-hidden="true" />
+                    </button>
+                  </span>
+                ) : (
+                  <span className="truncate text-slate-400">호환·성능·여유 종합 1000점</span>
+                )}
               </div>
               {activeComparison && hasGhostScore ? (
                 <CompactCompositeGhostArc

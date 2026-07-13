@@ -822,6 +822,7 @@ test('shows 3D problem markers, problem reasons, and overlay preference', async 
   await expect(popover).toContainText('파워 용량이 부족합니다.');
   await expect(popover).toContainText('GPU 권장 정격 파워보다 PSU 용량이 부족합니다.');
   await expect(popover).toContainText('GPU 교체 전에 850W 이상 파워를 먼저 검토하세요.');
+  await expect(popover.getByTestId('slot-problem-ai-explain')).toBeVisible();
 
   await popover.getByRole('button', { name: '교체 후보 보기' }).click();
   await expect(page).toHaveURL('/self-quote?category=GPU');
@@ -1398,6 +1399,76 @@ test('shows the current build performance panel from the resolve performance too
   // 미선택 상태에서는 중복 설명·빈 비교 그래프를 노출하지 않는다.
   await expect(panel.getByTestId('cost-effect-empty')).toHaveCount(0);
   await expect(panel.getByTestId('quote-checkout-actions')).toBeVisible();
+});
+
+test('submits the server-authoritative score explanation and renders the assessment card', async ({ page }) => {
+  await loginAsUser(page);
+  await page.addInitScript(() => {
+    localStorage.setItem('buildgraph.authUser', JSON.stringify({
+      id: 'user-score-explanation',
+      email: 'user@example.com',
+      name: 'Score Explanation User',
+      role: 'USER'
+    }));
+  });
+  const draft = {
+    ...emptyDraft,
+    items: [
+      draftItem('part-score-cpu', 'CPU', 'Core Ultra 9 285K', 780000),
+      draftItem('part-score-gpu', 'GPU', 'RTX 5060', 500000)
+    ],
+    totalPrice: 1280000,
+    itemCount: 2
+  };
+  let chatRequest: Record<string, unknown> = {};
+  await page.route('**/api/quote-drafts/current**', (route) => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(draft) }));
+  await page.route('**/api/build-graphs/resolve', (route) => route.fulfill({
+    status: 200,
+    contentType: 'application/json',
+    body: JSON.stringify({ ...buildGraphResponse(), compositeScore: compositeScoreFixture() })
+  }));
+  await page.route('**/api/parts**', (route) => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ items: [], page: 0, size: 20, total: 0 }) }));
+  await page.route('**/api/tools/performance/check', (route) => route.fulfill({
+    status: 200,
+    contentType: 'application/json',
+    body: JSON.stringify({ tool: 'performance', status: 'WARN', confidence: 'HIGH', summary: '', details: { gameFpsEvidence: [] } })
+  }));
+  await page.route('**/api/ai/build-chat', async (route) => {
+    chatRequest = route.request().postDataJSON() as Record<string, unknown>;
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        answerType: 'GENERAL',
+        message: 'CPU 성능 여유는 크지만 GPU가 게임 성능 균형을 제한해 GPU 상향을 먼저 검토하는 편이 좋습니다.',
+        builds: [],
+        simulation: null,
+        warnings: [],
+        quickReplies: ['현재 견적에 맞는 상위 GPU 추천해줘'],
+        buildAssessment: {
+          type: 'COMPOSITE_SCORE_EXPLANATION',
+          score: 742,
+          maxScore: 1000,
+          grade: 'C',
+          label: '기본형',
+          summary: 'CPU 체급에 비해 GPU 성능 균형이 낮습니다.',
+          strengths: [{ code: 'HIGH_CPU_TIER', severity: 'PASS', title: 'CPU 성능 여유', description: '현재 CPU는 상위권 구성입니다.', relatedCategories: ['CPU'] }],
+          cautions: [{ code: 'CPU_GPU_IMBALANCE', severity: 'WARN', title: 'CPU와 GPU 성능 균형', description: 'GPU가 상대적으로 낮습니다.', relatedCategories: ['CPU', 'GPU'] }],
+          recommendations: [{ priority: 1, category: 'GPU', title: 'GPU 상향 우선', reason: '현재 구성의 가장 큰 성능 제한 요소입니다.', prompt: '현재 견적에 맞는 상위 GPU 추천해줘' }],
+          evaluatedAt: '2026-07-13T00:00:00Z'
+        }
+      })
+    });
+  });
+
+  await page.goto('/self-quote');
+  await page.getByTestId('quote-score-ai-explain').click();
+
+  await expect(page.getByTestId('ai-build-assessment')).toBeVisible();
+  await expect(page.getByTestId('ai-build-assessment')).toContainText('742');
+  await expect(page.getByTestId('ai-build-assessment')).toContainText('GPU 상향 우선');
+  expect(chatRequest['assessmentContext']).toEqual({ source: 'QUOTE_DRAFT_CURRENT', focusType: 'SCORE' });
+  await expect(page.getByTestId('ai-build-assessment')).not.toContainText('성능 430');
 });
 
 test('shows game FPS reference in the performance panel with game and resolution selectors', async ({ page }) => {

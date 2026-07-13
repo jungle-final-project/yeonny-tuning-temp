@@ -1,6 +1,12 @@
 import { useEffect, useRef, useState, type CSSProperties } from 'react';
-import { X } from 'lucide-react';
-import { PART_CATEGORY_LABELS, type BuildGraphResolveResponse, type PartCategory } from '../../../quote/aiSelection';
+import { Sparkles, X } from 'lucide-react';
+import {
+  PART_CATEGORY_LABELS,
+  type BuildGraphFocus,
+  type BuildGraphResolveResponse,
+  type PartCategory
+} from '../../../quote/aiSelection';
+import { openAiAssistant } from '../../../../lib/events';
 import { partShortSpec } from '../../partDisplay';
 import type { QuoteDraftItem } from '../../types';
 import {
@@ -86,6 +92,19 @@ export function SlotBoard({
   const aiFocusLabel = aiFocusCategories
     .map((category) => slotConfigFor(category)?.label ?? category)
     .join(' · ');
+  const explainIssue = (category?: PartCategory, tool?: BuildGraphFocus['tool']) => {
+    const categoryLabel = category ? slotConfigFor(category)?.label ?? category : '현재 견적';
+    openAiAssistant({
+      prefill: `${categoryLabel}에서 표시된 주의 또는 장착 문제를 종합 점수 기준으로 설명해줘`,
+      autoSubmit: true,
+      assessmentContext: {
+        source: 'QUOTE_DRAFT_CURRENT',
+        focusType: 'ISSUE',
+        category,
+        tool
+      }
+    });
+  };
 
   useEffect(() => {
     if (isIsometric) {
@@ -135,7 +154,7 @@ export function SlotBoard({
   };
 
   useEffect(() => {
-    if (!hasAiFocus || !onClearAiFocus) return undefined;
+    if (!onClearAiFocus) return undefined;
     const handleKeyDown = (event: KeyboardEvent) => {
       if (event.key === 'Escape') {
         onClearAiFocus();
@@ -143,7 +162,7 @@ export function SlotBoard({
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [hasAiFocus, onClearAiFocus]);
+  }, [onClearAiFocus]);
 
   return (
     <div className="panel slot-board-panel relative flex h-full min-h-0 flex-col overflow-hidden">
@@ -229,6 +248,7 @@ export function SlotBoard({
           flashingCategories={flashingCategories}
           overlaysVisible={overlaysVisible}
           connectorAnchors={connectorAnchors}
+          onExplainIssue={explainIssue}
         />
       ) : isMotherboard ? (
         <MotherboardSlotBoardBody
@@ -274,8 +294,15 @@ export function SlotBoard({
           statusByCategory={statusByCategory}
           boardProblem={boardProblem}
           flashingCategories={flashingCategories}
+          onExplainIssue={explainIssue}
         />
       )}
+      {(isMotherboard || isIsometric) && boardProblem ? (
+        <SlotBoardProblemBanner
+          problem={boardProblem}
+          onExplain={() => explainIssue(undefined, boardProblem.tool)}
+        />
+      ) : null}
       {!isIsometric ? (
         <button
           type="button"
@@ -295,6 +322,7 @@ export function SlotBoard({
         <RelationMapBanner
           problem={boardProblem}
           graph={graph}
+          onExplain={() => explainIssue(undefined, boardProblem?.tool)}
           className="pointer-events-none absolute inset-x-4 bottom-4 z-[35] flex justify-center lg:bottom-5"
         />
       ) : null}
@@ -412,7 +440,8 @@ function FusedSlotBoardBody({
   graph,
   statusByCategory,
   boardProblem,
-  flashingCategories
+  flashingCategories,
+  onExplainIssue
 }: {
   items: QuoteDraftItem[];
   selectedCategory: PartCategory | null;
@@ -428,6 +457,7 @@ function FusedSlotBoardBody({
   statusByCategory: Map<string, 'PASS' | 'WARN' | 'FAIL'>;
   boardProblem: SlotBoardBannerProblem | null;
   flashingCategories: Set<PartCategory>;
+  onExplainIssue: (category?: PartCategory, tool?: BuildGraphFocus['tool']) => void;
 }) {
   return (
     // 보드 본체 — 배치도(기본): 실사 배치판(FusedPlateArt) 위에 부품 오버레이가 겹쳐진다(데스크톱 전용).
@@ -453,7 +483,10 @@ function FusedSlotBoardBody({
         isRemovePending={isRemovePending}
         isQuantityPending={isQuantityPending}
       />
-      <SlotBoardProblemBanner problem={boardProblem} />
+      <SlotBoardProblemBanner
+        problem={boardProblem}
+        onExplain={() => onExplainIssue(undefined, boardProblem?.tool)}
+      />
       <div data-testid="slot-board-mobile-slots" className="flex flex-col gap-2 lg:hidden">
         {SLOT_CONFIGS.map((slot) => (
           <MotherboardSlot
@@ -817,10 +850,12 @@ function RelationMapEdges({
 function RelationMapBanner({
   problem,
   graph,
+  onExplain,
   className = 'absolute inset-x-3 bottom-4 z-30 flex justify-center'
 }: {
   problem: SlotBoardBannerProblem | null;
   graph?: BuildGraphResolveResponse;
+  onExplain?: () => void;
   className?: string;
 }) {
   const issues = relationMapIssues(graph);
@@ -836,17 +871,16 @@ function RelationMapBanner({
       data-testid="relation-map-bottom-banner"
       className={className}
     >
-      <p
-        className={`pointer-events-none max-w-[88%] rounded-md border bg-white px-2.5 py-1.5 text-center text-[13.5px] font-semibold shadow-sm sm:text-[16px] ${
+      <div className={`pointer-events-auto flex max-w-[88%] flex-wrap items-center justify-center gap-2 rounded-md border bg-white px-2.5 py-1.5 shadow-sm ${
         hasProblem
           ? status === 'WARN'
-            ? 'border-amber-500 text-amber-500'
-            : 'border-red-500 text-red-500'
+            ? 'border-amber-500'
+            : 'border-red-500'
           : 'border-emerald-500 text-emerald-600'
-      }`}
-      >
-        {message}
-      </p>
+      }`}>
+        <p className={`text-center text-[13.5px] font-semibold sm:text-[16px] ${status === 'WARN' ? 'text-amber-500' : status === 'FAIL' ? 'text-red-500' : 'text-emerald-600'}`}>{message}</p>
+        {hasProblem && onExplain ? <ExplainIssueButton onClick={onExplain} /> : null}
+      </div>
     </div>
   );
 }
@@ -1308,7 +1342,8 @@ function IsometricSlotBoardBody({
   statusByCategory,
   flashingCategories,
   overlaysVisible,
-  connectorAnchors
+  connectorAnchors,
+  onExplainIssue
 }: {
   items: QuoteDraftItem[];
   selectedCategory: PartCategory | null;
@@ -1324,6 +1359,7 @@ function IsometricSlotBoardBody({
   flashingCategories: Set<PartCategory>;
   overlaysVisible: boolean;
   connectorAnchors?: ConnectorAnchors;
+  onExplainIssue: (category?: PartCategory, tool?: BuildGraphFocus['tool']) => void;
 }) {
   const problemDetailsByCategory = slotProblemDetailsByCategory(graph);
   const [activeProblemCategory, setActiveProblemCategory] = useState<PartCategory | null>(null);
@@ -1443,6 +1479,7 @@ function IsometricSlotBoardBody({
           detail={activeProblem}
           onClose={() => setActiveProblemCategory(null)}
           onShowCandidates={() => showReplacementCandidates(activeProblem.category)}
+          onExplain={() => onExplainIssue(activeProblem.category, toolForCategory(activeProblem.category))}
         />
       ) : null}
       {celebrating ? (
@@ -1850,9 +1887,10 @@ type SlotProblemReason = {
 type SlotBoardBannerProblem = {
   status: SlotProblemStatus;
   message: string;
+  tool?: BuildGraphFocus['tool'];
 };
 
-function SlotBoardProblemBanner({ problem }: { problem: SlotBoardBannerProblem | null }) {
+function SlotBoardProblemBanner({ problem, onExplain }: { problem: SlotBoardBannerProblem | null; onExplain?: () => void }) {
   if (!problem) {
     return null;
   }
@@ -1860,18 +1898,36 @@ function SlotBoardProblemBanner({ problem }: { problem: SlotBoardBannerProblem |
 
   return (
     <div className="pointer-events-none absolute inset-x-4 bottom-4 z-[35] flex justify-center lg:bottom-5">
-      <p
+      <div
         data-testid="slot-board-problem-banner"
         data-status={problem.status}
-        className={`max-w-[88%] rounded-md border bg-white px-2.5 py-1.5 text-center text-[13.5px] font-semibold shadow-sm sm:text-[16px] ${
+        className={`pointer-events-auto flex max-w-[88%] flex-wrap items-center justify-center gap-2 rounded-md border bg-white px-2.5 py-1.5 shadow-sm ${
           isFail
-            ? 'border-red-500 text-red-500'
-            : 'border-amber-500 text-amber-500'
+            ? 'border-red-500'
+            : 'border-amber-500'
         }`}
       >
-        {problem.message}
-      </p>
+        <p className={`text-center text-[13.5px] font-semibold sm:text-[16px] ${isFail ? 'text-red-500' : 'text-amber-500'}`}>{problem.message}</p>
+        {onExplain ? <ExplainIssueButton onClick={onExplain} /> : null}
+      </div>
     </div>
+  );
+}
+
+function ExplainIssueButton({ onClick }: { onClick: () => void }) {
+  return (
+    <button
+      type="button"
+      data-testid="slot-problem-ai-explain"
+      onClick={(event) => {
+        event.stopPropagation();
+        onClick();
+      }}
+      className="inline-flex items-center gap-1 rounded border border-blue-200 bg-blue-50 px-2 py-1 text-[10px] font-black text-brand-blue transition hover:border-brand-blue hover:bg-blue-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-200"
+    >
+      <Sparkles size={11} aria-hidden="true" />
+      AI에게 설명
+    </button>
   );
 }
 
@@ -1885,11 +1941,13 @@ function isoProblemMarkerPlacement(category: PartCategory) {
 function SlotProblemPopover({
   detail,
   onClose,
-  onShowCandidates
+  onShowCandidates,
+  onExplain
 }: {
   detail: SlotProblemDetail;
   onClose: () => void;
   onShowCandidates: () => void;
+  onExplain: () => void;
 }) {
   const placement = slotProblemPopoverPlacement(detail.category);
   const vars: CSSProperties = {
@@ -1933,7 +1991,8 @@ function SlotProblemPopover({
           </li>
         ))}
       </ul>
-      <div className="mt-3 flex justify-end">
+      <div className="mt-3 flex flex-wrap justify-end gap-2">
+        <ExplainIssueButton onClick={onExplain} />
         <button
           type="button"
           onClick={onShowCandidates}
@@ -2694,7 +2753,19 @@ function slotBoardProblemBanner(graph?: BuildGraphResolveResponse): SlotBoardBan
 
   const message = uniqueProblemReasons(reasons.filter((reason) => reason.status === status))[0]
     ?? (status === 'FAIL' ? '현재 구성에서 장착 불가 항목이 있습니다.' : '현재 구성에서 주의 항목이 있습니다.');
-  return { status, message };
+  const matchedTool = graph.toolResults.find((result) => result.status === status)?.tool;
+  return { status, message, tool: isBuildGraphTool(matchedTool) ? matchedTool : undefined };
+}
+
+function isBuildGraphTool(value: string | undefined): value is NonNullable<BuildGraphFocus['tool']> {
+  return value === 'compatibility' || value === 'power' || value === 'size' || value === 'performance' || value === 'price';
+}
+
+function toolForCategory(category: PartCategory): BuildGraphFocus['tool'] {
+  if (category === 'PSU') return 'power';
+  if (category === 'CASE') return 'size';
+  if (category === 'CPU' || category === 'GPU' || category === 'RAM' || category === 'STORAGE') return 'performance';
+  return 'compatibility';
 }
 
 function findGraphEdge(graph: BuildGraphResolveResponse | undefined, from: PartCategory, to: PartCategory) {

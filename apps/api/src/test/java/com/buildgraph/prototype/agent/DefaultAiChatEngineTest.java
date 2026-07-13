@@ -743,6 +743,53 @@ class DefaultAiChatEngineTest {
     }
 
     @Test
+    void buildAssessmentExplanationUsesMiniProfileWithoutRagOrFullBuildSchema() {
+        when(openAiResponsesClient.isConfigured()).thenReturn(true);
+        when(openAiResponsesClient.createStructuredJsonResult(
+                anyString(),
+                anyString(),
+                eq("buildgraph_build_assessment_explanation"),
+                any(),
+                eq("gpt-5.4-mini"),
+                eq("low"),
+                eq(180)
+        )).thenReturn(new LlmResponseResult(
+                "{\"assistantMessage\":\"CPU 체급에 비해 GPU가 낮아 GPU 상향을 먼저 검토하는 편이 좋습니다.\"}",
+                LlmProvider.OPENAI,
+                "gpt-5.4-mini",
+                "low",
+                900,
+                30,
+                10,
+                40,
+                20
+        ));
+        Map<String, Object> assessment = Map.of(
+                "score", 742,
+                "maxScore", 1000,
+                "summary", "CPU 체급에 비해 GPU가 낮습니다."
+        );
+
+        AiChatEngineResponse response = engine.explainBuildAssessment(new AiChatEngineRequest(
+                "왜 이 견적 점수가 낮아?",
+                "SELF_QUOTE",
+                null,
+                null,
+                null,
+                Map.of("serverFacts", Map.of("buildAssessment", assessment)),
+                1L
+        ), "BUILD_CHAT_54_MINI_FAST");
+
+        assertThat(response.intent()).isEqualTo(AiChatIntent.EXPLAIN);
+        assertThat(response.assistantMessage()).contains("GPU 상향");
+        assertThat(response.parsedContext()).containsEntry("buildAssessment", assessment);
+        assertThat(response.actions()).isEmpty();
+        assertThat(response.evidenceIds()).isEmpty();
+        verify(agentRagRetrievalService, never()).retrieveEvidenceSet(any(), any(), anyString(), anyInt());
+        verifyNoJdbcWrites();
+    }
+
+    @Test
     @SuppressWarnings("unchecked")
     void boardFocusStructuredOutputSchemaUsesOnlySupportedArrayKeywords() throws Exception {
         Method schemaMethod = DefaultAiChatEngine.class.getDeclaredMethod("boardFocusIntentSchema");

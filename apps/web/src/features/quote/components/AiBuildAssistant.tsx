@@ -20,6 +20,8 @@ import {
   resetAssistantConversation,
   saveAssistantSession,
   saveSelectedAiBuild,
+  type AiAssessmentContext,
+  type AiBuildAssessment,
   type AiChatMessage,
   type AiBoardFocus,
   type AiPerformanceSimulation,
@@ -82,7 +84,7 @@ export function AiBuildAssistant({ surface = 'home', variant = 'floating', onBoa
   const [failedBuild, setFailedBuild] = useState<AiRecommendedBuild | null>(null);
   const [applyingBuildId, setApplyingBuildId] = useState<string | null>(null);
   const [runningQuickReplyCommandId, setRunningQuickReplyCommandId] = useState<string | null>(null);
-  const [pendingSubmit, setPendingSubmit] = useState<string | null>(null);
+  const [pendingSubmit, setPendingSubmit] = useState<{ text: string; assessmentContext?: AiAssessmentContext } | null>(null);
   const [centerScrollbar, setCenterScrollbar] = useState<CenterScrollbarState>({
     canScroll: false,
     visible: false,
@@ -139,7 +141,13 @@ export function AiBuildAssistant({ surface = 'home', variant = 'floating', onBoa
       setOpen(true);
       if (detail?.prefill) {
         if (detail.autoSubmit) {
-          setPendingSubmit(detail.prefill);
+          setPendingSubmit({ text: detail.prefill, assessmentContext: detail.assessmentContext });
+          window.requestAnimationFrame(() => {
+            document.querySelector('[data-testid="ai-chatbot-panel"]')?.scrollIntoView({
+              behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth',
+              block: 'nearest'
+            });
+          });
         } else {
           setPrompt(detail.prefill);
         }
@@ -281,9 +289,9 @@ export function AiBuildAssistant({ surface = 'home', variant = 'floating', onBoa
 
   useEffect(() => {
     if (!pendingSubmit || isSending) return;
-    const text = pendingSubmit;
+    const submission = pendingSubmit;
     setPendingSubmit(null);
-    void sendMessage(text);
+    void sendMessage(submission.text, submission.assessmentContext);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pendingSubmit, isSending]);
 
@@ -292,7 +300,7 @@ export function AiBuildAssistant({ surface = 'home', variant = 'floating', onBoa
     await sendMessage(prompt);
   }
 
-  async function sendMessage(rawPrompt: string) {
+  async function sendMessage(rawPrompt: string, assessmentContext?: AiAssessmentContext) {
     const nextPrompt = rawPrompt.trim();
     if (!nextPrompt || isSending) return;
 
@@ -338,6 +346,7 @@ export function AiBuildAssistant({ surface = 'home', variant = 'floating', onBoa
         uiContext: surface === 'self-quote'
           ? { surface: 'SELF_QUOTE', capabilities: ['BOARD_PART_FOCUS'] }
           : { surface: 'HOME', capabilities: [] },
+        assessmentContext,
         clarificationContext: pendingClarification ?? undefined
       });
       const boardFocus = normalizeBoardFocus(response.boardFocus);
@@ -361,6 +370,7 @@ export function AiBuildAssistant({ surface = 'home', variant = 'floating', onBoa
         kind: messageKind(response.answerType),
         builds: responseBuilds,
         simulation: response.simulation ?? undefined,
+        buildAssessment: response.buildAssessment ?? undefined,
         warnings: response.warnings ?? [],
         quickReplies: response.quickReplies ?? undefined,
         quickReplyCommands: response.quickReplyCommands ?? undefined
@@ -422,7 +432,7 @@ export function AiBuildAssistant({ surface = 'home', variant = 'floating', onBoa
     messageId?: string
   ) => {
     if (!command) {
-      setPendingSubmit(reply);
+      setPendingSubmit({ text: reply });
       return;
     }
     const commandId = `${messageId ?? 'quick-reply'}:${command.partId}`;
@@ -885,7 +895,7 @@ const ChatMessage = memo(function ChatMessage({
               <span className={`${isLarge ? 'h-7 w-7' : 'h-5 w-5'} grid place-items-center rounded-full bg-blue-50 text-brand-blue`}>
                 <Sparkles size={isLarge ? 17 : 12} />
               </span>
-              {message.simulation ? '성능 시뮬레이션' : 'AI 견적 어시스턴트'}
+              {message.buildAssessment ? '견적 점수 설명' : message.simulation ? '성능 시뮬레이션' : 'AI 견적 어시스턴트'}
             </div>
           ) : null}
           <p className="break-keep">{message.text}</p>
@@ -915,6 +925,10 @@ const ChatMessage = memo(function ChatMessage({
           <SimulationResultCard simulation={message.simulation} size={size} />
         ) : null}
 
+        {message.buildAssessment ? (
+          <BuildAssessmentCard assessment={message.buildAssessment} size={size} />
+        ) : null}
+
         {message.builds ? (
           <div className={`${isLarge ? 'mt-4 gap-3' : 'mt-2 gap-2'} grid`}>
             {message.builds.map((build) => (
@@ -936,6 +950,75 @@ const ChatMessage = memo(function ChatMessage({
   && prev.applyingBuildId === next.applyingBuildId
   && prev.size === next.size
 ));
+
+function BuildAssessmentCard({ assessment, size = 'default' }: { assessment: AiBuildAssessment; size?: AiChatMessageSize }) {
+  const isLarge = size === 'large';
+  return (
+    <section
+      data-testid="ai-build-assessment"
+      className={`${isLarge ? 'mt-4 p-5' : 'mt-2 p-3'} rounded-lg border border-blue-100 bg-blue-50/70`}
+      aria-label={`현재 견적 종합 점수 ${assessment.score}점 / ${assessment.maxScore}점`}
+    >
+      <div className="flex flex-wrap items-end justify-between gap-2">
+        <div>
+          <p className={`${isLarge ? 'text-base' : 'text-xs'} font-black text-brand-blue`}>현재 견적 종합 점수</p>
+          <p className={`${isLarge ? 'text-4xl' : 'text-2xl'} mt-1 font-black text-commerce-ink`}>
+            {assessment.score}<span className={`${isLarge ? 'text-base' : 'text-xs'} ml-1 text-slate-400`}>/ {assessment.maxScore}</span>
+          </p>
+        </div>
+        <span className="rounded-full border border-blue-200 bg-white px-2 py-1 text-[11px] font-black text-brand-blue">
+          {assessment.grade} · {assessment.label}
+        </span>
+      </div>
+      <p className={`${isLarge ? 'text-base leading-7' : 'text-xs leading-5'} mt-3 break-keep font-bold text-slate-700`}>
+        {assessment.summary}
+      </p>
+      {assessment.strengths.length ? <AssessmentList title="강점" items={assessment.strengths} tone="positive" /> : null}
+      {assessment.cautions.length ? <AssessmentList title="주의점" items={assessment.cautions} tone="caution" /> : null}
+      {assessment.recommendations.length ? (
+        <div className="mt-3 border-t border-blue-100 pt-3">
+          <p className="text-[11px] font-black text-slate-500">개선 우선순위</p>
+          <ol className="mt-1.5 space-y-1.5">
+            {assessment.recommendations.map((item) => (
+              <li key={`${item.priority}-${item.category}`} className="flex gap-2 rounded bg-white px-2.5 py-2 text-xs leading-5 text-slate-700">
+                <span className="grid h-5 w-5 shrink-0 place-items-center rounded-full bg-brand-blue text-[10px] font-black text-white">{item.priority}</span>
+                <span><strong>{item.title}</strong><br /><span className="text-slate-500">{item.reason}</span></span>
+              </li>
+            ))}
+          </ol>
+        </div>
+      ) : null}
+    </section>
+  );
+}
+
+function AssessmentList({ title, items, tone }: {
+  title: string;
+  items: AiBuildAssessment['strengths'];
+  tone: 'positive' | 'caution';
+}) {
+  return (
+    <div className="mt-3">
+      <p className="text-[11px] font-black text-slate-500">{title}</p>
+      <ul className="mt-1.5 space-y-1.5">
+        {items.map((item) => (
+          <li
+            key={item.code}
+            className={`rounded border px-2.5 py-2 text-xs leading-5 ${
+              tone === 'positive'
+                ? 'border-emerald-100 bg-emerald-50 text-emerald-800'
+                : item.severity === 'FAIL'
+                  ? 'border-red-100 bg-red-50 text-red-800'
+                  : 'border-amber-100 bg-amber-50 text-amber-800'
+            }`}
+          >
+            <strong>{item.title}</strong><br />{item.description}
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
 
 function SimulationResultCard({ simulation, size = 'default' }: { simulation: AiPerformanceSimulation; size?: AiChatMessageSize }) {
   const isLarge = size === 'large';
