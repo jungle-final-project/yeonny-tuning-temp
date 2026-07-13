@@ -1562,6 +1562,130 @@ test('shows the measured fit reason in the board banner and sends the same Tool 
   });
 });
 
+test('keeps the ATX case mismatch warning in a non-overlapping top status row across every board view', async ({ page }) => {
+  await loginAsUser(page);
+  const message = '메인보드 규격 ATX / 케이스 지원 최대 M-ATX입니다. 케이스가 이 보드 규격의 장착을 지원하지 않습니다.';
+  const base = buildGraphResponse();
+
+  await page.route('**/api/quote-drafts/current**', (route) => route.fulfill({
+    status: 200,
+    contentType: 'application/json',
+    body: JSON.stringify(fullDraft)
+  }));
+  await page.route('**/api/build-graphs/resolve', (route) => route.fulfill({
+    status: 200,
+    contentType: 'application/json',
+    body: JSON.stringify({
+      ...base,
+      nodes: base.nodes.map((node) => node.category === 'MOTHERBOARD' || node.category === 'CASE'
+        ? { ...node, status: 'FAIL' }
+        : { ...node, status: 'PASS' }),
+      edges: [{
+        id: 'edge-board-case-form',
+        source: 'part-MOTHERBOARD',
+        target: 'part-CASE',
+        type: 'REQUIRES',
+        status: 'FAIL',
+        label: '보드 규격 장착 불가',
+        summary: message
+      }],
+      insights: [],
+      toolResults: [{
+        tool: 'size',
+        status: 'FAIL',
+        confidence: 'HIGH',
+        summary: message,
+        details: { motherboardFormFactor: 'ATX', caseMaxFormFactor: 'M-ATX' }
+      }]
+    })
+  }));
+  await page.route('**/api/parts**', (route) => route.fulfill({
+    status: 200,
+    contentType: 'application/json',
+    body: JSON.stringify({ items: [], page: 0, size: 20, total: 0 })
+  }));
+
+  await page.goto('/self-quote');
+
+  const expectStatusAboveBoard = async () => {
+    const statusRegion = page.getByTestId('slot-board-status-region');
+    const board = page.getByTestId('slot-board');
+    await expect(statusRegion).toHaveAttribute('data-placement', 'top');
+    const [statusBox, boardBox] = await Promise.all([statusRegion.boundingBox(), board.boundingBox()]);
+    expect(statusBox).not.toBeNull();
+    expect(boardBox).not.toBeNull();
+    expect((statusBox?.y ?? 0) + (statusBox?.height ?? 0)).toBeLessThanOrEqual((boardBox?.y ?? 0) + 1);
+  };
+
+  const banner = page.getByTestId('slot-board-problem-banner');
+  await expect(banner).toContainText(message);
+  await expect(banner.getByTestId('slot-problem-ai-explain')).toBeVisible();
+  await expectStatusAboveBoard();
+
+  const statusBox = await page.getByTestId('slot-board-status-region').boundingBox();
+  for (const control of [
+    page.getByTestId('relation-map-open'),
+    page.getByRole('button', { name: '실장도 보기' })
+  ]) {
+    const controlBox = await control.boundingBox();
+    expect(controlBox).not.toBeNull();
+    expect((statusBox?.y ?? 0) + (statusBox?.height ?? 0)).toBeLessThanOrEqual(controlBox?.y ?? 0);
+  }
+
+  await page.getByRole('button', { name: '실장도 보기' }).click();
+  await expect(page.getByTestId('slot-board')).toHaveAttribute('data-visual-mode', 'motherboard');
+  await expectStatusAboveBoard();
+
+  await page.getByRole('button', { name: '실장도 접기' }).click();
+  await expect(page.getByTestId('slot-board')).toHaveAttribute('data-visual-mode', 'fused');
+  await page.getByRole('radio', { name: '3D' }).click();
+  await expect(page.getByTestId('slot-board')).toHaveAttribute('data-visual-mode', 'isometric');
+  await expectStatusAboveBoard();
+
+  await page.getByRole('radio', { name: '배치도' }).click();
+  await page.getByTestId('relation-map-open').click();
+  await expect(page.getByTestId('relation-map-bottom-banner')).toContainText(message);
+  await expectStatusAboveBoard();
+
+  await page.setViewportSize({ width: 390, height: 844 });
+  const mobileStatusBox = await page.getByTestId('slot-board-status-region').boundingBox();
+  expect(mobileStatusBox).not.toBeNull();
+  expect(mobileStatusBox?.x ?? -1).toBeGreaterThanOrEqual(0);
+  expect((mobileStatusBox?.x ?? 0) + (mobileStatusBox?.width ?? 0)).toBeLessThanOrEqual(390);
+});
+
+test('does not reserve a board status row when the graph has no warning or failure', async ({ page }) => {
+  await loginAsUser(page);
+  const base = buildGraphResponse();
+
+  await page.route('**/api/quote-drafts/current**', (route) => route.fulfill({
+    status: 200,
+    contentType: 'application/json',
+    body: JSON.stringify(fullDraft)
+  }));
+  await page.route('**/api/build-graphs/resolve', (route) => route.fulfill({
+    status: 200,
+    contentType: 'application/json',
+    body: JSON.stringify({
+      ...base,
+      nodes: base.nodes.map((node) => ({ ...node, status: 'PASS' })),
+      edges: base.edges.map((edge) => ({ ...edge, status: 'PASS' })),
+      insights: [],
+      toolResults: []
+    })
+  }));
+  await page.route('**/api/parts**', (route) => route.fulfill({
+    status: 200,
+    contentType: 'application/json',
+    body: JSON.stringify({ items: [], page: 0, size: 20, total: 0 })
+  }));
+
+  await page.goto('/self-quote');
+
+  await expect(page.getByTestId('slot-board-status-region')).toHaveCount(0);
+  await expect(page.getByTestId('slot-board')).toBeVisible();
+});
+
 test('shows game FPS reference in the performance panel with game and resolution selectors', async ({ page }) => {
   await loginAsUser(page);
   const draft = {
