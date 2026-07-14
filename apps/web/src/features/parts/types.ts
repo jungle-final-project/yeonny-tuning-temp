@@ -23,6 +23,14 @@ export type PartRow = {
   } | null;
   score?: number;
   compatibility?: PartCompatibility | null;
+  recommendation?: PartRecommendation | null;
+};
+
+export type PartRecommendation = {
+  recommended: true;
+  rank: number;
+  score: number;
+  reasons: string[];
 };
 
 export type PartCompatibility = {

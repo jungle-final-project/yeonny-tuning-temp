@@ -1728,8 +1728,6 @@ function IsometricSlotCard({
             <ProblemStatusBadge slot={slot} detail={problemDetail} tone="FAIL" onProblemOpen={onProblemOpen} />
           ) : slotStatus === 'WARN' ? (
             <ProblemStatusBadge slot={slot} detail={problemDetail} tone="WARN" onProblemOpen={onProblemOpen} />
-          ) : filled ? (
-            <span className="rounded border border-emerald-200 bg-emerald-50 px-1 py-0.5 text-[9px] font-black text-emerald-700">호환 가능</span>
           ) : isNext ? (
             <span className="rounded border border-blue-200 bg-blue-50 px-1 py-0.5 text-[9px] font-black text-brand-blue">다음 선택</span>
           ) : null}
@@ -2478,8 +2476,6 @@ function MotherboardSlot({
             <span className="rounded border border-red-200 bg-red-50 px-1 py-0.5 text-[9px] font-black text-red-700">장착 불가</span>
           ) : slotStatus === 'WARN' ? (
             <span className="rounded border border-amber-200 bg-amber-50 px-1 py-0.5 text-[9px] font-black text-amber-700">간섭 주의</span>
-          ) : filled ? (
-            <span className="rounded border border-emerald-200 bg-emerald-50 px-1 py-0.5 text-[9px] font-black text-emerald-700">호환 가능</span>
           ) : isNext ? (
             <span className="rounded border border-blue-200 bg-blue-50 px-1 py-0.5 text-[9px] font-black text-brand-blue">다음 선택</span>
           ) : null}

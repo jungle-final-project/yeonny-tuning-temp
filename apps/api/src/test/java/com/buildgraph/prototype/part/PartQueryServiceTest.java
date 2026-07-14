@@ -24,12 +24,14 @@ class PartQueryServiceTest {
         List<Map<String, Object>> rawRows = List.of(
                 part("gpu-warn", 101L, "GPU", "RTX 5080 Compact", 1_490_000),
                 part("gpu-fail", 102L, "GPU", "RTX 5090 Long", 2_900_000),
-                part("gpu-pass", 103L, "GPU", "RTX 5070 Ti", 990_000)
+                part("gpu-pass-cheap", 103L, "GPU", "RTX 5060 Unbalanced", 500_000),
+                part("gpu-pass-balanced", 104L, "GPU", "RTX 5070 Ti Balanced", 990_000)
         );
         List<Map<String, Object>> evaluatedRows = List.of(
                 withCompatibility(rawRows.get(0), "WARN", "간섭 주의"),
                 withCompatibility(rawRows.get(1), "FAIL", "장착 불가"),
-                withCompatibility(rawRows.get(2), "PASS", "호환 가능")
+                withCompatibility(rawRows.get(2), "PASS", "호환 가능"),
+                withCompatibility(rawRows.get(3), "PASS", "호환 가능")
         );
         CurrentUserService.CurrentUser user = user();
         when(jdbcTemplate.queryForList(anyString(), eq("GPU"))).thenReturn(rawRows);
@@ -54,11 +56,15 @@ class PartQueryServiceTest {
 
         List<Map<String, Object>> items = castList(response.get("items"));
         assertThat(items).extracting(item -> item.get("name"))
-                .containsExactly("RTX 5070 Ti", "RTX 5080 Compact", "RTX 5090 Long");
+                .containsExactly("RTX 5070 Ti Balanced", "RTX 5060 Unbalanced", "RTX 5080 Compact", "RTX 5090 Long");
         assertThat(compatibility(items.get(0)).get("status")).isEqualTo("PASS");
-        assertThat(compatibility(items.get(1)).get("status")).isEqualTo("WARN");
-        assertThat(compatibility(items.get(2)).get("status")).isEqualTo("FAIL");
-        assertThat(response.get("total")).isEqualTo(3);
+        assertThat(compatibility(items.get(1)).get("status")).isEqualTo("PASS");
+        assertThat(compatibility(items.get(2)).get("status")).isEqualTo("WARN");
+        assertThat(compatibility(items.get(3)).get("status")).isEqualTo("FAIL");
+        assertThat(recommendation(items.get(0)).get("rank")).isEqualTo(1);
+        assertThat(recommendation(items.get(1)).get("rank")).isEqualTo(2);
+        assertThat(items.get(0)).doesNotContainKeys("_candidateToolResults", "_recommendationContext", "internal_id");
+        assertThat(response.get("total")).isEqualTo(4);
     }
 
     private static Map<String, Object> part(String publicId, long internalId, String category, String name, int price) {
@@ -82,6 +88,12 @@ class PartQueryServiceTest {
                 "summary", "현재 조합 기준 평가 결과입니다.",
                 "checkedTools", List.of("power", "size", "performance")
         ));
+        copy.put("_recommendationContext", Map.of("selectedCategories", List.of("CPU")));
+        copy.put("_candidateToolResults", List.of(MockData.map(
+                "tool", "performance",
+                "status", status,
+                "details", MockData.map("cpuBenchmarkScore", 80, "gpuBenchmarkScore", String.valueOf(row.get("name")).contains("Unbalanced") ? 40 : 80)
+        )));
         return copy;
     }
 
@@ -104,5 +116,9 @@ class PartQueryServiceTest {
     @SuppressWarnings("unchecked")
     private static Map<String, Object> compatibility(Map<String, Object> part) {
         return (Map<String, Object>) part.get("compatibility");
+    }
+    @SuppressWarnings("unchecked")
+    private static Map<String, Object> recommendation(Map<String, Object> part) {
+        return (Map<String, Object>) part.get("recommendation");
     }
 }

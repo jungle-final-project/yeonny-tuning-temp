@@ -603,12 +603,9 @@ export function AiBuildAssistant({ surface = 'home', variant = 'floating', onBoa
           setPlacement('side');
           setOpen(true);
         }}
-        className="fixed bottom-5 right-5 z-50 flex h-16 w-16 items-center justify-center rounded-2xl border border-slate-900 bg-slate-950 text-white shadow-2xl transition hover:-translate-y-0.5 hover:bg-slate-800 focus:outline-none focus:ring-4 focus:ring-blue-200"
+        className="fixed bottom-5 right-5 z-50 flex h-14 w-14 items-center justify-center rounded-2xl bg-[#ce7237] text-white shadow-2xl transition-transform hover:-translate-y-0.5 focus:outline-none focus:ring-4 focus:ring-[#ce7237]/20"
       >
-        <span className="relative grid h-11 w-11 place-items-center rounded-xl bg-white text-slate-950">
-          <Bot size={26} />
-          <span className="absolute -right-1 -top-1 h-3 w-3 rounded-full border-2 border-slate-950 bg-emerald-400" />
-        </span>
+        <Bot size={26} />
       </button>
     );
   }
@@ -1119,7 +1116,7 @@ const ChatMessage = memo(function ChatMessage({
         >
           {!isUser ? (
             <div className={`${assistantLabelClassName} flex items-center font-black`}>
-              <span className={`${assistantIconClassName} grid place-items-center rounded-full`}>
+              <span className={`${assistantIconClassName} ai-message-author-icon grid place-items-center rounded-full`}>
                 <Sparkles size={isLarge ? 17 : 12} />
               </span>
               {message.supportGuidance ? 'PC 상태 안내' : message.buildAssessment ? '견적 점수 설명' : message.simulation ? '성능 시뮬레이션' : 'AI 견적 어시스턴트'}

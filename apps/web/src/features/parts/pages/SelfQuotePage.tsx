@@ -1,6 +1,7 @@
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Bell, X } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent, type ReactNode } from 'react';
+import { createPortal } from 'react-dom';
 import { Link, Navigate, useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import { useHiddenPageScrollbar } from '../../../hooks/useHiddenPageScrollbar';
 import { Screen } from '../../../components/ui';
@@ -555,6 +556,11 @@ function QuoteChecklist({
   statusByCategory: Map<PartCategory, 'PASS' | 'WARN' | 'FAIL'>;
 }) {
   const [expandedCategory, setExpandedCategory] = useState<PartCategory | null>(() => selectedCategory ?? nextCategory ?? 'CPU');
+  const [recommendationTooltip, setRecommendationTooltip] = useState<{
+    part: PartRow;
+    left: number;
+    top: number;
+  } | null>(null);
   const filledCount = RECOMMENDED_SLOT_ORDER.filter((category) => draftItems.some((item) => item.category === category)).length;
   const activeCategory = expandedCategory ?? selectedCategory ?? nextCategory ?? 'CPU';
   const selectedPartIds = useMemo(() => new Set(draftItems.map((item) => item.partId)), [draftItems]);
@@ -600,6 +606,20 @@ function QuoteChecklist({
 
   const choosePart = (part: PartRow) => {
     onAddPart(part);
+  };
+
+  const showRecommendationTooltip = (part: PartRow, target: HTMLElement) => {
+    if (!part.recommendation?.recommended || part.recommendation.reasons.length === 0) {
+      setRecommendationTooltip(null);
+      return;
+    }
+    const rect = target.getBoundingClientRect();
+    const tooltipWidth = 280;
+    setRecommendationTooltip({
+      part,
+      left: Math.max(12, Math.min(rect.right + 8, window.innerWidth - tooltipWidth - 12)),
+      top: Math.max(12, Math.min(rect.top, window.innerHeight - 140))
+    });
   };
 
   const removeCategoryItems = (items: QuoteDraftItem[]) => {
@@ -745,12 +765,19 @@ function QuoteChecklist({
                         const isAlreadySelected = selectedPartIds.has(part.id);
                         const status = part.compatibility?.status;
                         const isFail = status === 'FAIL';
+                        const isRecommended = part.recommendation?.recommended === true;
+                        const visibleStatus = isAlreadySelected ? '선택됨' : isRecommended ? '추천' : status === 'PASS' ? null : status ?? '확인 전';
                         return (
                           <button
                             key={part.id}
                             type="button"
+                            data-recommended={part.recommendation?.recommended ? 'true' : 'false'}
                             disabled={isMutating || isAlreadySelected}
                             onClick={() => choosePart(part)}
+                            onMouseEnter={(event) => showRecommendationTooltip(part, event.currentTarget)}
+                            onMouseLeave={() => setRecommendationTooltip(null)}
+                            onFocus={(event) => showRecommendationTooltip(part, event.currentTarget)}
+                            onBlur={() => setRecommendationTooltip(null)}
                             className={`w-full rounded border bg-white px-2 py-2 text-left text-[11px] transition ${
                               isFail
                                 ? 'border-red-100 bg-red-50/40 hover:border-red-300'
@@ -765,17 +792,19 @@ function QuoteChecklist({
                             </div>
                             <div className="mt-1 flex items-center justify-between gap-2 text-[10px]">
                               <span className="truncate text-slate-500">{part.manufacturer ?? '제조사 미상'}</span>
-                              <span className={`shrink-0 font-black ${
-                                status === 'PASS'
-                                  ? 'text-emerald-700'
-                                  : status === 'WARN'
+                              {visibleStatus ? (
+                                <span className={`shrink-0 font-black ${
+                                  isRecommended
+                                    ? 'text-emerald-700'
+                                    : status === 'WARN'
                                     ? 'text-amber-600'
                                     : status === 'FAIL'
                                       ? 'text-red-600'
                                       : 'text-slate-400'
-                              }`}>
-                                {isAlreadySelected ? '선택됨' : status ?? '확인 전'}
-                              </span>
+                                }`}>
+                                  {visibleStatus}
+                                </span>
+                              ) : null}
                             </div>
                           </button>
                         );
@@ -791,6 +820,24 @@ function QuoteChecklist({
           );
         })}
       </ol>
+      {recommendationTooltip && typeof document !== 'undefined'
+        ? createPortal(
+            <div
+              data-testid="candidate-recommendation-tooltip"
+              role="tooltip"
+              className="pointer-events-none fixed z-[100] w-[280px] rounded-lg border border-emerald-200 bg-white p-3 text-[11px] shadow-lg"
+              style={{ left: recommendationTooltip.left, top: recommendationTooltip.top }}
+            >
+              <div className="font-black text-emerald-700">추천 근거</div>
+              <ul className="mt-1.5 space-y-1 text-emerald-700">
+                {recommendationTooltip.part.recommendation?.reasons.map((reason) => (
+                  <li key={reason}>· {reason}</li>
+                ))}
+              </ul>
+            </div>,
+            document.body
+          )
+        : null}
     </aside>
   );
 }
