@@ -1,6 +1,6 @@
 import { useMutation, useQuery } from '@tanstack/react-query';
-import { ArrowLeft, Bell, CalendarDays, ClipboardCheck, ExternalLink, MapPin, ShieldCheck, ShoppingBag, Truck, Wrench } from 'lucide-react';
-import { useEffect, useRef, useState } from 'react';
+import { ArrowLeft, CalendarDays, ChevronDown, ClipboardCheck, ExternalLink, MapPin, ShoppingBag, Truck } from 'lucide-react';
+import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import type React from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { Panel, Screen, StateMessage } from '../../../components/ui';
@@ -63,6 +63,8 @@ export function CheckoutPage() {
   const [addressLine2, setAddressLine2] = useState('');
   const [note, setNote] = useState('');
   const [asPolicyAccepted, setAsPolicyAccepted] = useState(false);
+  const [isPartListOpen, setIsPartListOpen] = useState(true);
+  const [isRequestInfoOpen, setIsRequestInfoOpen] = useState(true);
   const [formError, setFormError] = useState<string | null>(null);
   const [addressSearchError, setAddressSearchError] = useState('');
   const [idempotencyKey] = useState(() => crypto.randomUUID());
@@ -139,8 +141,25 @@ export function CheckoutPage() {
   }
 
   const hasCompatibilityFail = graphHasBlockingFail(graphQuery.data);
-  const formComplete = Boolean(region && preferredDate && asPolicyAccepted);
+  const contactInfoComplete = Boolean(contactName.trim() && contactPhone.trim());
+  const deliveryAddressComplete = deliveryMethod === 'PICKUP' || Boolean(postalCode.trim() && addressLine1.trim() && addressLine2.trim());
+  const requestInfoComplete = Boolean(region && preferredDate && contactInfoComplete && deliveryAddressComplete);
+  const requestInfoErrorMessage = deliveryMethod === 'DELIVERY'
+    ? '수령인, 연락처, 우편번호, 주소, 상세주소와 조립 지역, 희망 일정을 모두 입력해 주세요.'
+    : '수령인, 연락처와 조립 지역, 희망 일정을 모두 입력해 주세요.';
+  const formComplete = requestInfoComplete && asPolicyAccepted;
   const canSubmit = formComplete && !graphQuery.isLoading && !graphQuery.isError && !hasCompatibilityFail && !createRequestMutation.isPending;
+  const submitDisabledReason = createRequestMutation.isPending
+    ? null
+    : !requestInfoComplete
+      ? '정보를 모두 입력해주세요'
+      : !asPolicyAccepted
+        ? '표준 AS 동의 후 요청할 수 있습니다'
+        : graphQuery.isLoading
+          ? '호환성 검증 중입니다'
+          : graphQuery.isError || hasCompatibilityFail
+            ? '호환성 검증을 통과한 견적만 요청할 수 있습니다'
+            : null;
 
   const openPreferredDatePicker = () => {
     const input = preferredDateInputRef.current;
@@ -175,8 +194,14 @@ export function CheckoutPage() {
   };
 
   const createRequest = () => {
-    if (!formComplete) {
-      setFormError('조립 지역, 희망 일정과 표준 AS 정책 동의를 확인해 주세요.');
+    if (!requestInfoComplete) {
+      setIsRequestInfoOpen(true);
+      setFormError(requestInfoErrorMessage);
+      return;
+    }
+    if (!asPolicyAccepted) {
+      setIsRequestInfoOpen(true);
+      setFormError('표준 AS 동의 후 요청할 수 있습니다.');
       return;
     }
     if (graphQuery.isError || hasCompatibilityFail) {
@@ -202,19 +227,44 @@ export function CheckoutPage() {
 
       <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_380px]">
         <div className="min-w-0 space-y-5">
-          <Panel title={`조립 대상 부품 ${quoteDraft.itemCount}개`} subtitle="기사는 이 구성을 기준으로 재고와 최종 가격을 다시 확인합니다.">
-            <div className="space-y-3">
-              {quoteDraft.items.map((item) => <CheckoutItemCard key={item.partId} item={item} />)}
-            </div>
+          <Panel
+            title={`조립 대상 부품 ${quoteDraft.itemCount}개`}
+            subtitle="기사는 이 구성을 기준으로 재고와 최종 가격을 다시 확인합니다."
+            action={(
+              <TogglePanelButton
+                controlsId="checkout-part-list"
+                label="조립 대상 부품"
+                open={isPartListOpen}
+                onClick={() => setIsPartListOpen((current) => !current)}
+              />
+            )}
+          >
+            <CollapsiblePanelBody id="checkout-part-list" open={isPartListOpen}>
+              <div className="space-y-3">
+                {quoteDraft.items.map((item) => <CheckoutItemCard key={item.partId} item={item} />)}
+              </div>
+            </CollapsiblePanelBody>
           </Panel>
-          <Panel title="조립 요청 정보" subtitle="요청을 등록하면 현재 견적과 기사 제안이 계정에 저장됩니다.">
-            <form
-              className="space-y-5"
-              onSubmit={(event) => {
-                event.preventDefault();
-                createRequest();
-              }}
-            >
+          <Panel
+            title="조립 요청 정보"
+            subtitle="요청을 등록하면 현재 견적과 기사 제안이 계정에 저장됩니다."
+            action={(
+              <TogglePanelButton
+                controlsId="checkout-request-info"
+                label="조립 요청 정보"
+                open={isRequestInfoOpen}
+                onClick={() => setIsRequestInfoOpen((current) => !current)}
+              />
+            )}
+          >
+            <CollapsiblePanelBody id="checkout-request-info" open={isRequestInfoOpen}>
+              <form
+                className="space-y-5"
+                onSubmit={(event) => {
+                  event.preventDefault();
+                  createRequest();
+                }}
+              >
               <fieldset>
                 <legend className="text-sm font-black text-commerce-ink">서비스 방식</legend>
                 <div className="mt-2 grid gap-2 sm:grid-cols-2" role="radiogroup" aria-label="서비스 방식">
@@ -236,19 +286,20 @@ export function CheckoutPage() {
               <fieldset className="space-y-3">
                 <legend className="text-sm font-black text-commerce-ink">연락 및 수령 정보</legend>
                 <div className="grid gap-3 sm:grid-cols-2">
-                  <CheckoutTextInput label="수령인" value={contactName} onChange={setContactName} placeholder="선택 입력" />
-                  <CheckoutTextInput label="연락처" value={contactPhone} onChange={setContactPhone} placeholder="선택 입력" />
+                  <CheckoutTextInput label="수령인" value={contactName} onChange={setContactName} placeholder="이름 입력" required />
+                  <CheckoutTextInput label="연락처" value={contactPhone} onChange={setContactPhone} placeholder="연락처 입력" required />
                 </div>
                 {deliveryMethod === 'DELIVERY' ? (
                   <div className="grid gap-3 sm:grid-cols-[minmax(0,260px)_minmax(0,1fr)]">
                     <div className="text-xs font-black text-slate-600">
-                      <label htmlFor="checkout-postal-code">우편번호</label>
+                      <label htmlFor="checkout-postal-code">우편번호<RequiredMark /></label>
                       <div className="mt-1.5 flex gap-2">
                         <input
                           id="checkout-postal-code"
                           value={postalCode}
-                          placeholder="선택 입력"
+                          placeholder="주소 찾기"
                           readOnly
+                          required
                           autoComplete="postal-code"
                           className="h-11 min-w-0 flex-1 rounded-md border border-commerce-line bg-slate-50 px-3 text-sm font-bold text-commerce-ink outline-none focus:border-brand-blue focus:ring-4 focus:ring-blue-100"
                         />
@@ -262,22 +313,25 @@ export function CheckoutPage() {
                       </div>
                     </div>
                     <label className="block text-xs font-black text-slate-600">
-                      주소
+                      주소<RequiredMark />
                       <input
                         value={addressLine1}
-                        placeholder="선택 입력"
+                        placeholder="주소 찾기"
                         readOnly
+                        required
                         autoComplete="address-line1"
                         className="mt-1.5 h-11 w-full rounded-md border border-commerce-line bg-slate-50 px-3 text-sm font-bold text-commerce-ink outline-none focus:border-brand-blue focus:ring-4 focus:ring-blue-100"
                       />
                     </label>
                     <div className="sm:col-start-2">
-                      <CheckoutTextInput inputRef={addressLine2InputRef} label="상세 주소" value={addressLine2} onChange={setAddressLine2} placeholder="동·호수 등" autoComplete="address-line2" />
+                      <CheckoutTextInput inputRef={addressLine2InputRef} label="상세 주소" value={addressLine2} onChange={setAddressLine2} placeholder="동·호수 등" required autoComplete="address-line2" />
                     </div>
                     {addressSearchError ? <p className="text-xs font-bold text-red-600 sm:col-span-2">{addressSearchError}</p> : null}
                   </div>
                 ) : null}
-                <p className="text-xs font-bold leading-5 text-slate-500">초기 기사 제안 요청에서는 선택 사항입니다. 입력한 정보는 선택 기사에게 가상 결제 완료 후에만 공개됩니다.</p>
+                <p className="text-xs font-bold leading-5 text-slate-500">
+                  입력한 정보는 선택 기사에게 가상 결제 완료 후에만 공개됩니다.
+                </p>
               </fieldset>
 
               <div className="grid gap-4 md:grid-cols-2">
@@ -318,14 +372,8 @@ export function CheckoutPage() {
                 <span><strong className="font-black text-commerce-ink">BuildGraph 표준 AS 정책 적용에 동의합니다.</strong><span className="mt-1 block text-xs font-bold leading-5 text-slate-500">선택 가능한 모든 기사는 동일한 표준 AS 정책을 따릅니다.</span></span>
               </label>
               {formError ? <div className="rounded-md border border-red-200 bg-red-50 px-4 py-3 text-sm font-bold text-red-700">{formError}</div> : null}
-            </form>
-          </Panel>
-          <Panel title="중개 기준" subtitle="예상가와 기사 제안가는 구분해서 표시합니다.">
-            <div className="grid gap-3 md:grid-cols-3">
-              <NoticeItem icon={<ClipboardCheck size={18} />} title="견적 예상가" body="현재 내부 자산 가격이며 기사 제안 전 최종 가격이 아닙니다." />
-              <NoticeItem icon={<Wrench size={18} />} title="기사 확인가" body="기사 제안에서 재고 확인 가격, 조립비, 배송비를 따로 비교합니다." />
-              <NoticeItem icon={<ShieldCheck size={18} />} title="표준 AS" body="기사 소속과 관계없이 BuildGraph 표준 AS 정책을 적용합니다." />
-            </div>
+              </form>
+            </CollapsiblePanelBody>
           </Panel>
         </div>
 
@@ -339,7 +387,6 @@ export function CheckoutPage() {
               <p className="mt-1 text-xs font-bold text-white/65">기사 제안 전 현재 입력 내용을 확인하세요.</p>
             </div>
             <div className="space-y-4 p-5">
-              <SummaryRow label="예상 부품가" value={`${quoteDraft.totalPrice.toLocaleString()}원`} />
               <SummaryRow label="서비스" value={serviceType === 'FULL_SERVICE' ? '구매 + 조립 + 배송' : '조립만'} />
               <SummaryRow label="지역" value={region || '선택 필요'} muted={!region} />
               <SummaryRow label="희망 일정" value={preferredDate || '선택 필요'} muted={!preferredDate} />
@@ -348,19 +395,14 @@ export function CheckoutPage() {
               <div className="border-t border-commerce-line pt-4">
                 <SummaryRow label="예상가" value={`${quoteDraft.totalPrice.toLocaleString()}원`} strong />
               </div>
-              <GraphGateStatus loading={graphQuery.isLoading} error={graphQuery.isError} failed={hasCompatibilityFail} />
-              <button
-                type="button" onClick={createRequest} disabled={!canSubmit}
-                className="flex min-h-12 w-full items-center justify-center gap-2 rounded-md bg-commerce-ink px-4 py-3 text-sm font-black text-white transition hover:bg-slate-700 disabled:cursor-not-allowed disabled:bg-slate-300"
-              >
-                <Truck size={17} /> {createRequestMutation.isPending ? '요청 저장 중...' : '기사 제안 요청하기'}
-              </button>
+              <SubmitRequestButton
+                disabled={!canSubmit}
+                disabledReason={submitDisabledReason}
+                pending={createRequestMutation.isPending}
+                onClick={createRequest}
+              />
               <Link to="/my/assembly-requests" className="flex min-h-11 items-center justify-center rounded-md border border-commerce-line bg-white px-4 text-sm font-black text-commerce-ink hover:border-commerce-ink">
                 내 조립 요청 이력
-              </Link>
-              <Link to="/my/quotes" className="flex min-h-11 items-center justify-center gap-2 rounded-md border border-commerce-line bg-white px-4 py-3 text-sm font-black text-commerce-ink hover:border-commerce-ink">
-                <Bell size={16} />
-                목표가 알림 설정
               </Link>
             </div>
           </section>
@@ -368,6 +410,176 @@ export function CheckoutPage() {
       </div>
     </Screen>
   );
+}
+
+const COLLAPSIBLE_TRANSITION_MS = 520;
+const COLLAPSIBLE_REDUCED_TRANSITION_MS = 260;
+
+function CollapsiblePanelBody({ id, open, children }: { id: string; open: boolean; children: React.ReactNode }) {
+  const contentRef = useRef<HTMLDivElement>(null);
+  const isInitialRenderRef = useRef(true);
+  const [shouldRender, setShouldRender] = useState(open);
+  const [height, setHeight] = useState(open ? 'auto' : '0px');
+  const [isVisible, setIsVisible] = useState(open);
+
+  useEffect(() => {
+    if (open) {
+      setShouldRender(true);
+    }
+  }, [open]);
+
+  useLayoutEffect(() => {
+    if (!shouldRender) {
+      return;
+    }
+
+    const element = contentRef.current;
+    if (!element) {
+      return;
+    }
+
+    if (isInitialRenderRef.current) {
+      isInitialRenderRef.current = false;
+      setHeight(open ? 'auto' : '0px');
+      setIsVisible(open);
+      return;
+    }
+
+    const measuredHeight = `${element.scrollHeight}px`;
+    const transitionMs = collapsibleTransitionMs();
+
+    if (open) {
+      setHeight('0px');
+      setIsVisible(false);
+
+      const frame = window.requestAnimationFrame(() => {
+        setHeight(`${element.scrollHeight}px`);
+        setIsVisible(true);
+      });
+      const settleTimer = window.setTimeout(() => setHeight('auto'), transitionMs);
+      return () => {
+        window.cancelAnimationFrame(frame);
+        window.clearTimeout(settleTimer);
+      };
+    }
+
+    setHeight(measuredHeight);
+    setIsVisible(true);
+
+    const frame = window.requestAnimationFrame(() => {
+      setHeight('0px');
+      setIsVisible(false);
+    });
+    const unmountTimer = window.setTimeout(() => setShouldRender(false), transitionMs);
+    return () => {
+      window.cancelAnimationFrame(frame);
+      window.clearTimeout(unmountTimer);
+    };
+  }, [children, open, shouldRender]);
+
+  if (!shouldRender) {
+    return <div id={id} hidden />;
+  }
+
+  const inertProps = !open ? ({ inert: '' } as Record<string, string>) : {};
+  const transitionMs = collapsibleTransitionMs();
+  const opacityTransitionMs = Math.min(320, transitionMs);
+  const transition = `height ${transitionMs}ms cubic-bezier(0.4, 0, 0.2, 1), opacity ${opacityTransitionMs}ms ease-in-out`;
+  const handleTransitionEnd = (event: React.TransitionEvent<HTMLDivElement>) => {
+    if (event.target !== event.currentTarget || event.propertyName !== 'height') {
+      return;
+    }
+
+    if (open) {
+      setHeight('auto');
+      return;
+    }
+
+    setShouldRender(false);
+  };
+
+  return (
+    <div
+      id={id}
+      aria-hidden={!open}
+      style={{ height, opacity: isVisible ? 1 : 0, transition }}
+      className="overflow-hidden"
+      onTransitionEnd={handleTransitionEnd}
+      {...inertProps}
+    >
+      <div ref={contentRef} className="min-h-0 overflow-hidden">
+        {children}
+      </div>
+    </div>
+  );
+}
+
+function TogglePanelButton({ controlsId, label, open, onClick }: { controlsId: string; label: string; open: boolean; onClick: () => void }) {
+  const actionLabel = open ? `${label} 접기` : `${label} 펼치기`;
+
+  return (
+    <button
+      type="button"
+      aria-controls={controlsId}
+      aria-expanded={open}
+      aria-label={actionLabel}
+      title={actionLabel}
+      onClick={onClick}
+      className="inline-flex min-h-9 items-center justify-center gap-1.5 rounded-md border border-commerce-line bg-white px-3 text-xs font-black text-commerce-ink transition hover:border-brand-blue hover:bg-blue-50 hover:text-brand-blue focus:outline-none focus:ring-4 focus:ring-blue-100"
+    >
+      <span>{open ? '접기' : '펼치기'}</span>
+      <ChevronDown size={16} className={`transition-transform duration-300 ease-out motion-reduce:transition-none ${open ? 'rotate-180' : ''}`} />
+    </button>
+  );
+}
+
+function SubmitRequestButton({
+  disabled,
+  disabledReason,
+  pending,
+  onClick
+}: {
+  disabled: boolean;
+  disabledReason: string | null;
+  pending: boolean;
+  onClick: () => void;
+}) {
+  const tooltipId = disabledReason ? 'checkout-submit-disabled-reason' : undefined;
+
+  return (
+    <div
+      className="group relative"
+      tabIndex={disabledReason ? 0 : undefined}
+      aria-describedby={tooltipId}
+    >
+      <button
+        type="button"
+        onClick={onClick}
+        disabled={disabled}
+        aria-describedby={tooltipId}
+        className="flex min-h-12 w-full items-center justify-center gap-2 rounded-md bg-commerce-ink px-4 py-3 text-sm font-black text-white transition hover:bg-slate-700 disabled:pointer-events-none disabled:cursor-not-allowed disabled:bg-slate-300"
+      >
+        <Truck size={17} />
+        {pending ? '요청 저장 중...' : '기사 제안 요청하기'}
+      </button>
+      {disabledReason ? (
+        <div
+          id={tooltipId}
+          role="tooltip"
+          className="pointer-events-none absolute bottom-full left-1/2 z-20 mb-2 w-max max-w-[240px] -translate-x-1/2 rounded-md bg-slate-950 px-3 py-2 text-center text-xs font-black leading-5 text-white opacity-0 shadow-lg transition-opacity duration-150 group-hover:opacity-100 group-focus:opacity-100"
+        >
+          {disabledReason}
+          <span className="absolute left-1/2 top-full h-2 w-2 -translate-x-1/2 -translate-y-1 rotate-45 bg-slate-950" />
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+function collapsibleTransitionMs() {
+  return typeof window !== 'undefined' && window.matchMedia('(prefers-reduced-motion: reduce)').matches
+    ? COLLAPSIBLE_REDUCED_TRANSITION_MS
+    : COLLAPSIBLE_TRANSITION_MS;
 }
 
 function EmptyCheckout() {
@@ -469,7 +681,7 @@ function CheckoutTextInput({
 }) {
   return (
     <label className="block text-xs font-black text-slate-600">
-      {label}{required ? <span className="ml-1 text-red-500">필수</span> : null}
+      {label}{required ? <RequiredMark /> : null}
       <input
         ref={inputRef}
         aria-label={label}
@@ -482,6 +694,10 @@ function CheckoutTextInput({
       />
     </label>
   );
+}
+
+function RequiredMark() {
+  return <span aria-hidden="true" className="ml-0.5 align-super text-[10px] font-black leading-none text-red-500">*</span>;
 }
 
 function getKakaoPostcodeConstructor() {
@@ -540,31 +756,6 @@ function roadAddressExtra(data: KakaoPostcodeData) {
     extraParts.push(data.buildingName);
   }
   return extraParts.length > 0 ? ` (${extraParts.join(', ')})` : '';
-}
-
-function GraphGateStatus({ loading, error, failed }: { loading: boolean; error: boolean; failed: boolean }) {
-  if (loading) {
-    return <div className="rounded-md border border-blue-100 bg-blue-50 p-3 text-xs font-bold text-brand-blue">호환성 검증 중입니다.</div>;
-  }
-  if (error) {
-    return <div className="rounded-md border border-amber-200 bg-amber-50 p-3 text-xs font-bold leading-5 text-amber-800">호환성 검증 결과를 불러오지 못했습니다. 실제 요청은 잠시 차단됩니다.</div>;
-  }
-  if (failed) {
-    return <div className="rounded-md border border-red-200 bg-red-50 p-3 text-xs font-bold leading-5 text-red-700">장착 불가 항목이 있어 실제 조립 요청을 만들 수 없습니다.</div>;
-  }
-  return <div className="rounded-md border border-emerald-200 bg-emerald-50 p-3 text-xs font-bold text-emerald-700">호환성 검증을 통과했습니다.</div>;
-}
-
-function NoticeItem({ icon, title, body }: { icon: React.ReactNode; title: string; body: string }) {
-  return (
-    <div className="rounded-lg border border-commerce-line bg-slate-50 p-4">
-      <div className="flex items-center gap-2 font-black text-commerce-ink">
-        <span className="text-brand-blue">{icon}</span>
-        {title}
-      </div>
-      <p className="mt-2 break-keep text-xs font-bold leading-5 text-slate-500">{body}</p>
-    </div>
-  );
 }
 
 function SummaryRow({ label, value, muted = false, strong = false }: { label: string; value: string; muted?: boolean; strong?: boolean }) {

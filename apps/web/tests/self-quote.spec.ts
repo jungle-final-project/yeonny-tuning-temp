@@ -3850,6 +3850,7 @@ test('persists an assembly request, selects an offer, and pays points after Toss
   await page.getByLabel('수령인').fill('데모 사용자');
   await page.getByLabel('연락처').fill('010-1234-5678');
   await selectCheckoutAddress(page);
+  await page.getByLabel('상세 주소').fill('101동 1004호');
   await page.getByRole('checkbox', { name: /BuildGraph 표준 AS 정책 적용에 동의합니다/ }).check();
   await page.getByRole('button', { name: '기사 제안 요청하기' }).click();
 
@@ -3858,12 +3859,15 @@ test('persists an assembly request, selects an offer, and pays points after Toss
   await expect(page.getByText('박준호 기사')).toBeVisible();
   await expect(page.getByText('김도윤 기사')).toBeVisible();
   await expect(page.getByText('최민석 기사')).toBeVisible();
-  await expect(page.getByText('BuildGraph 기사 2/2')).toBeVisible();
+  await expect(page.getByText('Dazzajo 기사 2/2')).toBeVisible();
   await expect(page.getByText('외부 파트너 1/3')).toBeVisible();
 
   const balancedOffer = page.locator('article').filter({ hasText: '박준호 기사' });
   await balancedOffer.getByRole('button', { name: '이 기사 선택' }).click();
   await expect(balancedOffer.getByRole('button', { name: '선택됨' })).toBeVisible();
+  const selectedSummary = page.locator('aside').filter({ hasText: '선택 제안' });
+  await expect(selectedSummary.getByText('배송비')).toBeVisible();
+  await expect(selectedSummary.getByText('무료')).toBeVisible();
   await page.getByRole('button', { name: '선택한 제안 승인' }).click();
   await expect(page).toHaveURL(`/checkout/payment/${requestId}`);
   await page.reload();
@@ -3879,7 +3883,7 @@ test('persists an assembly request, selects an offer, and pays points after Toss
   expect(quoteDraftMethods.every((method) => method === 'GET')).toBe(true);
 });
 
-test('creates an assembly request without requiring contact or delivery address fields', async ({ page }) => {
+test('requires contact and delivery address fields before creating an assembly request', async ({ page }) => {
   const requestId = '00000000-0000-4000-8000-000000020011';
   let submittedBody: Record<string, unknown> | null = null;
   const request = {
@@ -3891,7 +3895,13 @@ test('creates an assembly request without requiring contact or delivery address 
     preferredDate: '2099-07-20',
     deliveryMethod: 'DELIVERY',
     note: '',
-    contact: { name: 'Demo User', phone: null, postalCode: null, addressLine1: null, addressLine2: null },
+    contact: {
+      name: 'Demo User',
+      phone: '010-1234-5678',
+      postalCode: '06236',
+      addressLine1: '서울시 강남구 테헤란로 1 (역삼동)',
+      addressLine2: '101동 1004호'
+    },
     asPolicyAccepted: true,
     estimatedPartsPrice: 1_400_000,
     itemCount: 2,
@@ -3903,6 +3913,7 @@ test('creates an assembly request without requiring contact or delivery address 
     statusHistory: []
   };
   await page.addInitScript(() => localStorage.setItem('buildgraph.token', 'jwt-user-token'));
+  await mockKakaoPostcode(page);
   await page.route('**/api/quote-drafts/current**', (route) => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(checkoutDraft) }));
   await page.route('**/api/build-graphs/resolve', (route) => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ mode: 'BUILD_OVERVIEW', summary: '호환 가능', nodes: [], edges: [], focusNodeIds: [], insights: [], toolResults: [] }) }));
   await page.route('**/api/assembly-requests**', async (route) => {
@@ -3914,20 +3925,33 @@ test('creates an assembly request without requiring contact or delivery address 
 
   await page.goto('/checkout');
 
+  const submitButton = page.getByRole('button', { name: '기사 제안 요청하기' });
   await expect(page.getByLabel('조립 지역')).toHaveValue('서울');
   await expect(page.getByLabel('희망 일정')).not.toHaveValue('');
-  await expect(page.getByLabel('수령인')).not.toHaveAttribute('required', '');
-  await expect(page.getByLabel('연락처')).not.toHaveAttribute('required', '');
-  await expect(page.getByLabel('주소', { exact: true })).not.toHaveAttribute('required', '');
+  await expect(page.getByLabel('수령인')).toHaveAttribute('required', '');
+  await expect(page.getByLabel('연락처')).toHaveAttribute('required', '');
+  await expect(page.getByLabel('우편번호')).toHaveAttribute('required', '');
+  await expect(page.locator('input[autocomplete="address-line1"]')).toHaveAttribute('required', '');
+  await expect(page.getByLabel('상세 주소')).toHaveAttribute('required', '');
   await page.getByRole('checkbox', { name: /BuildGraph 표준 AS 정책 적용에 동의합니다/ }).check();
-  await page.getByRole('button', { name: '기사 제안 요청하기' }).click();
+  await expect(submitButton).toBeDisabled();
+  await submitButton.hover({ force: true });
+  await expect(page.getByRole('tooltip', { name: '정보를 모두 입력해주세요' })).toBeVisible();
+
+  await page.getByLabel('연락처').fill('010-1234-5678');
+  await selectCheckoutAddress(page);
+  await page.getByLabel('상세 주소').fill('101동 1004호');
+  await expect(submitButton).toBeEnabled();
+  await submitButton.click();
 
   await expect(page).toHaveURL(`/checkout/offers/${requestId}`);
   expect(submittedBody).toMatchObject({
     region: '서울',
     contactName: 'Demo User',
-    contactPhone: '',
-    addressLine1: '',
+    contactPhone: '010-1234-5678',
+    postalCode: '06236',
+    addressLine1: '서울시 강남구 테헤란로 1 (역삼동)',
+    addressLine2: '101동 1004호',
     asPolicyAccepted: true
   });
 });
@@ -4009,8 +4033,8 @@ test('blocks an incompatible assembly request and does not expose a demo bypass'
   await page.getByLabel('수령인').fill('데모 사용자');
   await page.getByLabel('연락처').fill('010-1234-5678');
   await selectCheckoutAddress(page, '경기도 성남시 분당구 1 (분당동)', '13500');
+  await page.getByLabel('상세 주소').fill('101동 1004호');
   await page.getByRole('checkbox', { name: /BuildGraph 표준 AS 정책 적용에 동의합니다/ }).check();
-  await expect(page.getByText('장착 불가 항목이 있어 실제 조립 요청을 만들 수 없습니다.')).toBeVisible();
   await expect(page.getByRole('button', { name: '기사 제안 요청하기' })).toBeDisabled();
   await expect(page.getByRole('button', { name: '데모 제안 보기' })).toHaveCount(0);
   await expect(page).toHaveURL('/checkout');
