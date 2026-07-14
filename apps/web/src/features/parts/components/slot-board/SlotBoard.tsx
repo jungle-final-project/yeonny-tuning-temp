@@ -41,6 +41,8 @@ const SLOT_BOARD_LEGACY_DISPLAY_STORAGE_KEYS = [
   SLOT_BOARD_EDGES_VISIBLE_STORAGE_KEY,
   SLOT_BOARD_CARDS_VISIBLE_STORAGE_KEY
 ];
+const RELATION_MAP_STAGE_ASPECT_RATIO = 16 / 8.4;
+const RELATION_MAP_STAGE_MAX_WIDTH = 1120;
 
 type SlotBoardProps = {
   items: QuoteDraftItem[];
@@ -484,6 +486,54 @@ function FusedSlotBoardBody({
   );
 }
 
+function useRelationMapStageSize() {
+  const frameRef = useRef<HTMLDivElement | null>(null);
+  const [stageSize, setStageSize] = useState<{ width: number; height: number } | null>(null);
+
+  useEffect(() => {
+    let frameId = 0;
+
+    const measure = () => {
+      window.cancelAnimationFrame(frameId);
+      frameId = window.requestAnimationFrame(() => {
+        const frame = frameRef.current;
+        if (!frame) return;
+
+        const rect = frame.getBoundingClientRect();
+        if (rect.width <= 0 || rect.height <= 0) return;
+
+        const width = Math.floor(Math.min(
+          rect.width,
+          RELATION_MAP_STAGE_MAX_WIDTH,
+          rect.height * RELATION_MAP_STAGE_ASPECT_RATIO
+        ));
+        const height = Math.floor(width / RELATION_MAP_STAGE_ASPECT_RATIO);
+
+        setStageSize((current) => current?.width === width && current.height === height
+          ? current
+          : { width, height });
+      });
+    };
+
+    const resizeObserver = typeof ResizeObserver === 'undefined'
+      ? null
+      : new ResizeObserver(measure);
+    if (frameRef.current) {
+      resizeObserver?.observe(frameRef.current);
+    }
+    window.addEventListener('resize', measure);
+    measure();
+
+    return () => {
+      window.cancelAnimationFrame(frameId);
+      window.removeEventListener('resize', measure);
+      resizeObserver?.disconnect();
+    };
+  }, []);
+
+  return { frameRef, stageSize };
+}
+
 function RelationMapBoardBody({
   items,
   selectedCategory,
@@ -510,6 +560,10 @@ function RelationMapBoardBody({
   const issueFocusCategory = firstProblemCategory(graph) ?? firstFilledCategory(items) ?? null;
   const focusCategory = selectedCategory ?? issueFocusCategory ?? 'GPU';
   const reasonByCategory = relationMapReasonsByCategory(graph);
+  const { frameRef, stageSize } = useRelationMapStageSize();
+  const stageStyle: CSSProperties | undefined = stageSize
+    ? { width: stageSize.width, height: stageSize.height }
+    : undefined;
 
   return (
     <div
@@ -517,36 +571,42 @@ function RelationMapBoardBody({
       data-visual-mode="relation-map"
       className="relative flex min-h-0 flex-1 flex-col overflow-hidden bg-white p-3"
     >
-      <div data-testid="relation-map-stage" className="relative min-h-0 w-full min-w-0 flex-1 rounded-lg bg-white">
-        <RelationMapEdges
-          items={items}
-          graph={graph}
-          focusCategory={focusCategory}
-          selectedCategory={selectedCategory}
-        />
-        {RELATION_MAP_NODE_ORDER.map((category) => {
-          const slot = slotConfigFor(category);
-          if (!slot) return null;
-          const categoryItems = items.filter((item) => item.category === category);
-          return (
-            <RelationMapNode
-              key={category}
-              slot={slot}
-              items={categoryItems}
-              focusCategory={focusCategory}
-              selectedCategory={selectedCategory}
-              nextCategory={nextCategory}
-              status={statusByCategory.get(category)}
-              reason={reasonByCategory.get(category)}
-              isAiSpotlighted={aiFocusCategories.includes(category)}
-              isAiDimmed={aiFocusCategories.length > 0 && !aiFocusCategories.includes(category)}
-              isFlashing={flashingCategories.has(category)}
-              onSelect={() => onSlotSelect(category)}
-              onRemoveItem={onRemoveItem}
-              isRemovePending={isRemovePending}
-            />
-          );
-        })}
+      <div ref={frameRef} data-testid="relation-map-frame" className="grid min-h-0 flex-1 place-items-center overflow-hidden rounded-lg bg-white">
+        <div
+          data-testid="relation-map-stage"
+          className={`relative min-h-0 min-w-0 rounded-lg bg-white ${stageSize ? '' : 'h-full w-full'}`}
+          style={stageStyle}
+        >
+          <RelationMapEdges
+            items={items}
+            graph={graph}
+            focusCategory={focusCategory}
+            selectedCategory={selectedCategory}
+          />
+          {RELATION_MAP_NODE_ORDER.map((category) => {
+            const slot = slotConfigFor(category);
+            if (!slot) return null;
+            const categoryItems = items.filter((item) => item.category === category);
+            return (
+              <RelationMapNode
+                key={category}
+                slot={slot}
+                items={categoryItems}
+                focusCategory={focusCategory}
+                selectedCategory={selectedCategory}
+                nextCategory={nextCategory}
+                status={statusByCategory.get(category)}
+                reason={reasonByCategory.get(category)}
+                isAiSpotlighted={aiFocusCategories.includes(category)}
+                isAiDimmed={aiFocusCategories.length > 0 && !aiFocusCategories.includes(category)}
+                isFlashing={flashingCategories.has(category)}
+                onSelect={() => onSlotSelect(category)}
+                onRemoveItem={onRemoveItem}
+                isRemovePending={isRemovePending}
+              />
+            );
+          })}
+        </div>
       </div>
     </div>
   );
@@ -686,9 +746,9 @@ function RelationMapNode({
         aria-label={`${slot.label} 선택`}
         aria-pressed={isSelected}
         title={fullNameTitle}
-        className="grid h-full w-full min-h-0 grid-cols-[auto_minmax(0,1fr)] grid-rows-[minmax(0,1fr)_auto] items-center gap-x-[clamp(0.25rem,0.6vw,0.75rem)] overflow-hidden rounded-md px-[clamp(0.25rem,0.7vw,0.875rem)] py-[clamp(0.15rem,0.45vh,0.4rem)] text-left focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-blue"
+        className="grid h-full min-h-0 w-full grid-cols-[auto_minmax(0,1fr)] grid-rows-[minmax(0,1fr)_auto] items-center gap-x-2 overflow-hidden rounded-md px-2 py-1.5 text-left focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-blue"
       >
-        <span className={`row-span-2 grid h-[clamp(1.75rem,5vh,3.5rem)] w-[clamp(1.75rem,5vh,3.5rem)] shrink-0 place-items-center overflow-hidden rounded ${
+        <span className={`row-span-2 grid h-11 w-11 shrink-0 place-items-center overflow-hidden rounded ${
             filled ? 'border border-slate-100 bg-slate-50' : 'border border-slate-300 bg-slate-50 shadow-inner'
           }`}>
           <img
@@ -702,18 +762,18 @@ function RelationMapNode({
           />
         </span>
         <span className="min-w-0 self-end">
-          <span className="block truncate text-[clamp(0.68rem,1.55vh,0.9375rem)] font-black leading-tight text-slate-700">
+          <span className="block truncate text-sm font-black leading-tight text-slate-700">
             {slot.label}
           </span>
           <span
             title={fullNameTitle}
-            className={`block truncate text-[clamp(0.56rem,1.25vh,0.8125rem)] font-bold leading-tight ${filled ? 'text-commerce-ink' : 'text-slate-400'}`}
+            className={`block truncate text-xs font-bold leading-tight ${filled ? 'text-commerce-ink' : 'text-slate-400'}`}
           >
             {itemTitle}
           </span>
         </span>
         <span className="flex min-w-0 self-start justify-end">
-          <span className={`max-w-full truncate rounded px-1.5 py-px text-[clamp(0.52rem,1.1vh,0.75rem)] font-black leading-tight ${
+          <span className={`max-w-full truncate rounded px-1.5 py-px text-[11px] font-black leading-tight ${
             isFocused
               ? 'bg-blue-50 text-brand-blue'
               : status === 'FAIL'

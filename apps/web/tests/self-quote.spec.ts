@@ -1,4 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
+import { FUSED_BOARD_SIZE } from '../src/features/parts/components/slot-board/fusedPlateConfig';
 
 type KakaoPostcodeData = {
   zonecode: string;
@@ -1359,14 +1360,21 @@ test('shows graph edge labels on the fallback topology relationships', async ({ 
   await expect(page.getByTestId('slot-board')).toHaveAttribute('data-visual-mode', 'fused');
   const fusedPlate = page.getByTestId('slot-board-fused-plate');
   await expect(fusedPlate).toBeVisible();
-  const fusedArtCoversPlate = await fusedPlate.evaluate((plate) => {
+  const fusedBoardRatio = FUSED_BOARD_SIZE.width / FUSED_BOARD_SIZE.height;
+  await expect.poll(() => fusedPlate.evaluate((plate, expectedRatio) => {
     const art = plate.firstElementChild;
     if (!(art instanceof HTMLElement)) return false;
     const plateRect = plate.getBoundingClientRect();
     const artRect = art.getBoundingClientRect();
-    return artRect.width >= plateRect.width - 1 && artRect.height >= plateRect.height - 1;
-  });
-  expect(fusedArtCoversPlate).toBe(true);
+    const actualRatio = artRect.width / artRect.height;
+    return artRect.width > 0
+      && artRect.height > 0
+      && artRect.left >= plateRect.left - 1
+      && artRect.top >= plateRect.top - 1
+      && artRect.right <= plateRect.right + 1
+      && artRect.bottom <= plateRect.bottom + 1
+      && Math.abs(actualRatio - expectedRatio) < 0.01;
+  }, fusedBoardRatio)).toBe(true);
 });
 
 test('keeps fallback topology edges when the graph api fails', async ({ page }) => {

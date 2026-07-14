@@ -54,7 +54,7 @@ export function FusedPlateArt({
   const isActionPending = isRemovePending || isQuantityPending;
   const [hoveredCategory, setHoveredCategory] = useState<PartCategory | null>(null);
   const stageContainerRef = useRef<HTMLDivElement | null>(null);
-  const stageSize = useCoveredPlateSize(stageContainerRef);
+  const stageSize = useContainedPlateSize(stageContainerRef);
   const aiFocusSet = new Set(aiFocusCategories);
   const hasAiFocus = aiFocusSet.size > 0;
   const hasHoveredLayer = hoveredCategory
@@ -116,7 +116,7 @@ export function FusedPlateArt({
       <div
         className="relative shrink-0"
         style={stageSize
-          ? { width: stageSize.width, height: stageSize.height, transform: `translateY(${stageSize.offsetY}px)` }
+          ? { width: stageSize.width, height: stageSize.height }
           : { width: '100%', aspectRatio: `${FUSED_BOARD_SIZE.width} / ${FUSED_BOARD_SIZE.height}` }}
       >
         <img
@@ -312,11 +312,11 @@ export function FusedPlateArt({
   );
 }
 
-type CoveredPlateSize = { width: number; height: number; offsetY: number };
+type ContainedPlateSize = { width: number; height: number };
 
-// 부모 영역을 빈틈없이 덮되 원본 비율은 유지한다. 이미지·번호·클릭 영역이 같은 무대를 공유해 좌표가 어긋나지 않는다.
-function useCoveredPlateSize(containerRef: RefObject<HTMLDivElement>): CoveredPlateSize | null {
-  const [size, setSize] = useState<CoveredPlateSize | null>(null);
+// 부모 영역 안에 전체 판을 맞추되 원본 비율은 유지한다. 이미지·번호·클릭 영역이 같은 무대를 공유해 좌표가 어긋나지 않는다.
+function useContainedPlateSize(containerRef: RefObject<HTMLDivElement>): ContainedPlateSize | null {
+  const [size, setSize] = useState<ContainedPlateSize | null>(null);
 
   useLayoutEffect(() => {
     const container = containerRef.current;
@@ -328,16 +328,14 @@ function useCoveredPlateSize(containerRef: RefObject<HTMLDivElement>): CoveredPl
       if (containerWidth <= 0 || containerHeight <= 0) return;
 
       const ratio = FUSED_BOARD_SIZE.width / FUSED_BOARD_SIZE.height;
-      const width = Math.max(containerWidth, containerHeight * ratio);
+      const width = Math.min(containerWidth, containerHeight * ratio);
       const height = width / ratio;
-      const offsetY = Math.max(0, height - containerHeight) * 0.2;
       setSize((current) => (
         current
           && Math.abs(current.width - width) < 0.5
           && Math.abs(current.height - height) < 0.5
-          && Math.abs(current.offsetY - offsetY) < 0.5
           ? current
-          : { width, height, offsetY }
+          : { width, height }
       ));
     };
 

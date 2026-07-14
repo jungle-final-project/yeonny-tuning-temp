@@ -300,7 +300,7 @@ function SelfQuoteSlotBoardPage() {
   const unmetConditionCount = failCount === 0 ? blockingToolFailures(graphQuery.data, draftItems).length : 0;
 
   return (
-    <Screen mainClassName="mx-auto w-full max-w-[1800px] px-4 py-2 sm:px-6 lg:h-[calc(100dvh-210px)] lg:overflow-hidden lg:px-[clamp(40px,4.5vw,88px)] xl:h-[calc(100dvh-167px)]">
+    <Screen mainClassName="mx-auto w-full max-w-[1840px] px-4 py-2 sm:px-6 lg:h-[calc(100dvh-210px)] lg:overflow-hidden lg:px-[clamp(24px,2.2vw,48px)] xl:h-[calc(100dvh-167px)]">
       <div className="space-y-4 lg:flex lg:h-full lg:min-h-0 lg:flex-col lg:gap-2 lg:space-y-0">
         {showSupplementaryQuotePanels && aiBuild ? (
           <AiSelectedBuildPanel
@@ -342,7 +342,7 @@ function SelfQuoteSlotBoardPage() {
         ) : null}
 
         {/* 본문: 체크리스트(품목 지도) + 보드(보조 그래프) + AI 상담 패널. */}
-        <div className="grid gap-4 lg:min-h-0 lg:flex-1 lg:grid-cols-[clamp(256px,18vw,320px)_minmax(0,1fr)_clamp(336px,21vw,400px)] lg:grid-rows-[auto_minmax(0,1fr)_auto] lg:items-stretch lg:gap-2">
+        <div className="grid gap-4 lg:min-h-0 lg:flex-1 lg:grid-cols-[clamp(248px,17vw,304px)_minmax(0,1fr)_clamp(320px,20vw,388px)] lg:grid-rows-[auto_minmax(0,1fr)_auto] lg:items-stretch lg:gap-2">
           {/* 핵심 의사결정 지표: 체크리스트+관계도 폭에 맞추고 AI 열은 이 행부터 사용한다. */}
           <div ref={perfPanelRef} className="min-h-0 lg:col-span-2 lg:row-start-1">
             {draftItems.length === 0 ? (
