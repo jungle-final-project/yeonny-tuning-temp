@@ -1,7 +1,7 @@
 import { FormEvent, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useMutation, useQueries, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Check, FileText, GitBranch, Pencil, PencilLine, Save, ShoppingBag, Target, Trash2, X } from 'lucide-react';
+import { ArrowDown, ArrowUp, Check, FileText, GitBranch, Pencil, PencilLine, Save, ShoppingBag, Target, Trash2, X } from 'lucide-react';
 import { Panel, Screen, StateMessage } from '../../../components/ui';
 import { applyAiBuildToQuoteDraft } from '../../parts/partsApi';
 import { QuotePerformancePanel } from '../../parts/components/slot-board/QuotePerformancePanel';
@@ -190,13 +190,18 @@ export function MyQuotesPage() {
           </Panel>
 
           <div ref={alertFormRef} data-testid="quote-alert-registration" className="order-1">
-            <Panel title="목표가 알림 등록" subtitle="선택한 저장 견적에 포함된 부품만 목표가 알림으로 등록할 수 있습니다.">
+            <Panel title="목표가 알림 등록">
               <form onSubmit={submitAlert} className="grid gap-4 lg:grid-cols-[minmax(320px,1.4fr)_minmax(180px,0.7fr)_160px_minmax(220px,0.9fr)] lg:items-end">
                 <div>
                   {selectedAlertBuild ? (
                     <div className="mb-3 rounded-md border border-blue-100 bg-blue-50 px-3 py-2">
                       <div className="text-[11px] font-black text-brand-blue">선택한 저장 견적</div>
                       <div className="mt-1 truncate text-sm font-black text-commerce-ink" title={displayBuildName(selectedAlertBuild)}>{displayBuildName(selectedAlertBuild)}</div>
+                      {selectedSavedPart ? (
+                        <p className="mt-1 text-xs font-semibold text-slate-500">
+                          현재 저장가 {selectedSavedPart.price.toLocaleString()}원
+                        </p>
+                      ) : null}
                     </div>
                   ) : null}
                   <label htmlFor="quote-alert-saved-part" className="mb-1 block text-xs font-black text-slate-600">저장 견적 부품</label>
@@ -213,15 +218,11 @@ export function MyQuotesPage() {
                       </option>
                     ))}
                   </select>
-                  {selectedSavedPart ? (
-                    <p className="mt-2 break-keep text-xs leading-5 text-slate-500">
-                      {selectedSavedPart.buildName} · 현재 저장가 {selectedSavedPart.price.toLocaleString()}원
-                    </p>
-                  ) : (
+                  {!selectedSavedPart ? (
                     <p className="mt-2 break-keep text-xs leading-5 text-slate-500">
                       목표가를 등록하려면 저장 견적 카드의 목표가 등록 버튼을 먼저 선택하세요.
                     </p>
-                  )}
+                  ) : null}
                 </div>
 
                 <div>
@@ -590,7 +591,7 @@ function SavedBuildsComparison({ builds }: { builds: BuildSummary[] }) {
     <section data-testid="saved-builds-comparison" className="rounded-md border border-commerce-line bg-white p-5 shadow-product">
       <div className="flex flex-wrap items-end justify-between gap-2">
         <div>
-          <p className="text-xs font-black tracking-wide text-brand-blue">견적 비교</p>
+          <p className="text-xs font-black tracking-wide text-[#DE6C2D]">견적 비교</p>
           <h2 className="mt-1 text-lg font-black text-commerce-ink">견적 골라 부품·성능 비교</h2>
           <p className="mt-1 break-keep text-xs leading-5 text-slate-500">
             비교할 견적 2개를 고르면 가격·종합점수와 부품별 실제 수치를 좌우로 비교합니다.
@@ -616,14 +617,14 @@ function SavedBuildsComparison({ builds }: { builds: BuildSummary[] }) {
               onClick={() => toggleBuild(build.id)}
               className={`inline-flex max-w-[220px] items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-bold transition ${
                 active
-                  ? 'border-brand-blue bg-blue-50 text-brand-blue'
+                  ? 'border-[#DE6C2D] bg-[#DE6C2D]/10 text-[#DE6C2D]'
                   : disabled
                     ? 'cursor-not-allowed border-slate-100 bg-slate-50 text-slate-300'
                     : 'border-slate-200 bg-white text-slate-500 hover:border-slate-300 hover:text-slate-700'
               }`}
               title={displayBuildName(build)}
             >
-              <span className={`inline-flex h-4 min-w-4 shrink-0 items-center justify-center rounded-full text-[9px] font-black ${active ? 'bg-brand-blue text-white' : 'bg-slate-200 text-slate-400'}`}>
+              <span className={`inline-flex h-4 min-w-4 shrink-0 items-center justify-center rounded-full text-[9px] font-black ${active ? 'bg-[#DE6C2D] text-white' : 'bg-slate-200 text-slate-400'}`}>
                 {active ? (selectionIndex === 0 ? 'A' : 'B') : ''}
               </span>
               <span className="truncate">{displayBuildName(build)}</span>
@@ -633,7 +634,7 @@ function SavedBuildsComparison({ builds }: { builds: BuildSummary[] }) {
       </div>
 
       {columns.length < 2 ? (
-        <p data-testid="quote-compare-selection-guide" className="mt-5 rounded-md border border-dashed border-blue-200 bg-blue-50/60 px-4 py-7 text-center text-sm font-black text-brand-blue">
+        <p data-testid="quote-compare-selection-guide" className="mt-5 rounded-md border border-dashed border-[#DE6C2D]/40 bg-[#DE6C2D]/10 px-4 py-7 text-center text-sm font-black text-[#DE6C2D]">
           {columns.length === 0 ? '비교할 견적 2개를 선택하세요' : '비교할 견적을 하나 더 선택하세요'}
         </p>
       ) : <SavedBuildComparisonResult columnA={columns[0]} columnB={columns[1]} />}
@@ -645,13 +646,16 @@ function SavedBuildComparisonResult({ columnA, columnB }: { columnA: ComparisonC
   const categories = COMPARE_CATEGORY_ORDER.filter((category) =>
     itemsForCategory(columnA.build, category).length > 0 || itemsForCategory(columnB.build, category).length > 0
   );
+  const scoreA = columnA.compositeScore?.score;
+  const scoreB = columnB.compositeScore?.score;
+  const scoreComparison = typeof scoreA === 'number' && typeof scoreB === 'number' ? scoreA - scoreB : 0;
 
   return (
     <div className="mt-4 space-y-4">
       <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_minmax(260px,0.9fr)_minmax(0,1fr)]">
-        <QuoteSummaryCard label="A" column={columnA} />
+        <QuoteSummaryCard label="A" column={columnA} isHigherScore={scoreComparison > 0} />
         <ComparisonDeltaCard columnA={columnA} columnB={columnB} />
-        <QuoteSummaryCard label="B" column={columnB} />
+        <QuoteSummaryCard label="B" column={columnB} isHigherScore={scoreComparison < 0} />
       </div>
 
       <div className="overflow-hidden rounded-lg border border-slate-200 bg-white">
@@ -683,36 +687,32 @@ function SavedBuildComparisonResult({ columnA, columnB }: { columnA: ComparisonC
   );
 }
 
-function QuoteSummaryCard({ label, column }: { label: 'A' | 'B'; column: ComparisonColumn }) {
+function QuoteSummaryCard({ label, column, isHigherScore }: { label: 'A' | 'B'; column: ComparisonColumn; isHigherScore: boolean }) {
   const score = column.compositeScore;
   return (
-    <article data-testid={`quote-summary-${label}`} className="rounded-lg border border-blue-200 bg-white px-4 py-3 shadow-sm">
-      <div className="flex items-center gap-3">
-        <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-brand-blue text-base font-black text-white">{label}</span>
-        <div className="min-w-0 flex-1">
-          <div className="truncate text-base font-black text-commerce-ink" title={displayBuildName(column.build)}>{displayBuildName(column.build)}</div>
-          <div className="mt-2 grid grid-cols-2 divide-x divide-slate-200">
-            <div className="pr-3">
-              <div className="text-[10px] font-bold text-slate-400">총 견적 금액</div>
-              <div className="mt-1 text-lg font-black tracking-tight text-red-600">{column.build.totalPrice.toLocaleString('ko-KR')}원</div>
-            </div>
-            <div className="pl-3">
-              <div className="text-[10px] font-bold text-slate-400">종합 점수</div>
-              <ScoreValue column={column} />
-            </div>
-          </div>
+    <article data-testid={`quote-summary-${label}`} className={`relative isolate rounded-lg border border-[#DE6C2D]/35 bg-white px-4 py-3 shadow-sm ${isHigherScore ? 'shadow-[0_0_18px_rgba(222,108,45,0.16)]' : ''}`}>
+      {isHigherScore ? <span aria-hidden="true" className="pointer-events-none absolute -inset-1 -z-10 rounded-xl bg-[#DE6C2D]/10 blur-md animate-pulse" /> : null}
+      <div className="grid h-full grid-cols-[auto_minmax(0,1fr)_minmax(0,1fr)] items-center gap-3">
+        <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[#DE6C2D] text-base font-black text-white">{label}</span>
+        <div className="min-w-0 self-center">
+          <div className="text-[10px] font-bold text-slate-400">총 견적 금액</div>
+          <div className="mt-1 text-lg font-black tracking-tight text-commerce-ink">{column.build.totalPrice.toLocaleString('ko-KR')}원</div>
+        </div>
+        <div className="min-w-0 self-center border-l border-slate-200 pl-3">
+          <div className="text-[10px] font-bold text-slate-400">종합 점수</div>
+          <ScoreValue column={column} isHigherScore={isHigherScore} />
         </div>
       </div>
     </article>
   );
 }
 
-function ScoreValue({ column }: { column: ComparisonColumn }) {
+function ScoreValue({ column, isHigherScore }: { column: ComparisonColumn; isHigherScore: boolean }) {
   if (column.isLoading) return <div className="mt-1 h-6 w-20 animate-pulse rounded bg-slate-200" />;
   if (column.isError) return <div className="mt-1 text-xs font-black text-slate-500">조회 실패</div>;
   if (!column.compositeScore) return <div className="mt-1 text-xs font-black text-slate-500">자료 없음</div>;
   return (
-    <div className="mt-1 text-lg font-black tracking-tight text-red-600">
+    <div className={`mt-1 text-lg font-black tracking-tight ${isHigherScore ? 'text-red-600' : 'text-commerce-ink'}`}>
       {column.compositeScore.score.toLocaleString('ko-KR')}점
       <span className="ml-1 text-[10px] font-bold text-slate-400">/ {column.compositeScore.maxScore.toLocaleString('ko-KR')}</span>
     </div>
@@ -724,23 +724,32 @@ function ComparisonDeltaCard({ columnA, columnB }: { columnA: ComparisonColumn; 
   const score = scoreDeltaOutcome(columnA, columnB);
   return (
     <article className="flex min-h-[116px] items-center justify-center rounded-lg border border-slate-200 bg-slate-50/70 px-4 py-3 shadow-sm">
-      <div className="w-full max-w-[220px] space-y-2.5">
-        <ComparisonResultLine label="가격" testId="quote-compare-price-delta" outcome={price} />
-        <ComparisonResultLine label="종합 성능" testId="quote-compare-score-delta" outcome={score} />
+      <div className="w-full max-w-[260px] space-y-3">
+        <ComparisonResultLine kind="price" testId="quote-compare-price-delta" outcome={price} />
+        <ComparisonResultLine kind="score" testId="quote-compare-score-delta" outcome={score} />
         <p className="pt-0.5 text-center text-[10px] font-bold text-slate-400">가격·성능은 독립 비교</p>
       </div>
     </article>
   );
 }
 
-function ComparisonResultLine({ label, testId, outcome }: { label: string; testId: string; outcome: ComparisonOutcome }) {
+function ComparisonResultLine({ kind, testId, outcome }: { kind: 'price' | 'score'; testId: string; outcome: ComparisonOutcome }) {
+  const Icon = kind === 'price' ? ArrowDown : ArrowUp;
+  const iconLabel = kind === 'price' ? '가격 낮음' : '성능 높음';
   const emphasisClass = outcome.tone === 'positive' ? 'text-red-600' : outcome.tone === 'muted' ? 'text-slate-500' : 'text-slate-600';
+  const unitPattern = kind === 'price' ? /^(.+?원)(.*)$/ : /^(.+?점)(.*)$/;
+  const [, emphasisValue = outcome.emphasis ?? '', emphasisSuffix = ''] = outcome.emphasis?.match(unitPattern) ?? [];
   return (
-    <div className="grid grid-cols-[56px_minmax(0,1fr)] items-baseline gap-2 text-sm">
-      <span className="text-[10px] font-black text-slate-400">{label}</span>
-      <p data-testid={testId} className="min-w-0 text-right font-bold text-commerce-ink">
+    <div className="flex items-baseline justify-center gap-2.5 text-lg">
+      <span aria-label={iconLabel} className="animate-bounce text-slate-400"><Icon aria-hidden="true" size={18} strokeWidth={2.5} /></span>
+      <p data-testid={testId} className="min-w-0 text-center font-black text-commerce-ink">
         <span>{outcome.prefix}</span>
-        {outcome.emphasis ? <span className={`font-black ${emphasisClass}`}>{outcome.emphasis}</span> : null}
+        {outcome.emphasis ? (
+          <>
+            <span className={`font-black ${emphasisClass}`}>{emphasisValue}</span>
+            <span>{emphasisSuffix}</span>
+          </>
+        ) : null}
       </p>
     </div>
   );
@@ -764,14 +773,14 @@ function PartComparisonRow({
       data-testid={`quote-compare-row-${category}`}
       className={`grid grid-cols-[minmax(0,1fr)_64px_minmax(0,1fr)] gap-x-3 gap-y-2 px-4 md:grid-cols-[minmax(0,1fr)_132px_76px_132px_minmax(0,1fr)] md:items-center ${compact ? 'py-2.5' : 'py-3'}`}
     >
-      <PartSummary items={itemsA} meta={specification ? [] : comparison.metaA} side="A" />
+      <PartSummary category={category} items={itemsA} meta={specification ? [] : comparison.metaA} side="A" />
       <div className="col-start-1 row-start-2 md:col-start-2 md:row-start-1">
         {specification
           ? <SpecificationMetric category={category} values={comparison.metaA} side="A" hasPart={itemsA.length > 0} />
           : <MetricBar category={category} metric={comparison.metric} side="A" hasPart={itemsA.length > 0} samePart={comparison.samePart} />}
       </div>
       <div className="col-start-2 row-span-2 row-start-1 flex self-center justify-center md:col-start-3 md:row-span-1 md:row-start-1">
-        <span className="inline-flex min-h-8 min-w-14 items-center justify-center rounded-md bg-slate-100 px-2 text-[11px] font-black text-slate-600">
+        <span className="inline-flex min-h-8 min-w-14 items-center justify-center rounded-md bg-slate-100 px-2 text-xs font-black text-slate-600">
           {labelForCategory(category)}
         </span>
       </div>
@@ -780,60 +789,67 @@ function PartComparisonRow({
           ? <SpecificationMetric category={category} values={comparison.metaB} side="B" hasPart={itemsB.length > 0} />
           : <MetricBar category={category} metric={comparison.metric} side="B" hasPart={itemsB.length > 0} samePart={comparison.samePart} />}
       </div>
-      <PartSummary items={itemsB} meta={specification ? [] : comparison.metaB} side="B" />
-      <p data-testid={`quote-compare-description-${category}`} className={`col-span-3 row-start-3 truncate text-center text-[11px] font-black leading-4 md:col-span-5 md:row-start-2 ${comparisonDescriptionClass(comparison.description)}`}>
+      <PartSummary category={category} items={itemsB} meta={specification ? [] : comparison.metaB} side="B" />
+      <p data-testid={`quote-compare-description-${category}`} className={`col-span-3 row-start-3 truncate text-center text-xs font-black leading-4 md:col-span-5 md:row-start-2 ${comparisonDescriptionClass(comparison.description)}`}>
         {comparison.description}
       </p>
     </article>
   );
 }
 
-function PartSummary({ items, meta, side }: { items: BuildItem[]; meta: string[]; side: 'A' | 'B' }) {
+function PartSummary({ category, items, meta, side }: { category: string; items: BuildItem[]; meta: string[]; side: 'A' | 'B' }) {
   const isLeft = side === 'A';
   const positionClass = isLeft
     ? 'col-start-1 text-right md:col-start-1'
     : 'col-start-3 text-left md:col-start-5';
   if (items.length === 0) {
-    return <div className={`${positionClass} row-start-1 text-xs font-black text-slate-500`}>미포함</div>;
+    return <div className={`${positionClass} row-start-1 text-sm font-black text-slate-500`}>미포함</div>;
   }
   const [primary, ...rest] = items;
   const totalPrice = items.reduce((sum, item) => sum + (item.price ?? 0), 0);
   return (
     <div className={`${positionClass} row-start-1 min-w-0`}>
-      <div className="line-clamp-2 text-xs font-black leading-5 text-commerce-ink" title={items.map((item) => item.name).join(', ')}>
+      <div className={`${category === 'CASE' ? 'line-clamp-2' : 'truncate'} text-sm font-black leading-5 text-commerce-ink`} title={items.map((item) => item.name).join(', ')}>
         {primary.name}{rest.length > 0 ? ` 외 ${rest.length}` : ''}
       </div>
-      <div className="mt-px text-[11px] font-bold text-slate-500">{totalPrice.toLocaleString('ko-KR')}원</div>
-      {meta.length > 0 ? <div className="mt-0.5 truncate text-[10px] font-semibold leading-4 text-slate-400" title={meta.slice(0, 2).join(' · ')}>{meta.slice(0, 2).join(' · ')}</div> : null}
+      <div className="mt-px text-sm font-bold text-slate-500">{totalPrice.toLocaleString('ko-KR')}원</div>
+      {meta.length > 0 ? <div className="mt-0.5 truncate text-xs font-semibold leading-4 text-slate-400" title={meta.slice(0, 2).join(' · ')}>{meta.slice(0, 2).join(' · ')}</div> : null}
     </div>
   );
 }
 
 function MetricBar({ category, metric, side, hasPart, samePart }: { category: string; metric: CompareMetric | null; side: 'A' | 'B'; hasPart: boolean; samePart: boolean }) {
-  if (!hasPart) return <div className="text-center text-[10px] font-bold text-slate-500">미포함</div>;
+  const [isFilled, setIsFilled] = useState(false);
+
+  useEffect(() => {
+    const frame = requestAnimationFrame(() => setIsFilled(true));
+    return () => cancelAnimationFrame(frame);
+  }, []);
+
+  if (!hasPart) return <div className="text-center text-xs font-bold text-slate-500">미포함</div>;
   if (!metric) return null;
-  if (samePart) return <div data-testid={`quote-compare-bar-${category}-${side}`} className="text-center text-[10px] font-black text-slate-500">동일</div>;
+  if (samePart) return <div data-testid={`quote-compare-bar-${category}-${side}`} className="text-center text-xs font-black text-slate-500">동일</div>;
   const value = side === 'A' ? metric.valueA : metric.valueB;
   const max = Math.max(metric.valueA, metric.valueB);
   const index = Math.round((value / max) * 100);
   return (
     <div data-testid={`quote-compare-bar-${category}-${side}`} className="min-w-0">
       <div className={`mb-0.5 flex items-baseline gap-1 ${side === 'A' ? 'justify-end' : 'justify-start'}`}>
-        <span className="text-[11px] font-black text-slate-600">{formatMetricValue(value, metric.unit)}</span>
-        <span className="text-[9px] font-bold text-slate-400">{metric.label}</span>
+        <span className="text-sm font-black text-slate-600">{formatMetricValue(value, metric.unit)}</span>
+        <span className="text-xs font-bold text-slate-400">{metric.label}</span>
       </div>
       <div className={`flex h-2 overflow-hidden rounded-full bg-slate-100 ${side === 'A' ? 'justify-end' : 'justify-start'}`}>
-        <div className="h-full rounded-full bg-slate-600 transition-[width] duration-500" style={{ width: `${index}%` }} />
+        <div className="h-full rounded-full bg-[#FDBA74] transition-[width] duration-700 ease-out" style={{ width: isFilled ? `${index}%` : '0%' }} />
       </div>
     </div>
   );
 }
 
 function SpecificationMetric({ category, values, side, hasPart }: { category: string; values: string[]; side: 'A' | 'B'; hasPart: boolean }) {
-  if (!hasPart) return <div className="text-center text-[10px] font-bold text-slate-500">미포함</div>;
+  if (!hasPart) return <div className="text-center text-xs font-bold text-slate-500">미포함</div>;
   if (values.length === 0) return null;
   return (
-    <div data-testid={`quote-compare-spec-${category}-${side}`} className={`line-clamp-2 text-[10px] font-bold leading-4 text-slate-500 ${side === 'A' ? 'text-right' : 'text-left'}`} title={values.slice(0, 3).join(' · ')}>
+    <div data-testid={`quote-compare-spec-${category}-${side}`} className={`${category === 'CASE' ? 'line-clamp-2' : 'truncate'} text-xs font-bold leading-4 text-slate-500 ${side === 'A' ? 'text-right' : 'text-left'}`} title={values.slice(0, 3).join(' · ')}>
       {values.slice(0, 3).join(' · ')}
     </div>
   );
@@ -1350,7 +1366,8 @@ function buildPartCombinationSignature(build: BuildSummary) {
 
 function displayBuildName(build: BuildSummary) {
   const currentName = build.name?.trim();
-  if (currentName && !/\bbuild\b/i.test(currentName)) return currentName;
+  const isGenericName = /^(셀프\s*견적\s*저장\s*조합|저장\s*견적|self\s*quote\s*saved\s*combination)$/i.test(currentName ?? '');
+  if (currentName && !/\bbuild\b/i.test(currentName) && !isGenericName) return currentName;
 
   const context = [currentName, build.recommendedFor, build.summary]
     .filter(Boolean)
