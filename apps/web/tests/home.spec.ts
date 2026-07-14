@@ -1536,11 +1536,9 @@ test('renders the Etsy-style header and PC category navigation', async ({ page }
     return Number.parseFloat(shellMarginRight);
   }).toBeGreaterThan(389);
   const savedQuotesLink = header.getByRole('link', { name: '내 견적함' });
-  const currentQuoteLink = header.getByRole('link', { name: '현재 견적' });
   await expect(savedQuotesLink).toHaveAttribute('href', '/my/quotes');
-  await expect(currentQuoteLink).toHaveAttribute('href', '/self-quote');
-  await expect(savedQuotesLink.locator('svg')).toHaveAttribute('width', '20');
-  await expect(currentQuoteLink.locator('svg')).toHaveAttribute('width', '21');
+  await expect(savedQuotesLink.locator('svg')).toHaveAttribute('width', '21');
+  await expect(header.getByRole('link', { name: '현재 견적' })).toHaveCount(0);
   await expect(header.getByText('내 견적함', { exact: true })).toHaveCount(0);
   await expect(header.getByText('현재 견적', { exact: true })).toHaveCount(0);
   await expect(header.getByText('계정', { exact: true })).toHaveCount(0);

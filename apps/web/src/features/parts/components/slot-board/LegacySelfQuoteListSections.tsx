@@ -267,7 +267,7 @@ export function LegacySelfQuoteListSections() {
               </div>
               {showPartsRefreshing ? (
                 <div className="absolute inset-x-0 top-11 z-10 flex justify-center">
-                  <div className="rounded-full border border-blue-100 bg-white/95 px-3 py-1.5 text-xs font-black text-brand-blue shadow-product">
+                  <div className="rounded-full border border-blue-100 bg-white/95 px-3 py-1.5 text-xs font-black text-[#ce7237] shadow-product">
                     목록 업데이트 중
                   </div>
                 </div>
@@ -286,7 +286,7 @@ export function LegacySelfQuoteListSections() {
               type="button"
               onClick={() => saveQuoteMutation.mutate(quoteDraft)}
               disabled={saveQuoteMutation.isPending}
-              className="inline-flex min-h-9 items-center gap-1.5 rounded-md bg-brand-blue px-3 text-xs font-black text-white hover:bg-blue-700 disabled:cursor-wait disabled:bg-slate-400"
+              className="inline-flex min-h-9 items-center gap-1.5 rounded-md bg-[#ce7237] px-3 text-xs font-black text-white hover:bg-[#b9622f] disabled:cursor-wait disabled:bg-slate-400"
             >
               <FolderPlus size={14} />
               {saveQuoteMutation.isPending ? '추가 중' : '내 견적함에 추가'}
@@ -320,7 +320,7 @@ export function LegacySelfQuoteListSections() {
                 <div className="mt-1 text-slate-500">수량 {part.quantity}개</div>
                 <PriceTrendBadge partId={part.partId} />
                 <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
-                  <span className="font-black text-brand-blue">{part.lineTotal.toLocaleString()}원</span>
+                  <span className="font-black text-[#ce7237]">{part.lineTotal.toLocaleString()}원</span>
                   <div className="flex items-center gap-2">
                     {allowsQuantity(part.category) ? <DraftQuantityStepper item={part} onChange={updateQuantity} disabled={quantityMutation.isPending} /> : null}
                     <button type="button" aria-label={`${part.name} 견적에서 제거`} onClick={() => removePart(part.partId)} className="rounded-md border border-commerce-line px-2 py-1 font-black text-slate-600 hover:border-commerce-sale hover:text-commerce-sale">
@@ -369,7 +369,7 @@ function QuoteTotalCard({ totalPrice }: { totalPrice: number }) {
   return (
     <div className="rounded-md border border-commerce-line bg-white p-4 shadow-sm">
       <div className="text-xs font-bold text-slate-500">견적 합계</div>
-      <div className="mt-2 text-2xl font-black tracking-tight text-brand-blue">{totalPrice.toLocaleString()}원</div>
+      <div className="mt-2 text-2xl font-black tracking-tight text-[#ce7237]">{totalPrice.toLocaleString()}원</div>
     </div>
   );
 }
@@ -461,7 +461,7 @@ function partRows(
           aria-label={isSelected ? `${part.name} 견적에서 제거` : isReplace ? `${part.name} 견적 교체` : `${part.name} 견적 담기`}
           disabled={isPending}
           onClick={() => isSelected ? onRemovePart(part.id) : onAddPart(part)}
-          className={`rounded-md px-3 py-2 text-xs font-black transition focus:outline-none focus:ring-2 focus:ring-brand-blue disabled:cursor-wait disabled:opacity-60 ${
+          className={`rounded-md px-3 py-2 text-xs font-black transition focus:outline-none focus:ring-2 focus:ring-[#ce7237] disabled:cursor-wait disabled:opacity-60 ${
             isSelected
               ? 'border border-red-200 bg-red-50 text-red-700 hover:border-red-300 hover:bg-red-100'
               : 'bg-commerce-ink text-white hover:bg-slate-700'
@@ -576,7 +576,7 @@ function PartProductCell({ part }: { part: PartRow }) {
         />
       </Link>
       <div>
-        <Link to={`/parts/${part.id}`} className="font-black leading-5 text-commerce-ink hover:text-brand-blue hover:underline">{part.name}</Link>
+        <Link to={`/parts/${part.id}`} className="font-black leading-5 text-commerce-ink hover:text-[#ce7237] hover:underline">{part.name}</Link>
         <div className="mt-1 text-[11px] font-medium text-slate-500">{partShortSpec(part)}</div>
       </div>
     </div>
@@ -593,7 +593,7 @@ function SupplierCell({ part }: { part: PartRow }) {
     return supplierName;
   }
   return (
-    <a href={offerUrl} target="_blank" rel="noreferrer" className="font-black text-brand-blue hover:underline">
+    <a href={offerUrl} target="_blank" rel="noreferrer" className="font-black text-[#ce7237] hover:underline">
       {supplierName}
     </a>
   );

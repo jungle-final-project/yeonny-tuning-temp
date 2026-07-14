@@ -1,7 +1,7 @@
 import '@fontsource/outfit/500.css';
 import { FormEvent, ReactNode, useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { ChevronDown, Heart, LifeBuoy, LogOut, Search, ShieldCheck, ShoppingCart, UserRound, Wrench } from 'lucide-react';
+import { ChevronDown, LifeBuoy, LogOut, Search, ShieldCheck, ShoppingCart, UserRound, Wrench } from 'lucide-react';
 import { getCurrentUser, logout as logoutApi, type CurrentUser } from '../../features/auth/authApi';
 import { AUTH_CHANGED_EVENT, ApiError, clearToken, getCachedAuthUser, getRefreshToken, getToken } from '../../lib/api';
 import { openAiAssistant } from '../../lib/events';
@@ -127,8 +127,7 @@ export function AppHeader() {
           </form>
 
           <div className="col-start-2 row-start-1 flex items-center justify-end gap-1 lg:col-start-3">
-            <HeaderIconLink to="/my/quotes" icon={<Heart size={20} />} label="내 견적함" />
-            <HeaderIconLink to="/self-quote" icon={<ShoppingCart size={21} />} label="현재 견적" />
+            <HeaderIconLink to="/my/quotes" icon={<ShoppingCart size={21} />} label="내 견적함" />
             {user ? (
               <details data-testid="header-account-slot" className="group relative w-[118px] shrink-0">
                 <summary aria-label={'계정 메뉴: ' + (user.name || '다짜줘 사용자')} className="flex h-10 w-full cursor-pointer list-none items-center gap-2 rounded-lg px-2 text-[#595959] transition hover:bg-slate-100 hover:text-[#222222] focus:outline-none focus:ring-4 focus:ring-blue-100 [&::-webkit-details-marker]:hidden">
