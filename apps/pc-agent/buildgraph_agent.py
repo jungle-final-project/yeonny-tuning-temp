@@ -163,7 +163,7 @@ AGENT_ICON_PNG = "specup-agent.png"
 AGENT_ICON_ICO = "specup-agent.ico"
 BACKGROUND_INSTANCE_MUTEX_NAME = r"Local\SpecUpPcAgentBackground"
 VIEWER_INSTANCE_MUTEX_NAME = r"Local\SpecUpPcAgentViewer"
-DEFAULT_AGENT_VERSION = "0.1.16"
+DEFAULT_AGENT_VERSION = "0.1.17"
 DEFAULT_POLICY_VERSION = "policy-v1"
 STATUS_HOME_SIGNAL_LIMIT = 3
 LOG_TABLE_LIMIT = 500
@@ -6568,7 +6568,6 @@ def show_log_viewer(
         )
         summary_box.insert("1.0", summary)
         summary_box.configure(state="disabled")
-        summary_box.pack(fill="both", expand=True, padx=32)
         consent = tk.BooleanVar(panel, value=False)
         consent_button = tk.Button(
             panel,
@@ -6594,6 +6593,10 @@ def show_log_viewer(
         def update_consent() -> None:
             consent_button.configure(state="normal" if consent.get() else "disabled")
 
+        # 버튼과 체크박스를 창 하단에 먼저 고정한다. 그래야 진단 근거가 많아 요약 상자가
+        # 길어져도 '동의 후 AS 접수' 버튼이 창 밖으로 밀리지 않는다. 요약 상자는 남은 공간만 채운다.
+        action_row = tk.Frame(panel, background="#ffffff")
+        action_row.pack(side="bottom", fill="x", padx=32, pady=(0, 24))
         tk.Checkbutton(
             panel,
             text="위 진단 정보 전송에 동의합니다.",
@@ -6603,9 +6606,7 @@ def show_log_viewer(
             background="#ffffff",
             foreground=colors["text"],
             activebackground="#ffffff",
-        ).pack(anchor="w", padx=32, pady=(14, 10))
-        action_row = tk.Frame(panel, background="#ffffff")
-        action_row.pack(fill="x", padx=32, pady=(0, 24))
+        ).pack(side="bottom", anchor="w", padx=32, pady=(14, 10))
         tk.Button(
             action_row,
             text="취소",
@@ -6619,6 +6620,7 @@ def show_log_viewer(
             pady=9,
         ).pack(side="left")
         consent_button.pack(in_=action_row, side="right")
+        summary_box.pack(fill="both", expand=True, padx=32, pady=(0, 4))
         panel.transient(root)
         panel.grab_set()
 
