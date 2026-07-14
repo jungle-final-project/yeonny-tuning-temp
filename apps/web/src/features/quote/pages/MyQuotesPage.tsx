@@ -8,7 +8,6 @@ import { listAssemblyRequests } from '../../parts/assemblyApi';
 import { QuotePerformancePanel } from '../../parts/components/slot-board/QuotePerformancePanel';
 import type { BuildCompositeScore, PartCategory } from '../aiSelection';
 import { BuildDependencyGraph } from '../components/BuildDependencyGraph';
-import { CompositeScoreGauge } from '../components/CompositeScoreGauge';
 import { createQuotePriceAlert, deleteBuild, duplicateBuild, getBuildHistory, getPriceAlerts, renameBuild, resolveBuildGraph, type PriceAlert } from '../quoteApi';
 import type { BuildItem, BuildSummary } from '../types';
 
@@ -572,10 +571,30 @@ function SavedBuildCard({
   );
 }
 
-// 저장 견적 비교: 비교할 견적을 직접 고르고, 고른 견적의 CPU·GPU 등 모든 카테고리 부품과
-// 성능을 열(견적)×행(항목)으로 좌우 나열한다(사용자 피드백 — 전 카테고리 부품 대 부품 비교).
-// 성능 점수는 그래프 resolve의 compositeScore(0~1000)만 사용한다. CPU/GPU 평균 점수는 더 이상 대표 점수로 쓰지 않는다.
+// 저장 견적 비교: 선택 순서대로 A/B를 고정하고 기존 견적·그래프 응답만으로 대칭 비교한다.
 const COMPARE_CATEGORY_ORDER = ['CPU', 'MOTHERBOARD', 'RAM', 'GPU', 'STORAGE', 'PSU', 'CASE', 'COOLER'];
+
+type ComparisonColumn = {
+  build: BuildSummary;
+  compositeScore: BuildCompositeScore | null;
+  performanceDetails: Record<string, unknown>;
+  isLoading: boolean;
+  isError: boolean;
+};
+
+type CompareMetric = {
+  label: string;
+  valueA: number;
+  valueB: number;
+  unit: string;
+};
+
+type CategoryComparison = {
+  metric: CompareMetric | null;
+  description: string;
+  metaA: string[];
+  metaB: string[];
+};
 
 function itemsForCategory(build: BuildSummary, category: string): BuildItem[] {
   return (build.items ?? []).filter((item) => item.category === category);
@@ -584,19 +603,21 @@ function itemsForCategory(build: BuildSummary, category: string): BuildItem[] {
 function SavedBuildsComparison({ builds }: { builds: BuildSummary[] }) {
   const [selectedIds, setSelectedIds] = useState<string[]>(() => builds.slice(0, 2).map((build) => build.id));
 
-  // 견적 목록이 갱신되면 선택을 유효 범위로 정리한다(삭제된 견적 제거, 비면 앞 2개 기본 선택).
+  // 견적 목록이 갱신되면 삭제된 선택만 제거한다. 사용자가 비운 선택은 자동 복원하지 않는다.
   useEffect(() => {
     setSelectedIds((prev) => {
-      const valid = prev.filter((id) => builds.some((build) => build.id === id));
-      if (valid.length > 0) {
-        return valid.length === prev.length ? prev : valid;
+      const valid = prev.filter((id) => builds.some((build) => build.id === id)).slice(0, 2);
+      if (valid.length === prev.length && valid.every((id, index) => id === prev[index])) {
+        return prev;
       }
-      return builds.slice(0, 2).map((build) => build.id);
+      return valid;
     });
   }, [builds]);
 
   const selectedBuilds = useMemo(
-    () => builds.filter((build) => selectedIds.includes(build.id)),
+    () => selectedIds
+      .map((id) => builds.find((build) => build.id === id))
+      .filter((build): build is BuildSummary => Boolean(build)),
     [builds, selectedIds]
   );
 
@@ -623,27 +644,24 @@ function SavedBuildsComparison({ builds }: { builds: BuildSummary[] }) {
   function toggleBuild(id: string) {
     setSelectedIds((prev) => {
       if (prev.includes(id)) {
-        // 최소 1개는 남긴다.
-        return prev.length > 1 ? prev.filter((value) => value !== id) : prev;
+        return prev.filter((value) => value !== id);
       }
+      if (prev.length >= 2) return prev;
       return [...prev, id];
     });
   }
 
   const columns = selectedBuilds.map((build, index) => {
-    const compositeScore = perfResults[index]?.data?.compositeScore ?? null;
-    return { build, compositeScore, isLoading: perfResults[index]?.isLoading ?? false };
+    const result = perfResults[index];
+    const compositeScore = result?.data?.compositeScore ?? null;
+    return {
+      build,
+      compositeScore,
+      performanceDetails: performanceDetails(result?.data),
+      isLoading: result?.isLoading ?? false,
+      isError: result?.isError ?? false
+    } satisfies ComparisonColumn;
   });
-
-  const comparing = columns.length > 1;
-
-  // 선택된 견적 중 하나라도 포함하는 카테고리만 행으로 노출(정규 순서 유지).
-  const categories = COMPARE_CATEGORY_ORDER.filter((category) =>
-    selectedBuilds.some((build) => itemsForCategory(build, category).length > 0)
-  );
-
-  const colCount = columns.length + 1;
-  const lowestTotal = columns.length ? Math.min(...columns.map((col) => col.build.totalPrice)) : null;
 
   return (
     <section data-testid="saved-builds-comparison" className="rounded-md border border-commerce-line bg-white p-5 shadow-product">
@@ -652,10 +670,10 @@ function SavedBuildsComparison({ builds }: { builds: BuildSummary[] }) {
           <p className="text-xs font-black tracking-wide text-brand-blue">견적 비교</p>
           <h2 className="mt-1 text-lg font-black text-commerce-ink">견적 골라 부품·성능 비교</h2>
           <p className="mt-1 break-keep text-xs leading-5 text-slate-500">
-            비교할 견적을 고르면 전 카테고리 부품과 1000점 종합 점수를 좌우로 나열합니다.
+            비교할 견적 2개를 고르면 가격·종합점수와 부품별 실제 수치를 좌우로 비교합니다.
           </p>
         </div>
-        <p className="text-[11px] font-bold text-slate-400">종합 점수는 성능·호환·여유 참고값 · 실제 FPS·체감과 다를 수 있음</p>
+        <p className="text-[11px] font-bold text-slate-400">종합 점수와 벤치마크는 참고값이며 실제 FPS·체감과 다를 수 있음</p>
       </div>
 
       {/* 비교할 견적 선택 칩 */}
@@ -663,153 +681,476 @@ function SavedBuildsComparison({ builds }: { builds: BuildSummary[] }) {
         <span className="text-[11px] font-black text-slate-500">비교할 견적</span>
         {builds.map((build) => {
           const active = selectedIds.includes(build.id);
+          const selectionIndex = selectedIds.indexOf(build.id);
+          const disabled = !active && selectedIds.length >= 2;
           return (
             <button
               key={build.id}
               type="button"
               data-testid={`compare-toggle-${build.id}`}
               aria-pressed={active}
+              disabled={disabled}
               onClick={() => toggleBuild(build.id)}
               className={`inline-flex max-w-[220px] items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-bold transition ${
                 active
                   ? 'border-brand-blue bg-blue-50 text-brand-blue'
-                  : 'border-slate-200 bg-white text-slate-500 hover:border-slate-300 hover:text-slate-700'
+                  : disabled
+                    ? 'cursor-not-allowed border-slate-100 bg-slate-50 text-slate-300'
+                    : 'border-slate-200 bg-white text-slate-500 hover:border-slate-300 hover:text-slate-700'
               }`}
               title={build.name}
             >
-              <span className={`inline-block h-2 w-2 shrink-0 rounded-full ${active ? 'bg-brand-blue' : 'bg-slate-300'}`} />
+              <span className={`inline-flex h-4 min-w-4 shrink-0 items-center justify-center rounded-full text-[9px] font-black ${active ? 'bg-brand-blue text-white' : 'bg-slate-200 text-slate-400'}`}>
+                {active ? (selectionIndex === 0 ? 'A' : 'B') : ''}
+              </span>
               <span className="truncate">{build.name}</span>
             </button>
           );
         })}
       </div>
 
-      {columns.length === 0 ? (
-        <p className="mt-4 rounded-md border border-dashed border-slate-200 bg-slate-50 px-3 py-4 text-center text-xs font-bold text-slate-500">
-          비교할 견적을 하나 이상 선택하세요.
+      {columns.length < 2 ? (
+        <p data-testid="quote-compare-selection-guide" className="mt-5 rounded-md border border-dashed border-blue-200 bg-blue-50/60 px-4 py-7 text-center text-sm font-black text-brand-blue">
+          {columns.length === 0 ? '비교할 견적 2개를 선택하세요' : '비교할 견적을 하나 더 선택하세요'}
         </p>
-      ) : (
-        <div className="mt-4 overflow-x-auto">
-          <table className="w-full min-w-[460px] border-collapse text-left">
-            <thead>
-              <tr>
-                <th className="sticky left-0 z-10 bg-white pb-3 pr-3 align-bottom" scope="col">
-                  <span className="sr-only">비교 항목</span>
-                </th>
-                {columns.map((col) => (
-                  <th key={col.build.id} scope="col" className="min-w-[140px] px-2 pb-3 align-bottom">
-                    <div className="truncate text-sm font-black text-commerce-ink" title={col.build.name}>{col.build.name}</div>
-                    <div className="mt-0.5 flex items-center gap-1">
-                      <span className="text-xs font-black text-brand-blue">{col.build.totalPrice.toLocaleString()}원</span>
-                      {comparing && lowestTotal !== null && col.build.totalPrice === lowestTotal ? (
-                        <span className="rounded bg-slate-100 px-1 py-0.5 text-[9px] font-black text-slate-500">최저가</span>
-                      ) : null}
-                    </div>
-                  </th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {/* 구성 부품 섹션 */}
-              <SectionRow label="구성 부품" colSpan={colCount} />
-              {categories.map((category) => {
-                const cells = columns.map((col) => itemsForCategory(col.build, category));
-                const presentNames = cells
-                  .map((items) => items[0]?.name)
-                  .filter((name): name is string => Boolean(name));
-                const differs =
-                  comparing && (new Set(presentNames).size > 1 || presentNames.length !== columns.length);
-                return (
-                  <tr key={category} className="border-t border-slate-100">
-                    <th scope="row" className="sticky left-0 z-10 bg-white py-3 pr-3 align-top">
-                      <div className="flex items-center gap-1.5">
-                        <span className="text-xs font-black text-slate-700">{labelForCategory(category)}</span>
-                        {differs ? (
-                          <span className="rounded bg-amber-50 px-1 py-0.5 text-[9px] font-black text-amber-600">차이</span>
-                        ) : null}
-                      </div>
-                    </th>
-                    {cells.map((items, index) => (
-                      <td key={columns[index].build.id} className="px-2 py-3 align-top">
-                        <PartCompareCell items={items} />
-                      </td>
-                    ))}
-                  </tr>
-                );
-              })}
-
-              {/* 성능 섹션 (1000점 종합 점수) */}
-              <SectionRow label="종합 점수 (1000점)" colSpan={colCount} />
-              <tr className="border-t border-slate-100">
-                <th scope="row" className="sticky left-0 z-10 bg-white py-3 pr-3 align-middle">
-                  <div className="text-xs font-black text-slate-700">종합</div>
-                  <div className="text-[10px] font-bold text-slate-400">성능·호환·여유</div>
-                </th>
-                {columns.map((col) => {
-                  const bestScore = Math.max(...columns.map((item) => item.compositeScore?.score ?? -1));
-                  const isBest = comparing && col.compositeScore !== null && col.compositeScore.score === bestScore;
-                  return (
-                    <td key={col.build.id} className="px-2 py-3 align-middle">
-                      {col.isLoading ? (
-                        <div className="h-10 animate-pulse rounded bg-slate-200" />
-                      ) : (
-                        <CompositeCompareCell score={col.compositeScore} highlight={isBest} />
-                      )}
-                    </td>
-                  );
-                })}
-              </tr>
-            </tbody>
-          </table>
-        </div>
-      )}
+      ) : <SavedBuildComparisonResult columnA={columns[0]} columnB={columns[1]} />}
     </section>
   );
 }
 
-function SectionRow({ label, colSpan }: { label: string; colSpan: number }) {
+function SavedBuildComparisonResult({ columnA, columnB }: { columnA: ComparisonColumn; columnB: ComparisonColumn }) {
+  const categories = COMPARE_CATEGORY_ORDER.filter((category) =>
+    itemsForCategory(columnA.build, category).length > 0 || itemsForCategory(columnB.build, category).length > 0
+  );
+
   return (
-    <tr>
-      <td colSpan={colSpan} className="sticky left-0 bg-slate-50 px-3 py-1.5 text-[11px] font-black uppercase tracking-wide text-slate-500">
-        {label}
-      </td>
-    </tr>
+    <div className="mt-5 space-y-5">
+      <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_minmax(260px,0.9fr)_minmax(0,1fr)]">
+        <QuoteSummaryCard label="A" column={columnA} />
+        <ComparisonDeltaCard columnA={columnA} columnB={columnB} />
+        <QuoteSummaryCard label="B" column={columnB} />
+      </div>
+
+      <div className="overflow-hidden rounded-lg border border-slate-200 bg-white">
+        <div className="hidden grid-cols-[minmax(0,1fr)_132px_76px_132px_minmax(0,1fr)] items-center border-b border-slate-200 bg-slate-50 px-4 py-2.5 text-center text-[11px] font-black text-slate-500 md:grid">
+          <span>견적 A 구성 및 가격</span>
+          <span>A 지표</span>
+          <span>부품군</span>
+          <span>B 지표</span>
+          <span>견적 B 구성 및 가격</span>
+        </div>
+        <div className="divide-y divide-slate-100">
+          {categories.map((category) => {
+            const itemsA = itemsForCategory(columnA.build, category);
+            const itemsB = itemsForCategory(columnB.build, category);
+            const comparison = compareCategory(category, itemsA, itemsB, columnA.performanceDetails, columnB.performanceDetails);
+            return (
+              <PartComparisonRow
+                key={category}
+                category={category}
+                itemsA={itemsA}
+                itemsB={itemsB}
+                comparison={comparison}
+              />
+            );
+          })}
+        </div>
+      </div>
+    </div>
   );
 }
 
-function PartCompareCell({ items }: { items: BuildItem[] }) {
+function QuoteSummaryCard({ label, column }: { label: 'A' | 'B'; column: ComparisonColumn }) {
+  const score = column.compositeScore;
+  return (
+    <article data-testid={`quote-summary-${label}`} className="rounded-lg border border-blue-200 bg-white px-4 py-4 shadow-sm">
+      <div className="flex items-center gap-3">
+        <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-brand-blue text-base font-black text-white">{label}</span>
+        <div className="min-w-0 flex-1">
+          <div className="truncate text-base font-black text-commerce-ink" title={column.build.name}>{column.build.name}</div>
+          <div className="mt-3 grid grid-cols-2 divide-x divide-slate-200">
+            <div className="pr-3">
+              <div className="text-[10px] font-bold text-slate-400">총 견적 금액</div>
+              <div className="mt-1 text-lg font-black tracking-tight text-brand-blue">{column.build.totalPrice.toLocaleString('ko-KR')}원</div>
+            </div>
+            <div className="pl-3">
+              <div className="text-[10px] font-bold text-slate-400">종합 점수</div>
+              <ScoreValue column={column} />
+            </div>
+          </div>
+        </div>
+      </div>
+    </article>
+  );
+}
+
+function ScoreValue({ column }: { column: ComparisonColumn }) {
+  if (column.isLoading) return <div className="mt-1 h-6 w-20 animate-pulse rounded bg-slate-200" />;
+  if (column.isError) return <div className="mt-1 text-xs font-black text-red-500">조회 실패</div>;
+  if (!column.compositeScore) return <div className="mt-1 text-xs font-black text-slate-400">자료 없음</div>;
+  return (
+    <div className="mt-1 text-lg font-black tracking-tight text-brand-blue">
+      {column.compositeScore.score.toLocaleString('ko-KR')}점
+      <span className="ml-1 text-[10px] font-bold text-slate-400">/ {column.compositeScore.maxScore.toLocaleString('ko-KR')}</span>
+    </div>
+  );
+}
+
+function ComparisonDeltaCard({ columnA, columnB }: { columnA: ComparisonColumn; columnB: ComparisonColumn }) {
+  return (
+    <article className="flex min-h-[132px] items-center justify-center rounded-lg border border-slate-200 bg-slate-50/70 px-4 py-4 text-center shadow-sm">
+      <div>
+        <div className="mx-auto flex h-9 w-9 items-center justify-center rounded-full border-2 border-brand-blue bg-white text-brand-blue">
+          <Check size={19} strokeWidth={3} />
+        </div>
+        <p data-testid="quote-compare-price-delta" className="mt-2 text-sm font-black text-commerce-ink">{priceDeltaText(columnA.build.totalPrice, columnB.build.totalPrice)}</p>
+        <p data-testid="quote-compare-score-delta" className="mt-1 text-sm font-black text-brand-blue">{scoreDeltaText(columnA, columnB)}</p>
+        <p className="mt-2 text-[10px] font-bold text-slate-400">가격과 종합점수는 각각 독립적으로 비교</p>
+      </div>
+    </article>
+  );
+}
+
+function PartComparisonRow({
+  category,
+  itemsA,
+  itemsB,
+  comparison
+}: {
+  category: string;
+  itemsA: BuildItem[];
+  itemsB: BuildItem[];
+  comparison: CategoryComparison;
+}) {
+  return (
+    <article
+      data-testid={`quote-compare-row-${category}`}
+      className="grid grid-cols-[minmax(0,1fr)_64px_minmax(0,1fr)] gap-x-3 gap-y-3 px-4 py-4 md:grid-cols-[minmax(0,1fr)_132px_76px_132px_minmax(0,1fr)] md:items-center"
+    >
+      <PartSummary items={itemsA} meta={comparison.metaA} side="A" />
+      <div className="col-start-1 row-start-2 md:col-start-2 md:row-start-1">
+        <MetricBar category={category} metric={comparison.metric} side="A" hasPart={itemsA.length > 0} />
+      </div>
+      <div className="col-start-2 row-span-2 row-start-1 flex self-center justify-center md:col-start-3 md:row-span-1 md:row-start-1">
+        <span className="inline-flex min-h-8 min-w-14 items-center justify-center rounded-md bg-slate-100 px-2 text-[11px] font-black text-slate-600">
+          {labelForCategory(category)}
+        </span>
+      </div>
+      <div className="col-start-3 row-start-2 md:col-start-4 md:row-start-1">
+        <MetricBar category={category} metric={comparison.metric} side="B" hasPart={itemsB.length > 0} />
+      </div>
+      <PartSummary items={itemsB} meta={comparison.metaB} side="B" />
+      <p className="col-span-3 row-start-3 break-keep text-center text-[11px] font-black leading-5 text-brand-blue md:col-span-5 md:row-start-2">
+        {comparison.description}
+      </p>
+    </article>
+  );
+}
+
+function PartSummary({ items, meta, side }: { items: BuildItem[]; meta: string[]; side: 'A' | 'B' }) {
+  const isLeft = side === 'A';
+  const positionClass = isLeft
+    ? 'col-start-1 text-right md:col-start-1'
+    : 'col-start-3 text-left md:col-start-5';
   if (items.length === 0) {
-    return <div className="text-[11px] font-bold text-slate-300">미포함</div>;
+    return <div className={`${positionClass} row-start-1 text-xs font-black text-slate-300`}>미포함</div>;
   }
   const [primary, ...rest] = items;
   const totalPrice = items.reduce((sum, item) => sum + (item.price ?? 0), 0);
   return (
-    <div>
-      <div className="line-clamp-2 text-xs font-bold leading-4 text-commerce-ink" title={items.map((item) => item.name).join(', ')}>
-        {primary.name}
-        {rest.length > 0 ? <span className="font-black text-slate-400"> 외 {rest.length}</span> : null}
+    <div className={`${positionClass} row-start-1 min-w-0`}>
+      <div className="line-clamp-2 text-xs font-black leading-5 text-commerce-ink" title={items.map((item) => item.name).join(', ')}>
+        {primary.name}{rest.length > 0 ? ` 외 ${rest.length}` : ''}
       </div>
-      <div className="mt-0.5 text-[11px] font-semibold text-slate-500">{totalPrice.toLocaleString()}원</div>
+      <div className="mt-0.5 text-[11px] font-bold text-slate-500">{totalPrice.toLocaleString('ko-KR')}원</div>
+      {meta.length > 0 ? <div className="mt-1 text-[10px] font-semibold leading-4 text-slate-400">{meta.join(' · ')}</div> : null}
     </div>
   );
 }
 
-function CompositeCompareCell({ score, highlight }: { score: BuildCompositeScore | null; highlight: boolean }) {
-  if (score === null) {
-    return <div className="text-[11px] font-bold text-slate-400">자료 없음</div>;
-  }
+function MetricBar({ category, metric, side, hasPart }: { category: string; metric: CompareMetric | null; side: 'A' | 'B'; hasPart: boolean }) {
+  if (!hasPart) return <div className="text-center text-[10px] font-bold text-slate-300">미포함</div>;
+  if (!metric) return <div className="text-center text-[10px] font-bold text-slate-400">수치 막대 없음</div>;
+  const value = side === 'A' ? metric.valueA : metric.valueB;
+  const max = Math.max(metric.valueA, metric.valueB);
+  const index = Math.round((value / max) * 100);
   return (
-    <div className={highlight ? 'rounded-md bg-emerald-50/70 px-1.5 py-1' : 'px-1.5 py-1'}>
-      <CompositeScoreGauge
-        score={score}
-        size="mini"
-        highlight={highlight}
-        className="mx-auto"
-        gaugeTestId="quote-compare-composite-gauge"
-      />
-      {highlight ? <div className="mt-0.5 text-center text-[10px] font-black text-emerald-600">최고점 ▲</div> : null}
+    <div data-testid={`quote-compare-bar-${category}-${side}`} className="min-w-0">
+      <div className={`mb-1 flex items-baseline gap-1 ${side === 'A' ? 'justify-end' : 'justify-start'}`}>
+        <span className="text-[11px] font-black text-slate-600">{formatMetricValue(value, metric.unit)}</span>
+        <span className="text-[9px] font-bold text-slate-400">{metric.label}</span>
+      </div>
+      <div className={`flex h-2.5 overflow-hidden rounded-full bg-slate-100 ${side === 'A' ? 'justify-end' : 'justify-start'}`}>
+        <div className="h-full rounded-full bg-brand-blue transition-[width] duration-500" style={{ width: `${index}%` }} />
+      </div>
     </div>
   );
+}
+
+function compareCategory(
+  category: string,
+  itemsA: BuildItem[],
+  itemsB: BuildItem[],
+  performanceA: Record<string, unknown>,
+  performanceB: Record<string, unknown>
+): CategoryComparison {
+  const samePart = sameParts(itemsA, itemsB);
+  const metaA = partMeta(category, itemsA);
+  const metaB = partMeta(category, itemsB);
+  if (itemsA.length === 0 || itemsB.length === 0) {
+    const missing = itemsA.length === 0 && itemsB.length === 0 ? '두 견적 모두 미포함' : itemsA.length === 0 ? '견적 A에 미포함' : '견적 B에 미포함';
+    return { metric: null, description: missing, metaA, metaB };
+  }
+
+  if (category === 'CPU' || category === 'GPU') {
+    const key = category === 'CPU' ? 'cpuBenchmarkScore' : 'gpuBenchmarkScore';
+    const valueA = numberValue(performanceA[key]);
+    const valueB = numberValue(performanceB[key]);
+    const metric = positiveMetric(`${category} 벤치마크`, valueA, valueB, '점');
+    return {
+      metric,
+      description: samePart ? '동일 부품' : metric ? percentageDescription(category === 'CPU' ? 'CPU 벤치마크' : 'GPU 벤치마크', metric.valueA, metric.valueB) : '비교 가능한 수치 없음',
+      metaA,
+      metaB
+    };
+  }
+
+  if (category === 'RAM') {
+    const capacityA = sumAttribute(itemsA, 'capacityGb');
+    const capacityB = sumAttribute(itemsB, 'capacityGb');
+    const speedA = maxAttribute(itemsA, 'speedMhz');
+    const speedB = maxAttribute(itemsB, 'speedMhz');
+    const metric = positiveMetric('RAM 용량', capacityA, capacityB, 'GB');
+    let description = samePart ? '동일 부품' : numericDifferenceDescription('RAM 용량', capacityA, capacityB, 'GB', '큼');
+    if (!samePart && capacityA === capacityB && capacityA !== null) {
+      description = numericDifferenceDescription('RAM 클럭', speedA, speedB, 'MHz', '높음', 'RAM 용량과 클럭 동일');
+    }
+    return { metric, description, metaA, metaB };
+  }
+
+  if (category === 'STORAGE') {
+    const readA = maxAttribute(itemsA, 'readMbps');
+    const readB = maxAttribute(itemsB, 'readMbps');
+    const capacityA = sumAttribute(itemsA, 'capacityGb');
+    const capacityB = sumAttribute(itemsB, 'capacityGb');
+    const useRead = isPositive(readA) && isPositive(readB);
+    const metric = useRead
+      ? positiveMetric('읽기 속도', readA, readB, 'MB/s')
+      : positiveMetric('저장 용량', capacityA, capacityB, 'GB');
+    const description = samePart
+      ? '동일 부품'
+      : useRead && metric
+        ? percentageDescription('SSD 읽기 속도', metric.valueA, metric.valueB)
+        : storageCapacityDescription(capacityA, capacityB);
+    return { metric, description, metaA, metaB };
+  }
+
+  if (category === 'PSU') {
+    const capacityA = maxAttribute(itemsA, 'capacityW');
+    const capacityB = maxAttribute(itemsB, 'capacityW');
+    const metric = positiveMetric('정격 출력', capacityA, capacityB, 'W');
+    return {
+      metric,
+      description: samePart ? '동일 부품' : numericDifferenceDescription('정격 출력', capacityA, capacityB, 'W', '높음'),
+      metaA,
+      metaB
+    };
+  }
+
+  return {
+    metric: null,
+    description: samePart ? '동일 부품' : specificationDescription(category, itemsA[0], itemsB[0]),
+    metaA,
+    metaB
+  };
+}
+
+function performanceDetails(result?: { toolResults?: Array<{ tool: string; details?: Record<string, unknown> }> }) {
+  return result?.toolResults?.find((tool) => tool.tool === 'performance')?.details ?? {};
+}
+
+function positiveMetric(label: string, valueA: number | null, valueB: number | null, unit: string): CompareMetric | null {
+  if (!isPositive(valueA) || !isPositive(valueB)) return null;
+  return { label, valueA, valueB, unit };
+}
+
+function numberValue(value: unknown): number | null {
+  if (typeof value === 'number') return Number.isFinite(value) ? value : null;
+  if (typeof value !== 'string' || !/^-?\d+(?:\.\d+)?$/.test(value.trim())) return null;
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+function attributeNumber(item: BuildItem | undefined, key: string): number | null {
+  return numberValue(item?.attributes?.[key]);
+}
+
+function sumAttribute(items: BuildItem[], key: string): number | null {
+  const values = items.map((item) => attributeNumber(item, key)).filter((value): value is number => value !== null);
+  return values.length === items.length && values.length > 0 ? values.reduce((sum, value) => sum + value, 0) : null;
+}
+
+function maxAttribute(items: BuildItem[], key: string): number | null {
+  const values = items.map((item) => attributeNumber(item, key)).filter((value): value is number => value !== null);
+  return values.length > 0 ? Math.max(...values) : null;
+}
+
+function attributeText(item: BuildItem | undefined, key: string): string | null {
+  const value = item?.attributes?.[key];
+  if (typeof value === 'string' && value.trim()) return value.trim();
+  if (typeof value === 'number' && Number.isFinite(value)) return String(value);
+  if (typeof value === 'boolean') return value ? '지원' : '미지원';
+  if (Array.isArray(value) && value.length > 0) return value.map(String).join(', ');
+  return null;
+}
+
+function partMeta(category: string, items: BuildItem[]): string[] {
+  if (items.length === 0) return [];
+  const item = items[0];
+  const values: Array<string | null> = [];
+  if (category === 'CPU') {
+    values.push(unitText(attributeNumber(item, 'coreCount'), '코어'), unitText(attributeNumber(item, 'threadCount'), '스레드'));
+  } else if (category === 'GPU') {
+    values.push(unitText(attributeNumber(item, 'vramGb'), 'GB VRAM'));
+  } else if (category === 'RAM') {
+    values.push(unitText(sumAttribute(items, 'capacityGb'), 'GB'), unitText(maxAttribute(items, 'speedMhz'), 'MHz'), unitText(sumAttribute(items, 'moduleCount'), '개 모듈'));
+  } else if (category === 'STORAGE') {
+    values.push(formatCapacity(sumAttribute(items, 'capacityGb')), unitText(maxAttribute(items, 'readMbps'), 'MB/s 읽기'), unitText(maxAttribute(items, 'writeMbps'), 'MB/s 쓰기'));
+  } else if (category === 'PSU') {
+    values.push(unitText(maxAttribute(items, 'capacityW'), 'W'), attributeText(item, 'efficiency'));
+  } else if (category === 'MOTHERBOARD') {
+    values.push(attributeText(item, 'socket'), attributeText(item, 'chipset'), attributeText(item, 'memoryType'), attributeText(item, 'formFactor'));
+  } else if (category === 'CASE') {
+    values.push(attributeText(item, 'formFactor'), unitText(attributeNumber(item, 'maxGpuLengthMm'), 'mm GPU'), unitText(attributeNumber(item, 'maxCpuCoolerHeightMm'), 'mm 쿨러'));
+  } else if (category === 'COOLER') {
+    values.push(attributeText(item, 'coolerType'), unitText(attributeNumber(item, 'radiatorMm'), 'mm 라디에이터'), unitText(attributeNumber(item, 'heightMm') ?? attributeNumber(item, 'coolerHeightMm'), 'mm 높이'), unitText(attributeNumber(item, 'tdpW'), 'W TDP'));
+  }
+  return values.filter((value): value is string => Boolean(value));
+}
+
+function sameParts(itemsA: BuildItem[], itemsB: BuildItem[]) {
+  if (itemsA.length === 0 || itemsA.length !== itemsB.length) return false;
+  const idsA = itemsA.map(partIdentity).filter((id): id is string => Boolean(id)).sort();
+  const idsB = itemsB.map(partIdentity).filter((id): id is string => Boolean(id)).sort();
+  return idsA.length === itemsA.length && idsB.length === itemsB.length && idsA.every((id, index) => id === idsB[index]);
+}
+
+function partIdentity(item: BuildItem) {
+  return item.partId ?? item.id ?? null;
+}
+
+function percentageDescription(label: string, valueA: number, valueB: number) {
+  if (valueA === valueB) return `${label} 동일`;
+  const winner = valueA > valueB ? 'A' : 'B';
+  const lower = Math.min(valueA, valueB);
+  const percent = lower > 0 ? Math.round((Math.abs(valueA - valueB) / lower) * 100) : 0;
+  return `${winner}의 ${label}가 약 ${percent}% 높음`;
+}
+
+function numericDifferenceDescription(
+  label: string,
+  valueA: number | null,
+  valueB: number | null,
+  unit: string,
+  adjective: string,
+  equalText = `${label} 동일`
+) {
+  if (valueA === null || valueB === null) return '비교 가능한 수치 없음';
+  if (valueA === valueB) return equalText;
+  const winner = valueA > valueB ? 'A' : 'B';
+  return `${winner}의 ${label}이 ${formatMetricValue(Math.abs(valueA - valueB), unit)} ${adjective}`;
+}
+
+function storageCapacityDescription(valueA: number | null, valueB: number | null) {
+  if (valueA === null || valueB === null) return '비교 가능한 수치 없음';
+  if (valueA === valueB) return '저장 용량 동일';
+  const winner = valueA > valueB ? 'A' : 'B';
+  return `${winner}의 저장 공간이 ${formatCapacity(Math.abs(valueA - valueB))} 큼`;
+}
+
+function specificationDescription(category: string, itemA: BuildItem, itemB: BuildItem) {
+  const fields: Record<string, Array<{ label: string; keys: string[] }>> = {
+    MOTHERBOARD: [
+      { label: '소켓', keys: ['socket'] },
+      { label: '칩셋', keys: ['chipset'] },
+      { label: '메모리', keys: ['memoryType'] },
+      { label: '폼팩터', keys: ['formFactor'] }
+    ],
+    CASE: [
+      { label: '폼팩터', keys: ['formFactor'] },
+      { label: 'GPU 장착 길이', keys: ['maxGpuLengthMm'] },
+      { label: 'CPU 쿨러 높이', keys: ['maxCpuCoolerHeightMm'] }
+    ],
+    COOLER: [
+      { label: '쿨러 유형', keys: ['coolerType'] },
+      { label: '지원 소켓', keys: ['socketSupport'] },
+      { label: '높이', keys: ['heightMm', 'coolerHeightMm'] },
+      { label: '라디에이터', keys: ['radiatorMm'] },
+      { label: '표기 TDP', keys: ['tdpW'] }
+    ]
+  };
+  const compared = (fields[category] ?? []).map((field) => ({
+    label: field.label,
+    valueA: firstAttributeValue(itemA, field.keys),
+    valueB: firstAttributeValue(itemB, field.keys)
+  }));
+  const comparable = compared.filter((field) => field.valueA !== null && field.valueB !== null);
+  const different = comparable.filter((field) => normalizeSpec(field.valueA) !== normalizeSpec(field.valueB));
+  if (different.length > 0) return `${joinKorean(different.map((field) => field.label))} 규격이 다름`;
+  if (compared.some((field) => (field.valueA === null) !== (field.valueB === null))) return '일부 주요 규격 데이터가 한쪽에만 있음';
+  return comparable.length > 0 ? '주요 규격 동일' : '비교 가능한 수치 없음';
+}
+
+function firstAttributeValue(item: BuildItem, keys: string[]) {
+  for (const key of keys) {
+    const value = attributeText(item, key);
+    if (value !== null) return value;
+  }
+  return null;
+}
+
+function normalizeSpec(value: string | null) {
+  return value?.replace(/\s+/g, '').toLowerCase() ?? '';
+}
+
+function joinKorean(values: string[]) {
+  if (values.length <= 1) return values[0] ?? '';
+  return `${values.slice(0, -1).join(', ')}과 ${values[values.length - 1]}`;
+}
+
+function isPositive(value: number | null): value is number {
+  return value !== null && value > 0;
+}
+
+function unitText(value: number | null, unit: string) {
+  return value === null ? null : `${value.toLocaleString('ko-KR')}${unit}`;
+}
+
+function formatCapacity(value: number | null) {
+  if (value === null) return null;
+  return value >= 1000 && value % 1000 === 0 ? `${value / 1000}TB` : `${value.toLocaleString('ko-KR')}GB`;
+}
+
+function formatMetricValue(value: number, unit: string) {
+  if (unit === 'GB' && value >= 1000) return formatCapacity(value) ?? '';
+  return `${value.toLocaleString('ko-KR', { maximumFractionDigits: 1 })}${unit}`;
+}
+
+function priceDeltaText(priceA: number, priceB: number) {
+  if (priceA === priceB) return '가격 동일';
+  const winner = priceA < priceB ? 'A' : 'B';
+  return `${winner}가 ${Math.abs(priceA - priceB).toLocaleString('ko-KR')}원 저렴`;
+}
+
+function scoreDeltaText(columnA: ComparisonColumn, columnB: ComparisonColumn) {
+  if (columnA.isLoading || columnB.isLoading) return '종합점수 계산 중';
+  if (columnA.isError || columnB.isError) return '종합점수 조회 실패';
+  const scoreA = columnA.compositeScore?.score;
+  const scoreB = columnB.compositeScore?.score;
+  if (scoreA === undefined || scoreB === undefined) return '종합점수 자료 없음';
+  if (scoreA === scoreB) return '종합점수 동일';
+  const winner = scoreA > scoreB ? 'A' : 'B';
+  return `${winner}가 종합점수 ${Math.abs(scoreA - scoreB).toLocaleString('ko-KR')}점 높음`;
 }
 
 function PriceAlertRow({ alert }: { alert: PriceAlert }) {
