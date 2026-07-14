@@ -60,11 +60,11 @@ export function CheckoutPaymentPage() {
   const insufficientPoints = pointWalletQuery.isSuccess && balance < request.payment.amount;
 
   return (
-    <Screen>
-      <div className="mx-auto max-w-4xl">
+    <Screen mainClassName="mx-auto flex min-h-[calc(100vh-160px)] w-full max-w-[1550px] items-start px-4 py-6 sm:px-6 lg:items-center lg:px-8 xl:px-0">
+      <div className="mx-auto max-w-4xl lg:-translate-y-20">
         <Link to={`/checkout/offers/${request.id}`} className="inline-flex items-center gap-2 text-sm font-black text-brand-blue hover:underline"><ArrowLeft size={16} /> 기사 제안으로 돌아가기</Link>
         <div className="mt-4 grid gap-5 lg:grid-cols-[minmax(0,1fr)_340px]">
-          <Panel title="결제 수단" subtitle="토스 결제창에서 금액을 확인하고 테스트 인증을 마치면 보유 포인트로 결제합니다.">
+          <Panel title="포인트 결제 정보" subtitle="토스 결제창에서 금액을 확인하고 테스트 인증을 마치면 보유 포인트로 결제합니다.">
             <div className="space-y-4">
               <InfoLine icon={<UserRoundCheck size={17} />} label="선택 기사" value={offer.technicianName} />
               <InfoLine icon={<CalendarDays size={17} />} label="완료 예상" value={`${offer.leadTimeDays}일`} />
