@@ -3407,7 +3407,7 @@ test('shows save failure feedback while keeping the current self quote', async (
   await expect(page.getByTestId('checklist-GPU')).toContainText('RTX 5070 구매 테스트');
 });
 
-test('persists an assembly request, selects an offer, completes virtual payment, and reloads from the API', async ({ page }) => {
+test('persists an assembly request, selects an offer, and pays points after Toss authentication', async ({ page }) => {
   const quoteDraftMethods: string[] = [];
   const requestId = '00000000-0000-4000-8000-000000020001';
   let requestStatus = 'OFFERED';
@@ -3433,7 +3433,15 @@ test('persists an assembly request, selects an offer, completes virtual payment,
       { id: 'offer-fast', technicianId: 'tech-2', technicianName: '김도윤 기사', initials: '김', rating: 4.8, completedJobs: 132, responseMinutes: 8, specialties: ['당일 조립'], standardAsAccepted: true, providerType: 'INTERNAL', verified: true, status: selectedOfferId ? 'EXPIRED' : 'AVAILABLE', confirmedPartsPrice: 1_415_000, assemblyFee: 80_000, deliveryFee: 15_000, finalPrice: 1_510_000, leadTimeDays: 1, stockStatus: '주요 부품 재고 확인' },
       { id: 'offer-silent', technicianId: 'tech-3', technicianName: '최민석 기사', initials: '최', rating: 5, completedJobs: 96, responseMinutes: 18, specialties: ['저소음'], standardAsAccepted: true, providerType: 'EXTERNAL', verified: true, status: selectedOfferId ? 'EXPIRED' : 'AVAILABLE', confirmedPartsPrice: 1_388_000, assemblyFee: 95_000, deliveryFee: 20_000, finalPrice: 1_503_000, leadTimeDays: 3, stockStatus: '주요 부품 재고 확인' }
     ],
-    payment: paymentStatus ? { id: 'payment-1', amount: 1_470_000, method: 'VIRTUAL', status: paymentStatus } : null,
+    payment: paymentStatus ? {
+      id: 'payment-1',
+      amount: 1_470_000,
+      paidAmount: paymentStatus === 'PAID' ? 1_470_000 : 0,
+      currency: 'KRW',
+      provider: paymentStatus === 'PAID' ? 'BUILDGRAPH_POINT' : 'LEGACY_VIRTUAL',
+      method: paymentStatus === 'PAID' ? 'POINT' : 'VIRTUAL',
+      status: paymentStatus
+    } : null,
     statusHistory: [{ fromStatus: null, toStatus: 'REQUESTED', note: '조립 요청 등록' }]
   });
   await page.addInitScript(() => {
@@ -3455,6 +3463,13 @@ test('persists an assembly request, selects an offer, completes virtual payment,
       body: JSON.stringify({ mode: 'BUILD_OVERVIEW', summary: '호환 가능', nodes: [], edges: [], focusNodeIds: [], insights: [], toolResults: [] })
     });
   });
+  await page.route('**/api/users/me/points', async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({ id: 'point-wallet-1', name: '포인트', balance: 50_000_000, pointValueWon: 1, currency: 'KRW' })
+    });
+  });
   await page.route('**/api/assembly-requests**', async (route) => {
     const url = route.request().url();
     const method = route.request().method();
@@ -3469,9 +3484,26 @@ test('persists an assembly request, selects an offer, completes virtual payment,
       await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(assemblyResponse()) });
       return;
     }
-    if (method === 'POST' && url.endsWith('/payments/confirm-virtual')) {
+    if (method === 'POST' && url.endsWith('/payments/points/confirm')) {
       paymentStatus = 'PAID';
-      await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(assemblyResponse()) });
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          attempt: {
+            id: '00000000-0000-4000-8000-000000020011',
+            provider: 'BUILDGRAPH_POINT',
+            merchantPaymentId: 'POINT-test-payment',
+            payMethod: 'POINT',
+            requestedAmount: 1_470_000,
+            approvedAmount: 1_470_000,
+            currency: 'KRW',
+            status: 'SUCCEEDED',
+            expiresAt: '2099-07-20T12:00:00+09:00'
+          },
+          wallet: { id: 'point-wallet-1', name: '포인트', balance: 48_530_000, pointValueWon: 1, currency: 'KRW' }
+        })
+      });
       return;
     }
     await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(assemblyResponse()) });
@@ -3513,7 +3545,8 @@ test('persists an assembly request, selects an offer, completes virtual payment,
   await expect(page).toHaveURL(`/checkout/payment/${requestId}`);
   await page.reload();
   await expect(page.getByText('박준호 기사')).toBeVisible();
-  await page.getByRole('button', { name: '가상 결제 완료' }).click();
+  await expect(page.getByRole('button', { name: '토스 결제하기' })).toBeVisible();
+  await page.goto(`/checkout/toss/success/${requestId}?paymentType=NORMAL&paymentKey=test_payment_key&orderId=${requestId}&amount=1470000`);
 
   await expect(page).toHaveURL(`/checkout/complete/${requestId}`);
   await expect(page.getByRole('heading', { name: '조립 요청 진행 상태' })).toBeVisible();

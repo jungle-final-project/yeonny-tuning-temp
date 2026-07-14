@@ -51,6 +51,11 @@ management:
 buildgraph:
   cors:
     allowed-origins: ${BUILDGRAPH_CORS_ALLOWED_ORIGINS:}
+  payment:
+    mock:
+      # 실서버 안전 기본값은 false다. 로컬/테스트 환경에서만 명시적으로 활성화한다.
+      enabled: ${PAYMENT_MOCK_ENABLED:false}
+      webhook-secret: ${PAYMENT_MOCK_WEBHOOK_SECRET:}
   auth:
     google:
       client-id: ${GOOGLE_OAUTH_CLIENT_ID:}

@@ -326,7 +326,9 @@ public class TechnicianMarketplaceService {
         Map<String, Object> ownOffer = ownOffer(requestId, longValue(technician, "id"));
         Map<String, Object> payment = paymentRow(requestId);
         boolean selected = ownOffer != null && "SELECTED".equals(DbValueMapper.string(ownOffer, "status"));
-        boolean paid = payment != null && "PAID".equals(DbValueMapper.string(payment, "status"));
+        boolean paid = payment != null
+                && "PAID".equals(DbValueMapper.string(payment, "status"))
+                && !"MOCK".equals(DbValueMapper.string(payment, "provider"));
         Map<String, Object> result = new LinkedHashMap<>();
         result.put("id", DbValueMapper.string(request, request.containsKey("public_id_text") ? "public_id_text" : "id"));
         result.put("requestNo", DbValueMapper.string(request, "request_no"));

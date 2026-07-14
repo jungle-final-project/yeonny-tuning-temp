@@ -4,8 +4,7 @@ export {
   AssemblyRequestDetailPage,
   AssemblyRequestHistoryPage,
   CheckoutCompletePage,
-  CheckoutOffersPage,
-  CheckoutPaymentPage
+  CheckoutOffersPage
 } from './pages/AssemblyOfferPages';
 export { PartDetailPage } from './pages/PartDetailPage';
 export { SelfQuotePage } from './pages/SelfQuotePage';

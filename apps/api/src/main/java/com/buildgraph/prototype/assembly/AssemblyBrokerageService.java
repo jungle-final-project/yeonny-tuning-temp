@@ -41,17 +41,20 @@ public class AssemblyBrokerageService {
     private final CurrentUserService currentUserService;
     private final QuoteDraftQueryService quoteDraftQueryService;
     private final BuildGraphService buildGraphService;
+    private final BuildGraphPointService buildGraphPointService;
 
     public AssemblyBrokerageService(
             JdbcTemplate jdbcTemplate,
             CurrentUserService currentUserService,
             QuoteDraftQueryService quoteDraftQueryService,
-            BuildGraphService buildGraphService
+            BuildGraphService buildGraphService,
+            BuildGraphPointService buildGraphPointService
     ) {
         this.jdbcTemplate = jdbcTemplate;
         this.currentUserService = currentUserService;
         this.quoteDraftQueryService = quoteDraftQueryService;
         this.buildGraphService = buildGraphService;
+        this.buildGraphPointService = buildGraphPointService;
     }
 
     @Transactional
@@ -203,24 +206,12 @@ public class AssemblyBrokerageService {
 
     @Transactional
     public Map<String, Object> confirmVirtualPayment(String authorization, String requestPublicId) {
-        CurrentUserService.CurrentUser user = currentUserService.requireUser(authorization);
-        Long requestId = requireUserRequestForUpdate(requestPublicId, user.internalId());
-        Map<String, Object> request = requestRow(requestId);
-        if (!"MATCHED".equals(DbValueMapper.string(request, "status"))) {
-            throw conflict("기사 매칭 후에만 가상 결제를 진행할 수 있습니다.");
-        }
-        Map<String, Object> payment = paymentRow(requestId);
-        if (payment == null) {
-            throw conflict("결제 대기 정보를 찾을 수 없습니다.");
-        }
-        if ("PAID".equals(DbValueMapper.string(payment, "status"))) {
-            return detailByInternalId(requestId);
-        }
-        if (!"PENDING".equals(DbValueMapper.string(payment, "status"))) {
-            throw conflict("결제할 수 없는 상태입니다.");
-        }
-        jdbcTemplate.update("UPDATE assembly_payments SET status = 'PAID', paid_at = now(), updated_at = now() WHERE id = ?", longValue(payment, "internal_id"));
-        return detailByInternalId(requestId);
+        currentUserService.requireUser(authorization);
+        throw new ApiException(
+                HttpStatus.GONE,
+                "PAYMENT_ENDPOINT_RETIRED",
+                "가상 결제 즉시 완료 API는 종료되었습니다. 결제 시도 생성 API를 사용해 주세요."
+        );
     }
 
     @Transactional
@@ -593,6 +584,7 @@ public class AssemblyBrokerageService {
 
     private Map<String, Object> detailByInternalId(Long requestId) {
         Map<String, Object> row = requestRow(requestId);
+        Map<String, Object> payment = paymentRow(requestId);
         Map<String, Object> result = new LinkedHashMap<>();
         result.put("id", DbValueMapper.string(row, "public_id_text"));
         result.put("requestNo", DbValueMapper.string(row, "request_no"));
@@ -616,10 +608,11 @@ public class AssemblyBrokerageService {
         result.put("cancellationReason", DbValueMapper.string(row, "cancellation_reason"));
         result.put("createdAt", DbValueMapper.timestamp(row, "created_at"));
         result.put("updatedAt", DbValueMapper.timestamp(row, "updated_at"));
-        result.put("canCancel", USER_CANCEL_STATUSES.contains(DbValueMapper.string(row, "status")));
+        result.put("canCancel", USER_CANCEL_STATUSES.contains(DbValueMapper.string(row, "status"))
+                && (payment == null || !"PAID".equals(DbValueMapper.string(payment, "status"))));
         result.put("items", requestItems(requestId));
         result.put("offers", requestOffers(requestId));
-        result.put("payment", paymentMap(paymentRow(requestId)));
+        result.put("payment", paymentMap(payment));
         result.put("statusHistory", requestHistory(requestId));
         return result;
     }
@@ -709,10 +702,50 @@ public class AssemblyBrokerageService {
         return MockData.map(
                 "id", DbValueMapper.string(row, "id"),
                 "amount", longValue(row, "amount"),
+                "paidAmount", longValue(row, "paid_amount"),
+                "currency", DbValueMapper.string(row, "currency"),
+                "provider", DbValueMapper.string(row, "provider"),
                 "method", DbValueMapper.string(row, "method"),
                 "status", DbValueMapper.string(row, "status"),
                 "paidAt", DbValueMapper.timestamp(row, "paid_at"),
+                "verifiedAt", DbValueMapper.timestamp(row, "verified_at"),
                 "refundedAt", DbValueMapper.timestamp(row, "refunded_at"),
+                "latestAttempt", latestPaymentAttempt(longValue(row, "internal_id")),
+                "updatedAt", DbValueMapper.timestamp(row, "updated_at")
+        );
+    }
+
+    private Map<String, Object> latestPaymentAttempt(Long paymentId) {
+        if (paymentId == null) return null;
+        Map<String, Object> row = jdbcTemplate.queryForList("""
+                SELECT public_id::text AS id, provider, merchant_payment_id, provider_transaction_id,
+                       pg_transaction_id, pay_method, easy_pay_provider, requested_amount, approved_amount,
+                       currency, status, failure_code, failure_message, expires_at, verified_at,
+                       completed_at, created_at, updated_at
+                FROM assembly_payment_attempts
+                WHERE assembly_payment_id = ?
+                ORDER BY created_at DESC, id DESC
+                LIMIT 1
+                """, paymentId).stream().findFirst().orElse(null);
+        if (row == null) return null;
+        return MockData.map(
+                "id", DbValueMapper.string(row, "id"),
+                "provider", DbValueMapper.string(row, "provider"),
+                "merchantPaymentId", DbValueMapper.string(row, "merchant_payment_id"),
+                "providerTransactionId", DbValueMapper.string(row, "provider_transaction_id"),
+                "pgTransactionId", DbValueMapper.string(row, "pg_transaction_id"),
+                "payMethod", DbValueMapper.string(row, "pay_method"),
+                "easyPayProvider", DbValueMapper.string(row, "easy_pay_provider"),
+                "requestedAmount", longValue(row, "requested_amount"),
+                "approvedAmount", longValue(row, "approved_amount"),
+                "currency", DbValueMapper.string(row, "currency"),
+                "status", DbValueMapper.string(row, "status"),
+                "failureCode", DbValueMapper.string(row, "failure_code"),
+                "failureMessage", DbValueMapper.string(row, "failure_message"),
+                "expiresAt", DbValueMapper.timestamp(row, "expires_at"),
+                "verifiedAt", DbValueMapper.timestamp(row, "verified_at"),
+                "completedAt", DbValueMapper.timestamp(row, "completed_at"),
+                "createdAt", DbValueMapper.timestamp(row, "created_at"),
                 "updatedAt", DbValueMapper.timestamp(row, "updated_at")
         );
     }
@@ -786,8 +819,8 @@ public class AssemblyBrokerageService {
 
     private Map<String, Object> paymentRow(Long requestId) {
         return jdbcTemplate.queryForList("""
-                SELECT id AS internal_id, public_id::text AS id, amount, method, status,
-                       paid_at, refunded_at, updated_at
+                SELECT id AS internal_id, public_id::text AS id, amount, paid_amount, currency,
+                       provider, method, status, paid_at, verified_at, refunded_at, updated_at
                 FROM assembly_payments WHERE assembly_request_id = ?
                 """, requestId).stream().findFirst().orElse(null);
     }
@@ -834,15 +867,26 @@ public class AssemblyBrokerageService {
     }
 
     private void cancelRequest(Long requestId, Long actorId, String currentStatus, String reason) {
+        Map<String, Object> payment = paymentRow(requestId);
+        if (payment != null && "PAID".equals(DbValueMapper.string(payment, "status"))) {
+            boolean refunded = buildGraphPointService.refundPaidPointPayment(requestId);
+            if (!refunded) {
+                throw conflict("결제가 완료된 요청은 PG 환불 처리 후 취소해야 합니다. 관리자에게 문의해 주세요.");
+            }
+        }
         jdbcTemplate.update("UPDATE assembly_requests SET status = 'CANCELLED', cancellation_reason = ?, cancelled_at = now(), updated_at = now() WHERE id = ?", reason, requestId);
         jdbcTemplate.update("UPDATE assembly_offers SET status = 'EXPIRED', updated_at = now() WHERE assembly_request_id = ? AND status = 'AVAILABLE'", requestId);
         jdbcTemplate.update("""
-                UPDATE assembly_payments SET
-                    status = CASE status WHEN 'PAID' THEN 'REFUNDED' ELSE 'CANCELLED' END,
-                    refunded_at = CASE WHEN status = 'PAID' THEN now() ELSE refunded_at END,
-                    cancelled_at = CASE WHEN status = 'PENDING' THEN now() ELSE cancelled_at END,
-                    updated_at = now()
-                WHERE assembly_request_id = ? AND status IN ('PENDING', 'PAID')
+                UPDATE assembly_payment_attempts
+                SET status = 'CANCELLED', failure_code = 'ORDER_CANCELLED', failure_message = '조립 요청이 취소되었습니다.',
+                    completed_at = now(), updated_at = now()
+                WHERE assembly_payment_id = (SELECT id FROM assembly_payments WHERE assembly_request_id = ?)
+                  AND status IN ('READY', 'PROCESSING', 'VERIFYING')
+                """, requestId);
+        jdbcTemplate.update("""
+                UPDATE assembly_payments
+                SET status = 'CANCELLED', cancelled_at = now(), updated_at = now()
+                WHERE assembly_request_id = ? AND status = 'PENDING'
                 """, requestId);
         addHistory(requestId, actorId, currentStatus, "CANCELLED", reason);
     }
