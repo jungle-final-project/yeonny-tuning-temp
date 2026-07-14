@@ -15,7 +15,7 @@ export function AllPartsPage() {
         </div>
         <Link
           to="/self-quote"
-          className="inline-flex min-h-11 items-center justify-center rounded-md border border-commerce-line bg-white px-4 py-3 text-sm font-black text-commerce-ink hover:border-commerce-ink"
+          className="inline-flex min-h-11 items-center justify-center rounded-md border border-commerce-line bg-white px-4 py-3 text-sm font-black text-commerce-point hover:border-commerce-point hover:bg-orange-50"
         >
           셀프 견적 보드로 이동
         </Link>
