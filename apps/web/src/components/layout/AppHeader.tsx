@@ -1,3 +1,4 @@
+import '@fontsource/outfit/500.css';
 import { FormEvent, ReactNode, useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { ChevronDown, Heart, LifeBuoy, LogOut, Search, ShieldCheck, ShoppingCart, UserRound, Wrench } from 'lucide-react';
@@ -11,6 +12,7 @@ export function AppHeader() {
   const navigate = useNavigate();
   const [user, setUser] = useState<CurrentUser | null>(() => readCachedCurrentUser());
   const [searchInput, setSearchInput] = useState('');
+  const [headerSearchMode, setHeaderSearchMode] = useState<'general' | 'ai'>('ai');
   const [hasTechnicianProfile, setHasTechnicianProfile] = useState(false);
 
   function submitSearch(event: FormEvent<HTMLFormElement>) {
@@ -85,14 +87,33 @@ export function AppHeader() {
 
   return (
     <>
-      <header className="bg-white">
+      <header className="bg-[#f7f7f8]">
         <div className="mx-auto grid min-h-[68px] w-full max-w-[1320px] grid-cols-[auto_minmax(0,1fr)] items-center gap-x-3 gap-y-3 px-4 pb-[7px] pt-3 sm:px-6 lg:grid-cols-[minmax(180px,1fr)_minmax(360px,760px)_minmax(180px,1fr)] lg:gap-x-6 lg:px-8 xl:px-0">
-          <Link to="/" aria-label="다짜줘 홈" className="flex min-w-0 items-center gap-3 rounded-full focus:outline-none focus:ring-4 focus:ring-blue-100">
-            <span data-testid="header-logo-placeholder" aria-hidden="true" className="h-10 w-10 shrink-0 rounded-full bg-black sm:h-11 sm:w-11" />
-            <span className="text-xl font-semibold tracking-[-0.025em] text-[#222222] sm:text-2xl">Dazzajo</span>
-          </Link>
+          <div className="flex min-w-0 items-center gap-5">
+            <Link to="/" aria-label="다짜줘 홈" className="flex h-10 min-w-0 items-center rounded-md focus:outline-none focus:ring-4 focus:ring-blue-100">
+              <span className="relative -top-[2px] text-[28px] leading-none tracking-[-0.025em] text-[#de6c2d] sm:text-[33.6px]" style={{ fontFamily: 'Outfit, sans-serif', fontWeight: 500 }}>Dazzajo</span>
+            </Link>
+            <div role="group" aria-label="검색 방식" className="hidden shrink-0 items-center gap-3 lg:flex">
+              <button
+                type="button"
+                aria-pressed={headerSearchMode === 'general'}
+                onClick={() => setHeaderSearchMode('general')}
+                className={'flex h-10 items-center border-b-2 text-[15px] font-medium leading-none transition ' + (headerSearchMode === 'general' ? 'border-[#de6c2d] text-[#222222]' : 'border-transparent text-[#595959] hover:text-[#222222]')}
+              >
+                일반검색
+              </button>
+              <button
+                type="button"
+                aria-pressed={headerSearchMode === 'ai'}
+                onClick={() => setHeaderSearchMode('ai')}
+                className={'flex h-10 items-center border-b-2 text-[15px] font-medium leading-none transition ' + (headerSearchMode === 'ai' ? 'border-[#de6c2d] text-[#222222]' : 'border-transparent text-[#595959] hover:text-[#222222]')}
+              >
+                AI 검색
+              </button>
+            </div>
+          </div>
 
-          <form data-testid="header-ai-search" onSubmit={submitSearch} className="order-last col-span-2 flex h-12 w-full min-w-0 items-center rounded-full border-2 border-commerce-ink bg-white pl-5 pr-1.5 shadow-sm transition focus-within:ring-4 focus-within:ring-blue-100 lg:order-none lg:col-span-1">
+          <form data-testid="header-ai-search" onSubmit={submitSearch} className="order-last col-span-2 flex h-12 w-full min-w-0 items-center rounded-full border-2 border-commerce-ink bg-[#f7f7f8] pl-5 pr-1.5 shadow-sm transition focus-within:ring-4 focus-within:ring-blue-100 lg:order-none lg:col-span-1">
             <input
               value={searchInput}
               onChange={(event) => setSearchInput(event.target.value)}
@@ -100,19 +121,20 @@ export function AppHeader() {
               className="min-w-0 flex-1 bg-transparent pr-3 text-sm font-semibold outline-none placeholder:font-medium placeholder:text-slate-400"
               placeholder="어떤 PC를 맞춰드릴까요? 예: QHD 게임용 200만원 PC"
             />
-            <button type="submit" aria-label="AI 견적 검색" className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-commerce-ink text-white transition hover:bg-brand-blue focus:outline-none focus:ring-4 focus:ring-blue-100">
+            <button type="submit" aria-label="AI 견적 검색" className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-[#de6c2d] text-white transition hover:bg-[#c45c22] focus:outline-none focus:ring-4 focus:ring-blue-100">
               <Search size={18} aria-hidden="true" />
             </button>
           </form>
 
           <div className="col-start-2 row-start-1 flex items-center justify-end gap-1 lg:col-start-3">
-            <HeaderIconLink to="/my/quotes" icon={<Heart size={17} />} label="내 견적함" />
-            <HeaderIconLink to="/self-quote" icon={<ShoppingCart size={18} />} label="현재 견적" />
+            <HeaderIconLink to="/my/quotes" icon={<Heart size={20} />} label="내 견적함" />
+            <HeaderIconLink to="/self-quote" icon={<ShoppingCart size={21} />} label="현재 견적" />
             {user ? (
-              <details className="group relative">
-                <summary className="flex min-w-[50px] cursor-pointer list-none flex-col items-center justify-center gap-0.5 rounded-lg px-1.5 py-1 text-[#595959] transition hover:bg-slate-100 hover:text-[#222222] focus:outline-none focus:ring-4 focus:ring-blue-100 [&::-webkit-details-marker]:hidden">
-                  <span className="flex items-center gap-0.5"><UserRound size={18} aria-hidden="true" /><ChevronDown size={10} className="transition group-open:rotate-180" aria-hidden="true" /></span>
-                  <span className="text-[10px] font-bold">계정</span>
+              <details data-testid="header-account-slot" className="group relative w-[118px] shrink-0">
+                <summary aria-label={'계정 메뉴: ' + (user.name || '다짜줘 사용자')} className="flex h-10 w-full cursor-pointer list-none items-center gap-2 rounded-lg px-2 text-[#595959] transition hover:bg-slate-100 hover:text-[#222222] focus:outline-none focus:ring-4 focus:ring-blue-100 [&::-webkit-details-marker]:hidden">
+                  <UserRound size={21} className="shrink-0" aria-hidden="true" />
+                  <span data-testid="header-account-name" className="w-[72px] truncate text-left text-[15px] font-medium leading-none">{user.name || '다짜줘 사용자'}</span>
+                  <ChevronDown size={10} className="shrink-0 transition group-open:rotate-180" aria-hidden="true" />
                 </summary>
                 <div className="absolute right-0 top-[calc(100%+8px)] z-50 w-56 overflow-hidden rounded-xl border border-commerce-line bg-white py-2 shadow-xl">
                   <div className="border-b border-commerce-line px-4 pb-3 pt-2">
@@ -136,7 +158,16 @@ export function AppHeader() {
                 </div>
               </details>
             ) : (
-              <HeaderIconLink to="/login" icon={<UserRound size={18} />} label="계정" />
+              <Link
+                to="/login"
+                aria-label="계정 로그인"
+                data-testid="header-account-slot"
+                className="flex h-10 w-[118px] shrink-0 items-center gap-2 rounded-lg px-2 text-[#595959] transition hover:bg-slate-100 hover:text-[#222222] focus:outline-none focus:ring-4 focus:ring-blue-100"
+              >
+                <UserRound size={21} className="shrink-0" aria-hidden="true" />
+                <span data-testid="header-account-name" aria-hidden="true" className="block w-[72px] shrink-0" />
+                <span aria-hidden="true" className="block h-2.5 w-2.5 shrink-0" />
+              </Link>
             )}
           </div>
         </div>
@@ -164,9 +195,8 @@ function readCachedCurrentUser() {
 
 function HeaderIconLink({ to, icon, label }: { to: string; icon: ReactNode; label: string }) {
   return (
-    <Link to={to} aria-label={label} className="flex min-w-[50px] flex-col items-center justify-center gap-0.5 rounded-lg px-1.5 py-1 text-[#595959] transition hover:bg-slate-100 hover:text-[#222222] focus:outline-none focus:ring-4 focus:ring-blue-100">
+    <Link to={to} aria-label={label} title={label} className="grid h-10 w-10 shrink-0 place-items-center rounded-lg text-[#595959] transition hover:bg-slate-100 hover:text-[#222222] focus:outline-none focus:ring-4 focus:ring-blue-100">
       <span aria-hidden="true">{icon}</span>
-      <span className="text-[10px] font-bold">{label}</span>
     </Link>
   );
 }

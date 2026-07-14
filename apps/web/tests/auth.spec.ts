@@ -109,9 +109,9 @@ test('updates header from login response before auth me finishes', async ({ page
 
   await expect(page).toHaveURL('/');
   await page.getByTestId('home-login-choice-dialog').getByRole('button', { name: '선택지 닫기' }).click();
-  await page.getByText('계정', { exact: true }).click();
+  await page.locator('summary[aria-label^="계정 메뉴:"]').click();
   await expect(page.getByText('fast@example.com')).toBeVisible({ timeout: 2_000 });
-  await expect(page.getByText('Fast User')).toBeVisible({ timeout: 2_000 });
+  await expect(page.getByTestId('header-account-name')).toHaveText('Fast User', { timeout: 2_000 });
   await expect(page.getByRole('navigation').getByRole('link', { name: '관리자' })).toHaveCount(0);
   expect(await page.evaluate(() => JSON.parse(localStorage.getItem('buildgraph.authUser') ?? '{}'))).toMatchObject({
     email: 'fast@example.com',
@@ -145,7 +145,7 @@ test('shows admin navigation only for ADMIN role', async ({ page }) => {
 
   await page.goto('/login');
 
-  await page.getByText('계정', { exact: true }).click();
+  await page.locator('summary[aria-label^="계정 메뉴:"]').click();
   await expect(page.getByText('admin@example.com')).toBeVisible();
   await expect(page.getByRole('link', { name: '관리자' })).toHaveAttribute('href', '/admin');
 });
@@ -221,7 +221,7 @@ test('opens my profile from header and updates contact address', async ({ page }
 
   await mockKakaoPostcode(page);
   await page.goto('/login');
-  await page.getByText('계정', { exact: true }).click();
+  await page.locator('summary[aria-label^="계정 메뉴:"]').click();
   await page.getByRole('link', { name: '마이페이지' }).click();
 
   await expect(page).toHaveURL('/my/profile');
@@ -238,8 +238,8 @@ test('opens my profile from header and updates contact address', async ({ page }
   await page.getByRole('button', { name: '저장' }).click();
 
   await expect(page.getByText('내 정보가 저장되었습니다.')).toBeVisible();
-  await page.getByText('계정', { exact: true }).click();
-  await expect(page.getByText('수정 사용자')).toBeVisible();
+  await page.locator('summary[aria-label^="계정 메뉴:"]').click();
+  await expect(page.getByTestId('header-account-name')).toHaveText('수정 사용자');
   expect(await page.evaluate(() => JSON.parse(localStorage.getItem('buildgraph.authUser') ?? '{}'))).toMatchObject({
     name: '수정 사용자',
     phoneNumber: '010-1234-5678',
@@ -583,9 +583,9 @@ test('refreshes expired access token and retries current user request', async ({
 
   await page.goto('/login');
 
-  await page.getByText('계정', { exact: true }).click();
+  await page.locator('summary[aria-label^="계정 메뉴:"]').click();
   await expect(page.getByText('refreshed@example.com')).toBeVisible();
-  await expect(page.getByText('Refresh User')).toBeVisible();
+  await expect(page.getByTestId('header-account-name')).toHaveText('Refresh User');
   expect(expiredMeCalls).toBeGreaterThanOrEqual(1);
   expect(refreshedMeCalls).toBeGreaterThanOrEqual(1);
   expect(refreshCalls).toBe(1);
@@ -852,8 +852,8 @@ test('calls logout API and clears stored auth tokens', async ({ page }) => {
   });
 
   await page.goto('/login');
-  await page.getByText('계정', { exact: true }).click();
-  await expect(page.getByText('Logout User')).toBeVisible();
+  await page.locator('summary[aria-label^="계정 메뉴:"]').click();
+  await expect(page.getByTestId('header-account-name')).toHaveText('Logout User');
   await page.getByRole('button', { name: '로그아웃' }).click();
 
   await expect.poll(() => logoutCalled).toBe(true);
@@ -906,8 +906,8 @@ test('clears stored auth tokens even when logout API fails', async ({ page }) =>
   });
 
   await page.goto('/login');
-  await page.getByText('계정', { exact: true }).click();
-  await expect(page.getByText('Logout Fail User')).toBeVisible();
+  await page.locator('summary[aria-label^="계정 메뉴:"]').click();
+  await expect(page.getByTestId('header-account-name')).toHaveText('Logout Fail User');
   await page.getByRole('button', { name: '로그아웃' }).click();
 
   await expect.poll(() => logoutCalled).toBe(true);

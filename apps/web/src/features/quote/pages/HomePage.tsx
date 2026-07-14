@@ -29,29 +29,18 @@ import {
 import { partImageUrl } from '../../parts/partDisplay';
 import {
   applyAiBuildToQuoteDraft,
-  getPart,
   getPublicHome,
   listHomeRecommendedParts,
+  listParts,
   recordRecommendationEvent
 } from '../../parts/partsApi';
-import type { HomeRecommendedPart, PartRow } from '../../parts/types';
-import {
-  AI_ASSISTANT_SESSION_CHANGED_EVENT,
-  normalizeAiBuilds,
-  normalizeAiRecommendedBuild,
-  readAssistantSession,
-  recentBuildsForChatContext,
-  saveSelectedAiBuild,
-  type AiAssistantSession,
-  type AiRecommendedBuild,
-  type PartCategory
-} from '../aiSelection';
-import { HomeAiBuildPreview } from '../components/HomeAiBuildPreview';
+import type { HomeRecommendedPart, PartPage } from '../../parts/types';
+import { type PartCategory } from '../aiSelection';
 import {
   HomeFeaturedBuildPreview,
   type HomeFeaturedBuildPreviewItem
 } from '../components/HomeFeaturedBuildPreview';
-import { listHomeRecommendedBuilds, resolveBuildGraph } from '../quoteApi';
+import { resolveBuildGraph } from '../quoteApi';
 
 type CategoryItem = {
   value: PartCategory;
@@ -118,7 +107,11 @@ const HERO_DUMMY_IMAGES = [
   '/assets/home-hero/cooling-fan-illustration.jpg',
   '/assets/home-hero/mouse-editorial.jpg',
   '/assets/home-hero/pc-case-illustration.jpg',
-  '/assets/home-hero/motherboard-editorial.jpg'
+  '/assets/home-hero/motherboard-editorial.jpg',
+  '/assets/home-hero/mouse-editorial.jpg',
+  '/assets/home-hero/cooling-fan-illustration.jpg',
+  '/assets/home-hero/gpu-illustration.jpg',
+  '/assets/home-hero/pc-case-illustration.jpg'
 ] as const;
 const HOME_LOGIN_CHOICE_DISMISSED_KEY = 'buildgraph.homeLoginChoice.dismissed';
 
@@ -156,9 +149,7 @@ export function HomePage() {
   const queryClient = useQueryClient();
   const [searchParams] = useSearchParams();
   const skipHomeChoicePromptRef = useRef(searchParams.get('assistant') === 'open');
-  const [assistantSession, setAssistantSession] = useState<AiAssistantSession>(() => readAssistantSession());
   const [selectedCuratedBuildId, setSelectedCuratedBuildId] = useState<string | null>(null);
-  const [selectedAiBuildId, setSelectedAiBuildId] = useState<string | null>(null);
   const [applyingBuildId, setApplyingBuildId] = useState<string | null>(null);
   const [applyError, setApplyError] = useState<string | null>(null);
   const [showHomeChoicePrompt, setShowHomeChoicePrompt] = useState(() => Boolean(getToken()) && shouldShowHomeLoginChoice(skipHomeChoicePromptRef.current));
@@ -173,22 +164,22 @@ export function HomePage() {
     staleTime: 60_000
   });
 
-  const homeRecommendedBuildsQuery = useQuery({
-    queryKey: ['recommendations', 'home-builds'],
-    queryFn: listHomeRecommendedBuilds,
-    enabled: isAuthenticated,
-    staleTime: 60_000
+  const categoryPartQueries = useQueries({
+    queries: PART_CATEGORIES.map((category) => ({
+      queryKey: ['parts', 'modern-home-curated', category.value],
+      queryFn: () => listParts({ category: category.value, status: 'ACTIVE', page: 0, size: 4, sort: 'price_desc' as const }),
+      staleTime: 60_000,
+      enabled: isAuthenticated
+    }))
   });
-  const validatedBuilds = useMemo(
-    () => normalizeAiBuilds(homeRecommendedBuildsQuery.data?.items ?? []),
-    [homeRecommendedBuildsQuery.data?.items]
-  );
 
-  const publicCuratedPreviewItems = useMemo<HomeFeaturedBuildPreviewItem[]>(() => (
+  const curatedPreviewItems = useMemo<HomeFeaturedBuildPreviewItem[]>(() => (
     CURATED_BUILD_TEMPLATES.map((template, buildIndex) => {
-      const buildParts = PART_CATEGORIES.map((category) => {
+      const buildParts = PART_CATEGORIES.map((category, categoryIndex) => {
+        const page = categoryPartQueries[categoryIndex]?.data as PartPage | undefined;
         const publicCandidates = publicHomeQuery.data?.categoryParts[category.value] ?? [];
-        const part = publicCandidates[buildIndex] ?? publicCandidates[0];
+        const candidates = isAuthenticated ? (page?.items ?? []) : publicCandidates;
+        const part = candidates[buildIndex] ?? candidates[0];
         if (!part) return null;
         return {
           search: { category: category.value, searchQuery: part.name },
@@ -214,101 +205,29 @@ export function HomePage() {
           : null
       };
     })
-  ), [publicHomeQuery.data]);
+  ), [categoryPartQueries, isAuthenticated, publicHomeQuery.data]);
 
-  const latestHomeAiBuilds = useMemo(
-    () => isAuthenticated ? recentBuildsForChatContext(assistantSession) : [],
-    [assistantSession, isAuthenticated]
-  );
   const selectedCuratedBuild = selectedCuratedBuildId
-    ? validatedBuilds.find((build) => build.id === selectedCuratedBuildId) ?? null
+    ? curatedPreviewItems.find((item) => item.build.id === selectedCuratedBuildId) ?? null
     : null;
-  const selectedAiBuild = selectedAiBuildId
-    ? latestHomeAiBuilds.find((build) => build.id === selectedAiBuildId) ?? null
-    : null;
-
-  const aiImageQueries = useQueries({
-    queries: latestHomeAiBuilds.map((build) => {
-      const imageItem = build.items.find((item) => item.category === 'CASE')
-        ?? build.items.find((item) => item.category === 'GPU')
-        ?? build.items[0];
-      return {
-        queryKey: ['parts', 'modern-home-ai-image', build.id, imageItem?.partId ?? 'none'],
-        queryFn: () => getPart(imageItem!.partId),
-        enabled: isAuthenticated && Boolean(imageItem?.partId),
-        staleTime: 60_000
-      };
-    })
-  });
-
-  const aiPreviewItems = latestHomeAiBuilds.map((build, index) => ({
-    build,
-    imagePart: (aiImageQueries[index]?.data as PartRow | undefined) ?? null
-  }));
-
-  const validatedImageQueries = useQueries({
-    queries: validatedBuilds.map((build) => {
-      const imageItem = build.items.find((item) => item.category === 'CASE')
-        ?? build.items.find((item) => item.category === 'GPU')
-        ?? build.items[0];
-      return {
-        queryKey: ['parts', 'modern-home-validated-image', build.id, imageItem?.partId ?? 'none'],
-        queryFn: () => getPart(imageItem!.partId),
-        enabled: isAuthenticated && Boolean(imageItem?.partId),
-        staleTime: 60_000
-      };
-    })
-  });
-  const validatedPreviewItems = validatedBuilds.map((build, index) => ({
-    build,
-    imagePart: (validatedImageQueries[index]?.data as PartRow | undefined) ?? null
-  }));
-
-  const curatedGraphItems = selectedCuratedBuild?.items.map((item) => ({
-    partId: item.partId,
-    category: item.category,
-    quantity: item.quantity
+  const curatedGraphItems = selectedCuratedBuild?.buildParts.map(({ search, part }) => ({
+    partId: part.id,
+    category: search.category,
+    quantity: 1
   })) ?? [];
-  const curatedGraphSignature = curatedGraphItems.map((item) => `${item.category}:${item.partId}:${item.quantity}`).sort().join('|');
+  const curatedGraphSignature = curatedGraphItems.map((item) => `${item.category}:${item.partId}`).sort().join('|');
   const curatedGraphQuery = useQuery({
-    queryKey: ['build-graph', 'modern-home-curated', selectedCuratedBuild?.id, curatedGraphSignature],
+    queryKey: ['build-graph', 'modern-home-curated', selectedCuratedBuild?.build.id, curatedGraphSignature],
     queryFn: () => resolveBuildGraph({
       source: 'AI_BUILD',
       view: 'FOCUSED',
-      budgetWon: selectedCuratedBuild?.budgetWon,
+      budgetWon: selectedCuratedBuild?.assetTotalPrice ?? undefined,
       items: curatedGraphItems
     }),
-    enabled: isAuthenticated && Boolean(selectedCuratedBuild && curatedGraphItems.length > 0),
+    enabled: isAuthenticated && Boolean(selectedCuratedBuild && curatedGraphItems.length === PART_CATEGORIES.length),
     staleTime: 30_000
   });
 
-  const aiGraphItems = selectedAiBuild?.items.map((item) => ({
-    partId: item.partId,
-    category: item.category,
-    quantity: item.quantity
-  })) ?? [];
-  const aiGraphSignature = aiGraphItems.map((item) => `${item.category}:${item.partId}:${item.quantity}`).sort().join('|');
-  const aiGraphQuery = useQuery({
-    queryKey: ['build-graph', 'modern-home-ai', selectedAiBuild?.id, aiGraphSignature],
-    queryFn: () => resolveBuildGraph({
-      source: 'AI_BUILD',
-      view: 'FOCUSED',
-      budgetWon: selectedAiBuild?.budgetWon,
-      items: aiGraphItems
-    }),
-    enabled: isAuthenticated && Boolean(selectedAiBuild && aiGraphItems.length > 0),
-    staleTime: 30_000
-  });
-
-  useEffect(() => {
-    const syncSession = () => setAssistantSession(readAssistantSession());
-    window.addEventListener(AI_ASSISTANT_SESSION_CHANGED_EVENT, syncSession);
-    window.addEventListener('storage', syncSession);
-    return () => {
-      window.removeEventListener(AI_ASSISTANT_SESSION_CHANGED_EVENT, syncSession);
-      window.removeEventListener('storage', syncSession);
-    };
-  }, []);
 
   useEffect(() => {
     if (searchParams.get('assistant') !== 'open') return;
@@ -351,17 +270,6 @@ export function HomePage() {
     };
   }, []);
 
-  useEffect(() => {
-    if (selectedCuratedBuildId && !validatedBuilds.some((build) => build.id === selectedCuratedBuildId)) {
-      setSelectedCuratedBuildId(null);
-    }
-  }, [selectedCuratedBuildId, validatedBuilds]);
-
-  useEffect(() => {
-    if (selectedAiBuildId && !latestHomeAiBuilds.some((build) => build.id === selectedAiBuildId)) {
-      setSelectedAiBuildId(null);
-    }
-  }, [latestHomeAiBuilds, selectedAiBuildId]);
 
   async function applyCuratedBuild(build: CuratedBuild, buildParts: HomeFeaturedBuildPreviewItem['buildParts']) {
     if (!isAuthenticated) {
@@ -386,36 +294,6 @@ export function HomePage() {
       navigate('/self-quote');
     } catch {
       setApplyError('추천 조합을 현재 견적에 담지 못했습니다. 잠시 후 다시 시도해 주세요.');
-    } finally {
-      setApplyingBuildId(null);
-    }
-  }
-
-  async function applyAiBuild(build: AiRecommendedBuild) {
-    if (!isAuthenticated) {
-      navigate(`/login?redirect=${encodeURIComponent('/')}`);
-      return;
-    }
-    if (applyingBuildId) return;
-    const normalizedBuild = normalizeAiRecommendedBuild(build);
-    setApplyingBuildId(normalizedBuild.id);
-    setApplyError(null);
-    try {
-      const appliedDraft = await applyAiBuildToQuoteDraft({
-        buildId: normalizedBuild.id,
-        conflictPolicy: 'REPLACE',
-        items: normalizedBuild.items.map((item) => ({
-          partId: item.partId,
-          category: item.category,
-          quantity: item.quantity
-        }))
-      });
-      saveSelectedAiBuild(normalizedBuild);
-      queryClient.setQueryData(['quote-draft', 'current'], appliedDraft);
-      void queryClient.invalidateQueries({ queryKey: ['quote-draft', 'current'] });
-      navigate('/self-quote');
-    } catch {
-      setApplyError('AI 추천 조합을 현재 견적에 담지 못했습니다. 잠시 후 다시 시도해 주세요.');
     } finally {
       setApplyingBuildId(null);
     }
@@ -479,8 +357,8 @@ export function HomePage() {
   return (
     <div className="screen-shell modern-home-screen min-h-screen">
       <AppHeader />
-      <main id="main-content" className="modern-home-main mx-auto w-full max-w-[1320px] px-4 pb-20 pt-8 sm:px-6 lg:px-8 xl:px-0">
-        <section className="modern-home-hero relative overflow-hidden rounded-xl border border-[#e5e7ec] bg-white p-4 sm:p-6">
+      <main id="main-content" className="modern-home-main w-full bg-[#f7f7f8] pb-20">
+        <section className="modern-home-hero relative w-full overflow-hidden border-b border-commerce-line bg-white p-4 sm:p-6">
           <div data-testid="home-hero-dummy-collage" className="modern-home-hero-collage pointer-events-none absolute inset-0 z-0" aria-hidden="true">
             {HERO_DUMMY_IMAGES.map((src, index) => (
               <img
@@ -494,7 +372,7 @@ export function HomePage() {
           </div>
           <div
             data-testid="home-hero-gradient-layer"
-            className="pointer-events-none absolute inset-0 z-10 bg-gradient-to-b from-[#edf3ff] to-white opacity-60"
+            className="pointer-events-none absolute inset-0 z-10 bg-gradient-to-b from-[#fbeee7] to-white opacity-60"
             aria-hidden="true"
           />
           <div className="modern-home-intro relative z-20 flex min-h-[364px] flex-col items-center justify-center rounded-xl border border-transparent bg-transparent p-6 text-center sm:p-8 lg:p-12">
@@ -502,7 +380,7 @@ export function HomePage() {
               <h1 className="text-[48px] font-black leading-[1.08] tracking-[-0.03em] text-commerce-ink sm:text-[58px]">
                 견적부터 조립 후 AS까지,
                 <br />
-                <span className="text-[#235df7]">한 흐름으로</span>
+                <span className="text-[#de6c2d]">한 흐름으로</span>
               </h1>
               <p className="mx-auto mt-6 max-w-[900px] text-[17px] font-normal leading-relaxed text-slate-600 sm:text-[19px]">
                 당신이 원하는 맞춤형 PC를 가상으로 견적을 맞추고,
@@ -511,7 +389,7 @@ export function HomePage() {
               </p>
               <Link
                 to="/self-quote"
-                className="mt-[22px] inline-flex min-h-[36px] items-center justify-center rounded-full bg-[#235df7] px-[22px] text-sm font-bold text-white transition hover:bg-[#174ad1] focus:outline-none focus:ring-4 focus:ring-blue-100"
+                className="mt-[22px] inline-flex min-h-[36px] items-center justify-center rounded-full bg-[#de6c2d] px-[22px] text-sm font-bold text-white transition hover:bg-[#c45c22] focus:outline-none focus:ring-4 focus:ring-blue-100"
               >
                 나만의 견적 알아보기
               </Link>
@@ -519,20 +397,12 @@ export function HomePage() {
           </div>
         </section>
 
-        <section className="modern-home-recommendations mt-16" aria-labelledby="home-recommendations-title">
-          <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+        <div className="mx-auto w-full max-w-[1320px] px-4 sm:px-6 lg:px-8 xl:px-0">
+          <section className="modern-home-recommendations mt-16" aria-labelledby="home-recommendations-title">
+          <div className="flex justify-center text-center">
             <div>
-              <h2 id="home-recommendations-title" className="text-2xl font-bold leading-tight text-commerce-ink">인기있는 조합을 추천드려요</h2>
+              <h2 id="home-recommendations-title" className="text-2xl font-bold leading-tight text-commerce-ink">인기있는 조합</h2>
             </div>
-            {latestHomeAiBuilds.length ? (
-              <button
-                type="button"
-                onClick={() => openAiAssistant({ placement: 'side' })}
-                className="inline-flex min-h-11 items-center gap-2 self-start rounded-lg border border-blue-200 bg-blue-50 px-4 text-sm font-black text-brand-blue hover:border-brand-blue focus:outline-none focus:ring-4 focus:ring-blue-100 sm:self-auto"
-              >
-                AI와 조건 더 다듬기
-              </button>
-            ) : null}
           </div>
 
           {applyError ? (
@@ -542,60 +412,29 @@ export function HomePage() {
           ) : null}
 
           <div className="mt-6">
-            {latestHomeAiBuilds.length ? (
-              <div data-testid="home-ai-recommendations" className="home-ai-recommendations">
-                <HomeAiBuildPreview
-                  items={aiPreviewItems}
-                  selectedBuildId={selectedAiBuild?.id ?? null}
-                  applyingBuildId={applyingBuildId}
-                  graph={aiGraphQuery.data}
-                  isGraphLoading={aiGraphQuery.isLoading}
-                  isGraphError={aiGraphQuery.isError}
-                  onSelectBuild={setSelectedAiBuildId}
-                  onClearSelection={() => setSelectedAiBuildId(null)}
-                  onApplyBuild={applyAiBuild}
-                  onImageError={handleProductImageError}
-                />
-              </div>
-            ) : isAuthenticated ? (
-              validatedPreviewItems.length ? (
-                <HomeAiBuildPreview
-                  items={validatedPreviewItems}
-                  selectedBuildId={selectedCuratedBuild?.id ?? null}
-                  applyingBuildId={applyingBuildId}
-                  graph={curatedGraphQuery.data}
-                  isGraphLoading={curatedGraphQuery.isLoading}
-                  isGraphError={curatedGraphQuery.isError}
-                  onSelectBuild={setSelectedCuratedBuildId}
-                  onClearSelection={() => setSelectedCuratedBuildId(null)}
-                  onApplyBuild={applyAiBuild}
-                  onImageError={handleProductImageError}
-                />
-              ) : (
-                <div className="rounded-lg border border-commerce-line bg-white px-5 py-6 text-sm font-bold text-slate-600">
-                  {homeRecommendedBuildsQuery.isLoading
-                    ? '검증된 추천 조합을 준비하고 있습니다.'
-                    : '현재 검증을 통과한 기본 조합이 없습니다. AI에게 예산과 용도를 알려주면 새 조합을 계산합니다.'}
-                </div>
-              )
-            ) : (
-              <HomeFeaturedBuildPreview
-                items={publicCuratedPreviewItems}
-                selectedBuildId={null}
-                applyingBuildId={applyingBuildId}
-                graph={undefined}
-                isGraphLoading={false}
-                isGraphError={false}
-                onSelectBuild={() => navigate(`/login?redirect=${encodeURIComponent('/')}`)}
-                onClearSelection={() => undefined}
-                onApplyBuild={applyCuratedBuild}
-                onImageError={handleProductImageError}
-              />
-            )}
+            <HomeFeaturedBuildPreview
+              items={curatedPreviewItems}
+              selectedBuildId={selectedCuratedBuild?.build.id ?? null}
+              applyingBuildId={applyingBuildId}
+              graph={curatedGraphQuery.data}
+              isGraphLoading={curatedGraphQuery.isLoading}
+              isGraphError={curatedGraphQuery.isError}
+              onSelectBuild={(buildId) => {
+                if (!isAuthenticated) {
+                  navigate('/login?redirect=' + encodeURIComponent('/'));
+                  return;
+                }
+                setSelectedCuratedBuildId(buildId);
+              }}
+              onClearSelection={() => setSelectedCuratedBuildId(null)}
+              onApplyBuild={applyCuratedBuild}
+              onImageError={handleProductImageError}
+            />
           </div>
         </section>
 
-        <PopularPartsSection isAuthenticated={isAuthenticated} publicItems={publicHomeQuery.data?.recommendedParts.items ?? []} publicLoading={publicHomeQuery.isLoading} publicError={publicHomeQuery.isError} />
+          <PopularPartsSection isAuthenticated={isAuthenticated} publicItems={publicHomeQuery.data?.recommendedParts.items ?? []} publicLoading={publicHomeQuery.isLoading} publicError={publicHomeQuery.isError} />
+        </div>
       </main>
       {showHomeChoicePrompt ? (
         <HomeLoginChoiceDialog
@@ -848,13 +687,13 @@ function PopularPartsSection({ isAuthenticated, publicItems, publicLoading, publ
 
   return (
     <section data-testid="home-parts-section" className="mt-16" aria-labelledby="popular-parts-title">
-      <div className="flex items-end justify-between gap-4">
+      <div className="relative flex items-end justify-center gap-4">
         <div>
-          <h2 id="popular-parts-title" className="text-2xl font-bold leading-tight text-commerce-ink">맞춤형 부품을 추천드려요</h2>
+          <h2 id="popular-parts-title" className="text-2xl font-bold leading-tight text-commerce-ink">맞춤형 부품</h2>
         </div>
         <Link
           to="/parts"
-          className="hidden items-center self-end text-xs font-semibold leading-tight tracking-[0.16em] text-slate-500 transition-colors hover:text-commerce-ink focus:outline-none focus:ring-2 focus:ring-slate-300 sm:inline-flex"
+          className="absolute right-0 hidden items-center self-end text-xs font-semibold leading-tight tracking-[0.16em] text-slate-500 transition-colors hover:text-commerce-ink focus:outline-none focus:ring-2 focus:ring-slate-300 sm:inline-flex"
         >
           MORE {'>'}
         </Link>

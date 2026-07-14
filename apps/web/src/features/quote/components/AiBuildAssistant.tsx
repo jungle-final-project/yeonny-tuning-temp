@@ -224,6 +224,15 @@ export function AiBuildAssistant({ surface = 'home', variant = 'floating', onBoa
   }, [open, isEmbedded]);
 
   useEffect(() => {
+    if (typeof document === 'undefined') return undefined;
+    const shouldDock = !isEmbedded && open && placement === 'side' && isDesktopAssistant;
+    document.documentElement.classList.toggle('ai-assistant-side-open', shouldDock);
+    return () => {
+      document.documentElement.classList.remove('ai-assistant-side-open');
+    };
+  }, [isDesktopAssistant, isEmbedded, open, placement]);
+
+  useEffect(() => {
     return () => setAiAssistantOpen(false);
   }, []);
 
@@ -596,7 +605,10 @@ export function AiBuildAssistant({ surface = 'home', variant = 'floating', onBoa
         type="button"
         aria-label="AI 견적 챗봇 열기"
         data-testid="ai-chatbot-launcher"
-        onClick={() => setOpen(true)}
+        onClick={() => {
+          setPlacement('side');
+          setOpen(true);
+        }}
         className="fixed bottom-5 right-5 z-50 flex h-16 w-16 items-center justify-center rounded-2xl border border-slate-900 bg-slate-950 text-white shadow-2xl transition hover:-translate-y-0.5 hover:bg-slate-800 focus:outline-none focus:ring-4 focus:ring-blue-200"
       >
         <span className="relative grid h-11 w-11 place-items-center rounded-xl bg-white text-slate-950">
@@ -763,10 +775,11 @@ export function AiBuildAssistant({ surface = 'home', variant = 'floating', onBoa
     );
   }
 
+  const isDockedAssistant = !isEmbedded && isDesktopAssistant;
   const panelClassName = isEmbedded
     ? 'panel flex h-full min-h-0 flex-col overflow-hidden bg-[#f8fbff]'
     : isDesktopAssistant
-    ? 'fixed bottom-4 right-4 z-50 flex h-[min(620px,calc(100vh-2rem))] w-[min(390px,calc(100vw-2rem))] flex-col overflow-hidden rounded-lg border border-slate-200 bg-[#f8fbff] shadow-2xl'
+    ? 'ai-assistant-docked-panel fixed inset-y-0 right-0 z-50 flex h-dvh w-[390px] flex-col overflow-hidden bg-[#f7f7f8]'
     : 'fixed bottom-4 right-3 z-50 w-[min(calc(100vw-1.5rem),460px)] overflow-hidden rounded-2xl border border-slate-200 bg-[#f8fbff] shadow-2xl';
   const bodyClassName = `${isEmbedded || isDesktopAssistant ? 'min-h-0 flex-1' : 'max-h-[78vh]'} flex flex-col`;
 
@@ -775,6 +788,7 @@ export function AiBuildAssistant({ surface = 'home', variant = 'floating', onBoa
       data-testid="ai-chatbot-panel"
       className={panelClassName}
     >
+      {!isDockedAssistant ? (
       <div className={isEmbedded ? 'border-b border-slate-200 bg-white px-4 py-3' : 'border-b border-blue-700 bg-brand-blue px-4 py-3 text-white'}>
         <div className="flex items-center justify-between gap-3">
           <div className="flex min-w-0 items-center gap-3">
@@ -798,17 +812,32 @@ export function AiBuildAssistant({ surface = 'home', variant = 'floating', onBoa
           ) : null}
         </div>
       </div>
+      ) : null}
 
-      <div className={bodyClassName}>
-        <div className="border-b border-slate-100 bg-[#f8fbff] px-4 py-3">
-          <div className="mb-2 text-[11px] font-black text-slate-400">이렇게 물어보세요</div>
-          <div className="flex flex-wrap gap-2">
+      <div className={`${bodyClassName} ${isDockedAssistant ? 'bg-[#f7f7f8]' : ''}`}>
+        <div className={isDockedAssistant ? 'border-b border-slate-100 bg-[#f7f7f8] px-4 py-3' : 'border-b border-slate-100 bg-[#f8fbff] px-4 py-3'}>
+          <div className="mb-2 flex items-center justify-between gap-3">
+            <div className="text-[11px] font-black text-slate-400">이렇게 물어보세요</div>
+            {isDockedAssistant ? (
+              <button
+                type="button"
+                aria-label="AI 견적 챗봇 닫기"
+                onClick={() => setOpen(false)}
+                className="grid h-9 w-9 shrink-0 place-items-center rounded-md text-slate-500 transition hover:bg-slate-200 hover:text-slate-800 focus:outline-none focus:ring-4 focus:ring-orange-100"
+              >
+                <X size={17} />
+              </button>
+            ) : null}
+          </div>
+          <div className={isDockedAssistant ? 'grid grid-cols-[1.35fr_1.15fr_0.8fr_1fr] gap-1.5' : 'flex flex-wrap gap-2'}>
             {COMMON_QUICK_PROMPTS.map((example) => (
               <button
                 key={example.label}
                 type="button"
                 onClick={() => setPrompt(example.prompt)}
-                className="rounded-full border border-slate-200 bg-white px-3 py-1.5 text-[11px] font-black text-slate-600 shadow-sm transition hover:border-brand-blue hover:text-brand-blue focus:outline-none focus:ring-4 focus:ring-blue-100"
+                className={isDockedAssistant
+                  ? 'min-w-0 whitespace-nowrap rounded-full border border-slate-200 bg-white px-1.5 py-1.5 text-[10px] font-black text-slate-600 shadow-sm transition hover:border-brand-blue hover:text-brand-blue focus:outline-none focus:ring-4 focus:ring-blue-100'
+                  : 'rounded-full border border-slate-200 bg-white px-3 py-1.5 text-[11px] font-black text-slate-600 shadow-sm transition hover:border-brand-blue hover:text-brand-blue focus:outline-none focus:ring-4 focus:ring-blue-100'}
               >
                 {example.label}
               </button>
@@ -834,7 +863,7 @@ export function AiBuildAssistant({ surface = 'home', variant = 'floating', onBoa
           <div ref={messagesEndRef} />
         </div>
 
-        <form onSubmit={submitPrompt} className="border-t border-slate-200 bg-white p-3">
+        <form onSubmit={submitPrompt} className={isDockedAssistant ? 'border-t border-slate-200 bg-[#f7f7f8] p-3' : 'border-t border-slate-200 bg-white p-3'}>
           {submitError ? (
             <div role="alert" className="mb-2 rounded-md border border-red-100 bg-red-50 px-3 py-2 text-xs font-bold text-red-700">
               {submitError}
@@ -873,10 +902,12 @@ export function AiBuildAssistant({ surface = 'home', variant = 'floating', onBoa
               <Send size={17} />
             </button>
           </div>
-          <div className="mt-2 flex items-center gap-2 text-[11px] font-bold text-slate-500">
-            <CheckCircle2 size={14} className="text-commerce-green" />
-            추천은 서버의 부품 데이터 기준으로 계산되며 대화 기록은 브라우저에만 임시 저장됩니다(창을 닫으면 사라집니다).
-          </div>
+          {!isDockedAssistant ? (
+            <div className="mt-2 flex items-center gap-2 text-[11px] font-bold text-slate-500">
+              <CheckCircle2 size={14} className="text-commerce-green" />
+              추천은 서버의 부품 데이터 기준으로 계산되며 대화 기록은 브라우저에만 임시 저장됩니다(창을 닫으면 사라집니다).
+            </div>
+          ) : null}
         </form>
       </div>
     </section>
