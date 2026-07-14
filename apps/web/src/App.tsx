@@ -2,7 +2,8 @@ import { Navigate, Route, Routes, useLocation } from 'react-router-dom';
 import { AdminLoginPage, AuthCallbackPage, LoginPage, MyProfilePage, SignupPage } from './features/auth/AuthPages';
 import { RequireAdmin } from './features/auth/RequireAdmin';
 import { RequireUser } from './features/auth/RequireUser';
-import { AllPartsPage, AssemblyRequestDetailPage, AssemblyRequestHistoryPage, CheckoutCompletePage, CheckoutOffersPage, CheckoutPage, CheckoutPaymentPage, PartDetailPage, SelfQuotePage } from './features/parts/PartsPages';
+import { CheckoutPaymentPage, TossPointPaymentFailPage, TossPointPaymentSuccessPage } from './features/payment';
+import { AllPartsPage, AssemblyRequestDetailPage, AssemblyRequestHistoryPage, CheckoutCompletePage, CheckoutOffersPage, CheckoutPage, PartDetailPage, SelfQuotePage } from './features/parts/PartsPages';
 import { BuildResultPage, ChangePartPage, HomePage, LatestBuildResultPage, MyQuotesPage, RequirementPage } from './features/quote/QuotePages';
 import { AsChatPage, SupportNewPage, SupportTicketPage } from './features/support/SupportPages';
 import { SupportChatWidget } from './features/support/SupportChatWidget';
@@ -22,6 +23,8 @@ export default function App() {
         <Route path="/checkout" element={<RequireUser><CheckoutPage /></RequireUser>} />
         <Route path="/checkout/offers/:requestId" element={<RequireUser><CheckoutOffersPage /></RequireUser>} />
         <Route path="/checkout/payment/:requestId" element={<RequireUser><CheckoutPaymentPage /></RequireUser>} />
+        <Route path="/checkout/toss/success/:requestId" element={<RequireUser><TossPointPaymentSuccessPage /></RequireUser>} />
+        <Route path="/checkout/toss/fail/:requestId" element={<RequireUser><TossPointPaymentFailPage /></RequireUser>} />
         <Route path="/checkout/complete/:requestId" element={<RequireUser><CheckoutCompletePage /></RequireUser>} />
         <Route path="/checkout/offers" element={<Navigate to="/my/assembly-requests" replace />} />
         <Route path="/checkout/complete" element={<Navigate to="/my/assembly-requests" replace />} />
