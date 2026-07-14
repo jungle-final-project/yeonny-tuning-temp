@@ -475,6 +475,19 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
+  /api/recommendations/home-builds:
+    get:
+      summary: 홈 검증 추천 조합
+      description: 홈의 기본 추천 카드에 사용할 200만원 예산 티어 조합을 반환한다. 8개 필수 카테고리가 완성되고 target 예산 밴드 안이며 compatibility, power, size, performance, price Tool이 모두 실행되고 FAIL이 없는 조합만 최대 3개 반환한다. 유효한 조합이 없으면 임의 부품 조합 대신 빈 배열을 반환한다.
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: 서버 검증 완료 홈 추천 조합
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HomeRecommendedBuildsResponse"
   /api/recommendations/home-parts:
     get:
       summary: 홈 추천 부품 랭킹
@@ -1314,12 +1327,8 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/TechnicianDto"
-        "404":
-          description: 기사 프로필 없음
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ErrorResponse"
+        "204":
+          description: 아직 외부 기사 프로필을 신청하지 않은 정상 상태
     patch:
       summary: 본인 외부 기사 프로필 보정
       requestBody:
@@ -4443,7 +4452,7 @@ components:
           type: string
         builds:
           type: array
-          description: 견적 추천 질문은 추천 build 1~3개를 반환한다. 명시 예산 target 모드에서는 모든 카드의 totalPrice가 예산의 87.5%~112.5% 밴드 안에 들어야 하며, 밴드 밖 조합은 카드 수가 줄더라도 반환하지 않는다(밴드 밖 3장보다 밴드 안 2장을 택한다). 견적 변경(BUILD_MODIFY) 요청은 변경 미리보기 카드 1장(tier=draft-edit, badges=[DRAFT_EDIT_PREVIEW])을, 예산이 최소 구성가에 미달하거나 예산 근접 조합을 구성하지 못한 경우 '가능한 최소 구성' 카드 1장을 반환할 수 있다. 시뮬레이션/명확화/거절(LLM 실패) 응답에서는 빈 배열이다.
+          description: 견적 추천 질문은 추천 build 1~3개를 반환하고 사용자 문구의 추천 개수도 실제 배열 길이와 일치한다. 명시 예산 target 모드에서는 모든 카드의 totalPrice가 예산의 87.5%~112.5% 밴드 안에 들어야 하며, 밴드 밖 조합은 카드 수가 줄더라도 반환하지 않는다(밴드 밖 3장보다 밴드 안 2장을 택한다). 예산이 최소 구성가에 미달하면 밴드 밖 카드를 만들지 않고 builds=[]와 실제 최소가·부족액·다음 예산 quick reply를 반환한다. 예산은 충분하지만 근접 조합을 만들 수 없는 경우에만 해당 예산 모드를 지키는 '가능한 최소 구성' 카드 1장으로 폴백할 수 있다. 견적 변경(BUILD_MODIFY) 요청은 변경 미리보기 카드 1장(tier=draft-edit, badges=[DRAFT_EDIT_PREVIEW])을 반환한다. 시뮬레이션/명확화/거절(LLM 실패) 응답에서는 빈 배열이다.
           items:
             $ref: "#/components/schemas/AiBuildRecommendationDto"
         simulation:
@@ -5030,6 +5039,21 @@ components:
         fallbackUsed:
           type: boolean
           description: XGBoost scorer를 쓰지 못해 deterministic fallback 랭킹을 사용했는지 여부
+    HomeRecommendedBuildsResponse:
+      type: object
+      required: [items, generatedAt, fallbackUsed]
+      properties:
+        items:
+          type: array
+          maxItems: 3
+          items:
+            $ref: "#/components/schemas/AiBuildRecommendationDto"
+        generatedAt:
+          type: string
+          format: date-time
+        fallbackUsed:
+          type: boolean
+          description: 준비된 티어 스냅샷 대신 요청 시점에 deterministic 조합을 계산했는지 여부
     HomeRecommendedPartDto:
       type: object
       required: [recommendationId, rankPosition, part, scoreSource, reasonTags]

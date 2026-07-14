@@ -103,6 +103,27 @@ class DefaultAiChatEngineTest {
     }
 
     @Test
+    void explicitRtxTiBuildKeepsTheSuffixAsPartOfTheHardConstraint() {
+        AiChatEngineResponse response = engine.respond(new AiChatEngineRequest(
+                "RTX 5070 Ti를 반드시 넣은 PC 추천해줘",
+                "HOME",
+                null,
+                null,
+                null,
+                Map.of(),
+                1L
+        ));
+
+        assertThat(response.parsedContext().get("requiredGpuClasses")).asList().contains("RTX_5070_TI");
+        assertThat(response.recommendations()).hasSize(3).allSatisfy(recommendation ->
+                assertThat(recommendation.items())
+                        .filteredOn(part -> "GPU".equals(part.category()))
+                        .singleElement()
+                        .satisfies(part -> assertThat(part.name()).containsIgnoringCase("RTX 5070 Ti")));
+        verifyNoJdbcWrites();
+    }
+
+    @Test
     void fullBuildRecommendationHonorsExplicitCpuModelToken() {
         AiChatEngineResponse response = engine.respond(new AiChatEngineRequest(
                 "CPU 9700X 들어간 PC 추천해줘",
@@ -996,6 +1017,200 @@ class DefaultAiChatEngineTest {
     }
 
     @Test
+    void hardConstraintBuildRecommendationUsesNarrowLlmContextSchemaAndKeepsModelConstraint() {
+        when(openAiResponsesClient.isConfigured()).thenReturn(true);
+        when(agentRagRetrievalService.retrieveEvidenceSet(any(), eq(AgentRunProfiles.requirementParse()), anyString(), anyInt()))
+                .thenReturn(List.of());
+        when(openAiResponsesClient.createStructuredJsonResult(
+                anyString(),
+                anyString(),
+                eq("buildgraph_ai_build_recommendation_context"),
+                any(),
+                eq("gpt-5.4-mini"),
+                eq("low"),
+                eq(650)
+        )).thenReturn(new LlmResponseResult("""
+                {
+                  "budget": 3000000,
+                  "budgetMode": "MAX",
+                  "usageTags": ["GAMING"],
+                  "resolution": null,
+                  "preferredVendors": ["NVIDIA"],
+                  "priority": null,
+                  "performanceTier": "ENTHUSIAST",
+                  "budgetPolicy": "USER_BUDGET",
+                  "mustHave": [],
+                  "requiredGpuClasses": ["RTX_5090"],
+                  "requiredPartKeywords": [],
+                  "requiredPartConstraints": [],
+                  "hardConstraintPolicy": "MUST_INCLUDE",
+                  "confidence": {
+                    "budget": "HIGH",
+                    "usageTags": "HIGH",
+                    "resolution": "LOW",
+                    "preferredVendors": "HIGH",
+                    "mustHave": "LOW",
+                    "requiredGpuClasses": "HIGH",
+                    "requiredPartKeywords": "LOW"
+                  },
+                  "parseNotes": "예산 상한과 RTX 5090 필수 조건을 함께 유지합니다."
+                }
+                """, LlmProvider.OPENAI, "gpt-5.4-mini", "low", 2500, 170, 40, 210, 3200));
+
+        AiChatEngineResponse response = engine.respondLlmRequired(new AiChatEngineRequest(
+                "300만원 이하 RTX 5090 게임용 PC 추천해줘",
+                "HOME",
+                null,
+                null,
+                null,
+                Map.of("_buildRecommendationParseOnly", true, "serverFacts", Map.of("budgetWon", 3_000_000)),
+                1L
+        ), "BUILD_CHAT_54_MINI_FAST");
+
+        assertThat(response.intent()).isEqualTo(AiChatIntent.FULL_BUILD_RECOMMEND);
+        assertThat(response.parsedContext())
+                .containsEntry("budget", 3_000_000)
+                .containsEntry("budgetMode", "MAX")
+                .containsEntry("hardConstraintPolicy", "MUST_INCLUDE");
+        assertThat(response.parsedContext().get("requiredGpuClasses")).asList().containsExactly("RTX_5090");
+        assertThat(response.recommendations()).hasSize(3).allSatisfy(recommendation ->
+                assertThat(recommendation.items())
+                        .filteredOn(part -> "GPU".equals(part.category()))
+                        .singleElement()
+                        .satisfies(part -> assertThat(part.attributes()).containsEntry("gpuClass", "RTX_5090")));
+        verify(openAiResponsesClient, never()).createStructuredJsonResult(
+                anyString(), anyString(), eq("buildgraph_ai_build_chat_plan"), any(), anyString(), anyString(), anyInt());
+        verifyNoJdbcWrites();
+    }
+
+    @Test
+    void hardConstraintBuildRecommendationKeepsEveryLlmParsedCategoryConstraint() {
+        when(openAiResponsesClient.isConfigured()).thenReturn(true);
+        when(agentRagRetrievalService.retrieveEvidenceSet(any(), eq(AgentRunProfiles.requirementParse()), anyString(), anyInt()))
+                .thenReturn(List.of());
+        when(openAiResponsesClient.createStructuredJsonResult(
+                anyString(),
+                anyString(),
+                eq("buildgraph_ai_build_recommendation_context"),
+                any(),
+                eq("gpt-5.4-mini"),
+                eq("low"),
+                eq(650)
+        )).thenReturn(new LlmResponseResult("""
+                {
+                  "budget": 4500000,
+                  "budgetMode": "MAX",
+                  "usageTags": ["GAMING"],
+                  "resolution": "4K",
+                  "preferredVendors": ["AMD", "NVIDIA"],
+                  "priority": "게임 성능",
+                  "performanceTier": "PERFORMANCE",
+                  "budgetPolicy": "USER_BUDGET",
+                  "mustHave": [],
+                  "requiredGpuClasses": ["RTX_5070_TI"],
+                  "requiredPartKeywords": ["AMD", "MSI", "RTX 5070"],
+                  "requiredPartConstraints": [
+                    {"category": "CPU", "keywords": ["AMD"]},
+                    {"category": "MOTHERBOARD", "keywords": ["MSI"]},
+                    {"category": "GPU", "keywords": ["RTX 5070"]}
+                  ],
+                  "hardConstraintPolicy": "MUST_INCLUDE",
+                  "confidence": {
+                    "budget": "HIGH",
+                    "usageTags": "HIGH",
+                    "resolution": "HIGH",
+                    "preferredVendors": "HIGH",
+                    "mustHave": "LOW",
+                    "requiredGpuClasses": "HIGH",
+                    "requiredPartKeywords": "HIGH"
+                  },
+                  "parseNotes": "AMD CPU, MSI 메인보드와 RTX 5070을 모두 필수 조건으로 유지합니다."
+                }
+                """, LlmProvider.OPENAI, "gpt-5.4-mini", "low", 2400, 200, 60, 260, 3300));
+
+        AiChatEngineResponse response = engine.respondLlmRequired(new AiChatEngineRequest(
+                "AMD CPU, MSI 메인보드와 RTX 5070 Ti를 반드시 넣고 450만원 이하 4K 게임용 PC 견적을 만들어줘",
+                "HOME",
+                null,
+                null,
+                null,
+                Map.of("_buildRecommendationParseOnly", true, "serverFacts", Map.of("budgetWon", 4_500_000)),
+                1L
+        ), "BUILD_CHAT_54_MINI_FAST");
+
+        assertThat(response.intent()).isEqualTo(AiChatIntent.FULL_BUILD_RECOMMEND);
+        assertThat(response.recommendations()).isNotEmpty().allSatisfy(recommendation -> {
+            assertThat(recommendation.items())
+                    .filteredOn(part -> "CPU".equals(part.category()))
+                    .singleElement()
+                    .satisfies(part -> assertThat(part.name()).containsIgnoringCase("AMD"));
+            assertThat(recommendation.items())
+                    .filteredOn(part -> "GPU".equals(part.category()))
+                    .singleElement()
+                    .satisfies(part -> assertThat(part.name()).containsIgnoringCase("RTX 5070 Ti"));
+            assertThat(recommendation.items())
+                    .filteredOn(part -> "MOTHERBOARD".equals(part.category()))
+                    .singleElement()
+                    .satisfies(part -> assertThat(part.name()).containsIgnoringCase("MSI"));
+        });
+        verifyNoJdbcWrites();
+    }
+
+    @Test
+    void fullBuildDoesNotTreatTheCpuModelAsAnAdditionalGpuModel() {
+        AiChatEngineResponse response = engine.respond(new AiChatEngineRequest(
+                "CPU 9700X와 RTX 5080 GPU를 반드시 넣은 게임 PC 추천해줘",
+                "HOME",
+                null,
+                null,
+                null,
+                Map.of(),
+                1L
+        ));
+
+        assertThat(response.recommendations()).hasSize(3).allSatisfy(recommendation -> {
+            assertThat(recommendation.items())
+                    .filteredOn(part -> "CPU".equals(part.category()))
+                    .singleElement()
+                    .satisfies(part -> assertThat(part.name()).containsIgnoringCase("9700X"));
+            assertThat(recommendation.items())
+                    .filteredOn(part -> "GPU".equals(part.category()))
+                    .singleElement()
+                    .satisfies(part -> assertThat(part.name()).containsIgnoringCase("RTX 5080"));
+        });
+        verifyNoJdbcWrites();
+    }
+
+    @Test
+    void fullBuildScopesRamStorageAndPsuNumbersToTheirOwnCategories() {
+        AiChatEngineResponse response = engine.respond(new AiChatEngineRequest(
+                "RAM 64GB와 SSD 2TB, 1000W 파워를 반드시 포함한 작업용 PC 추천해줘",
+                "HOME",
+                null,
+                null,
+                null,
+                Map.of(),
+                1L
+        ));
+
+        assertThat(response.recommendations()).hasSize(3).allSatisfy(recommendation -> {
+            assertThat(recommendation.items())
+                    .filteredOn(part -> "RAM".equals(part.category()))
+                    .singleElement()
+                    .satisfies(part -> assertThat(part.attributes()).containsEntry("capacityGb", 64));
+            assertThat(recommendation.items())
+                    .filteredOn(part -> "STORAGE".equals(part.category()))
+                    .singleElement()
+                    .satisfies(part -> assertThat((Integer) part.attributes().get("capacityGb")).isGreaterThanOrEqualTo(2000));
+            assertThat(recommendation.items())
+                    .filteredOn(part -> "PSU".equals(part.category()))
+                    .singleElement()
+                    .satisfies(part -> assertThat(part.attributes()).containsEntry("capacityW", 1000));
+        });
+        verifyNoJdbcWrites();
+    }
+
+    @Test
     void llmRequiredBuildModifyHonorsMotherboardBrandToken() {
         stubBuildChatPlan("""
                 {
@@ -1855,6 +2070,13 @@ class DefaultAiChatEngineTest {
                     partRow(category, "psu-high", "PSU High", 260_000, Map.of("toolReady", true, "capacityW", 1000, "efficiency", "PLATINUM", "atxSpec", "3.1", "modular", true)),
                     partRow(category, "psu-mid", "PSU Mid", 150_000, Map.of("toolReady", true, "capacityW", 850, "efficiency", "GOLD", "atxSpec", "3.1", "modular", true)),
                     partRow(category, "psu-low", "PSU Low", 80_000, Map.of("toolReady", true, "capacityW", 650, "efficiency", "BRONZE", "atxSpec", "2.4", "modular", false))
+            );
+        }
+        if ("STORAGE".equals(category)) {
+            return List.of(
+                    partRow(category, "storage-4tb", "NVMe SSD 4TB", 900_000, Map.of("toolReady", true, "capacityGb", 4000, "pcieGeneration", "5.0")),
+                    partRow(category, "storage-2tb", "NVMe SSD 2TB", 700_000, Map.of("toolReady", true, "capacityGb", 2000, "pcieGeneration", "4.0")),
+                    partRow(category, "storage-1tb", "NVMe SSD 1TB", 500_000, Map.of("toolReady", true, "capacityGb", 1000, "pcieGeneration", "4.0"))
             );
         }
         return List.of(

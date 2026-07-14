@@ -382,6 +382,22 @@ test('renders 8 empty slots on the slot board without the legacy list workspace'
   await expect(page.getByTestId('graph-flow-canvas')).toHaveCount(0);
 });
 
+test('keeps self quote and the primary navigation inside a mobile viewport', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await loginAsUser(page);
+  await page.route('**/api/quote-drafts/current**', async (route) => {
+    await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(emptyDraft) });
+  });
+  await page.route('**/api/parts**', async (route) => {
+    await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ items: [], page: 0, size: 20, total: 0 }) });
+  });
+
+  await page.goto('/self-quote');
+
+  await expect(page.getByTestId('quote-checklist')).toBeVisible();
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1)).toBe(true);
+});
+
 test('AI part location focus spotlights all 8 categories across fused, motherboard, and 3D views', async ({ page }) => {
   await loginAsUser(page);
   await page.addInitScript(() => {
@@ -1162,6 +1178,10 @@ test('keeps the selected checklist category open while replacing single-slot par
 
   await page.goto('/self-quote?category=CPU');
   const candidates = page.getByTestId('checklist-candidates-CPU');
+  await expect(candidates).toBeVisible();
+
+  // 이미 열린 카테고리를 다시 눌러도 목록을 닫지 않는다. 빠른 연속 교체가 핵심 동선이다.
+  await page.getByTestId('checklist-CPU').click();
   await expect(candidates).toBeVisible();
 
   await candidates.getByRole('button', { name: /AMD Ryzen 5 9600X/ }).click();
@@ -3387,7 +3407,7 @@ test('shows save failure feedback while keeping the current self quote', async (
   await expect(page.getByTestId('checklist-GPU')).toContainText('RTX 5070 구매 테스트');
 });
 
-test('persists an assembly request, selects an offer, completes virtual payment, and reloads from the API', async ({ page }) => {
+test('persists an assembly request, selects an offer, and pays points after Toss authentication', async ({ page }) => {
   const quoteDraftMethods: string[] = [];
   const requestId = '00000000-0000-4000-8000-000000020001';
   let requestStatus = 'OFFERED';
@@ -3413,7 +3433,15 @@ test('persists an assembly request, selects an offer, completes virtual payment,
       { id: 'offer-fast', technicianId: 'tech-2', technicianName: '김도윤 기사', initials: '김', rating: 4.8, completedJobs: 132, responseMinutes: 8, specialties: ['당일 조립'], standardAsAccepted: true, providerType: 'INTERNAL', verified: true, status: selectedOfferId ? 'EXPIRED' : 'AVAILABLE', confirmedPartsPrice: 1_415_000, assemblyFee: 80_000, deliveryFee: 15_000, finalPrice: 1_510_000, leadTimeDays: 1, stockStatus: '주요 부품 재고 확인' },
       { id: 'offer-silent', technicianId: 'tech-3', technicianName: '최민석 기사', initials: '최', rating: 5, completedJobs: 96, responseMinutes: 18, specialties: ['저소음'], standardAsAccepted: true, providerType: 'EXTERNAL', verified: true, status: selectedOfferId ? 'EXPIRED' : 'AVAILABLE', confirmedPartsPrice: 1_388_000, assemblyFee: 95_000, deliveryFee: 20_000, finalPrice: 1_503_000, leadTimeDays: 3, stockStatus: '주요 부품 재고 확인' }
     ],
-    payment: paymentStatus ? { id: 'payment-1', amount: 1_470_000, method: 'VIRTUAL', status: paymentStatus } : null,
+    payment: paymentStatus ? {
+      id: 'payment-1',
+      amount: 1_470_000,
+      paidAmount: paymentStatus === 'PAID' ? 1_470_000 : 0,
+      currency: 'KRW',
+      provider: paymentStatus === 'PAID' ? 'BUILDGRAPH_POINT' : 'LEGACY_VIRTUAL',
+      method: paymentStatus === 'PAID' ? 'POINT' : 'VIRTUAL',
+      status: paymentStatus
+    } : null,
     statusHistory: [{ fromStatus: null, toStatus: 'REQUESTED', note: '조립 요청 등록' }]
   });
   await page.addInitScript(() => {
@@ -3435,6 +3463,13 @@ test('persists an assembly request, selects an offer, completes virtual payment,
       body: JSON.stringify({ mode: 'BUILD_OVERVIEW', summary: '호환 가능', nodes: [], edges: [], focusNodeIds: [], insights: [], toolResults: [] })
     });
   });
+  await page.route('**/api/users/me/points', async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({ id: 'point-wallet-1', name: '포인트', balance: 50_000_000, pointValueWon: 1, currency: 'KRW' })
+    });
+  });
   await page.route('**/api/assembly-requests**', async (route) => {
     const url = route.request().url();
     const method = route.request().method();
@@ -3449,9 +3484,26 @@ test('persists an assembly request, selects an offer, completes virtual payment,
       await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(assemblyResponse()) });
       return;
     }
-    if (method === 'POST' && url.endsWith('/payments/confirm-virtual')) {
+    if (method === 'POST' && url.endsWith('/payments/points/confirm')) {
       paymentStatus = 'PAID';
-      await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(assemblyResponse()) });
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          attempt: {
+            id: '00000000-0000-4000-8000-000000020011',
+            provider: 'BUILDGRAPH_POINT',
+            merchantPaymentId: 'POINT-test-payment',
+            payMethod: 'POINT',
+            requestedAmount: 1_470_000,
+            approvedAmount: 1_470_000,
+            currency: 'KRW',
+            status: 'SUCCEEDED',
+            expiresAt: '2099-07-20T12:00:00+09:00'
+          },
+          wallet: { id: 'point-wallet-1', name: '포인트', balance: 48_530_000, pointValueWon: 1, currency: 'KRW' }
+        })
+      });
       return;
     }
     await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(assemblyResponse()) });
@@ -3493,7 +3545,8 @@ test('persists an assembly request, selects an offer, completes virtual payment,
   await expect(page).toHaveURL(`/checkout/payment/${requestId}`);
   await page.reload();
   await expect(page.getByText('박준호 기사')).toBeVisible();
-  await page.getByRole('button', { name: '가상 결제 완료' }).click();
+  await expect(page.getByRole('button', { name: '토스 결제하기' })).toBeVisible();
+  await page.goto(`/checkout/toss/success/${requestId}?paymentType=NORMAL&paymentKey=test_payment_key&orderId=${requestId}&amount=1470000`);
 
   await expect(page).toHaveURL(`/checkout/complete/${requestId}`);
   await expect(page.getByRole('heading', { name: '조립 요청 진행 상태' })).toBeVisible();
@@ -3756,6 +3809,13 @@ test('self quote chatbot sends current draft and never mutates the draft automat
   await expect(chatbotPanel.getByRole('button', { name: '800만원 PC 추천' })).toHaveCount(0);
   await expect(chatbotPanel.getByRole('button', { name: '9950X3D 상세' })).toHaveCount(0);
   await expect(chatbotPanel.getByRole('button', { name: '내 견적함' })).toHaveCount(0);
+  // 명확한 카테고리 화면 이동은 브라우저에서 즉시 처리하고 Build Chat을 호출하지 않는다.
+  await page.getByRole('textbox', { name: 'AI 챗봇에게 PC 사양 질문' }).fill('GPU 보여줘');
+  await page.getByRole('button', { name: '질문 보내기' }).click();
+  await expect(page).toHaveURL('/self-quote?category=GPU');
+  expect(buildChatBodies).toHaveLength(0);
+  await expect(page.getByTestId('ai-chat-messages')).toContainText('GPU 부품 화면으로 이동했습니다.');
+
   // 견적 완성 요청은 현재 견적(드래프트) 문맥이 필요하므로 서버로 draft가 전송돼야 한다
   await page.getByRole('textbox', { name: 'AI 챗봇에게 PC 사양 질문' }).fill('지금 견적 기준으로 나머지 부품 채워줘');
   await page.getByRole('button', { name: '질문 보내기' }).click();
@@ -4797,4 +4857,46 @@ test('records home recommendation detail and draft add events on product detail 
       partId: 'part-home-rec-test'
     })
   ]));
+});
+
+// 셀프견적 임베드 어시스턴트도 홈과 동일한 공용 컴포넌트라 응답 대기 버블이 떠야 한다(surface별 회귀 방지).
+test('셀프견적 임베드 챗봇도 느린 응답 동안 대기 버블을 보여준다', async ({ page }) => {
+  await loginAsUser(page);
+  // AI 세션 소유자 키는 캐시된 authUser에서 나온다. auth/me 응답을 기다리는 경합 없이
+  // 첫 제출부터 owner 키가 준비되도록 localStorage를 직접 심는다(홈 헬퍼와 동일한 패턴).
+  await page.addInitScript(() => {
+    localStorage.setItem('buildgraph.authUser', JSON.stringify({ id: 'user-test', email: 'user@example.com', name: 'Demo User', role: 'USER' }));
+  });
+  await page.route('**/api/quote-drafts/current**', async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({ id: 'draft-loading-smoke', status: 'ACTIVE', name: '셀프 견적', items: [], totalPrice: 0, itemCount: 0 })
+    });
+  });
+  await page.route('**/api/parts**', async (route) => {
+    await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ items: [], page: 0, size: 20, total: 0 }) });
+  });
+  let chatCalls = 0;
+  await page.route('**/api/ai/build-chat', async (route) => {
+    chatCalls += 1;
+    await new Promise((resolve) => setTimeout(resolve, 1200));
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({ answerType: 'GENERAL', message: '셀프견적 응답이 도착했습니다.', builds: [], warnings: [] })
+    });
+  });
+
+  await page.goto('/self-quote');
+  await page.getByRole('textbox', { name: 'AI 챗봇에게 PC 사양 질문' }).fill('200만원 PC 추천');
+  await page.getByRole('button', { name: '질문 보내기' }).click();
+
+  const pending = page.getByTestId('ai-chat-pending');
+  await expect(pending).toBeVisible();
+  await expect(pending).toContainText('답변을 준비하고 있어요');
+  expect(chatCalls).toBe(1);
+
+  await expect(page.getByText('셀프견적 응답이 도착했습니다.')).toBeVisible();
+  await expect(pending).toHaveCount(0);
 });

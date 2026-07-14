@@ -1,7 +1,5 @@
 import { API_BASE_URL, ApiError, api, getToken } from '../../lib/api';
 
-export const AS_CHAT_DEFAULT_TICKET_ID = '00000000-0000-4000-8000-000000006001';
-
 export type AsChatTicket = {
   id: string;
   status: string;

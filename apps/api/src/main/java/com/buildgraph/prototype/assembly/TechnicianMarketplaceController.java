@@ -10,6 +10,7 @@ import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.http.ResponseEntity;
 
 @RestController
 @RequestMapping("/api/technician")
@@ -29,8 +30,12 @@ public class TechnicianMarketplaceController {
     }
 
     @GetMapping("/profile")
-    Map<String, Object> profile(@RequestHeader(value = "Authorization", required = false) String authorization) {
-        return service.profile(authorization);
+    ResponseEntity<Map<String, Object>> profile(
+            @RequestHeader(value = "Authorization", required = false) String authorization
+    ) {
+        return service.profileIfPresent(authorization)
+                .map(ResponseEntity::ok)
+                .orElseGet(() -> ResponseEntity.noContent().build());
     }
 
     @PatchMapping("/profile")

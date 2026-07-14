@@ -1,0 +1,3662 @@
+[
+  {
+    "id": "demo-state-001",
+    "group": "DEMO_REQUIREMENT_RECOMMEND",
+    "profile": "BUILD_CHAT_54_MINI_FAST",
+    "setupDraft": {
+      "template": "EMPTY"
+    },
+    "journeyVariant": "정상",
+    "scenarioLabel": "조건 입력과 추천 1",
+    "steps": [
+      {
+        "kind": "BUILD_CHAT",
+        "message": "200만원으로 QHD 게임용 PC 추천해줘"
+      },
+      {
+        "kind": "ASSERT_RECOMMENDATION",
+        "required": [
+          "budget",
+          "compatibility",
+          "gaming"
+        ]
+      },
+      {
+        "kind": "APPLY_FIRST_BUILD_PREVIEW"
+      },
+      {
+        "kind": "ASSERT_DRAFT"
+      }
+    ],
+    "expectedInvariants": [
+      "NO_TOOL_FAIL",
+      "NO_CROSS_USER_DATA",
+      "STATE_TRANSITION_VALID",
+      "RELOAD_SAFE"
+    ],
+    "webReplay": true,
+    "risk": "HIGH"
+  },
+  {
+    "id": "demo-state-002",
+    "group": "DEMO_REQUIREMENT_RECOMMEND",
+    "profile": "BUILD_CHAT_54_MINI_FAST",
+    "setupDraft": {
+      "template": "EMPTY"
+    },
+    "journeyVariant": "새로고침",
+    "scenarioLabel": "조건 입력과 추천 2",
+    "steps": [
+      {
+        "kind": "BUILD_CHAT",
+        "message": "220만원으로 QHD 게임용 PC 추천해줘"
+      },
+      {
+        "kind": "ASSERT_RECOMMENDATION",
+        "required": [
+          "budget",
+          "compatibility",
+          "gaming"
+        ]
+      },
+      {
+        "kind": "APPLY_FIRST_BUILD_PREVIEW"
+      },
+      {
+        "kind": "ASSERT_DRAFT"
+      }
+    ],
+    "expectedInvariants": [
+      "NO_TOOL_FAIL",
+      "NO_CROSS_USER_DATA",
+      "STATE_TRANSITION_VALID",
+      "RELOAD_SAFE"
+    ],
+    "webReplay": true,
+    "risk": "HIGH"
+  },
+  {
+    "id": "demo-state-003",
+    "group": "DEMO_REQUIREMENT_RECOMMEND",
+    "profile": "BUILD_CHAT_54_MINI_FAST",
+    "setupDraft": {
+      "template": "EMPTY"
+    },
+    "journeyVariant": "뒤로가기",
+    "scenarioLabel": "조건 입력과 추천 3",
+    "steps": [
+      {
+        "kind": "BUILD_CHAT",
+        "message": "180만원으로 QHD 게임용 PC 추천해줘"
+      },
+      {
+        "kind": "ASSERT_RECOMMENDATION",
+        "required": [
+          "budget",
+          "compatibility",
+          "gaming"
+        ]
+      },
+      {
+        "kind": "APPLY_FIRST_BUILD_PREVIEW"
+      },
+      {
+        "kind": "ASSERT_DRAFT"
+      }
+    ],
+    "expectedInvariants": [
+      "NO_TOOL_FAIL",
+      "NO_CROSS_USER_DATA",
+      "STATE_TRANSITION_VALID",
+      "RELOAD_SAFE"
+    ],
+    "webReplay": true,
+    "risk": "HIGH"
+  },
+  {
+    "id": "demo-state-004",
+    "group": "DEMO_REQUIREMENT_RECOMMEND",
+    "profile": "BUILD_CHAT_54_MINI_FAST",
+    "setupDraft": {
+      "template": "EMPTY"
+    },
+    "journeyVariant": "중복클릭",
+    "scenarioLabel": "조건 입력과 추천 4",
+    "steps": [
+      {
+        "kind": "BUILD_CHAT",
+        "message": "250만원으로 QHD 게임용 PC 추천해줘"
+      },
+      {
+        "kind": "ASSERT_RECOMMENDATION",
+        "required": [
+          "budget",
+          "compatibility",
+          "gaming"
+        ]
+      },
+      {
+        "kind": "APPLY_FIRST_BUILD_PREVIEW"
+      },
+      {
+        "kind": "ASSERT_DRAFT"
+      }
+    ],
+    "expectedInvariants": [
+      "NO_TOOL_FAIL",
+      "NO_CROSS_USER_DATA",
+      "STATE_TRANSITION_VALID",
+      "RELOAD_SAFE"
+    ],
+    "webReplay": true,
+    "risk": "HIGH"
+  },
+  {
+    "id": "demo-state-005",
+    "group": "DEMO_REQUIREMENT_RECOMMEND",
+    "profile": "BUILD_CHAT_54_MINI_FAST",
+    "setupDraft": {
+      "template": "EMPTY"
+    },
+    "journeyVariant": "느린응답",
+    "scenarioLabel": "조건 입력과 추천 5",
+    "steps": [
+      {
+        "kind": "BUILD_CHAT",
+        "message": "200만원으로 QHD 게임용 PC 추천해줘"
+      },
+      {
+        "kind": "ASSERT_RECOMMENDATION",
+        "required": [
+          "budget",
+          "compatibility",
+          "gaming"
+        ]
+      },
+      {
+        "kind": "APPLY_FIRST_BUILD_PREVIEW"
+      },
+      {
+        "kind": "ASSERT_DRAFT"
+      }
+    ],
+    "expectedInvariants": [
+      "NO_TOOL_FAIL",
+      "NO_CROSS_USER_DATA",
+      "STATE_TRANSITION_VALID",
+      "RELOAD_SAFE"
+    ],
+    "webReplay": false,
+    "risk": "HIGH"
+  },
+  {
+    "id": "demo-state-006",
+    "group": "DEMO_REQUIREMENT_RECOMMEND",
+    "profile": "BUILD_CHAT_54_MINI_FAST",
+    "setupDraft": {
+      "template": "EMPTY"
+    },
+    "journeyVariant": "정상",
+    "scenarioLabel": "조건 입력과 추천 6",
+    "steps": [
+      {
+        "kind": "BUILD_CHAT",
+        "message": "220만원으로 QHD 게임용 PC 추천해줘"
+      },
+      {
+        "kind": "ASSERT_RECOMMENDATION",
+        "required": [
+          "budget",
+          "compatibility",
+          "gaming"
+        ]
+      },
+      {
+        "kind": "APPLY_FIRST_BUILD_PREVIEW"
+      },
+      {
+        "kind": "ASSERT_DRAFT"
+      }
+    ],
+    "expectedInvariants": [
+      "NO_TOOL_FAIL",
+      "NO_CROSS_USER_DATA",
+      "STATE_TRANSITION_VALID",
+      "RELOAD_SAFE"
+    ],
+    "webReplay": false,
+    "risk": "HIGH"
+  },
+  {
+    "id": "demo-state-007",
+    "group": "DEMO_REQUIREMENT_RECOMMEND",
+    "profile": "BUILD_CHAT_54_MINI_FAST",
+    "setupDraft": {
+      "template": "EMPTY"
+    },
+    "journeyVariant": "새로고침",
+    "scenarioLabel": "조건 입력과 추천 7",
+    "steps": [
+      {
+        "kind": "BUILD_CHAT",
+        "message": "180만원으로 QHD 게임용 PC 추천해줘"
+      },
+      {
+        "kind": "ASSERT_RECOMMENDATION",
+        "required": [
+          "budget",
+          "compatibility",
+          "gaming"
+        ]
+      },
+      {
+        "kind": "APPLY_FIRST_BUILD_PREVIEW"
+      },
+      {
+        "kind": "ASSERT_DRAFT"
+      }
+    ],
+    "expectedInvariants": [
+      "NO_TOOL_FAIL",
+      "NO_CROSS_USER_DATA",
+      "STATE_TRANSITION_VALID",
+      "RELOAD_SAFE"
+    ],
+    "webReplay": false,
+    "risk": "HIGH"
+  },
+  {
+    "id": "demo-state-008",
+    "group": "DEMO_REQUIREMENT_RECOMMEND",
+    "profile": "BUILD_CHAT_54_MINI_FAST",
+    "setupDraft": {
+      "template": "EMPTY"
+    },
+    "journeyVariant": "뒤로가기",
+    "scenarioLabel": "조건 입력과 추천 8",
+    "steps": [
+      {
+        "kind": "BUILD_CHAT",
+        "message": "250만원으로 QHD 게임용 PC 추천해줘"
+      },
+      {
+        "kind": "ASSERT_RECOMMENDATION",
+        "required": [
+          "budget",
+          "compatibility",
+          "gaming"
+        ]
+      },
+      {
+        "kind": "APPLY_FIRST_BUILD_PREVIEW"
+      },
+      {
+        "kind": "ASSERT_DRAFT"
+      }
+    ],
+    "expectedInvariants": [
+      "NO_TOOL_FAIL",
+      "NO_CROSS_USER_DATA",
+      "STATE_TRANSITION_VALID",
+      "RELOAD_SAFE"
+    ],
+    "webReplay": false,
+    "risk": "HIGH"
+  },
+  {
+    "id": "demo-state-009",
+    "group": "DEMO_REQUIREMENT_RECOMMEND",
+    "profile": "BUILD_CHAT_54_MINI_FAST",
+    "setupDraft": {
+      "template": "EMPTY"
+    },
+    "journeyVariant": "중복클릭",
+    "scenarioLabel": "조건 입력과 추천 9",
+    "steps": [
+      {
+        "kind": "BUILD_CHAT",
+        "message": "200만원으로 QHD 게임용 PC 추천해줘"
+      },
+      {
+        "kind": "ASSERT_RECOMMENDATION",
+        "required": [
+          "budget",
+          "compatibility",
+          "gaming"
+        ]
+      },
+      {
+        "kind": "APPLY_FIRST_BUILD_PREVIEW"
+      },
+      {
+        "kind": "ASSERT_DRAFT"
+      }
+    ],
+    "expectedInvariants": [
+      "NO_TOOL_FAIL",
+      "NO_CROSS_USER_DATA",
+      "STATE_TRANSITION_VALID",
+      "RELOAD_SAFE"
+    ],
+    "webReplay": false,
+    "risk": "MEDIUM"
+  },
+  {
+    "id": "demo-state-010",
+    "group": "DEMO_REQUIREMENT_RECOMMEND",
+    "profile": "BUILD_CHAT_54_MINI_FAST",
+    "setupDraft": {
+      "template": "EMPTY"
+    },
+    "journeyVariant": "느린응답",
+    "scenarioLabel": "조건 입력과 추천 10",
+    "steps": [
+      {
+        "kind": "BUILD_CHAT",
+        "message": "220만원으로 QHD 게임용 PC 추천해줘"
+      },
+      {
+        "kind": "ASSERT_RECOMMENDATION",
+        "required": [
+          "budget",
+          "compatibility",
+          "gaming"
+        ]
+      },
+      {
+        "kind": "APPLY_FIRST_BUILD_PREVIEW"
+      },
+      {
+        "kind": "ASSERT_DRAFT"
+      }
+    ],
+    "expectedInvariants": [
+      "NO_TOOL_FAIL",
+      "NO_CROSS_USER_DATA",
+      "STATE_TRANSITION_VALID",
+      "RELOAD_SAFE"
+    ],
+    "webReplay": false,
+    "risk": "MEDIUM"
+  },
+  {
+    "id": "demo-state-011",
+    "group": "DEMO_REQUIREMENT_RECOMMEND",
+    "profile": "BUILD_CHAT_54_MINI_FAST",
+    "setupDraft": {
+      "template": "EMPTY"
+    },
+    "journeyVariant": "정상",
+    "scenarioLabel": "조건 입력과 추천 11",
+    "steps": [
+      {
+        "kind": "BUILD_CHAT",
+        "message": "180만원으로 QHD 게임용 PC 추천해줘"
+      },
+      {
+        "kind": "ASSERT_RECOMMENDATION",
+        "required": [
+          "budget",
+          "compatibility",
+          "gaming"
+        ]
+      },
+      {
+        "kind": "APPLY_FIRST_BUILD_PREVIEW"
+      },
+      {
+        "kind": "ASSERT_DRAFT"
+      }
+    ],
+    "expectedInvariants": [
+      "NO_TOOL_FAIL",
+      "NO_CROSS_USER_DATA",
+      "STATE_TRANSITION_VALID",
+      "RELOAD_SAFE"
+    ],
+    "webReplay": false,
+    "risk": "MEDIUM"
+  },
+  {
+    "id": "demo-state-012",
+    "group": "DEMO_REQUIREMENT_RECOMMEND",
+    "profile": "BUILD_CHAT_54_MINI_FAST",
+    "setupDraft": {
+      "template": "EMPTY"
+    },
+    "journeyVariant": "새로고침",
+    "scenarioLabel": "조건 입력과 추천 12",
+    "steps": [
+      {
+        "kind": "BUILD_CHAT",
+        "message": "250만원으로 QHD 게임용 PC 추천해줘"
+      },
+      {
+        "kind": "ASSERT_RECOMMENDATION",
+        "required": [
+          "budget",
+          "compatibility",
+          "gaming"
+        ]
+      },
+      {
+        "kind": "APPLY_FIRST_BUILD_PREVIEW"
+      },
+      {
+        "kind": "ASSERT_DRAFT"
+      }
+    ],
+    "expectedInvariants": [
+      "NO_TOOL_FAIL",
+      "NO_CROSS_USER_DATA",
+      "STATE_TRANSITION_VALID",
+      "RELOAD_SAFE"
+    ],
+    "webReplay": false,
+    "risk": "MEDIUM"
+  },
+  {
+    "id": "demo-state-013",
+    "group": "DEMO_REQUIREMENT_RECOMMEND",
+    "profile": "BUILD_CHAT_54_MINI_FAST",
+    "setupDraft": {
+      "template": "EMPTY"
+    },
+    "journeyVariant": "뒤로가기",
+    "scenarioLabel": "조건 입력과 추천 13",
+    "steps": [
+      {
+        "kind": "BUILD_CHAT",
+        "message": "200만원으로 QHD 게임용 PC 추천해줘"
+      },
+      {
+        "kind": "ASSERT_RECOMMENDATION",
+        "required": [
+          "budget",
+          "compatibility",
+          "gaming"
+        ]
+      },
+      {
+        "kind": "APPLY_FIRST_BUILD_PREVIEW"
+      },
+      {
+        "kind": "ASSERT_DRAFT"
+      }
+    ],
+    "expectedInvariants": [
+      "NO_TOOL_FAIL",
+      "NO_CROSS_USER_DATA",
+      "STATE_TRANSITION_VALID",
+      "RELOAD_SAFE"
+    ],
+    "webReplay": false,
+    "risk": "MEDIUM"
+  },
+  {
+    "id": "demo-state-014",
+    "group": "DEMO_REQUIREMENT_RECOMMEND",
+    "profile": "BUILD_CHAT_54_MINI_FAST",
+    "setupDraft": {
+      "template": "EMPTY"
+    },
+    "journeyVariant": "중복클릭",
+    "scenarioLabel": "조건 입력과 추천 14",
+    "steps": [
+      {
+        "kind": "BUILD_CHAT",
+        "message": "220만원으로 QHD 게임용 PC 추천해줘"
+      },
+      {
+        "kind": "ASSERT_RECOMMENDATION",
+        "required": [
+          "budget",
+          "compatibility",
+          "gaming"
+        ]
+      },
+      {
+        "kind": "APPLY_FIRST_BUILD_PREVIEW"
+      },
+      {
+        "kind": "ASSERT_DRAFT"
+      }
+    ],
+    "expectedInvariants": [
+      "NO_TOOL_FAIL",
+      "NO_CROSS_USER_DATA",
+      "STATE_TRANSITION_VALID",
+      "RELOAD_SAFE"
+    ],
+    "webReplay": false,
+    "risk": "MEDIUM"
+  },
+  {
+    "id": "demo-state-015",
+    "group": "DEMO_REQUIREMENT_RECOMMEND",
+    "profile": "BUILD_CHAT_54_MINI_FAST",
+    "setupDraft": {
+      "template": "EMPTY"
+    },
+    "journeyVariant": "느린응답",
+    "scenarioLabel": "조건 입력과 추천 15",
+    "steps": [
+      {
+        "kind": "BUILD_CHAT",
+        "message": "180만원으로 QHD 게임용 PC 추천해줘"
+      },
+      {
+        "kind": "ASSERT_RECOMMENDATION",
+        "required": [
+          "budget",
+          "compatibility",
+          "gaming"
+        ]
+      },
+      {
+        "kind": "APPLY_FIRST_BUILD_PREVIEW"
+      },
+      {
+        "kind": "ASSERT_DRAFT"
+      }
+    ],
+    "expectedInvariants": [
+      "NO_TOOL_FAIL",
+      "NO_CROSS_USER_DATA",
+      "STATE_TRANSITION_VALID",
+      "RELOAD_SAFE"
+    ],
+    "webReplay": false,
+    "risk": "MEDIUM"
+  },
+  {
+    "id": "demo-state-016",
+    "group": "DEMO_REQUIREMENT_RECOMMEND",
+    "profile": "BUILD_CHAT_54_MINI_FAST",
+    "setupDraft": {
+      "template": "EMPTY"
+    },
+    "journeyVariant": "정상",
+    "scenarioLabel": "조건 입력과 추천 16",
+    "steps": [
+      {
+        "kind": "BUILD_CHAT",
+        "message": "250만원으로 QHD 게임용 PC 추천해줘"
+      },
+      {
+        "kind": "ASSERT_RECOMMENDATION",
+        "required": [
+          "budget",
+          "compatibility",
+          "gaming"
+        ]
+      },
+      {
+        "kind": "APPLY_FIRST_BUILD_PREVIEW"
+      },
+      {
+        "kind": "ASSERT_DRAFT"
+      }
+    ],
+    "expectedInvariants": [
+      "NO_TOOL_FAIL",
+      "NO_CROSS_USER_DATA",
+      "STATE_TRANSITION_VALID",
+      "RELOAD_SAFE"
+    ],
+    "webReplay": false,
+    "risk": "MEDIUM"
+  },
+  {
+    "id": "demo-state-017",
+    "group": "DEMO_REQUIREMENT_RECOMMEND",
+    "profile": "BUILD_CHAT_54_MINI_FAST",
+    "setupDraft": {
+      "template": "EMPTY"
+    },
+    "journeyVariant": "새로고침",
+    "scenarioLabel": "조건 입력과 추천 17",
+    "steps": [
+      {
+        "kind": "BUILD_CHAT",
+        "message": "200만원으로 QHD 게임용 PC 추천해줘"
+      },
+      {
+        "kind": "ASSERT_RECOMMENDATION",
+        "required": [
+          "budget",
+          "compatibility",
+          "gaming"
+        ]
+      },
+      {
+        "kind": "APPLY_FIRST_BUILD_PREVIEW"
+      },
+      {
+        "kind": "ASSERT_DRAFT"
+      }
+    ],
+    "expectedInvariants": [
+      "NO_TOOL_FAIL",
+      "NO_CROSS_USER_DATA",
+      "STATE_TRANSITION_VALID",
+      "RELOAD_SAFE"
+    ],
+    "webReplay": false,
+    "risk": "MEDIUM"
+  },
+  {
+    "id": "demo-state-018",
+    "group": "DEMO_REQUIREMENT_RECOMMEND",
+    "profile": "BUILD_CHAT_54_MINI_FAST",
+    "setupDraft": {
+      "template": "EMPTY"
+    },
+    "journeyVariant": "뒤로가기",
+    "scenarioLabel": "조건 입력과 추천 18",
+    "steps": [
+      {
+        "kind": "BUILD_CHAT",
+        "message": "220만원으로 QHD 게임용 PC 추천해줘"
+      },
+      {
+        "kind": "ASSERT_RECOMMENDATION",
+        "required": [
+          "budget",
+          "compatibility",
+          "gaming"
+        ]
+      },
+      {
+        "kind": "APPLY_FIRST_BUILD_PREVIEW"
+      },
+      {
+        "kind": "ASSERT_DRAFT"
+      }
+    ],
+    "expectedInvariants": [
+      "NO_TOOL_FAIL",
+      "NO_CROSS_USER_DATA",
+      "STATE_TRANSITION_VALID",
+      "RELOAD_SAFE"
+    ],
+    "webReplay": false,
+    "risk": "MEDIUM"
+  },
+  {
+    "id": "demo-state-019",
+    "group": "DEMO_REQUIREMENT_RECOMMEND",
+    "profile": "BUILD_CHAT_54_MINI_FAST",
+    "setupDraft": {
+      "template": "EMPTY"
+    },
+    "journeyVariant": "중복클릭",
+    "scenarioLabel": "조건 입력과 추천 19",
+    "steps": [
+      {
+        "kind": "BUILD_CHAT",
+        "message": "180만원으로 QHD 게임용 PC 추천해줘"
+      },
+      {
+        "kind": "ASSERT_RECOMMENDATION",
+        "required": [
+          "budget",
+          "compatibility",
+          "gaming"
+        ]
+      },
+      {
+        "kind": "APPLY_FIRST_BUILD_PREVIEW"
+      },
+      {
+        "kind": "ASSERT_DRAFT"
+      }
+    ],
+    "expectedInvariants": [
+      "NO_TOOL_FAIL",
+      "NO_CROSS_USER_DATA",
+      "STATE_TRANSITION_VALID",
+      "RELOAD_SAFE"
+    ],
+    "webReplay": false,
+    "risk": "MEDIUM"
+  },
+  {
+    "id": "demo-state-020",
+    "group": "DEMO_REQUIREMENT_RECOMMEND",
+    "profile": "BUILD_CHAT_54_MINI_FAST",
+    "setupDraft": {
+      "template": "EMPTY"
+    },
+    "journeyVariant": "느린응답",
+    "scenarioLabel": "조건 입력과 추천 20",
+    "steps": [
+      {
+        "kind": "BUILD_CHAT",
+        "message": "250만원으로 QHD 게임용 PC 추천해줘"
+      },
+      {
+        "kind": "ASSERT_RECOMMENDATION",
+        "required": [
+          "budget",
+          "compatibility",
+          "gaming"
+        ]
+      },
+      {
+        "kind": "APPLY_FIRST_BUILD_PREVIEW"
+      },
+      {
+        "kind": "ASSERT_DRAFT"
+      }
+    ],
+    "expectedInvariants": [
+      "NO_TOOL_FAIL",
+      "NO_CROSS_USER_DATA",
+      "STATE_TRANSITION_VALID",
+      "RELOAD_SAFE"
+    ],
+    "webReplay": false,
+    "risk": "MEDIUM"
+  },
+  {
+    "id": "demo-state-021",
+    "group": "DEMO_GPU_DOWNGRADE_RESTORE",
+    "profile": "BUILD_CHAT_54_MINI_FAST",
+    "setupDraft": {
+      "template": "COMPLETE_VERIFIED"
+    },
+    "journeyVariant": "정상",
+    "scenarioLabel": "GPU 하향과 원복 1",
+    "steps": [
+      {
+        "kind": "SNAPSHOT_DRAFT"
+      },
+      {
+        "kind": "BUILD_CHAT",
+        "message": "GPU를 더 저렴한 제품으로 바꿔줘"
+      },
+      {
+        "kind": "ASSERT_PREVIEW",
+        "category": "GPU",
+        "direction": "CHEAPER"
+      },
+      {
+        "kind": "SIMULATE",
+        "message": "바꾸면 QHD 게임 성능이 얼마나 달라져?"
+      },
+      {
+        "kind": "RESTORE_DRAFT"
+      }
+    ],
+    "expectedInvariants": [
+      "NO_TOOL_FAIL",
+      "NO_CROSS_USER_DATA",
+      "STATE_TRANSITION_VALID",
+      "RELOAD_SAFE"
+    ],
+    "webReplay": true,
+    "risk": "HIGH"
+  },
+  {
+    "id": "demo-state-022",
+    "group": "DEMO_GPU_DOWNGRADE_RESTORE",
+    "profile": "BUILD_CHAT_54_MINI_FAST",
+    "setupDraft": {
+      "template": "COMPLETE_VERIFIED"
+    },
+    "journeyVariant": "새로고침",
+    "scenarioLabel": "GPU 하향과 원복 2",
+    "steps": [
+      {
+        "kind": "SNAPSHOT_DRAFT"
+      },
+      {
+        "kind": "BUILD_CHAT",
+        "message": "GPU를 더 저렴한 제품으로 바꿔줘"
+      },
+      {
+        "kind": "ASSERT_PREVIEW",
+        "category": "GPU",
+        "direction": "CHEAPER"
+      },
+      {
+        "kind": "SIMULATE",
+        "message": "바꾸면 QHD 게임 성능이 얼마나 달라져?"
+      },
+      {
+        "kind": "RESTORE_DRAFT"
+      }
+    ],
+    "expectedInvariants": [
+      "NO_TOOL_FAIL",
+      "NO_CROSS_USER_DATA",
+      "STATE_TRANSITION_VALID",
+      "RELOAD_SAFE"
+    ],
+    "webReplay": true,
+    "risk": "HIGH"
+  },
+  {
+    "id": "demo-state-023",
+    "group": "DEMO_GPU_DOWNGRADE_RESTORE",
+    "profile": "BUILD_CHAT_54_MINI_FAST",
+    "setupDraft": {
+      "template": "COMPLETE_VERIFIED"
+    },
+    "journeyVariant": "뒤로가기",
+    "scenarioLabel": "GPU 하향과 원복 3",
+    "steps": [
+      {
+        "kind": "SNAPSHOT_DRAFT"
+      },
+      {
+        "kind": "BUILD_CHAT",
+        "message": "GPU를 더 저렴한 제품으로 바꿔줘"
+      },
+      {
+        "kind": "ASSERT_PREVIEW",
+        "category": "GPU",
+        "direction": "CHEAPER"
+      },
+      {
+        "kind": "SIMULATE",
+        "message": "바꾸면 QHD 게임 성능이 얼마나 달라져?"
+      },
+      {
+        "kind": "RESTORE_DRAFT"
+      }
+    ],
+    "expectedInvariants": [
+      "NO_TOOL_FAIL",
+      "NO_CROSS_USER_DATA",
+      "STATE_TRANSITION_VALID",
+      "RELOAD_SAFE"
+    ],
+    "webReplay": true,
+    "risk": "HIGH"
+  },
+  {
+    "id": "demo-state-024",
+    "group": "DEMO_GPU_DOWNGRADE_RESTORE",
+    "profile": "BUILD_CHAT_54_MINI_FAST",
+    "setupDraft": {
+      "template": "COMPLETE_VERIFIED"
+    },
+    "journeyVariant": "중복클릭",
+    "scenarioLabel": "GPU 하향과 원복 4",
+    "steps": [
+      {
+        "kind": "SNAPSHOT_DRAFT"
+      },
+      {
+        "kind": "BUILD_CHAT",
+        "message": "GPU를 더 저렴한 제품으로 바꿔줘"
+      },
+      {
+        "kind": "ASSERT_PREVIEW",
+        "category": "GPU",
+        "direction": "CHEAPER"
+      },
+      {
+        "kind": "SIMULATE",
+        "message": "바꾸면 QHD 게임 성능이 얼마나 달라져?"
+      },
+      {
+        "kind": "RESTORE_DRAFT"
+      }
+    ],
+    "expectedInvariants": [
+      "NO_TOOL_FAIL",
+      "NO_CROSS_USER_DATA",
+      "STATE_TRANSITION_VALID",
+      "RELOAD_SAFE"
+    ],
+    "webReplay": true,
+    "risk": "HIGH"
+  },
+  {
+    "id": "demo-state-025",
+    "group": "DEMO_GPU_DOWNGRADE_RESTORE",
+    "profile": "BUILD_CHAT_54_MINI_FAST",
+    "setupDraft": {
+      "template": "COMPLETE_VERIFIED"
+    },
+    "journeyVariant": "느린응답",
+    "scenarioLabel": "GPU 하향과 원복 5",
+    "steps": [
+      {
+        "kind": "SNAPSHOT_DRAFT"
+      },
+      {
+        "kind": "BUILD_CHAT",
+        "message": "GPU를 더 저렴한 제품으로 바꿔줘"
+      },
+      {
+        "kind": "ASSERT_PREVIEW",
+        "category": "GPU",
+        "direction": "CHEAPER"
+      },
+      {
+        "kind": "SIMULATE",
+        "message": "바꾸면 QHD 게임 성능이 얼마나 달라져?"
+      },
+      {
+        "kind": "RESTORE_DRAFT"
+      }
+    ],
+    "expectedInvariants": [
+      "NO_TOOL_FAIL",
+      "NO_CROSS_USER_DATA",
+      "STATE_TRANSITION_VALID",
+      "RELOAD_SAFE"
+    ],
+    "webReplay": false,
+    "risk": "HIGH"
+  },
+  {
+    "id": "demo-state-026",
+    "group": "DEMO_GPU_DOWNGRADE_RESTORE",
+    "profile": "BUILD_CHAT_54_MINI_FAST",
+    "setupDraft": {
+      "template": "COMPLETE_VERIFIED"
+    },
+    "journeyVariant": "정상",
+    "scenarioLabel": "GPU 하향과 원복 6",
+    "steps": [
+      {
+        "kind": "SNAPSHOT_DRAFT"
+      },
+      {
+        "kind": "BUILD_CHAT",
+        "message": "GPU를 더 저렴한 제품으로 바꿔줘"
+      },
+      {
+        "kind": "ASSERT_PREVIEW",
+        "category": "GPU",
+        "direction": "CHEAPER"
+      },
+      {
+        "kind": "SIMULATE",
+        "message": "바꾸면 QHD 게임 성능이 얼마나 달라져?"
+      },
+      {
+        "kind": "RESTORE_DRAFT"
+      }
+    ],
+    "expectedInvariants": [
+      "NO_TOOL_FAIL",
+      "NO_CROSS_USER_DATA",
+      "STATE_TRANSITION_VALID",
+      "RELOAD_SAFE"
+    ],
+    "webReplay": false,
+    "risk": "HIGH"
+  },
+  {
+    "id": "demo-state-027",
+    "group": "DEMO_GPU_DOWNGRADE_RESTORE",
+    "profile": "BUILD_CHAT_54_MINI_FAST",
+    "setupDraft": {
+      "template": "COMPLETE_VERIFIED"
+    },
+    "journeyVariant": "새로고침",
+    "scenarioLabel": "GPU 하향과 원복 7",
+    "steps": [
+      {
+        "kind": "SNAPSHOT_DRAFT"
+      },
+      {
+        "kind": "BUILD_CHAT",
+        "message": "GPU를 더 저렴한 제품으로 바꿔줘"
+      },
+      {
+        "kind": "ASSERT_PREVIEW",
+        "category": "GPU",
+        "direction": "CHEAPER"
+      },
+      {
+        "kind": "SIMULATE",
+        "message": "바꾸면 QHD 게임 성능이 얼마나 달라져?"
+      },
+      {
+        "kind": "RESTORE_DRAFT"
+      }
+    ],
+    "expectedInvariants": [
+      "NO_TOOL_FAIL",
+      "NO_CROSS_USER_DATA",
+      "STATE_TRANSITION_VALID",
+      "RELOAD_SAFE"
+    ],
+    "webReplay": false,
+    "risk": "HIGH"
+  },
+  {
+    "id": "demo-state-028",
+    "group": "DEMO_GPU_DOWNGRADE_RESTORE",
+    "profile": "BUILD_CHAT_54_MINI_FAST",
+    "setupDraft": {
+      "template": "COMPLETE_VERIFIED"
+    },
+    "journeyVariant": "뒤로가기",
+    "scenarioLabel": "GPU 하향과 원복 8",
+    "steps": [
+      {
+        "kind": "SNAPSHOT_DRAFT"
+      },
+      {
+        "kind": "BUILD_CHAT",
+        "message": "GPU를 더 저렴한 제품으로 바꿔줘"
+      },
+      {
+        "kind": "ASSERT_PREVIEW",
+        "category": "GPU",
+        "direction": "CHEAPER"
+      },
+      {
+        "kind": "SIMULATE",
+        "message": "바꾸면 QHD 게임 성능이 얼마나 달라져?"
+      },
+      {
+        "kind": "RESTORE_DRAFT"
+      }
+    ],
+    "expectedInvariants": [
+      "NO_TOOL_FAIL",
+      "NO_CROSS_USER_DATA",
+      "STATE_TRANSITION_VALID",
+      "RELOAD_SAFE"
+    ],
+    "webReplay": false,
+    "risk": "HIGH"
+  },
+  {
+    "id": "demo-state-029",
+    "group": "DEMO_GPU_DOWNGRADE_RESTORE",
+    "profile": "BUILD_CHAT_54_MINI_FAST",
+    "setupDraft": {
+      "template": "COMPLETE_VERIFIED"
+    },
+    "journeyVariant": "중복클릭",
+    "scenarioLabel": "GPU 하향과 원복 9",
+    "steps": [
+      {
+        "kind": "SNAPSHOT_DRAFT"
+      },
+      {
+        "kind": "BUILD_CHAT",
+        "message": "GPU를 더 저렴한 제품으로 바꿔줘"
+      },
+      {
+        "kind": "ASSERT_PREVIEW",
+        "category": "GPU",
+        "direction": "CHEAPER"
+      },
+      {
+        "kind": "SIMULATE",
+        "message": "바꾸면 QHD 게임 성능이 얼마나 달라져?"
+      },
+      {
+        "kind": "RESTORE_DRAFT"
+      }
+    ],
+    "expectedInvariants": [
+      "NO_TOOL_FAIL",
+      "NO_CROSS_USER_DATA",
+      "STATE_TRANSITION_VALID",
+      "RELOAD_SAFE"
+    ],
+    "webReplay": false,
+    "risk": "MEDIUM"
+  },
+  {
+    "id": "demo-state-030",
+    "group": "DEMO_GPU_DOWNGRADE_RESTORE",
+    "profile": "BUILD_CHAT_54_MINI_FAST",
+    "setupDraft": {
+      "template": "COMPLETE_VERIFIED"
+    },
+    "journeyVariant": "느린응답",
+    "scenarioLabel": "GPU 하향과 원복 10",
+    "steps": [
+      {
+        "kind": "SNAPSHOT_DRAFT"
+      },
+      {
+        "kind": "BUILD_CHAT",
+        "message": "GPU를 더 저렴한 제품으로 바꿔줘"
+      },
+      {
+        "kind": "ASSERT_PREVIEW",
+        "category": "GPU",
+        "direction": "CHEAPER"
+      },
+      {
+        "kind": "SIMULATE",
+        "message": "바꾸면 QHD 게임 성능이 얼마나 달라져?"
+      },
+      {
+        "kind": "RESTORE_DRAFT"
+      }
+    ],
+    "expectedInvariants": [
+      "NO_TOOL_FAIL",
+      "NO_CROSS_USER_DATA",
+      "STATE_TRANSITION_VALID",
+      "RELOAD_SAFE"
+    ],
+    "webReplay": false,
+    "risk": "MEDIUM"
+  },
+  {
+    "id": "demo-state-031",
+    "group": "DEMO_GPU_DOWNGRADE_RESTORE",
+    "profile": "BUILD_CHAT_54_MINI_FAST",
+    "setupDraft": {
+      "template": "COMPLETE_VERIFIED"
+    },
+    "journeyVariant": "정상",
+    "scenarioLabel": "GPU 하향과 원복 11",
+    "steps": [
+      {
+        "kind": "SNAPSHOT_DRAFT"
+      },
+      {
+        "kind": "BUILD_CHAT",
+        "message": "GPU를 더 저렴한 제품으로 바꿔줘"
+      },
+      {
+        "kind": "ASSERT_PREVIEW",
+        "category": "GPU",
+        "direction": "CHEAPER"
+      },
+      {
+        "kind": "SIMULATE",
+        "message": "바꾸면 QHD 게임 성능이 얼마나 달라져?"
+      },
+      {
+        "kind": "RESTORE_DRAFT"
+      }
+    ],
+    "expectedInvariants": [
+      "NO_TOOL_FAIL",
+      "NO_CROSS_USER_DATA",
+      "STATE_TRANSITION_VALID",
+      "RELOAD_SAFE"
+    ],
+    "webReplay": false,
+    "risk": "MEDIUM"
+  },
+  {
+    "id": "demo-state-032",
+    "group": "DEMO_GPU_DOWNGRADE_RESTORE",
+    "profile": "BUILD_CHAT_54_MINI_FAST",
+    "setupDraft": {
+      "template": "COMPLETE_VERIFIED"
+    },
+    "journeyVariant": "새로고침",
+    "scenarioLabel": "GPU 하향과 원복 12",
+    "steps": [
+      {
+        "kind": "SNAPSHOT_DRAFT"
+      },
+      {
+        "kind": "BUILD_CHAT",
+        "message": "GPU를 더 저렴한 제품으로 바꿔줘"
+      },
+      {
+        "kind": "ASSERT_PREVIEW",
+        "category": "GPU",
+        "direction": "CHEAPER"
+      },
+      {
+        "kind": "SIMULATE",
+        "message": "바꾸면 QHD 게임 성능이 얼마나 달라져?"
+      },
+      {
+        "kind": "RESTORE_DRAFT"
+      }
+    ],
+    "expectedInvariants": [
+      "NO_TOOL_FAIL",
+      "NO_CROSS_USER_DATA",
+      "STATE_TRANSITION_VALID",
+      "RELOAD_SAFE"
+    ],
+    "webReplay": false,
+    "risk": "MEDIUM"
+  },
+  {
+    "id": "demo-state-033",
+    "group": "DEMO_GPU_DOWNGRADE_RESTORE",
+    "profile": "BUILD_CHAT_54_MINI_FAST",
+    "setupDraft": {
+      "template": "COMPLETE_VERIFIED"
+    },
+    "journeyVariant": "뒤로가기",
+    "scenarioLabel": "GPU 하향과 원복 13",
+    "steps": [
+      {
+        "kind": "SNAPSHOT_DRAFT"
+      },
+      {
+        "kind": "BUILD_CHAT",
+        "message": "GPU를 더 저렴한 제품으로 바꿔줘"
+      },
+      {
+        "kind": "ASSERT_PREVIEW",
+        "category": "GPU",
+        "direction": "CHEAPER"
+      },
+      {
+        "kind": "SIMULATE",
+        "message": "바꾸면 QHD 게임 성능이 얼마나 달라져?"
+      },
+      {
+        "kind": "RESTORE_DRAFT"
+      }
+    ],
+    "expectedInvariants": [
+      "NO_TOOL_FAIL",
+      "NO_CROSS_USER_DATA",
+      "STATE_TRANSITION_VALID",
+      "RELOAD_SAFE"
+    ],
+    "webReplay": false,
+    "risk": "MEDIUM"
+  },
+  {
+    "id": "demo-state-034",
+    "group": "DEMO_GPU_DOWNGRADE_RESTORE",
+    "profile": "BUILD_CHAT_54_MINI_FAST",
+    "setupDraft": {
+      "template": "COMPLETE_VERIFIED"
+    },
+    "journeyVariant": "중복클릭",
+    "scenarioLabel": "GPU 하향과 원복 14",
+    "steps": [
+      {
+        "kind": "SNAPSHOT_DRAFT"
+      },
+      {
+        "kind": "BUILD_CHAT",
+        "message": "GPU를 더 저렴한 제품으로 바꿔줘"
+      },
+      {
+        "kind": "ASSERT_PREVIEW",
+        "category": "GPU",
+        "direction": "CHEAPER"
+      },
+      {
+        "kind": "SIMULATE",
+        "message": "바꾸면 QHD 게임 성능이 얼마나 달라져?"
+      },
+      {
+        "kind": "RESTORE_DRAFT"
+      }
+    ],
+    "expectedInvariants": [
+      "NO_TOOL_FAIL",
+      "NO_CROSS_USER_DATA",
+      "STATE_TRANSITION_VALID",
+      "RELOAD_SAFE"
+    ],
+    "webReplay": false,
+    "risk": "MEDIUM"
+  },
+  {
+    "id": "demo-state-035",
+    "group": "DEMO_GPU_DOWNGRADE_RESTORE",
+    "profile": "BUILD_CHAT_54_MINI_FAST",
+    "setupDraft": {
+      "template": "COMPLETE_VERIFIED"
+    },
+    "journeyVariant": "느린응답",
+    "scenarioLabel": "GPU 하향과 원복 15",
+    "steps": [
+      {
+        "kind": "SNAPSHOT_DRAFT"
+      },
+      {
+        "kind": "BUILD_CHAT",
+        "message": "GPU를 더 저렴한 제품으로 바꿔줘"
+      },
+      {
+        "kind": "ASSERT_PREVIEW",
+        "category": "GPU",
+        "direction": "CHEAPER"
+      },
+      {
+        "kind": "SIMULATE",
+        "message": "바꾸면 QHD 게임 성능이 얼마나 달라져?"
+      },
+      {
+        "kind": "RESTORE_DRAFT"
+      }
+    ],
+    "expectedInvariants": [
+      "NO_TOOL_FAIL",
+      "NO_CROSS_USER_DATA",
+      "STATE_TRANSITION_VALID",
+      "RELOAD_SAFE"
+    ],
+    "webReplay": false,
+    "risk": "MEDIUM"
+  },
+  {
+    "id": "demo-state-036",
+    "group": "DEMO_GPU_DOWNGRADE_RESTORE",
+    "profile": "BUILD_CHAT_54_MINI_FAST",
+    "setupDraft": {
+      "template": "COMPLETE_VERIFIED"
+    },
+    "journeyVariant": "정상",
+    "scenarioLabel": "GPU 하향과 원복 16",
+    "steps": [
+      {
+        "kind": "SNAPSHOT_DRAFT"
+      },
+      {
+        "kind": "BUILD_CHAT",
+        "message": "GPU를 더 저렴한 제품으로 바꿔줘"
+      },
+      {
+        "kind": "ASSERT_PREVIEW",
+        "category": "GPU",
+        "direction": "CHEAPER"
+      },
+      {
+        "kind": "SIMULATE",
+        "message": "바꾸면 QHD 게임 성능이 얼마나 달라져?"
+      },
+      {
+        "kind": "RESTORE_DRAFT"
+      }
+    ],
+    "expectedInvariants": [
+      "NO_TOOL_FAIL",
+      "NO_CROSS_USER_DATA",
+      "STATE_TRANSITION_VALID",
+      "RELOAD_SAFE"
+    ],
+    "webReplay": false,
+    "risk": "MEDIUM"
+  },
+  {
+    "id": "demo-state-037",
+    "group": "DEMO_GPU_DOWNGRADE_RESTORE",
+    "profile": "BUILD_CHAT_54_MINI_FAST",
+    "setupDraft": {
+      "template": "COMPLETE_VERIFIED"
+    },
+    "journeyVariant": "새로고침",
+    "scenarioLabel": "GPU 하향과 원복 17",
+    "steps": [
+      {
+        "kind": "SNAPSHOT_DRAFT"
+      },
+      {
+        "kind": "BUILD_CHAT",
+        "message": "GPU를 더 저렴한 제품으로 바꿔줘"
+      },
+      {
+        "kind": "ASSERT_PREVIEW",
+        "category": "GPU",
+        "direction": "CHEAPER"
+      },
+      {
+        "kind": "SIMULATE",
+        "message": "바꾸면 QHD 게임 성능이 얼마나 달라져?"
+      },
+      {
+        "kind": "RESTORE_DRAFT"
+      }
+    ],
+    "expectedInvariants": [
+      "NO_TOOL_FAIL",
+      "NO_CROSS_USER_DATA",
+      "STATE_TRANSITION_VALID",
+      "RELOAD_SAFE"
+    ],
+    "webReplay": false,
+    "risk": "MEDIUM"
+  },
+  {
+    "id": "demo-state-038",
+    "group": "DEMO_GPU_DOWNGRADE_RESTORE",
+    "profile": "BUILD_CHAT_54_MINI_FAST",
+    "setupDraft": {
+      "template": "COMPLETE_VERIFIED"
+    },
+    "journeyVariant": "뒤로가기",
+    "scenarioLabel": "GPU 하향과 원복 18",
+    "steps": [
+      {
+        "kind": "SNAPSHOT_DRAFT"
+      },
+      {
+        "kind": "BUILD_CHAT",
+        "message": "GPU를 더 저렴한 제품으로 바꿔줘"
+      },
+      {
+        "kind": "ASSERT_PREVIEW",
+        "category": "GPU",
+        "direction": "CHEAPER"
+      },
+      {
+        "kind": "SIMULATE",
+        "message": "바꾸면 QHD 게임 성능이 얼마나 달라져?"
+      },
+      {
+        "kind": "RESTORE_DRAFT"
+      }
+    ],
+    "expectedInvariants": [
+      "NO_TOOL_FAIL",
+      "NO_CROSS_USER_DATA",
+      "STATE_TRANSITION_VALID",
+      "RELOAD_SAFE"
+    ],
+    "webReplay": false,
+    "risk": "MEDIUM"
+  },
+  {
+    "id": "demo-state-039",
+    "group": "DEMO_GPU_DOWNGRADE_RESTORE",
+    "profile": "BUILD_CHAT_54_MINI_FAST",
+    "setupDraft": {
+      "template": "COMPLETE_VERIFIED"
+    },
+    "journeyVariant": "중복클릭",
+    "scenarioLabel": "GPU 하향과 원복 19",
+    "steps": [
+      {
+        "kind": "SNAPSHOT_DRAFT"
+      },
+      {
+        "kind": "BUILD_CHAT",
+        "message": "GPU를 더 저렴한 제품으로 바꿔줘"
+      },
+      {
+        "kind": "ASSERT_PREVIEW",
+        "category": "GPU",
+        "direction": "CHEAPER"
+      },
+      {
+        "kind": "SIMULATE",
+        "message": "바꾸면 QHD 게임 성능이 얼마나 달라져?"
+      },
+      {
+        "kind": "RESTORE_DRAFT"
+      }
+    ],
+    "expectedInvariants": [
+      "NO_TOOL_FAIL",
+      "NO_CROSS_USER_DATA",
+      "STATE_TRANSITION_VALID",
+      "RELOAD_SAFE"
+    ],
+    "webReplay": false,
+    "risk": "MEDIUM"
+  },
+  {
+    "id": "demo-state-040",
+    "group": "DEMO_GPU_DOWNGRADE_RESTORE",
+    "profile": "BUILD_CHAT_54_MINI_FAST",
+    "setupDraft": {
+      "template": "COMPLETE_VERIFIED"
+    },
+    "journeyVariant": "느린응답",
+    "scenarioLabel": "GPU 하향과 원복 20",
+    "steps": [
+      {
+        "kind": "SNAPSHOT_DRAFT"
+      },
+      {
+        "kind": "BUILD_CHAT",
+        "message": "GPU를 더 저렴한 제품으로 바꿔줘"
+      },
+      {
+        "kind": "ASSERT_PREVIEW",
+        "category": "GPU",
+        "direction": "CHEAPER"
+      },
+      {
+        "kind": "SIMULATE",
+        "message": "바꾸면 QHD 게임 성능이 얼마나 달라져?"
+      },
+      {
+        "kind": "RESTORE_DRAFT"
+      }
+    ],
+    "expectedInvariants": [
+      "NO_TOOL_FAIL",
+      "NO_CROSS_USER_DATA",
+      "STATE_TRANSITION_VALID",
+      "RELOAD_SAFE"
+    ],
+    "webReplay": false,
+    "risk": "MEDIUM"
+  },
+  {
+    "id": "demo-state-041",
+    "group": "DEMO_ASSEMBLY_MATCH",
+    "profile": "BUILD_CHAT_54_MINI_FAST",
+    "setupDraft": {
+      "template": "COMPLETE_VERIFIED"
+    },
+    "journeyVariant": "정상",
+    "scenarioLabel": "조립 요청과 기사 제안 1",
+    "steps": [
+      {
+        "kind": "CREATE_ASSEMBLY_REQUEST",
+        "serviceType": "FULL_SERVICE",
+        "region": "서울"
+      },
+      {
+        "kind": "ASSERT_INTERNAL_OFFERS",
+        "max": 2
+      },
+      {
+        "kind": "REFRESH_OFFERS"
+      },
+      {
+        "kind": "SELECT_OFFER"
+      },
+      {
+        "kind": "CONFIRM_VIRTUAL_PAYMENT"
+      }
+    ],
+    "expectedInvariants": [
+      "NO_TOOL_FAIL",
+      "NO_CROSS_USER_DATA",
+      "STATE_TRANSITION_VALID",
+      "RELOAD_SAFE"
+    ],
+    "webReplay": true,
+    "risk": "HIGH"
+  },
+  {
+    "id": "demo-state-042",
+    "group": "DEMO_ASSEMBLY_MATCH",
+    "profile": "BUILD_CHAT_54_MINI_FAST",
+    "setupDraft": {
+      "template": "COMPLETE_VERIFIED"
+    },
+    "journeyVariant": "새로고침",
+    "scenarioLabel": "조립 요청과 기사 제안 2",
+    "steps": [
+      {
+        "kind": "CREATE_ASSEMBLY_REQUEST",
+        "serviceType": "FULL_SERVICE",
+        "region": "서울"
+      },
+      {
+        "kind": "ASSERT_INTERNAL_OFFERS",
+        "max": 2
+      },
+      {
+        "kind": "REFRESH_OFFERS"
+      },
+      {
+        "kind": "SELECT_OFFER"
+      },
+      {
+        "kind": "CONFIRM_VIRTUAL_PAYMENT"
+      }
+    ],
+    "expectedInvariants": [
+      "NO_TOOL_FAIL",
+      "NO_CROSS_USER_DATA",
+      "STATE_TRANSITION_VALID",
+      "RELOAD_SAFE"
+    ],
+    "webReplay": true,
+    "risk": "HIGH"
+  },
+  {
+    "id": "demo-state-043",
+    "group": "DEMO_ASSEMBLY_MATCH",
+    "profile": "BUILD_CHAT_54_MINI_FAST",
+    "setupDraft": {
+      "template": "COMPLETE_VERIFIED"
+    },
+    "journeyVariant": "뒤로가기",
+    "scenarioLabel": "조립 요청과 기사 제안 3",
+    "steps": [
+      {
+        "kind": "CREATE_ASSEMBLY_REQUEST",
+        "serviceType": "FULL_SERVICE",
+        "region": "서울"
+      },
+      {
+        "kind": "ASSERT_INTERNAL_OFFERS",
+        "max": 2
+      },
+      {
+        "kind": "REFRESH_OFFERS"
+      },
+      {
+        "kind": "SELECT_OFFER"
+      },
+      {
+        "kind": "CONFIRM_VIRTUAL_PAYMENT"
+      }
+    ],
+    "expectedInvariants": [
+      "NO_TOOL_FAIL",
+      "NO_CROSS_USER_DATA",
+      "STATE_TRANSITION_VALID",
+      "RELOAD_SAFE"
+    ],
+    "webReplay": true,
+    "risk": "HIGH"
+  },
+  {
+    "id": "demo-state-044",
+    "group": "DEMO_ASSEMBLY_MATCH",
+    "profile": "BUILD_CHAT_54_MINI_FAST",
+    "setupDraft": {
+      "template": "COMPLETE_VERIFIED"
+    },
+    "journeyVariant": "중복클릭",
+    "scenarioLabel": "조립 요청과 기사 제안 4",
+    "steps": [
+      {
+        "kind": "CREATE_ASSEMBLY_REQUEST",
+        "serviceType": "FULL_SERVICE",
+        "region": "서울"
+      },
+      {
+        "kind": "ASSERT_INTERNAL_OFFERS",
+        "max": 2
+      },
+      {
+        "kind": "REFRESH_OFFERS"
+      },
+      {
+        "kind": "SELECT_OFFER"
+      },
+      {
+        "kind": "CONFIRM_VIRTUAL_PAYMENT"
+      }
+    ],
+    "expectedInvariants": [
+      "NO_TOOL_FAIL",
+      "NO_CROSS_USER_DATA",
+      "STATE_TRANSITION_VALID",
+      "RELOAD_SAFE"
+    ],
+    "webReplay": true,
+    "risk": "HIGH"
+  },
+  {
+    "id": "demo-state-045",
+    "group": "DEMO_ASSEMBLY_MATCH",
+    "profile": "BUILD_CHAT_54_MINI_FAST",
+    "setupDraft": {
+      "template": "COMPLETE_VERIFIED"
+    },
+    "journeyVariant": "느린응답",
+    "scenarioLabel": "조립 요청과 기사 제안 5",
+    "steps": [
+      {
+        "kind": "CREATE_ASSEMBLY_REQUEST",
+        "serviceType": "FULL_SERVICE",
+        "region": "서울"
+      },
+      {
+        "kind": "ASSERT_INTERNAL_OFFERS",
+        "max": 2
+      },
+      {
+        "kind": "REFRESH_OFFERS"
+      },
+      {
+        "kind": "SELECT_OFFER"
+      },
+      {
+        "kind": "CONFIRM_VIRTUAL_PAYMENT"
+      }
+    ],
+    "expectedInvariants": [
+      "NO_TOOL_FAIL",
+      "NO_CROSS_USER_DATA",
+      "STATE_TRANSITION_VALID",
+      "RELOAD_SAFE"
+    ],
+    "webReplay": false,
+    "risk": "HIGH"
+  },
+  {
+    "id": "demo-state-046",
+    "group": "DEMO_ASSEMBLY_MATCH",
+    "profile": "BUILD_CHAT_54_MINI_FAST",
+    "setupDraft": {
+      "template": "COMPLETE_VERIFIED"
+    },
+    "journeyVariant": "정상",
+    "scenarioLabel": "조립 요청과 기사 제안 6",
+    "steps": [
+      {
+        "kind": "CREATE_ASSEMBLY_REQUEST",
+        "serviceType": "FULL_SERVICE",
+        "region": "서울"
+      },
+      {
+        "kind": "ASSERT_INTERNAL_OFFERS",
+        "max": 2
+      },
+      {
+        "kind": "REFRESH_OFFERS"
+      },
+      {
+        "kind": "SELECT_OFFER"
+      },
+      {
+        "kind": "CONFIRM_VIRTUAL_PAYMENT"
+      }
+    ],
+    "expectedInvariants": [
+      "NO_TOOL_FAIL",
+      "NO_CROSS_USER_DATA",
+      "STATE_TRANSITION_VALID",
+      "RELOAD_SAFE"
+    ],
+    "webReplay": false,
+    "risk": "HIGH"
+  },
+  {
+    "id": "demo-state-047",
+    "group": "DEMO_ASSEMBLY_MATCH",
+    "profile": "BUILD_CHAT_54_MINI_FAST",
+    "setupDraft": {
+      "template": "COMPLETE_VERIFIED"
+    },
+    "journeyVariant": "새로고침",
+    "scenarioLabel": "조립 요청과 기사 제안 7",
+    "steps": [
+      {
+        "kind": "CREATE_ASSEMBLY_REQUEST",
+        "serviceType": "FULL_SERVICE",
+        "region": "서울"
+      },
+      {
+        "kind": "ASSERT_INTERNAL_OFFERS",
+        "max": 2
+      },
+      {
+        "kind": "REFRESH_OFFERS"
+      },
+      {
+        "kind": "SELECT_OFFER"
+      },
+      {
+        "kind": "CONFIRM_VIRTUAL_PAYMENT"
+      }
+    ],
+    "expectedInvariants": [
+      "NO_TOOL_FAIL",
+      "NO_CROSS_USER_DATA",
+      "STATE_TRANSITION_VALID",
+      "RELOAD_SAFE"
+    ],
+    "webReplay": false,
+    "risk": "HIGH"
+  },
+  {
+    "id": "demo-state-048",
+    "group": "DEMO_ASSEMBLY_MATCH",
+    "profile": "BUILD_CHAT_54_MINI_FAST",
+    "setupDraft": {
+      "template": "COMPLETE_VERIFIED"
+    },
+    "journeyVariant": "뒤로가기",
+    "scenarioLabel": "조립 요청과 기사 제안 8",
+    "steps": [
+      {
+        "kind": "CREATE_ASSEMBLY_REQUEST",
+        "serviceType": "FULL_SERVICE",
+        "region": "서울"
+      },
+      {
+        "kind": "ASSERT_INTERNAL_OFFERS",
+        "max": 2
+      },
+      {
+        "kind": "REFRESH_OFFERS"
+      },
+      {
+        "kind": "SELECT_OFFER"
+      },
+      {
+        "kind": "CONFIRM_VIRTUAL_PAYMENT"
+      }
+    ],
+    "expectedInvariants": [
+      "NO_TOOL_FAIL",
+      "NO_CROSS_USER_DATA",
+      "STATE_TRANSITION_VALID",
+      "RELOAD_SAFE"
+    ],
+    "webReplay": false,
+    "risk": "HIGH"
+  },
+  {
+    "id": "demo-state-049",
+    "group": "DEMO_ASSEMBLY_MATCH",
+    "profile": "BUILD_CHAT_54_MINI_FAST",
+    "setupDraft": {
+      "template": "COMPLETE_VERIFIED"
+    },
+    "journeyVariant": "중복클릭",
+    "scenarioLabel": "조립 요청과 기사 제안 9",
+    "steps": [
+      {
+        "kind": "CREATE_ASSEMBLY_REQUEST",
+        "serviceType": "FULL_SERVICE",
+        "region": "서울"
+      },
+      {
+        "kind": "ASSERT_INTERNAL_OFFERS",
+        "max": 2
+      },
+      {
+        "kind": "REFRESH_OFFERS"
+      },
+      {
+        "kind": "SELECT_OFFER"
+      },
+      {
+        "kind": "CONFIRM_VIRTUAL_PAYMENT"
+      }
+    ],
+    "expectedInvariants": [
+      "NO_TOOL_FAIL",
+      "NO_CROSS_USER_DATA",
+      "STATE_TRANSITION_VALID",
+      "RELOAD_SAFE"
+    ],
+    "webReplay": false,
+    "risk": "MEDIUM"
+  },
+  {
+    "id": "demo-state-050",
+    "group": "DEMO_ASSEMBLY_MATCH",
+    "profile": "BUILD_CHAT_54_MINI_FAST",
+    "setupDraft": {
+      "template": "COMPLETE_VERIFIED"
+    },
+    "journeyVariant": "느린응답",
+    "scenarioLabel": "조립 요청과 기사 제안 10",
+    "steps": [
+      {
+        "kind": "CREATE_ASSEMBLY_REQUEST",
+        "serviceType": "FULL_SERVICE",
+        "region": "서울"
+      },
+      {
+        "kind": "ASSERT_INTERNAL_OFFERS",
+        "max": 2
+      },
+      {
+        "kind": "REFRESH_OFFERS"
+      },
+      {
+        "kind": "SELECT_OFFER"
+      },
+      {
+        "kind": "CONFIRM_VIRTUAL_PAYMENT"
+      }
+    ],
+    "expectedInvariants": [
+      "NO_TOOL_FAIL",
+      "NO_CROSS_USER_DATA",
+      "STATE_TRANSITION_VALID",
+      "RELOAD_SAFE"
+    ],
+    "webReplay": false,
+    "risk": "MEDIUM"
+  },
+  {
+    "id": "demo-state-051",
+    "group": "DEMO_ASSEMBLY_MATCH",
+    "profile": "BUILD_CHAT_54_MINI_FAST",
+    "setupDraft": {
+      "template": "COMPLETE_VERIFIED"
+    },
+    "journeyVariant": "정상",
+    "scenarioLabel": "조립 요청과 기사 제안 11",
+    "steps": [
+      {
+        "kind": "CREATE_ASSEMBLY_REQUEST",
+        "serviceType": "FULL_SERVICE",
+        "region": "서울"
+      },
+      {
+        "kind": "ASSERT_INTERNAL_OFFERS",
+        "max": 2
+      },
+      {
+        "kind": "REFRESH_OFFERS"
+      },
+      {
+        "kind": "SELECT_OFFER"
+      },
+      {
+        "kind": "CONFIRM_VIRTUAL_PAYMENT"
+      }
+    ],
+    "expectedInvariants": [
+      "NO_TOOL_FAIL",
+      "NO_CROSS_USER_DATA",
+      "STATE_TRANSITION_VALID",
+      "RELOAD_SAFE"
+    ],
+    "webReplay": false,
+    "risk": "MEDIUM"
+  },
+  {
+    "id": "demo-state-052",
+    "group": "DEMO_ASSEMBLY_MATCH",
+    "profile": "BUILD_CHAT_54_MINI_FAST",
+    "setupDraft": {
+      "template": "COMPLETE_VERIFIED"
+    },
+    "journeyVariant": "새로고침",
+    "scenarioLabel": "조립 요청과 기사 제안 12",
+    "steps": [
+      {
+        "kind": "CREATE_ASSEMBLY_REQUEST",
+        "serviceType": "FULL_SERVICE",
+        "region": "서울"
+      },
+      {
+        "kind": "ASSERT_INTERNAL_OFFERS",
+        "max": 2
+      },
+      {
+        "kind": "REFRESH_OFFERS"
+      },
+      {
+        "kind": "SELECT_OFFER"
+      },
+      {
+        "kind": "CONFIRM_VIRTUAL_PAYMENT"
+      }
+    ],
+    "expectedInvariants": [
+      "NO_TOOL_FAIL",
+      "NO_CROSS_USER_DATA",
+      "STATE_TRANSITION_VALID",
+      "RELOAD_SAFE"
+    ],
+    "webReplay": false,
+    "risk": "MEDIUM"
+  },
+  {
+    "id": "demo-state-053",
+    "group": "DEMO_ASSEMBLY_MATCH",
+    "profile": "BUILD_CHAT_54_MINI_FAST",
+    "setupDraft": {
+      "template": "COMPLETE_VERIFIED"
+    },
+    "journeyVariant": "뒤로가기",
+    "scenarioLabel": "조립 요청과 기사 제안 13",
+    "steps": [
+      {
+        "kind": "CREATE_ASSEMBLY_REQUEST",
+        "serviceType": "FULL_SERVICE",
+        "region": "서울"
+      },
+      {
+        "kind": "ASSERT_INTERNAL_OFFERS",
+        "max": 2
+      },
+      {
+        "kind": "REFRESH_OFFERS"
+      },
+      {
+        "kind": "SELECT_OFFER"
+      },
+      {
+        "kind": "CONFIRM_VIRTUAL_PAYMENT"
+      }
+    ],
+    "expectedInvariants": [
+      "NO_TOOL_FAIL",
+      "NO_CROSS_USER_DATA",
+      "STATE_TRANSITION_VALID",
+      "RELOAD_SAFE"
+    ],
+    "webReplay": false,
+    "risk": "MEDIUM"
+  },
+  {
+    "id": "demo-state-054",
+    "group": "DEMO_ASSEMBLY_MATCH",
+    "profile": "BUILD_CHAT_54_MINI_FAST",
+    "setupDraft": {
+      "template": "COMPLETE_VERIFIED"
+    },
+    "journeyVariant": "중복클릭",
+    "scenarioLabel": "조립 요청과 기사 제안 14",
+    "steps": [
+      {
+        "kind": "CREATE_ASSEMBLY_REQUEST",
+        "serviceType": "FULL_SERVICE",
+        "region": "서울"
+      },
+      {
+        "kind": "ASSERT_INTERNAL_OFFERS",
+        "max": 2
+      },
+      {
+        "kind": "REFRESH_OFFERS"
+      },
+      {
+        "kind": "SELECT_OFFER"
+      },
+      {
+        "kind": "CONFIRM_VIRTUAL_PAYMENT"
+      }
+    ],
+    "expectedInvariants": [
+      "NO_TOOL_FAIL",
+      "NO_CROSS_USER_DATA",
+      "STATE_TRANSITION_VALID",
+      "RELOAD_SAFE"
+    ],
+    "webReplay": false,
+    "risk": "MEDIUM"
+  },
+  {
+    "id": "demo-state-055",
+    "group": "DEMO_ASSEMBLY_MATCH",
+    "profile": "BUILD_CHAT_54_MINI_FAST",
+    "setupDraft": {
+      "template": "COMPLETE_VERIFIED"
+    },
+    "journeyVariant": "느린응답",
+    "scenarioLabel": "조립 요청과 기사 제안 15",
+    "steps": [
+      {
+        "kind": "CREATE_ASSEMBLY_REQUEST",
+        "serviceType": "FULL_SERVICE",
+        "region": "서울"
+      },
+      {
+        "kind": "ASSERT_INTERNAL_OFFERS",
+        "max": 2
+      },
+      {
+        "kind": "REFRESH_OFFERS"
+      },
+      {
+        "kind": "SELECT_OFFER"
+      },
+      {
+        "kind": "CONFIRM_VIRTUAL_PAYMENT"
+      }
+    ],
+    "expectedInvariants": [
+      "NO_TOOL_FAIL",
+      "NO_CROSS_USER_DATA",
+      "STATE_TRANSITION_VALID",
+      "RELOAD_SAFE"
+    ],
+    "webReplay": false,
+    "risk": "MEDIUM"
+  },
+  {
+    "id": "demo-state-056",
+    "group": "DEMO_ASSEMBLY_MATCH",
+    "profile": "BUILD_CHAT_54_MINI_FAST",
+    "setupDraft": {
+      "template": "COMPLETE_VERIFIED"
+    },
+    "journeyVariant": "정상",
+    "scenarioLabel": "조립 요청과 기사 제안 16",
+    "steps": [
+      {
+        "kind": "CREATE_ASSEMBLY_REQUEST",
+        "serviceType": "FULL_SERVICE",
+        "region": "서울"
+      },
+      {
+        "kind": "ASSERT_INTERNAL_OFFERS",
+        "max": 2
+      },
+      {
+        "kind": "REFRESH_OFFERS"
+      },
+      {
+        "kind": "SELECT_OFFER"
+      },
+      {
+        "kind": "CONFIRM_VIRTUAL_PAYMENT"
+      }
+    ],
+    "expectedInvariants": [
+      "NO_TOOL_FAIL",
+      "NO_CROSS_USER_DATA",
+      "STATE_TRANSITION_VALID",
+      "RELOAD_SAFE"
+    ],
+    "webReplay": false,
+    "risk": "MEDIUM"
+  },
+  {
+    "id": "demo-state-057",
+    "group": "DEMO_ASSEMBLY_MATCH",
+    "profile": "BUILD_CHAT_54_MINI_FAST",
+    "setupDraft": {
+      "template": "COMPLETE_VERIFIED"
+    },
+    "journeyVariant": "새로고침",
+    "scenarioLabel": "조립 요청과 기사 제안 17",
+    "steps": [
+      {
+        "kind": "CREATE_ASSEMBLY_REQUEST",
+        "serviceType": "FULL_SERVICE",
+        "region": "서울"
+      },
+      {
+        "kind": "ASSERT_INTERNAL_OFFERS",
+        "max": 2
+      },
+      {
+        "kind": "REFRESH_OFFERS"
+      },
+      {
+        "kind": "SELECT_OFFER"
+      },
+      {
+        "kind": "CONFIRM_VIRTUAL_PAYMENT"
+      }
+    ],
+    "expectedInvariants": [
+      "NO_TOOL_FAIL",
+      "NO_CROSS_USER_DATA",
+      "STATE_TRANSITION_VALID",
+      "RELOAD_SAFE"
+    ],
+    "webReplay": false,
+    "risk": "MEDIUM"
+  },
+  {
+    "id": "demo-state-058",
+    "group": "DEMO_ASSEMBLY_MATCH",
+    "profile": "BUILD_CHAT_54_MINI_FAST",
+    "setupDraft": {
+      "template": "COMPLETE_VERIFIED"
+    },
+    "journeyVariant": "뒤로가기",
+    "scenarioLabel": "조립 요청과 기사 제안 18",
+    "steps": [
+      {
+        "kind": "CREATE_ASSEMBLY_REQUEST",
+        "serviceType": "FULL_SERVICE",
+        "region": "서울"
+      },
+      {
+        "kind": "ASSERT_INTERNAL_OFFERS",
+        "max": 2
+      },
+      {
+        "kind": "REFRESH_OFFERS"
+      },
+      {
+        "kind": "SELECT_OFFER"
+      },
+      {
+        "kind": "CONFIRM_VIRTUAL_PAYMENT"
+      }
+    ],
+    "expectedInvariants": [
+      "NO_TOOL_FAIL",
+      "NO_CROSS_USER_DATA",
+      "STATE_TRANSITION_VALID",
+      "RELOAD_SAFE"
+    ],
+    "webReplay": false,
+    "risk": "MEDIUM"
+  },
+  {
+    "id": "demo-state-059",
+    "group": "DEMO_ASSEMBLY_MATCH",
+    "profile": "BUILD_CHAT_54_MINI_FAST",
+    "setupDraft": {
+      "template": "COMPLETE_VERIFIED"
+    },
+    "journeyVariant": "중복클릭",
+    "scenarioLabel": "조립 요청과 기사 제안 19",
+    "steps": [
+      {
+        "kind": "CREATE_ASSEMBLY_REQUEST",
+        "serviceType": "FULL_SERVICE",
+        "region": "서울"
+      },
+      {
+        "kind": "ASSERT_INTERNAL_OFFERS",
+        "max": 2
+      },
+      {
+        "kind": "REFRESH_OFFERS"
+      },
+      {
+        "kind": "SELECT_OFFER"
+      },
+      {
+        "kind": "CONFIRM_VIRTUAL_PAYMENT"
+      }
+    ],
+    "expectedInvariants": [
+      "NO_TOOL_FAIL",
+      "NO_CROSS_USER_DATA",
+      "STATE_TRANSITION_VALID",
+      "RELOAD_SAFE"
+    ],
+    "webReplay": false,
+    "risk": "MEDIUM"
+  },
+  {
+    "id": "demo-state-060",
+    "group": "DEMO_ASSEMBLY_MATCH",
+    "profile": "BUILD_CHAT_54_MINI_FAST",
+    "setupDraft": {
+      "template": "COMPLETE_VERIFIED"
+    },
+    "journeyVariant": "느린응답",
+    "scenarioLabel": "조립 요청과 기사 제안 20",
+    "steps": [
+      {
+        "kind": "CREATE_ASSEMBLY_REQUEST",
+        "serviceType": "FULL_SERVICE",
+        "region": "서울"
+      },
+      {
+        "kind": "ASSERT_INTERNAL_OFFERS",
+        "max": 2
+      },
+      {
+        "kind": "REFRESH_OFFERS"
+      },
+      {
+        "kind": "SELECT_OFFER"
+      },
+      {
+        "kind": "CONFIRM_VIRTUAL_PAYMENT"
+      }
+    ],
+    "expectedInvariants": [
+      "NO_TOOL_FAIL",
+      "NO_CROSS_USER_DATA",
+      "STATE_TRANSITION_VALID",
+      "RELOAD_SAFE"
+    ],
+    "webReplay": false,
+    "risk": "MEDIUM"
+  },
+  {
+    "id": "demo-state-061",
+    "group": "DEMO_DIAGNOSIS_CONSENT",
+    "profile": "BUILD_CHAT_54_MINI_FAST",
+    "setupDraft": {
+      "template": "COMPLETE_VERIFIED"
+    },
+    "journeyVariant": "정상",
+    "scenarioLabel": "증상 입력과 진단 동의 1",
+    "steps": [
+      {
+        "kind": "AS_CHAT",
+        "message": "게임 중 검은 화면"
+      },
+      {
+        "kind": "ASSERT_PROBABILISTIC_GUIDANCE"
+      },
+      {
+        "kind": "ASSERT_DIAGNOSIS_CONSENT"
+      },
+      {
+        "kind": "OPEN_AGENT_DOWNLOAD"
+      }
+    ],
+    "expectedInvariants": [
+      "NO_TOOL_FAIL",
+      "NO_CROSS_USER_DATA",
+      "STATE_TRANSITION_VALID",
+      "RELOAD_SAFE"
+    ],
+    "webReplay": true,
+    "risk": "HIGH"
+  },
+  {
+    "id": "demo-state-062",
+    "group": "DEMO_DIAGNOSIS_CONSENT",
+    "profile": "BUILD_CHAT_54_MINI_FAST",
+    "setupDraft": {
+      "template": "COMPLETE_VERIFIED"
+    },
+    "journeyVariant": "새로고침",
+    "scenarioLabel": "증상 입력과 진단 동의 2",
+    "steps": [
+      {
+        "kind": "AS_CHAT",
+        "message": "게임 중 화면 멈춤"
+      },
+      {
+        "kind": "ASSERT_PROBABILISTIC_GUIDANCE"
+      },
+      {
+        "kind": "ASSERT_DIAGNOSIS_CONSENT"
+      },
+      {
+        "kind": "OPEN_AGENT_DOWNLOAD"
+      }
+    ],
+    "expectedInvariants": [
+      "NO_TOOL_FAIL",
+      "NO_CROSS_USER_DATA",
+      "STATE_TRANSITION_VALID",
+      "RELOAD_SAFE"
+    ],
+    "webReplay": true,
+    "risk": "HIGH"
+  },
+  {
+    "id": "demo-state-063",
+    "group": "DEMO_DIAGNOSIS_CONSENT",
+    "profile": "BUILD_CHAT_54_MINI_FAST",
+    "setupDraft": {
+      "template": "COMPLETE_VERIFIED"
+    },
+    "journeyVariant": "뒤로가기",
+    "scenarioLabel": "증상 입력과 진단 동의 3",
+    "steps": [
+      {
+        "kind": "AS_CHAT",
+        "message": "드라이버 중단"
+      },
+      {
+        "kind": "ASSERT_PROBABILISTIC_GUIDANCE"
+      },
+      {
+        "kind": "ASSERT_DIAGNOSIS_CONSENT"
+      },
+      {
+        "kind": "OPEN_AGENT_DOWNLOAD"
+      }
+    ],
+    "expectedInvariants": [
+      "NO_TOOL_FAIL",
+      "NO_CROSS_USER_DATA",
+      "STATE_TRANSITION_VALID",
+      "RELOAD_SAFE"
+    ],
+    "webReplay": true,
+    "risk": "HIGH"
+  },
+  {
+    "id": "demo-state-064",
+    "group": "DEMO_DIAGNOSIS_CONSENT",
+    "profile": "BUILD_CHAT_54_MINI_FAST",
+    "setupDraft": {
+      "template": "COMPLETE_VERIFIED"
+    },
+    "journeyVariant": "중복클릭",
+    "scenarioLabel": "증상 입력과 진단 동의 4",
+    "steps": [
+      {
+        "kind": "AS_CHAT",
+        "message": "프레임 급락"
+      },
+      {
+        "kind": "ASSERT_PROBABILISTIC_GUIDANCE"
+      },
+      {
+        "kind": "ASSERT_DIAGNOSIS_CONSENT"
+      },
+      {
+        "kind": "OPEN_AGENT_DOWNLOAD"
+      }
+    ],
+    "expectedInvariants": [
+      "NO_TOOL_FAIL",
+      "NO_CROSS_USER_DATA",
+      "STATE_TRANSITION_VALID",
+      "RELOAD_SAFE"
+    ],
+    "webReplay": true,
+    "risk": "HIGH"
+  },
+  {
+    "id": "demo-state-065",
+    "group": "DEMO_DIAGNOSIS_CONSENT",
+    "profile": "BUILD_CHAT_54_MINI_FAST",
+    "setupDraft": {
+      "template": "COMPLETE_VERIFIED"
+    },
+    "journeyVariant": "느린응답",
+    "scenarioLabel": "증상 입력과 진단 동의 5",
+    "steps": [
+      {
+        "kind": "AS_CHAT",
+        "message": "게임 중 검은 화면"
+      },
+      {
+        "kind": "ASSERT_PROBABILISTIC_GUIDANCE"
+      },
+      {
+        "kind": "ASSERT_DIAGNOSIS_CONSENT"
+      },
+      {
+        "kind": "OPEN_AGENT_DOWNLOAD"
+      }
+    ],
+    "expectedInvariants": [
+      "NO_TOOL_FAIL",
+      "NO_CROSS_USER_DATA",
+      "STATE_TRANSITION_VALID",
+      "RELOAD_SAFE"
+    ],
+    "webReplay": false,
+    "risk": "HIGH"
+  },
+  {
+    "id": "demo-state-066",
+    "group": "DEMO_DIAGNOSIS_CONSENT",
+    "profile": "BUILD_CHAT_54_MINI_FAST",
+    "setupDraft": {
+      "template": "COMPLETE_VERIFIED"
+    },
+    "journeyVariant": "정상",
+    "scenarioLabel": "증상 입력과 진단 동의 6",
+    "steps": [
+      {
+        "kind": "AS_CHAT",
+        "message": "게임 중 화면 멈춤"
+      },
+      {
+        "kind": "ASSERT_PROBABILISTIC_GUIDANCE"
+      },
+      {
+        "kind": "ASSERT_DIAGNOSIS_CONSENT"
+      },
+      {
+        "kind": "OPEN_AGENT_DOWNLOAD"
+      }
+    ],
+    "expectedInvariants": [
+      "NO_TOOL_FAIL",
+      "NO_CROSS_USER_DATA",
+      "STATE_TRANSITION_VALID",
+      "RELOAD_SAFE"
+    ],
+    "webReplay": false,
+    "risk": "HIGH"
+  },
+  {
+    "id": "demo-state-067",
+    "group": "DEMO_DIAGNOSIS_CONSENT",
+    "profile": "BUILD_CHAT_54_MINI_FAST",
+    "setupDraft": {
+      "template": "COMPLETE_VERIFIED"
+    },
+    "journeyVariant": "새로고침",
+    "scenarioLabel": "증상 입력과 진단 동의 7",
+    "steps": [
+      {
+        "kind": "AS_CHAT",
+        "message": "드라이버 중단"
+      },
+      {
+        "kind": "ASSERT_PROBABILISTIC_GUIDANCE"
+      },
+      {
+        "kind": "ASSERT_DIAGNOSIS_CONSENT"
+      },
+      {
+        "kind": "OPEN_AGENT_DOWNLOAD"
+      }
+    ],
+    "expectedInvariants": [
+      "NO_TOOL_FAIL",
+      "NO_CROSS_USER_DATA",
+      "STATE_TRANSITION_VALID",
+      "RELOAD_SAFE"
+    ],
+    "webReplay": false,
+    "risk": "HIGH"
+  },
+  {
+    "id": "demo-state-068",
+    "group": "DEMO_DIAGNOSIS_CONSENT",
+    "profile": "BUILD_CHAT_54_MINI_FAST",
+    "setupDraft": {
+      "template": "COMPLETE_VERIFIED"
+    },
+    "journeyVariant": "뒤로가기",
+    "scenarioLabel": "증상 입력과 진단 동의 8",
+    "steps": [
+      {
+        "kind": "AS_CHAT",
+        "message": "프레임 급락"
+      },
+      {
+        "kind": "ASSERT_PROBABILISTIC_GUIDANCE"
+      },
+      {
+        "kind": "ASSERT_DIAGNOSIS_CONSENT"
+      },
+      {
+        "kind": "OPEN_AGENT_DOWNLOAD"
+      }
+    ],
+    "expectedInvariants": [
+      "NO_TOOL_FAIL",
+      "NO_CROSS_USER_DATA",
+      "STATE_TRANSITION_VALID",
+      "RELOAD_SAFE"
+    ],
+    "webReplay": false,
+    "risk": "HIGH"
+  },
+  {
+    "id": "demo-state-069",
+    "group": "DEMO_DIAGNOSIS_CONSENT",
+    "profile": "BUILD_CHAT_54_MINI_FAST",
+    "setupDraft": {
+      "template": "COMPLETE_VERIFIED"
+    },
+    "journeyVariant": "중복클릭",
+    "scenarioLabel": "증상 입력과 진단 동의 9",
+    "steps": [
+      {
+        "kind": "AS_CHAT",
+        "message": "게임 중 검은 화면"
+      },
+      {
+        "kind": "ASSERT_PROBABILISTIC_GUIDANCE"
+      },
+      {
+        "kind": "ASSERT_DIAGNOSIS_CONSENT"
+      },
+      {
+        "kind": "OPEN_AGENT_DOWNLOAD"
+      }
+    ],
+    "expectedInvariants": [
+      "NO_TOOL_FAIL",
+      "NO_CROSS_USER_DATA",
+      "STATE_TRANSITION_VALID",
+      "RELOAD_SAFE"
+    ],
+    "webReplay": false,
+    "risk": "MEDIUM"
+  },
+  {
+    "id": "demo-state-070",
+    "group": "DEMO_DIAGNOSIS_CONSENT",
+    "profile": "BUILD_CHAT_54_MINI_FAST",
+    "setupDraft": {
+      "template": "COMPLETE_VERIFIED"
+    },
+    "journeyVariant": "느린응답",
+    "scenarioLabel": "증상 입력과 진단 동의 10",
+    "steps": [
+      {
+        "kind": "AS_CHAT",
+        "message": "게임 중 화면 멈춤"
+      },
+      {
+        "kind": "ASSERT_PROBABILISTIC_GUIDANCE"
+      },
+      {
+        "kind": "ASSERT_DIAGNOSIS_CONSENT"
+      },
+      {
+        "kind": "OPEN_AGENT_DOWNLOAD"
+      }
+    ],
+    "expectedInvariants": [
+      "NO_TOOL_FAIL",
+      "NO_CROSS_USER_DATA",
+      "STATE_TRANSITION_VALID",
+      "RELOAD_SAFE"
+    ],
+    "webReplay": false,
+    "risk": "MEDIUM"
+  },
+  {
+    "id": "demo-state-071",
+    "group": "DEMO_DIAGNOSIS_CONSENT",
+    "profile": "BUILD_CHAT_54_MINI_FAST",
+    "setupDraft": {
+      "template": "COMPLETE_VERIFIED"
+    },
+    "journeyVariant": "정상",
+    "scenarioLabel": "증상 입력과 진단 동의 11",
+    "steps": [
+      {
+        "kind": "AS_CHAT",
+        "message": "드라이버 중단"
+      },
+      {
+        "kind": "ASSERT_PROBABILISTIC_GUIDANCE"
+      },
+      {
+        "kind": "ASSERT_DIAGNOSIS_CONSENT"
+      },
+      {
+        "kind": "OPEN_AGENT_DOWNLOAD"
+      }
+    ],
+    "expectedInvariants": [
+      "NO_TOOL_FAIL",
+      "NO_CROSS_USER_DATA",
+      "STATE_TRANSITION_VALID",
+      "RELOAD_SAFE"
+    ],
+    "webReplay": false,
+    "risk": "MEDIUM"
+  },
+  {
+    "id": "demo-state-072",
+    "group": "DEMO_DIAGNOSIS_CONSENT",
+    "profile": "BUILD_CHAT_54_MINI_FAST",
+    "setupDraft": {
+      "template": "COMPLETE_VERIFIED"
+    },
+    "journeyVariant": "새로고침",
+    "scenarioLabel": "증상 입력과 진단 동의 12",
+    "steps": [
+      {
+        "kind": "AS_CHAT",
+        "message": "프레임 급락"
+      },
+      {
+        "kind": "ASSERT_PROBABILISTIC_GUIDANCE"
+      },
+      {
+        "kind": "ASSERT_DIAGNOSIS_CONSENT"
+      },
+      {
+        "kind": "OPEN_AGENT_DOWNLOAD"
+      }
+    ],
+    "expectedInvariants": [
+      "NO_TOOL_FAIL",
+      "NO_CROSS_USER_DATA",
+      "STATE_TRANSITION_VALID",
+      "RELOAD_SAFE"
+    ],
+    "webReplay": false,
+    "risk": "MEDIUM"
+  },
+  {
+    "id": "demo-state-073",
+    "group": "DEMO_DIAGNOSIS_CONSENT",
+    "profile": "BUILD_CHAT_54_MINI_FAST",
+    "setupDraft": {
+      "template": "COMPLETE_VERIFIED"
+    },
+    "journeyVariant": "뒤로가기",
+    "scenarioLabel": "증상 입력과 진단 동의 13",
+    "steps": [
+      {
+        "kind": "AS_CHAT",
+        "message": "게임 중 검은 화면"
+      },
+      {
+        "kind": "ASSERT_PROBABILISTIC_GUIDANCE"
+      },
+      {
+        "kind": "ASSERT_DIAGNOSIS_CONSENT"
+      },
+      {
+        "kind": "OPEN_AGENT_DOWNLOAD"
+      }
+    ],
+    "expectedInvariants": [
+      "NO_TOOL_FAIL",
+      "NO_CROSS_USER_DATA",
+      "STATE_TRANSITION_VALID",
+      "RELOAD_SAFE"
+    ],
+    "webReplay": false,
+    "risk": "MEDIUM"
+  },
+  {
+    "id": "demo-state-074",
+    "group": "DEMO_DIAGNOSIS_CONSENT",
+    "profile": "BUILD_CHAT_54_MINI_FAST",
+    "setupDraft": {
+      "template": "COMPLETE_VERIFIED"
+    },
+    "journeyVariant": "중복클릭",
+    "scenarioLabel": "증상 입력과 진단 동의 14",
+    "steps": [
+      {
+        "kind": "AS_CHAT",
+        "message": "게임 중 화면 멈춤"
+      },
+      {
+        "kind": "ASSERT_PROBABILISTIC_GUIDANCE"
+      },
+      {
+        "kind": "ASSERT_DIAGNOSIS_CONSENT"
+      },
+      {
+        "kind": "OPEN_AGENT_DOWNLOAD"
+      }
+    ],
+    "expectedInvariants": [
+      "NO_TOOL_FAIL",
+      "NO_CROSS_USER_DATA",
+      "STATE_TRANSITION_VALID",
+      "RELOAD_SAFE"
+    ],
+    "webReplay": false,
+    "risk": "MEDIUM"
+  },
+  {
+    "id": "demo-state-075",
+    "group": "DEMO_DIAGNOSIS_CONSENT",
+    "profile": "BUILD_CHAT_54_MINI_FAST",
+    "setupDraft": {
+      "template": "COMPLETE_VERIFIED"
+    },
+    "journeyVariant": "느린응답",
+    "scenarioLabel": "증상 입력과 진단 동의 15",
+    "steps": [
+      {
+        "kind": "AS_CHAT",
+        "message": "드라이버 중단"
+      },
+      {
+        "kind": "ASSERT_PROBABILISTIC_GUIDANCE"
+      },
+      {
+        "kind": "ASSERT_DIAGNOSIS_CONSENT"
+      },
+      {
+        "kind": "OPEN_AGENT_DOWNLOAD"
+      }
+    ],
+    "expectedInvariants": [
+      "NO_TOOL_FAIL",
+      "NO_CROSS_USER_DATA",
+      "STATE_TRANSITION_VALID",
+      "RELOAD_SAFE"
+    ],
+    "webReplay": false,
+    "risk": "MEDIUM"
+  },
+  {
+    "id": "demo-state-076",
+    "group": "DEMO_DIAGNOSIS_CONSENT",
+    "profile": "BUILD_CHAT_54_MINI_FAST",
+    "setupDraft": {
+      "template": "COMPLETE_VERIFIED"
+    },
+    "journeyVariant": "정상",
+    "scenarioLabel": "증상 입력과 진단 동의 16",
+    "steps": [
+      {
+        "kind": "AS_CHAT",
+        "message": "프레임 급락"
+      },
+      {
+        "kind": "ASSERT_PROBABILISTIC_GUIDANCE"
+      },
+      {
+        "kind": "ASSERT_DIAGNOSIS_CONSENT"
+      },
+      {
+        "kind": "OPEN_AGENT_DOWNLOAD"
+      }
+    ],
+    "expectedInvariants": [
+      "NO_TOOL_FAIL",
+      "NO_CROSS_USER_DATA",
+      "STATE_TRANSITION_VALID",
+      "RELOAD_SAFE"
+    ],
+    "webReplay": false,
+    "risk": "MEDIUM"
+  },
+  {
+    "id": "demo-state-077",
+    "group": "DEMO_DIAGNOSIS_CONSENT",
+    "profile": "BUILD_CHAT_54_MINI_FAST",
+    "setupDraft": {
+      "template": "COMPLETE_VERIFIED"
+    },
+    "journeyVariant": "새로고침",
+    "scenarioLabel": "증상 입력과 진단 동의 17",
+    "steps": [
+      {
+        "kind": "AS_CHAT",
+        "message": "게임 중 검은 화면"
+      },
+      {
+        "kind": "ASSERT_PROBABILISTIC_GUIDANCE"
+      },
+      {
+        "kind": "ASSERT_DIAGNOSIS_CONSENT"
+      },
+      {
+        "kind": "OPEN_AGENT_DOWNLOAD"
+      }
+    ],
+    "expectedInvariants": [
+      "NO_TOOL_FAIL",
+      "NO_CROSS_USER_DATA",
+      "STATE_TRANSITION_VALID",
+      "RELOAD_SAFE"
+    ],
+    "webReplay": false,
+    "risk": "MEDIUM"
+  },
+  {
+    "id": "demo-state-078",
+    "group": "DEMO_DIAGNOSIS_CONSENT",
+    "profile": "BUILD_CHAT_54_MINI_FAST",
+    "setupDraft": {
+      "template": "COMPLETE_VERIFIED"
+    },
+    "journeyVariant": "뒤로가기",
+    "scenarioLabel": "증상 입력과 진단 동의 18",
+    "steps": [
+      {
+        "kind": "AS_CHAT",
+        "message": "게임 중 화면 멈춤"
+      },
+      {
+        "kind": "ASSERT_PROBABILISTIC_GUIDANCE"
+      },
+      {
+        "kind": "ASSERT_DIAGNOSIS_CONSENT"
+      },
+      {
+        "kind": "OPEN_AGENT_DOWNLOAD"
+      }
+    ],
+    "expectedInvariants": [
+      "NO_TOOL_FAIL",
+      "NO_CROSS_USER_DATA",
+      "STATE_TRANSITION_VALID",
+      "RELOAD_SAFE"
+    ],
+    "webReplay": false,
+    "risk": "MEDIUM"
+  },
+  {
+    "id": "demo-state-079",
+    "group": "DEMO_DIAGNOSIS_CONSENT",
+    "profile": "BUILD_CHAT_54_MINI_FAST",
+    "setupDraft": {
+      "template": "COMPLETE_VERIFIED"
+    },
+    "journeyVariant": "중복클릭",
+    "scenarioLabel": "증상 입력과 진단 동의 19",
+    "steps": [
+      {
+        "kind": "AS_CHAT",
+        "message": "드라이버 중단"
+      },
+      {
+        "kind": "ASSERT_PROBABILISTIC_GUIDANCE"
+      },
+      {
+        "kind": "ASSERT_DIAGNOSIS_CONSENT"
+      },
+      {
+        "kind": "OPEN_AGENT_DOWNLOAD"
+      }
+    ],
+    "expectedInvariants": [
+      "NO_TOOL_FAIL",
+      "NO_CROSS_USER_DATA",
+      "STATE_TRANSITION_VALID",
+      "RELOAD_SAFE"
+    ],
+    "webReplay": false,
+    "risk": "MEDIUM"
+  },
+  {
+    "id": "demo-state-080",
+    "group": "DEMO_DIAGNOSIS_CONSENT",
+    "profile": "BUILD_CHAT_54_MINI_FAST",
+    "setupDraft": {
+      "template": "COMPLETE_VERIFIED"
+    },
+    "journeyVariant": "느린응답",
+    "scenarioLabel": "증상 입력과 진단 동의 20",
+    "steps": [
+      {
+        "kind": "AS_CHAT",
+        "message": "프레임 급락"
+      },
+      {
+        "kind": "ASSERT_PROBABILISTIC_GUIDANCE"
+      },
+      {
+        "kind": "ASSERT_DIAGNOSIS_CONSENT"
+      },
+      {
+        "kind": "OPEN_AGENT_DOWNLOAD"
+      }
+    ],
+    "expectedInvariants": [
+      "NO_TOOL_FAIL",
+      "NO_CROSS_USER_DATA",
+      "STATE_TRANSITION_VALID",
+      "RELOAD_SAFE"
+    ],
+    "webReplay": false,
+    "risk": "MEDIUM"
+  },
+  {
+    "id": "demo-state-081",
+    "group": "DEMO_REMOTE_SUPPORT",
+    "profile": "BUILD_CHAT_54_MINI_FAST",
+    "setupDraft": {
+      "template": "COMPLETE_VERIFIED"
+    },
+    "journeyVariant": "정상",
+    "scenarioLabel": "로그 근거와 원격지원 종료 1",
+    "steps": [
+      {
+        "kind": "OPEN_SUPPORT_TICKET"
+      },
+      {
+        "kind": "ASSERT_LOG_EVIDENCE"
+      },
+      {
+        "kind": "REQUEST_REMOTE_SUPPORT"
+      },
+      {
+        "kind": "ASSERT_DATA_TRANSFER_CONSENT"
+      },
+      {
+        "kind": "ASSERT_REMOTE_STATUS"
+      }
+    ],
+    "expectedInvariants": [
+      "NO_TOOL_FAIL",
+      "NO_CROSS_USER_DATA",
+      "STATE_TRANSITION_VALID",
+      "RELOAD_SAFE"
+    ],
+    "webReplay": true,
+    "risk": "HIGH"
+  },
+  {
+    "id": "demo-state-082",
+    "group": "DEMO_REMOTE_SUPPORT",
+    "profile": "BUILD_CHAT_54_MINI_FAST",
+    "setupDraft": {
+      "template": "COMPLETE_VERIFIED"
+    },
+    "journeyVariant": "새로고침",
+    "scenarioLabel": "로그 근거와 원격지원 종료 2",
+    "steps": [
+      {
+        "kind": "OPEN_SUPPORT_TICKET"
+      },
+      {
+        "kind": "ASSERT_LOG_EVIDENCE"
+      },
+      {
+        "kind": "REQUEST_REMOTE_SUPPORT"
+      },
+      {
+        "kind": "ASSERT_DATA_TRANSFER_CONSENT"
+      },
+      {
+        "kind": "ASSERT_REMOTE_STATUS"
+      }
+    ],
+    "expectedInvariants": [
+      "NO_TOOL_FAIL",
+      "NO_CROSS_USER_DATA",
+      "STATE_TRANSITION_VALID",
+      "RELOAD_SAFE"
+    ],
+    "webReplay": true,
+    "risk": "HIGH"
+  },
+  {
+    "id": "demo-state-083",
+    "group": "DEMO_REMOTE_SUPPORT",
+    "profile": "BUILD_CHAT_54_MINI_FAST",
+    "setupDraft": {
+      "template": "COMPLETE_VERIFIED"
+    },
+    "journeyVariant": "뒤로가기",
+    "scenarioLabel": "로그 근거와 원격지원 종료 3",
+    "steps": [
+      {
+        "kind": "OPEN_SUPPORT_TICKET"
+      },
+      {
+        "kind": "ASSERT_LOG_EVIDENCE"
+      },
+      {
+        "kind": "REQUEST_REMOTE_SUPPORT"
+      },
+      {
+        "kind": "ASSERT_DATA_TRANSFER_CONSENT"
+      },
+      {
+        "kind": "ASSERT_REMOTE_STATUS"
+      }
+    ],
+    "expectedInvariants": [
+      "NO_TOOL_FAIL",
+      "NO_CROSS_USER_DATA",
+      "STATE_TRANSITION_VALID",
+      "RELOAD_SAFE"
+    ],
+    "webReplay": true,
+    "risk": "HIGH"
+  },
+  {
+    "id": "demo-state-084",
+    "group": "DEMO_REMOTE_SUPPORT",
+    "profile": "BUILD_CHAT_54_MINI_FAST",
+    "setupDraft": {
+      "template": "COMPLETE_VERIFIED"
+    },
+    "journeyVariant": "중복클릭",
+    "scenarioLabel": "로그 근거와 원격지원 종료 4",
+    "steps": [
+      {
+        "kind": "OPEN_SUPPORT_TICKET"
+      },
+      {
+        "kind": "ASSERT_LOG_EVIDENCE"
+      },
+      {
+        "kind": "REQUEST_REMOTE_SUPPORT"
+      },
+      {
+        "kind": "ASSERT_DATA_TRANSFER_CONSENT"
+      },
+      {
+        "kind": "ASSERT_REMOTE_STATUS"
+      }
+    ],
+    "expectedInvariants": [
+      "NO_TOOL_FAIL",
+      "NO_CROSS_USER_DATA",
+      "STATE_TRANSITION_VALID",
+      "RELOAD_SAFE"
+    ],
+    "webReplay": true,
+    "risk": "HIGH"
+  },
+  {
+    "id": "demo-state-085",
+    "group": "DEMO_REMOTE_SUPPORT",
+    "profile": "BUILD_CHAT_54_MINI_FAST",
+    "setupDraft": {
+      "template": "COMPLETE_VERIFIED"
+    },
+    "journeyVariant": "느린응답",
+    "scenarioLabel": "로그 근거와 원격지원 종료 5",
+    "steps": [
+      {
+        "kind": "OPEN_SUPPORT_TICKET"
+      },
+      {
+        "kind": "ASSERT_LOG_EVIDENCE"
+      },
+      {
+        "kind": "REQUEST_REMOTE_SUPPORT"
+      },
+      {
+        "kind": "ASSERT_DATA_TRANSFER_CONSENT"
+      },
+      {
+        "kind": "ASSERT_REMOTE_STATUS"
+      }
+    ],
+    "expectedInvariants": [
+      "NO_TOOL_FAIL",
+      "NO_CROSS_USER_DATA",
+      "STATE_TRANSITION_VALID",
+      "RELOAD_SAFE"
+    ],
+    "webReplay": false,
+    "risk": "HIGH"
+  },
+  {
+    "id": "demo-state-086",
+    "group": "DEMO_REMOTE_SUPPORT",
+    "profile": "BUILD_CHAT_54_MINI_FAST",
+    "setupDraft": {
+      "template": "COMPLETE_VERIFIED"
+    },
+    "journeyVariant": "정상",
+    "scenarioLabel": "로그 근거와 원격지원 종료 6",
+    "steps": [
+      {
+        "kind": "OPEN_SUPPORT_TICKET"
+      },
+      {
+        "kind": "ASSERT_LOG_EVIDENCE"
+      },
+      {
+        "kind": "REQUEST_REMOTE_SUPPORT"
+      },
+      {
+        "kind": "ASSERT_DATA_TRANSFER_CONSENT"
+      },
+      {
+        "kind": "ASSERT_REMOTE_STATUS"
+      }
+    ],
+    "expectedInvariants": [
+      "NO_TOOL_FAIL",
+      "NO_CROSS_USER_DATA",
+      "STATE_TRANSITION_VALID",
+      "RELOAD_SAFE"
+    ],
+    "webReplay": false,
+    "risk": "HIGH"
+  },
+  {
+    "id": "demo-state-087",
+    "group": "DEMO_REMOTE_SUPPORT",
+    "profile": "BUILD_CHAT_54_MINI_FAST",
+    "setupDraft": {
+      "template": "COMPLETE_VERIFIED"
+    },
+    "journeyVariant": "새로고침",
+    "scenarioLabel": "로그 근거와 원격지원 종료 7",
+    "steps": [
+      {
+        "kind": "OPEN_SUPPORT_TICKET"
+      },
+      {
+        "kind": "ASSERT_LOG_EVIDENCE"
+      },
+      {
+        "kind": "REQUEST_REMOTE_SUPPORT"
+      },
+      {
+        "kind": "ASSERT_DATA_TRANSFER_CONSENT"
+      },
+      {
+        "kind": "ASSERT_REMOTE_STATUS"
+      }
+    ],
+    "expectedInvariants": [
+      "NO_TOOL_FAIL",
+      "NO_CROSS_USER_DATA",
+      "STATE_TRANSITION_VALID",
+      "RELOAD_SAFE"
+    ],
+    "webReplay": false,
+    "risk": "HIGH"
+  },
+  {
+    "id": "demo-state-088",
+    "group": "DEMO_REMOTE_SUPPORT",
+    "profile": "BUILD_CHAT_54_MINI_FAST",
+    "setupDraft": {
+      "template": "COMPLETE_VERIFIED"
+    },
+    "journeyVariant": "뒤로가기",
+    "scenarioLabel": "로그 근거와 원격지원 종료 8",
+    "steps": [
+      {
+        "kind": "OPEN_SUPPORT_TICKET"
+      },
+      {
+        "kind": "ASSERT_LOG_EVIDENCE"
+      },
+      {
+        "kind": "REQUEST_REMOTE_SUPPORT"
+      },
+      {
+        "kind": "ASSERT_DATA_TRANSFER_CONSENT"
+      },
+      {
+        "kind": "ASSERT_REMOTE_STATUS"
+      }
+    ],
+    "expectedInvariants": [
+      "NO_TOOL_FAIL",
+      "NO_CROSS_USER_DATA",
+      "STATE_TRANSITION_VALID",
+      "RELOAD_SAFE"
+    ],
+    "webReplay": false,
+    "risk": "HIGH"
+  },
+  {
+    "id": "demo-state-089",
+    "group": "DEMO_REMOTE_SUPPORT",
+    "profile": "BUILD_CHAT_54_MINI_FAST",
+    "setupDraft": {
+      "template": "COMPLETE_VERIFIED"
+    },
+    "journeyVariant": "중복클릭",
+    "scenarioLabel": "로그 근거와 원격지원 종료 9",
+    "steps": [
+      {
+        "kind": "OPEN_SUPPORT_TICKET"
+      },
+      {
+        "kind": "ASSERT_LOG_EVIDENCE"
+      },
+      {
+        "kind": "REQUEST_REMOTE_SUPPORT"
+      },
+      {
+        "kind": "ASSERT_DATA_TRANSFER_CONSENT"
+      },
+      {
+        "kind": "ASSERT_REMOTE_STATUS"
+      }
+    ],
+    "expectedInvariants": [
+      "NO_TOOL_FAIL",
+      "NO_CROSS_USER_DATA",
+      "STATE_TRANSITION_VALID",
+      "RELOAD_SAFE"
+    ],
+    "webReplay": false,
+    "risk": "MEDIUM"
+  },
+  {
+    "id": "demo-state-090",
+    "group": "DEMO_REMOTE_SUPPORT",
+    "profile": "BUILD_CHAT_54_MINI_FAST",
+    "setupDraft": {
+      "template": "COMPLETE_VERIFIED"
+    },
+    "journeyVariant": "느린응답",
+    "scenarioLabel": "로그 근거와 원격지원 종료 10",
+    "steps": [
+      {
+        "kind": "OPEN_SUPPORT_TICKET"
+      },
+      {
+        "kind": "ASSERT_LOG_EVIDENCE"
+      },
+      {
+        "kind": "REQUEST_REMOTE_SUPPORT"
+      },
+      {
+        "kind": "ASSERT_DATA_TRANSFER_CONSENT"
+      },
+      {
+        "kind": "ASSERT_REMOTE_STATUS"
+      }
+    ],
+    "expectedInvariants": [
+      "NO_TOOL_FAIL",
+      "NO_CROSS_USER_DATA",
+      "STATE_TRANSITION_VALID",
+      "RELOAD_SAFE"
+    ],
+    "webReplay": false,
+    "risk": "MEDIUM"
+  },
+  {
+    "id": "demo-state-091",
+    "group": "DEMO_REMOTE_SUPPORT",
+    "profile": "BUILD_CHAT_54_MINI_FAST",
+    "setupDraft": {
+      "template": "COMPLETE_VERIFIED"
+    },
+    "journeyVariant": "정상",
+    "scenarioLabel": "로그 근거와 원격지원 종료 11",
+    "steps": [
+      {
+        "kind": "OPEN_SUPPORT_TICKET"
+      },
+      {
+        "kind": "ASSERT_LOG_EVIDENCE"
+      },
+      {
+        "kind": "REQUEST_REMOTE_SUPPORT"
+      },
+      {
+        "kind": "ASSERT_DATA_TRANSFER_CONSENT"
+      },
+      {
+        "kind": "ASSERT_REMOTE_STATUS"
+      }
+    ],
+    "expectedInvariants": [
+      "NO_TOOL_FAIL",
+      "NO_CROSS_USER_DATA",
+      "STATE_TRANSITION_VALID",
+      "RELOAD_SAFE"
+    ],
+    "webReplay": false,
+    "risk": "MEDIUM"
+  },
+  {
+    "id": "demo-state-092",
+    "group": "DEMO_REMOTE_SUPPORT",
+    "profile": "BUILD_CHAT_54_MINI_FAST",
+    "setupDraft": {
+      "template": "COMPLETE_VERIFIED"
+    },
+    "journeyVariant": "새로고침",
+    "scenarioLabel": "로그 근거와 원격지원 종료 12",
+    "steps": [
+      {
+        "kind": "OPEN_SUPPORT_TICKET"
+      },
+      {
+        "kind": "ASSERT_LOG_EVIDENCE"
+      },
+      {
+        "kind": "REQUEST_REMOTE_SUPPORT"
+      },
+      {
+        "kind": "ASSERT_DATA_TRANSFER_CONSENT"
+      },
+      {
+        "kind": "ASSERT_REMOTE_STATUS"
+      }
+    ],
+    "expectedInvariants": [
+      "NO_TOOL_FAIL",
+      "NO_CROSS_USER_DATA",
+      "STATE_TRANSITION_VALID",
+      "RELOAD_SAFE"
+    ],
+    "webReplay": false,
+    "risk": "MEDIUM"
+  },
+  {
+    "id": "demo-state-093",
+    "group": "DEMO_REMOTE_SUPPORT",
+    "profile": "BUILD_CHAT_54_MINI_FAST",
+    "setupDraft": {
+      "template": "COMPLETE_VERIFIED"
+    },
+    "journeyVariant": "뒤로가기",
+    "scenarioLabel": "로그 근거와 원격지원 종료 13",
+    "steps": [
+      {
+        "kind": "OPEN_SUPPORT_TICKET"
+      },
+      {
+        "kind": "ASSERT_LOG_EVIDENCE"
+      },
+      {
+        "kind": "REQUEST_REMOTE_SUPPORT"
+      },
+      {
+        "kind": "ASSERT_DATA_TRANSFER_CONSENT"
+      },
+      {
+        "kind": "ASSERT_REMOTE_STATUS"
+      }
+    ],
+    "expectedInvariants": [
+      "NO_TOOL_FAIL",
+      "NO_CROSS_USER_DATA",
+      "STATE_TRANSITION_VALID",
+      "RELOAD_SAFE"
+    ],
+    "webReplay": false,
+    "risk": "MEDIUM"
+  },
+  {
+    "id": "demo-state-094",
+    "group": "DEMO_REMOTE_SUPPORT",
+    "profile": "BUILD_CHAT_54_MINI_FAST",
+    "setupDraft": {
+      "template": "COMPLETE_VERIFIED"
+    },
+    "journeyVariant": "중복클릭",
+    "scenarioLabel": "로그 근거와 원격지원 종료 14",
+    "steps": [
+      {
+        "kind": "OPEN_SUPPORT_TICKET"
+      },
+      {
+        "kind": "ASSERT_LOG_EVIDENCE"
+      },
+      {
+        "kind": "REQUEST_REMOTE_SUPPORT"
+      },
+      {
+        "kind": "ASSERT_DATA_TRANSFER_CONSENT"
+      },
+      {
+        "kind": "ASSERT_REMOTE_STATUS"
+      }
+    ],
+    "expectedInvariants": [
+      "NO_TOOL_FAIL",
+      "NO_CROSS_USER_DATA",
+      "STATE_TRANSITION_VALID",
+      "RELOAD_SAFE"
+    ],
+    "webReplay": false,
+    "risk": "MEDIUM"
+  },
+  {
+    "id": "demo-state-095",
+    "group": "DEMO_REMOTE_SUPPORT",
+    "profile": "BUILD_CHAT_54_MINI_FAST",
+    "setupDraft": {
+      "template": "COMPLETE_VERIFIED"
+    },
+    "journeyVariant": "느린응답",
+    "scenarioLabel": "로그 근거와 원격지원 종료 15",
+    "steps": [
+      {
+        "kind": "OPEN_SUPPORT_TICKET"
+      },
+      {
+        "kind": "ASSERT_LOG_EVIDENCE"
+      },
+      {
+        "kind": "REQUEST_REMOTE_SUPPORT"
+      },
+      {
+        "kind": "ASSERT_DATA_TRANSFER_CONSENT"
+      },
+      {
+        "kind": "ASSERT_REMOTE_STATUS"
+      }
+    ],
+    "expectedInvariants": [
+      "NO_TOOL_FAIL",
+      "NO_CROSS_USER_DATA",
+      "STATE_TRANSITION_VALID",
+      "RELOAD_SAFE"
+    ],
+    "webReplay": false,
+    "risk": "MEDIUM"
+  },
+  {
+    "id": "demo-state-096",
+    "group": "DEMO_REMOTE_SUPPORT",
+    "profile": "BUILD_CHAT_54_MINI_FAST",
+    "setupDraft": {
+      "template": "COMPLETE_VERIFIED"
+    },
+    "journeyVariant": "정상",
+    "scenarioLabel": "로그 근거와 원격지원 종료 16",
+    "steps": [
+      {
+        "kind": "OPEN_SUPPORT_TICKET"
+      },
+      {
+        "kind": "ASSERT_LOG_EVIDENCE"
+      },
+      {
+        "kind": "REQUEST_REMOTE_SUPPORT"
+      },
+      {
+        "kind": "ASSERT_DATA_TRANSFER_CONSENT"
+      },
+      {
+        "kind": "ASSERT_REMOTE_STATUS"
+      }
+    ],
+    "expectedInvariants": [
+      "NO_TOOL_FAIL",
+      "NO_CROSS_USER_DATA",
+      "STATE_TRANSITION_VALID",
+      "RELOAD_SAFE"
+    ],
+    "webReplay": false,
+    "risk": "MEDIUM"
+  },
+  {
+    "id": "demo-state-097",
+    "group": "DEMO_REMOTE_SUPPORT",
+    "profile": "BUILD_CHAT_54_MINI_FAST",
+    "setupDraft": {
+      "template": "COMPLETE_VERIFIED"
+    },
+    "journeyVariant": "새로고침",
+    "scenarioLabel": "로그 근거와 원격지원 종료 17",
+    "steps": [
+      {
+        "kind": "OPEN_SUPPORT_TICKET"
+      },
+      {
+        "kind": "ASSERT_LOG_EVIDENCE"
+      },
+      {
+        "kind": "REQUEST_REMOTE_SUPPORT"
+      },
+      {
+        "kind": "ASSERT_DATA_TRANSFER_CONSENT"
+      },
+      {
+        "kind": "ASSERT_REMOTE_STATUS"
+      }
+    ],
+    "expectedInvariants": [
+      "NO_TOOL_FAIL",
+      "NO_CROSS_USER_DATA",
+      "STATE_TRANSITION_VALID",
+      "RELOAD_SAFE"
+    ],
+    "webReplay": false,
+    "risk": "MEDIUM"
+  },
+  {
+    "id": "demo-state-098",
+    "group": "DEMO_REMOTE_SUPPORT",
+    "profile": "BUILD_CHAT_54_MINI_FAST",
+    "setupDraft": {
+      "template": "COMPLETE_VERIFIED"
+    },
+    "journeyVariant": "뒤로가기",
+    "scenarioLabel": "로그 근거와 원격지원 종료 18",
+    "steps": [
+      {
+        "kind": "OPEN_SUPPORT_TICKET"
+      },
+      {
+        "kind": "ASSERT_LOG_EVIDENCE"
+      },
+      {
+        "kind": "REQUEST_REMOTE_SUPPORT"
+      },
+      {
+        "kind": "ASSERT_DATA_TRANSFER_CONSENT"
+      },
+      {
+        "kind": "ASSERT_REMOTE_STATUS"
+      }
+    ],
+    "expectedInvariants": [
+      "NO_TOOL_FAIL",
+      "NO_CROSS_USER_DATA",
+      "STATE_TRANSITION_VALID",
+      "RELOAD_SAFE"
+    ],
+    "webReplay": false,
+    "risk": "MEDIUM"
+  },
+  {
+    "id": "demo-state-099",
+    "group": "DEMO_REMOTE_SUPPORT",
+    "profile": "BUILD_CHAT_54_MINI_FAST",
+    "setupDraft": {
+      "template": "COMPLETE_VERIFIED"
+    },
+    "journeyVariant": "중복클릭",
+    "scenarioLabel": "로그 근거와 원격지원 종료 19",
+    "steps": [
+      {
+        "kind": "OPEN_SUPPORT_TICKET"
+      },
+      {
+        "kind": "ASSERT_LOG_EVIDENCE"
+      },
+      {
+        "kind": "REQUEST_REMOTE_SUPPORT"
+      },
+      {
+        "kind": "ASSERT_DATA_TRANSFER_CONSENT"
+      },
+      {
+        "kind": "ASSERT_REMOTE_STATUS"
+      }
+    ],
+    "expectedInvariants": [
+      "NO_TOOL_FAIL",
+      "NO_CROSS_USER_DATA",
+      "STATE_TRANSITION_VALID",
+      "RELOAD_SAFE"
+    ],
+    "webReplay": false,
+    "risk": "MEDIUM"
+  },
+  {
+    "id": "demo-state-100",
+    "group": "DEMO_REMOTE_SUPPORT",
+    "profile": "BUILD_CHAT_54_MINI_FAST",
+    "setupDraft": {
+      "template": "COMPLETE_VERIFIED"
+    },
+    "journeyVariant": "느린응답",
+    "scenarioLabel": "로그 근거와 원격지원 종료 20",
+    "steps": [
+      {
+        "kind": "OPEN_SUPPORT_TICKET"
+      },
+      {
+        "kind": "ASSERT_LOG_EVIDENCE"
+      },
+      {
+        "kind": "REQUEST_REMOTE_SUPPORT"
+      },
+      {
+        "kind": "ASSERT_DATA_TRANSFER_CONSENT"
+      },
+      {
+        "kind": "ASSERT_REMOTE_STATUS"
+      }
+    ],
+    "expectedInvariants": [
+      "NO_TOOL_FAIL",
+      "NO_CROSS_USER_DATA",
+      "STATE_TRANSITION_VALID",
+      "RELOAD_SAFE"
+    ],
+    "webReplay": false,
+    "risk": "MEDIUM"
+  }
+]

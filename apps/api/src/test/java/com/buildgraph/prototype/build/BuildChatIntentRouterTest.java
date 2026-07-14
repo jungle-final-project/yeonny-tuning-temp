@@ -14,6 +14,7 @@ class BuildChatIntentRouterTest {
         List<Case> cases = List.of(
                 // 견적 추천 (유지)
                 c("5090 들어간 PC 추천해줘", BuildChatIntent.BUILD_RECOMMEND),
+                c("RTX 5090 말고 가성비 GPU로 견적 추천해줘", BuildChatIntent.ASK_CLARIFICATION),
                 c("300만원 이하 RTX 5090 PC로 맞춰줘", BuildChatIntent.BUILD_RECOMMEND),
                 c("300만원 견적 추천해줘", BuildChatIntent.BUILD_RECOMMEND),
                 c("3백만원 PC 추천해줘", BuildChatIntent.BUILD_RECOMMEND),
@@ -209,6 +210,41 @@ class BuildChatIntentRouterTest {
         // 회귀 방어: 순수 완성 요청("나머지 채워줘")은 그대로 BUILD_RECOMMEND로 유지된다.
         BuildChatIntentDecision completion = router.decide(draftRequest("지금 견적 나머지 채워줘"), "지금 견적 나머지 채워줘");
         assertThat(completion.intent()).isEqualTo(BuildChatIntent.BUILD_RECOMMEND);
+    }
+
+    @Test
+    void relationshipRecommendationsUseTheCategoryNearestTheRecommendationVerb() {
+        assertThat(BuildChatService.detectRecommendationTargetCategory("현재 메인보드에 맞는 CPU 추천해줘"))
+                .isEqualTo("CPU");
+        assertThat(BuildChatService.detectRecommendationTargetCategory("이 CPU에 맞는 메인보드 후보 보여줘"))
+                .isEqualTo("MOTHERBOARD");
+        assertThat(BuildChatService.detectRecommendationTargetCategory("현재 견적과 호환되는 고성능 GPU 추천해줘"))
+                .isEqualTo("GPU");
+        assertThat(BuildChatService.detectPartCategory("M.2 SSD 추천해줘"))
+                .isEqualTo("STORAGE");
+
+        BuildChatIntentDecision categoryRecommendation = router.decide(
+                draftRequest("현재 견적과 호환되는 고성능 GPU 추천해줘"),
+                "현재 견적과 호환되는 고성능 GPU 추천해줘"
+        );
+        assertThat(categoryRecommendation.intent()).isNotEqualTo(BuildChatIntent.EXPLAIN_BUILD_SCORE);
+        assertThat(categoryRecommendation.targetCategory()).isEqualTo("GPU");
+
+        BuildChatIntentDecision scoreImprovement = router.decide(
+                draftRequest("현재 견적 점수를 실제로 높일 부품을 추천해줘"),
+                "현재 견적 점수를 실제로 높일 부품을 추천해줘"
+        );
+        assertThat(scoreImprovement.intent()).isEqualTo(BuildChatIntent.EXPLAIN_BUILD_SCORE);
+    }
+
+    @Test
+    void storageCandidateCompatibilityReviewIsNotMisclassifiedAsPcSymptom() {
+        String message = "지금 견적에 2TB NVMe SSD 추천해줘 첫 번째 후보를 적용하면 현재 구성에서 문제가 없는지 설명해줘";
+
+        BuildChatIntentDecision decision = router.decide(draftRequest(message), message);
+
+        assertThat(decision.intent()).isNotEqualTo(BuildChatIntent.SUPPORT_GUIDANCE);
+        assertThat(decision.targetCategory()).isEqualTo("STORAGE");
     }
 
     @Test

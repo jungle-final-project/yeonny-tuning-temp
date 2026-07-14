@@ -67,16 +67,16 @@ class AssemblyBrokerageControllerTest {
     }
 
     @Test
-    void userCanSelectOfferAndConfirmVirtualPayment() throws Exception {
+    void userCanSelectOfferAndRetiredVirtualPaymentRouteIsPreserved() throws Exception {
         when(service.selectOffer(USER_TOKEN, "assembly-1", "offer-1"))
                 .thenReturn(Map.of("id", "assembly-1", "status", "MATCHED"));
         when(service.confirmVirtualPayment(USER_TOKEN, "assembly-1"))
-                .thenReturn(Map.of("id", "assembly-1", "payment", Map.of("status", "PAID")));
+                .thenThrow(new ApiException(HttpStatus.GONE, "PAYMENT_ENDPOINT_RETIRED", "결제 시도 API를 사용해 주세요."));
 
         mockMvc.perform(post("/api/assembly-requests/assembly-1/offers/offer-1/select").header("Authorization", USER_TOKEN))
                 .andExpect(status().isOk()).andExpect(jsonPath("$.status").value("MATCHED"));
         mockMvc.perform(post("/api/assembly-requests/assembly-1/payments/confirm-virtual").header("Authorization", USER_TOKEN))
-                .andExpect(status().isOk()).andExpect(jsonPath("$.payment.status").value("PAID"));
+                .andExpect(status().isGone()).andExpect(jsonPath("$.code").value("PAYMENT_ENDPOINT_RETIRED"));
     }
 
     @Test

@@ -9,6 +9,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import org.springframework.http.HttpStatus;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -80,6 +81,11 @@ public class TechnicianMarketplaceService {
         Map<String, Object> technician = technicianByUser(user.internalId());
         if (technician == null) throw notFound();
         return profileMap(technician);
+    }
+
+    public Optional<Map<String, Object>> profileIfPresent(String authorization) {
+        CurrentUserService.CurrentUser user = requireRegularUser(authorization);
+        return Optional.ofNullable(technicianByUser(user.internalId())).map(this::profileMap);
     }
 
     @Transactional
@@ -320,7 +326,9 @@ public class TechnicianMarketplaceService {
         Map<String, Object> ownOffer = ownOffer(requestId, longValue(technician, "id"));
         Map<String, Object> payment = paymentRow(requestId);
         boolean selected = ownOffer != null && "SELECTED".equals(DbValueMapper.string(ownOffer, "status"));
-        boolean paid = payment != null && "PAID".equals(DbValueMapper.string(payment, "status"));
+        boolean paid = payment != null
+                && "PAID".equals(DbValueMapper.string(payment, "status"))
+                && !"MOCK".equals(DbValueMapper.string(payment, "provider"));
         Map<String, Object> result = new LinkedHashMap<>();
         result.put("id", DbValueMapper.string(request, request.containsKey("public_id_text") ? "public_id_text" : "id"));
         result.put("requestNo", DbValueMapper.string(request, "request_no"));

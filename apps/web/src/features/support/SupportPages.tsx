@@ -4,7 +4,7 @@ import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { DataTable, Panel, Screen, StateMessage, StatusBadge, statusLabel } from '../../components/ui';
 import { ApiError, getCachedAuthUser } from '../../lib/api';
 import { formatSeoulTime } from '../../lib/dateTime';
-import { AS_CHAT_DEFAULT_TICKET_ID, getAsChat, sendAsChat, streamAsChat } from './asChatApi';
+import { getAsChat, sendAsChat, streamAsChat } from './asChatApi';
 import type { AsChatEvidence, AsChatResponse, AsChatToolResult } from './asChatApi';
 import { downloadPcAgentForCurrentUser } from './agentDownload';
 import { prepareSupportLogFile } from './logFileProcessing';
@@ -53,8 +53,8 @@ const symptomTypeOptions = [
 
 export function AsChatPage() {
   const [searchParams] = useSearchParams();
-  const initialTicketId = searchParams.get('asTicketId')?.trim() || AS_CHAT_DEFAULT_TICKET_ID;
-  const [ticketId, setTicketId] = useState(initialTicketId);
+  const requestedTicketId = searchParams.get('asTicketId')?.trim() ?? '';
+  const [ticketId, setTicketId] = useState(requestedTicketId);
   const [message, setMessage] = useState('게임 20분 뒤 프레임이 급락하고 GPU 온도가 95도까지 올라가요.');
   const [latestResponse, setLatestResponse] = useState<AsChatResponse | null>(null);
   const [error, setError] = useState('');
@@ -62,11 +62,25 @@ export function AsChatPage() {
   const [progressSteps, setProgressSteps] = useState<string[]>([]);
 
   // 티켓 번호를 타이핑하는 글자마다 조회가 나가지 않도록, 입력이 멈춘 뒤(300ms) 확정값으로만 조회한다.
-  const [committedTicketId, setCommittedTicketId] = useState(initialTicketId);
+  const [committedTicketId, setCommittedTicketId] = useState(requestedTicketId);
   useEffect(() => {
     const timer = setTimeout(() => setCommittedTicketId(ticketId.trim()), 300);
     return () => clearTimeout(timer);
   }, [ticketId]);
+
+  const currentSupportQuery = useQuery({
+    queryKey: ['support-chat-current', 'as-ai-entry'],
+    queryFn: () => getCurrentSupportChat(),
+    enabled: requestedTicketId.length === 0
+  });
+
+  useEffect(() => {
+    const currentTicketId = currentSupportQuery.data?.contact?.asTicketId?.trim();
+    if (!ticketId.trim() && currentTicketId) {
+      setTicketId(currentTicketId);
+      setCommittedTicketId(currentTicketId);
+    }
+  }, [currentSupportQuery.data?.contact?.asTicketId, ticketId]);
 
   const chatQuery = useQuery({
     queryKey: ['as-chat', committedTicketId],
@@ -123,12 +137,17 @@ export function AsChatPage() {
 
   const chat = latestResponse?.asTicketId === ticketId ? latestResponse : chatQuery.data;
   const isBusy = sendMutation.isPending;
-  const canSend = Boolean(message.trim()) && !isBusy;
+  const hasTicket = Boolean(ticketId.trim());
+  const canSend = Boolean(ticketId.trim() && message.trim()) && !isBusy;
 
   function submitTicket(event: FormEvent) {
     event.preventDefault();
     setLatestResponse(null);
     setError('');
+    if (!ticketId.trim()) {
+      setError('먼저 AS 접수를 생성하거나 티켓 번호를 입력해 주세요.');
+      return;
+    }
     void chatQuery.refetch();
   }
 
@@ -141,28 +160,41 @@ export function AsChatPage() {
 
   return (
     <Screen>
-      <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_430px]">
+      <div className="grid min-w-0 gap-5 xl:grid-cols-[minmax(0,1fr)_430px]">
+        <div className="min-w-0 max-w-full">
         <Panel title="AS AI 챗봇" subtitle="AS 접수 후 티켓 증상과 검증 근거를 사용해 1차 상담 답변을 생성합니다.">
-          <form onSubmit={submitTicket} className="mb-4 flex gap-3">
+          <form onSubmit={submitTicket} className="mb-4 flex min-w-0 flex-col gap-3 sm:flex-row">
             <input
-              className="h-11 flex-1 rounded border border-slate-300 px-3 text-sm"
+              className="h-11 min-w-0 w-full flex-1 rounded border border-slate-300 px-3 text-sm"
               value={ticketId}
               onChange={(event) => setTicketId(event.target.value)}
               aria-label="AS 티켓 번호"
             />
-            <button className="rounded border border-slate-300 px-4 py-2 text-sm font-bold">티켓 불러오기</button>
+            <button className="w-full rounded border border-slate-300 px-4 py-2 text-sm font-bold sm:w-auto">티켓 불러오기</button>
           </form>
 
+          {currentSupportQuery.isLoading ? <StateMessage type="info" title="최근 AS 접수 확인 중" body="현재 사용자에게 연결된 AS 티켓을 확인하고 있습니다." /> : null}
+          {currentSupportQuery.isError ? <StateMessage type="warn" title="최근 AS 접수 확인 실패" body="티켓 번호를 직접 입력하거나 AS 접수 화면에서 새 접수를 만들어 주세요." /> : null}
           {chatQuery.isLoading ? <StateMessage type="info" title="챗봇 세션 조회 중" body="AS 티켓과 기존 대화 이력을 불러오고 있습니다." /> : null}
           {chatQuery.isError ? <StateMessage type="warn" title="챗봇 세션 조회 실패" body="대화 이력을 불러오지 못했습니다. 잠시 후 다시 시도해 주세요." /> : null}
           {error ? <div className="mb-4"><StateMessage type="warn" title="AS AI 확인 필요" body={error} /></div> : null}
 
           <div className="h-[560px] overflow-y-auto rounded border border-slate-200 bg-slate-50 p-4">
-            {chat?.messages.length ? (
+            {!hasTicket && !currentSupportQuery.isLoading ? (
+              <div className="flex h-full flex-col items-center justify-center gap-4 px-4 text-center">
+                <StateMessage type="info" title="연결된 AS 접수가 없습니다" body="AS 접수를 먼저 생성하면 해당 티켓의 증상과 진단 근거로 AI 상담을 이어갈 수 있습니다." />
+                <Link
+                  to={currentSupportQuery.data?.supportNewPath ?? '/support/new'}
+                  className="rounded bg-brand-blue px-4 py-2 text-sm font-black text-white"
+                >
+                  AS 접수 시작하기
+                </Link>
+              </div>
+            ) : chat?.messages.length ? (
               <div className="space-y-3">
                 {chat.messages.map((item) => (
                   <div key={item.id} className={`flex ${item.role === 'USER' ? 'justify-end' : 'justify-start'}`}>
-                    <div className={`max-w-[72%] rounded px-4 py-3 text-sm leading-6 shadow-sm ${item.role === 'USER' ? 'bg-brand-blue text-white' : 'border border-slate-200 bg-white text-slate-800'}`}>
+                    <div className={`max-w-[88%] break-words rounded px-4 py-3 text-sm leading-6 shadow-sm sm:max-w-[72%] ${item.role === 'USER' ? 'bg-brand-blue text-white' : 'border border-slate-200 bg-white text-slate-800'}`}>
                       <div className="mb-1 text-[11px] font-bold opacity-75">{item.role === 'USER' ? '사용자' : 'AI 상담'}</div>
                       <p className="whitespace-pre-wrap">{item.content}</p>
                     </div>
@@ -188,23 +220,24 @@ export function AsChatPage() {
             ) : null}
           </div>
 
-          <form onSubmit={submitMessage} className="mt-4 flex gap-3">
+          <form onSubmit={submitMessage} className="mt-4 flex min-w-0 flex-col gap-3 sm:flex-row">
             <textarea
-              className="h-24 flex-1 rounded border border-slate-300 p-3 text-sm"
+              className="h-24 min-w-0 w-full flex-1 rounded border border-slate-300 p-3 text-sm"
               placeholder="예: 게임 20분 뒤 프레임이 급락하고 GPU 온도가 95도까지 올라가요."
               value={message}
               onChange={(event) => setMessage(event.target.value)}
             />
-            <button disabled={!canSend} className="w-32 rounded bg-brand-blue text-sm font-bold text-white disabled:cursor-not-allowed disabled:bg-slate-400">
+            <button disabled={!canSend} className="h-11 w-full rounded bg-brand-blue text-sm font-bold text-white disabled:cursor-not-allowed disabled:bg-slate-400 sm:h-auto sm:w-32">
               {isBusy ? '전송 중' : '전송'}
             </button>
           </form>
         </Panel>
+        </div>
 
-        <div className="space-y-5">
+        <div className="min-w-0 max-w-full space-y-5">
           <Panel title="티켓 / 모델">
             <div className="space-y-3 text-sm">
-              <InfoRow label="AS 티켓" value={chat?.asTicketId ?? ticketId} />
+              <InfoRow label="AS 티켓" value={(chat?.asTicketId ?? ticketId) || '-'} />
               <InfoRow label="모델" value={chat?.model ?? '-'} />
               <InfoRow label="Agent 세션" value={chat?.agentSessionId ?? '-'} />
               <InfoRow label="상태" value={chat?.ticket.status ?? '-'} />

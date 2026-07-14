@@ -43,4 +43,12 @@ class TechnicianMarketplaceServiceTest {
                 .doesNotContain("own_offer.status = 'SELECTED'")
                 .contains("own_offer.id IS NULL");
     }
+
+    @Test
+    void profileLookupReturnsEmptyForAUserWhoHasNotApplied() {
+        when(currentUserService.requireUser("Bearer user")).thenReturn(new CurrentUserService.CurrentUser(
+                2L, "user-public-id", "user@example.com", "User", "USER", null));
+
+        assertThat(service.profileIfPresent("Bearer user")).isEmpty();
+    }
 }

@@ -1003,7 +1003,7 @@ test('chatbot uses build-chat API without replacing featured home recommendation
   expect(buildChatRequests[0].message).toBe('200만원 PC 추천');
   expect(buildChatRequests[0].currentQuoteDraft).toBeUndefined();
   await expect(chatbotPanel).toContainText('AI 견적 어시스턴트');
-  await expect(chatbotPanel).toContainText('가격 통과');
+  await expect(chatbotPanel).toContainText('이 조합으로 셀프 견적 보기');
   await expect(page.getByTestId('ai-chat-messages')).toContainText('200만원 예산 기준');
   await expect(main.getByTestId('home-ai-recommendations')).toHaveCount(0);
   await expect(featuredCards).toHaveCount(4);

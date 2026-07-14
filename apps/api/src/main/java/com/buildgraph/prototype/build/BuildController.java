@@ -119,4 +119,12 @@ public class BuildController {
         }
         return buildChatService.chat(body, aiProfile, user);
     }
+
+    @GetMapping("/recommendations/home-builds")
+    Map<String, Object> homeRecommendedBuilds(
+            @RequestHeader(value = "Authorization", required = false) String authorization
+    ) {
+        currentUserService.requireUser(authorization);
+        return buildChatService.homeRecommendedBuilds();
+    }
 }
