@@ -446,24 +446,24 @@ function PerfPanelBody({
           <div data-testid="quote-fps-section" className="min-w-0 py-1">
             <div className={`flex items-start justify-between gap-2 ${activeComparison ? 'flex-wrap' : 'flex-nowrap'}`}>
               <div className="flex min-w-0 flex-wrap items-baseline gap-x-2 gap-y-0.5">
-                <span className="shrink-0 text-[11px] font-black text-slate-600">
+                <span className="shrink-0 text-sm font-black text-slate-600">
                   {activeComparison ? '가격·성능 향상' : '게임 예상 성능'}
                 </span>
                 {!activeComparison && hasGpu ? (
                   resultAvg !== null ? (
-                    <span className="truncate text-[10px] font-bold text-slate-500">
+                    <span className="truncate text-xs font-bold text-slate-500">
                       {game.label} · {resolution.label} · {resultLabel}
-                      <strong data-testid="fps-avg" className="ml-1 text-base font-black text-commerce-ink">
+                      <strong data-testid="fps-avg" className="ml-1 text-xl font-black text-commerce-ink">
                         {Math.round(resultAvg)} FPS
                       </strong>
                     </span>
                   ) : (
-                    <span className="truncate text-[10px] font-bold text-slate-400">
+                    <span className="truncate text-xs font-bold text-slate-400">
                       {isFetching ? '성능을 계산하고 있어요' : '참고 자료 없음'}
                     </span>
                   )
                 ) : !activeComparison ? (
-                  <span className="truncate text-[10px] font-bold text-slate-400">GPU를 담으면 표시됩니다</span>
+                  <span className="truncate text-xs font-bold text-slate-400">GPU를 담으면 표시됩니다</span>
                 ) : null}
               </div>
 
@@ -485,7 +485,7 @@ function PerfPanelBody({
                       data-testid={`fps-res-${res.key}`}
                       aria-pressed={resKey === res.key}
                       onClick={() => setResKey(res.key)}
-                      className={`rounded px-2 py-0.5 text-[9px] font-black transition ${
+                      className={`rounded px-2 py-0.5 text-[11px] font-black transition ${
                         resKey === res.key ? 'bg-white text-commerce-ink shadow-sm' : 'text-slate-400 hover:text-slate-600'
                       }`}
                     >
@@ -511,7 +511,7 @@ function PerfPanelBody({
                       </div>
                       <div className="perf-block-in mt-1 flex min-w-0 flex-wrap items-baseline gap-x-2 gap-y-0.5">
                         <CostEffectEmphasis {...costEffectDisplay(currentPart?.currentPrice, activeComparison.price)} compact />
-                        <span data-testid="cost-effect-fps" className="truncate text-[9px] font-bold text-slate-500">
+                        <span data-testid="cost-effect-fps" className="truncate text-[11px] font-bold text-slate-500">
                           예상 FPS {fpsRangeText(avg, hasLow ? low : undefined)} → {fpsRangeText(compareAvg, hasCompareLow ? compareLow : undefined)}
                         </span>
                       </div>
@@ -538,7 +538,7 @@ function PerfPanelBody({
                           data-testid={`fps-game-${g.key}`}
                           aria-pressed={gameKey === g.key}
                           onClick={() => setGameKey(g.key)}
-                          className={`rounded-full border px-2 py-0.5 text-[9px] font-black transition ${
+                          className={`rounded-full border px-2 py-0.5 text-[11px] font-black transition ${
                             gameKey === g.key
                               ? 'border-brand-blue bg-brand-blue text-white'
                               : 'border-commerce-line bg-white text-slate-500 hover:border-brand-blue'
@@ -551,26 +551,26 @@ function PerfPanelBody({
                   </div>
                   {isCompareReady ? (
                     <div className="mt-1.5 grid grid-cols-[auto_1fr] items-center gap-x-2 gap-y-1">
-                      <span className="text-[10px] font-black text-slate-500">FPS</span>
+                      <span className="text-xs font-black text-slate-500">FPS</span>
                       <div className="flex items-baseline gap-1 font-black leading-none">
-                        <span data-testid="fps-avg" className="text-sm text-slate-400">{Math.round(avg)}</span>
-                        <span className="text-[10px] text-slate-400">→</span>
-                        <span data-testid="fps-compare-avg" className="text-base text-brand-blue">{Math.round(compareAvg)}</span>
-                        <span data-testid="fps-compare-delta" className={`rounded-full border px-1 py-0.5 text-[9px] ${deltaBadgeTone(percentDelta(avg, compareAvg))}`}>
+                        <span data-testid="fps-avg" className="text-base text-slate-400">{Math.round(avg)}</span>
+                        <span className="text-xs text-slate-400">→</span>
+                        <span data-testid="fps-compare-avg" className="text-lg text-brand-blue">{Math.round(compareAvg)}</span>
+                        <span data-testid="fps-compare-delta" className={`rounded-full border px-1 py-0.5 text-[10px] ${deltaBadgeTone(percentDelta(avg, compareAvg))}`}>
                           {formatSignedPercent(percentDelta(avg, compareAvg))}
                         </span>
                       </div>
-                      <span className="text-[9px] font-bold text-slate-400">기존</span>
+                      <span className="text-[10px] font-bold text-slate-400">기존</span>
                       <div className="h-1.5 overflow-hidden rounded-full bg-slate-100">
                         <div className="h-full rounded-full bg-slate-400" style={{ width: `${Math.max(3, fpsPercent(avg))}%` }} />
                       </div>
-                      <span className="text-[9px] font-black text-brand-blue">변경</span>
+                      <span className="text-[10px] font-black text-brand-blue">변경</span>
                       <div className="h-1.5 overflow-hidden rounded-full bg-slate-100">
                         <div className="perf-bar-grow h-full rounded-full bg-brand-blue" style={{ width: `${Math.max(3, fpsPercent(compareAvg))}%` }} />
                       </div>
                     </div>
                   ) : (
-                    <div className="mt-1.5 text-[10px] font-bold text-slate-400">
+                    <div className="mt-1.5 text-xs font-bold text-slate-400">
                       {isCompareLoading ? '비교 성능을 계산하고 있어요' : '변경 조합의 참고 자료가 없습니다'}
                     </div>
                   )}
@@ -586,7 +586,7 @@ function PerfPanelBody({
                       data-testid={`fps-game-${g.key}`}
                       aria-pressed={gameKey === g.key}
                       onClick={() => setGameKey(g.key)}
-                      className={`rounded-full border px-2 py-0.5 text-[9px] font-black transition ${
+                      className={`rounded-full border px-2.5 py-1 text-[11px] font-black transition ${
                         gameKey === g.key
                           ? 'border-brand-blue bg-brand-blue text-white'
                           : 'border-commerce-line bg-white text-slate-500 hover:border-brand-blue'

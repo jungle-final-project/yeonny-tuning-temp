@@ -175,16 +175,16 @@ export function SlotBoard({
       className="panel slot-board-panel isolate relative flex h-full min-h-0 w-full min-w-0 max-w-[calc(100vw-2rem)] flex-col overflow-hidden bg-white lg:max-w-full"
     >
       {/* 보드 헤더: 제목 + 호환 상태 범례(초록/노랑/빨강/회색) */}
-      <div className="border-b border-commerce-line bg-gradient-to-b from-white to-slate-50 px-4 py-2.5">
+      <div className="border-b border-commerce-line bg-gradient-to-b from-white to-slate-50 px-4 py-4">
         <div className="flex items-center justify-between gap-2">
           <div className="flex min-w-0 items-center gap-2">
-            <span className="shrink-0 text-xs font-black text-slate-700">구성 관계도 — 부품 간 호환 상태</span>
+            <span className="shrink-0 text-base font-black text-slate-700">구성 관계도 — 부품 간 호환 상태</span>
             {nextCategory && !hasAiFocus ? (
               <button
                 type="button"
                 data-testid="quote-next-guide"
                 onClick={() => onSlotSelect(nextCategory)}
-                className="min-w-0 truncate rounded-md border border-blue-100 bg-blue-50/70 px-2 py-1 text-[10px] font-black text-brand-blue transition hover:border-brand-blue/30 hover:bg-blue-50"
+                className="min-w-0 truncate rounded-md border border-blue-100 bg-blue-50/70 px-2 py-1 text-xs font-black text-brand-blue transition hover:border-brand-blue/30 hover:bg-blue-50"
               >
                 다음: {slotOrderNumber(nextCategory)}. {withObjectParticle(PART_CATEGORY_LABELS[nextCategory])} 선택해 주세요
               </button>
@@ -193,7 +193,7 @@ export function SlotBoard({
           {hasAiFocus ? (
             <span
               data-testid="slot-board-ai-focus-status"
-              className="ml-auto inline-flex min-w-0 items-center gap-1.5 rounded-full border border-blue-200 bg-blue-50 px-2 py-1 text-[10px] font-black text-brand-blue"
+              className="ml-auto inline-flex min-w-0 items-center gap-1.5 rounded-full border border-blue-200 bg-blue-50 px-2 py-1 text-xs font-black text-brand-blue"
             >
               <span className="truncate">{aiFocusLabel} 위치 강조 중</span>
               <button
@@ -379,7 +379,7 @@ function SlotBoardModeSegments({
             role="radio"
             aria-checked={active}
             onClick={() => onChange?.(option.mode)}
-            className={`rounded-full px-2 py-0.5 text-[10px] font-black transition focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-blue ${
+            className={`rounded-full px-2.5 py-1 text-xs font-black transition focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-blue ${
               active ? 'bg-brand-blue text-white' : 'text-slate-500 hover:bg-slate-100 hover:text-slate-700'
             }`}
           >
