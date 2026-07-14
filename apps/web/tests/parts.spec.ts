@@ -141,14 +141,14 @@ test('renders the all parts page and keeps filter state in the /parts URL', asyn
   await expect.poll(() => partRequests[partRequests.length - 1]?.searchParams.get('q')).toBe('RTX');
 });
 
-test('restores legacy quote action colors and marks the active primary navigation item', async ({ page }) => {
+test('uses one horizontal action style for add, replace, and remove while marking the active primary navigation item', async ({ page }) => {
   await loginAsUser(page);
-  const currentGpu = {
-    ...draftItem(gpuPart),
-    id: 'draft-current-gpu',
-    partId: 'part-current-gpu',
+  const currentGpuPart = {
+    ...gpuPart,
+    id: 'part-current-gpu',
     name: 'Current Build GPU'
   };
+  const currentGpu = draftItem(currentGpuPart);
 
   await page.route('**/api/quote-drafts/current**', async (route) => {
     await route.fulfill({
@@ -163,26 +163,41 @@ test('restores legacy quote action colors and marks the active primary navigatio
       await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ items: [], summary: { sampleCount: 0 } }) });
       return;
     }
+    const items = url.searchParams.get('category') === 'GPU'
+      ? [currentGpuPart, gpuPart]
+      : [currentGpuPart, gpuPart, ramPart];
     await route.fulfill({
       status: 200,
       contentType: 'application/json',
-      body: JSON.stringify({ items: [gpuPart], page: 0, size: 20, total: 1 })
+      body: JSON.stringify({ items, page: 0, size: 20, total: items.length })
     });
   });
 
-  await page.goto('/parts?category=GPU');
+  await page.goto('/parts');
 
-  const replaceButton = page.getByRole('button', { name: 'AllParts RTX GPU 견적 교체' });
-  await expect(replaceButton).toHaveCSS('background-color', 'rgb(17, 24, 39)');
-  await expect(replaceButton).toHaveCSS('color', 'rgb(255, 255, 255)');
-
-  const cartRemoveButton = page.getByRole('button', { name: 'Current Build GPU 견적에서 제거' });
+  const tableActionButtons = [
+    page.getByRole('row').filter({ hasText: 'Current Build GPU' }).getByRole('button', { name: 'Current Build GPU 견적에서 제거' }),
+    page.getByRole('row').filter({ hasText: 'AllParts RTX GPU' }).getByRole('button', { name: 'AllParts RTX GPU 견적 교체' }),
+    page.getByRole('row').filter({ hasText: 'AllParts DDR5 RAM' }).getByRole('button', { name: 'AllParts DDR5 RAM 견적 담기' })
+  ];
+  await expect(tableActionButtons[0]).toHaveText('빼기');
+  await expect(tableActionButtons[1]).toHaveText('교체');
+  await expect(tableActionButtons[2]).toHaveText('담기');
+  for (const actionButton of tableActionButtons) {
+    await expect(actionButton).toHaveCSS('background-color', 'rgb(17, 24, 39)');
+    await expect(actionButton).toHaveCSS('color', 'rgb(255, 255, 255)');
+    await expect(actionButton).toHaveCSS('white-space', 'nowrap');
+    await expect.poll(async () => (await actionButton.boundingBox())?.width ?? 0).toBeGreaterThanOrEqual(64);
+  }
+  const cartRemoveButton = page.locator('aside').getByRole('button', { name: 'Current Build GPU 견적에서 제거' });
   await expect(cartRemoveButton).toHaveCSS('background-color', 'rgb(255, 255, 255)');
   await expect(cartRemoveButton).toHaveCSS('border-color', 'rgb(203, 213, 225)');
   await expect(cartRemoveButton).toHaveCSS('color', 'rgb(71, 85, 105)');
 
   const navigation = page.getByRole('navigation', { name: '견적 및 PC 부품 카테고리' });
   const gpuLink = navigation.getByRole('link', { name: 'GPU', exact: true });
+  await gpuLink.click();
+  await expect(page).toHaveURL('/parts?category=GPU');
   await expect(gpuLink).toHaveAttribute('aria-current', 'page');
   await expect(gpuLink).toHaveCSS('background-color', 'rgb(255, 255, 255)');
   await expect.poll(() => gpuLink.evaluate((element) => getComputedStyle(element, '::after').backgroundColor)).toBe('rgb(222, 108, 45)');
