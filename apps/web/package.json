@@ -16,6 +16,7 @@
     "test:e2e:user-surface-stateful-qa": "playwright test -c playwright.user-surface-stateful-qa.config.ts"
   },
   "dependencies": {
+    "@fontsource/outfit": "^5.2.8",
     "@fullpage/react-fullpage": "^0.1.49",
     "@tanstack/react-query": "^5.66.0",
     "@tosspayments/tosspayments-sdk": "^2.7.1",

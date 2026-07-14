@@ -1,4 +1,4 @@
-import { type FormEvent, memo, useCallback, useEffect, useRef, useState } from 'react';
+import { type CSSProperties, type FormEvent, type ReactNode, memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
 import { BarChart3, Bot, CheckCircle2, Download, LifeBuoy, Send, ShoppingCart, Sparkles, X } from 'lucide-react';
@@ -7,6 +7,7 @@ import { AUTH_CHANGED_EVENT, ApiError, clearToken, getToken } from '../../../lib
 import { AI_BUILD_ASSISTANT_CLOSE_EVENT, AI_BUILD_ASSISTANT_OPEN_EVENT, AI_BUILD_ASSISTANT_TOGGLE_EVENT, SUPPORT_CHAT_CLOSE_EVENT, SUPPORT_CHAT_OPEN_EVENT, requestPerfCompare, setAiAssistantOpen, type AiAssistantOpenDetail } from '../../../lib/events';
 import { applyAiBuildToQuoteDraft, getCurrentQuoteDraft, putQuoteDraftItem } from '../../parts/partsApi';
 import { downloadPcAgentForCurrentUser } from '../../support/agentDownload';
+import { AiChatPendingBubble } from './AiChatPendingBubble';
 import {
   AI_ASSISTANT_SESSION_CHANGED_EVENT,
   PART_CATEGORY_LABELS,
@@ -29,7 +30,6 @@ import {
   type AiQuickReplyCommand,
   type AiRecommendedBuild,
   type AiSupportGuidance,
-  type AiToolResult,
   type BuildGraphFocus,
   type PartCategory
 } from '../aiSelection';
@@ -99,6 +99,14 @@ export function AiBuildAssistant({ surface = 'home', variant = 'floating', onBoa
   const [prompt, setPrompt] = useState('');
   const [session, setSession] = useState(() => readAssistantSession());
   const [isSending, setIsSending] = useState(false);
+  // 응답 대기 임시 버블. 300ms 이내 응답에는 띄우지 않아 깜빡임을 막는다(pendingVisible 게이트).
+  // 세션에 저장하지 않고 React 상태로만 둬서 새로고침 시 유령 버블이 남지 않게 한다.
+  const [pending, setPending] = useState<{ id: string; excerpt: string } | null>(null);
+  const [pendingVisible, setPendingVisible] = useState(false);
+  const activeRequestRef = useRef<string | null>(null);
+  const pendingTimerRef = useRef<number | null>(null);
+  // 방금 도착한 assistant 답변만 문장 단위로 순차 노출한다. 세션 복원/과거 메시지는 애니메이션하지 않는다.
+  const [revealMessageId, setRevealMessageId] = useState<string | null>(null);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [applyError, setApplyError] = useState<string | null>(null);
   const [failedBuild, setFailedBuild] = useState<AiRecommendedBuild | null>(null);
@@ -210,6 +218,15 @@ export function AiBuildAssistant({ surface = 'home', variant = 'floating', onBoa
   }, [open, isEmbedded]);
 
   useEffect(() => {
+    if (typeof document === 'undefined') return undefined;
+    const shouldDock = !isEmbedded && open && placement === 'side' && isDesktopAssistant;
+    document.documentElement.classList.toggle('ai-assistant-side-open', shouldDock);
+    return () => {
+      document.documentElement.classList.remove('ai-assistant-side-open');
+    };
+  }, [isDesktopAssistant, isEmbedded, open, placement]);
+
+  useEffect(() => {
     return () => setAiAssistantOpen(false);
   }, []);
 
@@ -307,6 +324,10 @@ export function AiBuildAssistant({ surface = 'home', variant = 'floating', onBoa
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pendingSubmit, isSending]);
 
+  useEffect(() => () => {
+    if (pendingTimerRef.current !== null) window.clearTimeout(pendingTimerRef.current);
+  }, []);
+
   async function submitPrompt(event: FormEvent) {
     event.preventDefault();
     await sendMessage(prompt);
@@ -364,6 +385,18 @@ export function AiBuildAssistant({ surface = 'home', variant = 'floating', onBoa
     }
 
     setIsSending(true);
+
+    // 응답 대기 표시 arm — fastCategory route는 위에서 이미 return했으므로 여기까지 오지 않는다.
+    // 300ms 타이머가 발화하기 전에 응답이 오면 finally가 타이머를 지워 버블이 뜨지 않는다.
+    const requestId = createAiMessageId('pending');
+    activeRequestRef.current = requestId;
+    const excerpt = nextPrompt.length > 30 ? `${nextPrompt.slice(0, 30)}…` : nextPrompt;
+    setPending({ id: requestId, excerpt });
+    setPendingVisible(false);
+    if (pendingTimerRef.current !== null) window.clearTimeout(pendingTimerRef.current);
+    pendingTimerRef.current = window.setTimeout(() => {
+      if (activeRequestRef.current === requestId) setPendingVisible(true);
+    }, 300);
 
     try {
       // 셀프견적에서는 어떤 후속 질문도 현재 장바구니와 충돌할 수 있으므로 최신 draft를 항상 보낸다.
@@ -428,6 +461,7 @@ export function AiBuildAssistant({ surface = 'home', variant = 'floating', onBoa
       };
       setSession(nextSession);
       saveAssistantSession(nextSession, ownerKey);
+      setRevealMessageId(assistantMessage.id);
     } catch (error) {
       if (error instanceof ApiError && error.status === 401) {
         saveAssistantSession(baseSession, ownerKey);
@@ -438,6 +472,17 @@ export function AiBuildAssistant({ surface = 'home', variant = 'floating', onBoa
       }
       setSubmitError(GENERIC_SUBMIT_ERROR_MESSAGE);
     } finally {
+      // 이 요청이 아직 최신이면 대기 버블을 정리한다(응답/오류로 교체). 늦게 도착한 이전 요청은
+      // activeRequestRef가 달라 최신 UI를 덮지 않는다. 실제 응답이 오는 즉시 교체하며 인위 지연은 없다.
+      if (pendingTimerRef.current !== null) {
+        window.clearTimeout(pendingTimerRef.current);
+        pendingTimerRef.current = null;
+      }
+      if (activeRequestRef.current === requestId) {
+        activeRequestRef.current = null;
+        setPending(null);
+        setPendingVisible(false);
+      }
       setIsSending(false);
     }
   }
@@ -554,7 +599,10 @@ export function AiBuildAssistant({ surface = 'home', variant = 'floating', onBoa
         type="button"
         aria-label="AI 견적 챗봇 열기"
         data-testid="ai-chatbot-launcher"
-        onClick={() => setOpen(true)}
+        onClick={() => {
+          setPlacement('side');
+          setOpen(true);
+        }}
         className="fixed bottom-5 right-5 z-50 flex h-16 w-16 items-center justify-center rounded-2xl border border-slate-900 bg-slate-950 text-white shadow-2xl transition hover:-translate-y-0.5 hover:bg-slate-800 focus:outline-none focus:ring-4 focus:ring-blue-200"
       >
         <span className="relative grid h-11 w-11 place-items-center rounded-xl bg-white text-slate-950">
@@ -663,12 +711,11 @@ export function AiBuildAssistant({ surface = 'home', variant = 'floating', onBoa
                         runningQuickReplyCommandId={runningQuickReplyCommandId}
                         applyingBuildId={applyingBuildId}
                         size="large"
+                        reveal={message.id === revealMessageId}
                       />
                     ))}
-                    {isSending ? (
-                      <div className="rounded-[22px] bg-slate-50 px-5 py-4 text-[20px] font-bold leading-8 text-slate-500">
-                        서버에서 추천 조합을 계산하는 중입니다.
-                      </div>
+                    {pending && pendingVisible ? (
+                      <AiChatPendingBubble excerpt={pending.excerpt} size="large" />
                     ) : null}
                     <div ref={messagesEndRef} />
                   </div>
@@ -723,10 +770,11 @@ export function AiBuildAssistant({ surface = 'home', variant = 'floating', onBoa
     );
   }
 
+  const isDockedAssistant = !isEmbedded && isDesktopAssistant;
   const panelClassName = isEmbedded
     ? 'panel flex h-full min-h-0 flex-col overflow-hidden bg-[#f8fbff]'
     : isDesktopAssistant
-    ? 'fixed bottom-4 right-4 z-50 flex h-[min(620px,calc(100vh-2rem))] w-[min(390px,calc(100vw-2rem))] flex-col overflow-hidden rounded-lg border border-slate-200 bg-[#f8fbff] shadow-2xl'
+    ? 'ai-assistant-docked-panel fixed inset-y-0 right-0 z-50 flex h-dvh w-[390px] flex-col overflow-hidden bg-[#f7f7f8]'
     : 'fixed bottom-4 right-3 z-50 w-[min(calc(100vw-1.5rem),460px)] overflow-hidden rounded-2xl border border-slate-200 bg-[#f8fbff] shadow-2xl';
   const bodyClassName = `${isEmbedded || isDesktopAssistant ? 'min-h-0 flex-1' : 'max-h-[78vh]'} flex flex-col`;
 
@@ -735,6 +783,7 @@ export function AiBuildAssistant({ surface = 'home', variant = 'floating', onBoa
       data-testid="ai-chatbot-panel"
       className={panelClassName}
     >
+      {!isDockedAssistant ? (
       <div className={isEmbedded ? 'border-b border-slate-200 bg-white px-4 py-3' : 'border-b border-blue-700 bg-brand-blue px-4 py-3 text-white'}>
         <div className="flex items-center justify-between gap-3">
           <div className="flex min-w-0 items-center gap-3">
@@ -758,8 +807,21 @@ export function AiBuildAssistant({ surface = 'home', variant = 'floating', onBoa
           ) : null}
         </div>
       </div>
+      ) : null}
 
-      <div className={bodyClassName}>
+      <div className={`${bodyClassName} ${isDockedAssistant ? 'bg-[#f7f7f8]' : ''}`}>
+        {isDockedAssistant ? (
+          <div className="flex justify-end px-4 pt-2">
+            <button
+              type="button"
+              aria-label="AI 견적 챗봇 닫기"
+              onClick={() => setOpen(false)}
+              className="grid h-9 w-9 shrink-0 place-items-center rounded-md text-slate-500 transition hover:bg-slate-200 hover:text-slate-800 focus:outline-none focus:ring-4 focus:ring-orange-100"
+            >
+              <X size={17} />
+            </button>
+          </div>
+        ) : null}
         <div data-testid="ai-chat-messages" className="min-h-0 flex-1 space-y-3 overflow-y-auto px-4 py-4">
           {session.messages.map((message) => (
             <ChatMessage
@@ -769,17 +831,16 @@ export function AiBuildAssistant({ surface = 'home', variant = 'floating', onBoa
               onQuickReply={handleQuickReply}
               runningQuickReplyCommandId={runningQuickReplyCommandId}
               applyingBuildId={applyingBuildId}
+              reveal={message.id === revealMessageId}
             />
           ))}
-          {isSending ? (
-            <div className="rounded-2xl border border-slate-200 bg-white px-3 py-2 text-sm font-bold text-slate-500 shadow-sm">
-              서버에서 추천 조합을 계산하는 중입니다.
-            </div>
+          {pending && pendingVisible ? (
+            <AiChatPendingBubble excerpt={pending.excerpt} />
           ) : null}
           <div ref={messagesEndRef} />
         </div>
 
-        <form autoComplete="off" onSubmit={submitPrompt} className="border-t border-slate-200 bg-white p-3">
+        <form autoComplete="off" onSubmit={submitPrompt} className={isDockedAssistant ? 'border-t border-slate-200 bg-[#f7f7f8] p-3' : 'border-t border-slate-200 bg-white p-3'}>
           {submitError ? (
             <div role="alert" className="mb-2 rounded-md border border-red-100 bg-red-50 px-3 py-2 text-xs font-bold text-red-700">
               {submitError}
@@ -885,13 +946,127 @@ function toolFromPrompt(prompt: string): BuildGraphFocus['tool'] {
   return undefined;
 }
 
+// 답변 텍스트를 문장 단위로 자른다. 문장부호 뒤 공백 또는 줄바꿈에서만 끊어 "3.5" 같은 소수점은 보존한다.
+function splitIntoSentences(text: string): string[] {
+  return text
+    .split(/\n+/)
+    .flatMap((line) => line.split(/(?<=[.!?…。])\s+/))
+    .map((sentence) => sentence.trim())
+    .filter(Boolean);
+}
+
+// 새로 추가된 문장 하나를 자연스럽게 페이드 인한다. 커스텀 keyframe 없이 opacity 트랜지션만 쓴다(index.css 무수정).
+function FadeInSentence({ text, leadingSpace }: { text: string; leadingSpace: boolean }) {
+  const [shown, setShown] = useState(false);
+  useEffect(() => {
+    const id = window.requestAnimationFrame(() => setShown(true));
+    return () => window.cancelAnimationFrame(id);
+  }, []);
+  return (
+    <span
+      data-testid="ai-message-sentence"
+      className={`transition-opacity duration-300 ${shown ? 'opacity-100' : 'opacity-0'}`}
+    >
+      {leadingSpace ? ' ' : ''}{text}
+    </span>
+  );
+}
+
+// 카드 프레임이 부드럽게 등장(내용은 카드 내부에서 한 칸씩 채워짐 — CompactBuildCard 참고).
+function FadeInBlock({ children }: { children: ReactNode }) {
+  const [shown, setShown] = useState(false);
+  useEffect(() => {
+    // 초기 숨김 상태를 한 프레임 페인트한 뒤 표시해 트랜지션이 스냅 없이 재생되게 한다(이중 rAF).
+    let raf2 = 0;
+    const raf1 = window.requestAnimationFrame(() => {
+      raf2 = window.requestAnimationFrame(() => setShown(true));
+    });
+    return () => {
+      window.cancelAnimationFrame(raf1);
+      window.cancelAnimationFrame(raf2);
+    };
+  }, []);
+  return (
+    <div className={`transition-all duration-300 ease-out ${shown ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-1'}`}>
+      {children}
+    </div>
+  );
+}
+
+// 카드 내부 섹션을 순서대로 하나씩 노출하기 위한 스텝 카운터(0→count). active가 아니면 즉시 전체 노출.
+function useStepReveal(count: number, active: boolean, stepMs: number): number {
+  const [shown, setShown] = useState(active ? 1 : count);
+  useEffect(() => {
+    if (!active) {
+      setShown(count);
+      return;
+    }
+    setShown(1);
+    let cancelled = false;
+    const timers: number[] = [];
+    for (let index = 1; index < count; index += 1) {
+      const nextShown = index + 1;
+      timers.push(window.setTimeout(() => {
+        if (!cancelled) setShown(nextShown);
+      }, index * stepMs));
+    }
+    return () => {
+      cancelled = true;
+      timers.forEach((timer) => window.clearTimeout(timer));
+    };
+  }, [active, count, stepMs]);
+  return active ? shown : count;
+}
+
+function prefersReducedMotion() {
+  return typeof window !== 'undefined'
+    && typeof window.matchMedia === 'function'
+    && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+}
+
+// 방금 도착한 답변을 문장 → 카드 순서로 한 스텝씩 노출한다. 문장은 길이에 비례한 간격, 카드는 고정 간격.
+// active가 아니면(과거 메시지·모션 최소화·스텝 1개) 전체를 즉시 노출한다.
+function useSequentialReveal(sentences: string[], extraCount: number, active: boolean): number {
+  const total = sentences.length + extraCount;
+  const [count, setCount] = useState(active ? 1 : total);
+
+  useEffect(() => {
+    if (!active) {
+      setCount(total);
+      return;
+    }
+    setCount(1);
+    let cancelled = false;
+    const timers: number[] = [];
+    let elapsed = 0;
+    for (let index = 1; index < total; index += 1) {
+      const delay = index < sentences.length
+        ? Math.min(240 + sentences[index].length * 16, 720) // 문장: 읽는 속도처럼
+        : 850; // 카드: 내부 섹션이 차근차근 채워지는 걸 보여주도록 넉넉한 간격
+      elapsed += delay;
+      const nextCount = index + 1;
+      timers.push(window.setTimeout(() => {
+        if (!cancelled) setCount(nextCount);
+      }, elapsed));
+    }
+    return () => {
+      cancelled = true;
+      timers.forEach((timer) => window.clearTimeout(timer));
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [active, total]);
+
+  return active ? count : total;
+}
+
 const ChatMessage = memo(function ChatMessage({
   message,
   onSelectBuild,
   onQuickReply,
   runningQuickReplyCommandId,
   applyingBuildId,
-  size = 'default'
+  size = 'default',
+  reveal = false
 }: {
   message: AiChatMessage;
   onSelectBuild: (build: AiRecommendedBuild) => void;
@@ -899,9 +1074,31 @@ const ChatMessage = memo(function ChatMessage({
   runningQuickReplyCommandId: string | null;
   applyingBuildId: string | null;
   size?: AiChatMessageSize;
+  reveal?: boolean;
 }) {
   const isUser = message.role === 'user';
   const isLarge = size === 'large';
+
+  // 리빌 타임라인: 문장들 → 카드(가이드/시뮬/평가/견적) 순서로 한 스텝씩 노출한다.
+  const sentences = useMemo(() => (isUser ? [] : splitIntoSentences(message.text)), [isUser, message.text]);
+  const extraCount = isUser
+    ? 0
+    : (message.supportGuidance ? 1 : 0)
+      + (message.simulation ? 1 : 0)
+      + (message.buildAssessment ? 1 : 0)
+      + (message.builds?.length ?? 0);
+  const animate = reveal && !isUser && !prefersReducedMotion() && sentences.length + extraCount > 1;
+  const revealedCount = useSequentialReveal(sentences, extraCount, animate);
+  const sentencesShown = animate ? Math.min(revealedCount, sentences.length) : sentences.length;
+  const extrasShown = animate ? Math.max(0, revealedCount - sentences.length) : extraCount;
+  const textDone = !animate || sentencesShown >= sentences.length;
+  // 카드들을 DOM 순서대로 순회하며 현재 노출 스텝까지만 보이게 한다.
+  let extraCursor = 0;
+  const revealNextExtra = () => {
+    const visible = !animate || extrasShown > extraCursor;
+    extraCursor += 1;
+    return visible;
+  };
 
   return (
     <div className={`flex ${isUser ? 'justify-end' : 'justify-start'}`}>
@@ -915,8 +1112,18 @@ const ChatMessage = memo(function ChatMessage({
               {message.supportGuidance ? 'PC 상태 안내' : message.buildAssessment ? '견적 점수 설명' : message.simulation ? '성능 시뮬레이션' : 'AI 견적 어시스턴트'}
             </div>
           ) : null}
-          <p className="break-keep">{message.text}</p>
-          {!isUser && message.quickReplies?.length ? (
+          {isUser ? (
+            <p className="break-keep">{message.text}</p>
+          ) : (
+            <p data-testid="ai-message-text" className="break-keep" aria-live={animate ? 'polite' : undefined}>
+              {animate
+                ? sentences.slice(0, sentencesShown).map((sentence, index) => (
+                  <FadeInSentence key={index} text={sentence} leadingSpace={index > 0} />
+                ))
+                : message.text}
+            </p>
+          )}
+          {!isUser && message.quickReplies?.length && textDone ? (
             <div data-testid="ai-quick-replies" className={`${isLarge ? 'mt-3 gap-3' : 'mt-2 gap-2'} flex flex-wrap`}>
               {message.quickReplies.map((reply) => {
                 const command = message.quickReplyCommands?.find((item) => item.label === reply);
@@ -938,23 +1145,34 @@ const ChatMessage = memo(function ChatMessage({
           ) : null}
         </div>
 
-        {message.supportGuidance ? (
-          <SupportGuidanceCard guidance={message.supportGuidance} size={size} />
+        {message.supportGuidance && revealNextExtra() ? (
+          animate
+            ? <FadeInBlock><SupportGuidanceCard guidance={message.supportGuidance} size={size} /></FadeInBlock>
+            : <SupportGuidanceCard guidance={message.supportGuidance} size={size} />
         ) : null}
 
-        {message.simulation ? (
-          <SimulationResultCard simulation={message.simulation} size={size} />
+        {message.simulation && revealNextExtra() ? (
+          animate
+            ? <FadeInBlock><SimulationResultCard simulation={message.simulation} size={size} /></FadeInBlock>
+            : <SimulationResultCard simulation={message.simulation} size={size} />
         ) : null}
 
-        {message.buildAssessment ? (
-          <BuildAssessmentCard assessment={message.buildAssessment} size={size} />
+        {message.buildAssessment && revealNextExtra() ? (
+          animate
+            ? <FadeInBlock><BuildAssessmentCard assessment={message.buildAssessment} size={size} /></FadeInBlock>
+            : <BuildAssessmentCard assessment={message.buildAssessment} size={size} />
         ) : null}
 
-        {message.builds ? (
+        {message.builds?.length ? (
           <div className={`${isLarge ? 'mt-4 gap-3' : 'mt-2 gap-2'} grid`}>
-            {message.builds.map((build) => (
-              <CompactBuildCard key={`${message.id}-${build.id}`} build={build} onSelectBuild={onSelectBuild} applyingBuildId={applyingBuildId} size={size} />
-            ))}
+            {message.builds.map((build) => {
+              if (!revealNextExtra()) return null;
+              const key = `${message.id}-${build.id}`;
+              const distinction = deriveBuildDistinction(build, message.builds ?? []);
+              return animate
+                ? <FadeInBlock key={key}><CompactBuildCard build={build} onSelectBuild={onSelectBuild} applyingBuildId={applyingBuildId} size={size} reveal distinction={distinction} /></FadeInBlock>
+                : <CompactBuildCard key={key} build={build} onSelectBuild={onSelectBuild} applyingBuildId={applyingBuildId} size={size} distinction={distinction} />;
+            })}
           </div>
         ) : null}
       </div>
@@ -970,6 +1188,7 @@ const ChatMessage = memo(function ChatMessage({
   && prev.runningQuickReplyCommandId === next.runningQuickReplyCommandId
   && prev.applyingBuildId === next.applyingBuildId
   && prev.size === next.size
+  && prev.reveal === next.reveal
 ));
 
 function SupportGuidanceCard({ guidance, size = 'default' }: { guidance: AiSupportGuidance; size?: AiChatMessageSize }) {
@@ -1277,16 +1496,64 @@ function MiniBar({ value, max, className, size = 'default' }: { value?: number |
 // 재마운트될 때 옛 비교가 다시 켜지지 않도록 빌드 단위로 1회만 발행한다.
 const perfCompareNotifiedBuildIds = new Set<string>();
 
+// 특이점에서 비교할 핵심 부품(성능 체감이 큰 순서)과, 짧은 설명에 쓸 한국어 명칭.
+const DISTINCTION_CATEGORY_ORDER: PartCategory[] = ['GPU', 'CPU', 'RAM', 'STORAGE'];
+const EMPHASIS_WORD: Partial<Record<PartCategory, string>> = {
+  GPU: '그래픽',
+  CPU: 'CPU',
+  RAM: '메모리',
+  STORAGE: '저장'
+};
+
+// 같은 응답의 다른 추천들과 비교해 이 조합만의 특이점을 "짧은 설명"으로 만든다(부품명 X — 잘리면 의미 없음).
+// 카테고리별 지출을 다른 조합 평균과 비교해 이 조합이 가장 힘준/줄인 부분 + 가격 위치를 한 구절로 표현한다.
+// 백엔드 summary가 모든 카드에 동일한 보일러플레이트라 프런트에서 실제 차이를 뽑아 대체한다.
+function deriveBuildDistinction(build: AiRecommendedBuild, builds: AiRecommendedBuild[]): string | null {
+  if (!builds || builds.length < 2) return null;
+  const others = builds.filter((candidate) => candidate.id !== build.id);
+  const prices = builds.map((candidate) => candidate.totalPrice);
+  const minPrice = Math.min(...prices);
+  const maxPrice = Math.max(...prices);
+  const isCheapest = build.totalPrice === minPrice && minPrice !== maxPrice;
+  const isPriciest = build.totalPrice === maxPrice && minPrice !== maxPrice;
+
+  const spendOf = (target: AiRecommendedBuild, category: PartCategory) => target.items
+    .filter((item) => item.category === category)
+    .reduce((sum, item) => sum + item.price * (item.quantity || 1), 0);
+
+  // 다른 조합 평균 대비 지출 차이가 가장 큰 카테고리 = 이 조합의 힘준/줄인 지점.
+  let emphasisCategory: PartCategory | null = null;
+  let emphasisDelta = 0;
+  for (const category of DISTINCTION_CATEGORY_ORDER) {
+    const mine = spendOf(build, category);
+    const avgOthers = others.reduce((sum, candidate) => sum + spendOf(candidate, category), 0) / others.length;
+    const delta = mine - avgOthers;
+    if (Math.abs(delta) > Math.abs(emphasisDelta) && Math.abs(delta) >= 30000) {
+      emphasisDelta = delta;
+      emphasisCategory = category;
+    }
+  }
+  const word = emphasisCategory ? EMPHASIS_WORD[emphasisCategory] : null;
+
+  if (isPriciest) return word && emphasisDelta > 0 ? `${word} 비중을 높인 고사양` : '성능을 우선한 구성';
+  if (isCheapest) return word && emphasisDelta < 0 ? `${word} 비중을 낮춘 가성비` : '가격을 아낀 구성';
+  return '성능·가격 균형';
+}
+
 function CompactBuildCard({
   build,
   onSelectBuild,
   applyingBuildId,
-  size = 'default'
+  size = 'default',
+  reveal = false,
+  distinction
 }: {
   build: AiRecommendedBuild;
   onSelectBuild: (build: AiRecommendedBuild) => void;
   applyingBuildId: string | null;
   size?: AiChatMessageSize;
+  reveal?: boolean;
+  distinction?: string | null;
 }) {
   // 변경 미리보기 카드는 전체 견적이 아니라 바뀐 부품만 보여준다(전체 8부품 나열은 무엇이 바뀌는지 흐린다).
   // 적용은 여전히 build 전체(items 전량)로 하므로 나머지 부품이 삭제되지 않는다.
@@ -1312,9 +1579,24 @@ function CompactBuildCard({
   const isApplyingThis = applyingBuildId === build.id;
   const isApplyDisabled = Boolean(applyingBuildId);
 
+  // 카드 내부를 헤더 → 제목·특이사항·가격 → 담기 버튼 순서로 하나씩 채운다(강조).
+  const animateSections = reveal && !prefersReducedMotion();
+  let sectionIndex = 0;
+  const headerIdx = sectionIndex++;
+  const titleIdx = sectionIndex++;
+  const buttonIdx = sectionIndex++;
+  const visibleSections = useStepReveal(sectionIndex, animateSections, 280);
+  const sectionStyle = (idx: number): CSSProperties | undefined => (animateSections
+    ? {
+      opacity: idx < visibleSections ? 1 : 0,
+      transform: idx < visibleSections ? 'translateY(0)' : 'translateY(6px)',
+      transition: 'opacity 300ms ease-out, transform 300ms ease-out, color 150ms ease, background-color 150ms ease, border-color 150ms ease'
+    }
+    : undefined);
+
   return (
-    <article className={`${isLarge ? 'rounded-[22px] p-5' : 'rounded-2xl p-3'} border border-slate-200 bg-white shadow-sm`}>
-      <div className={`${isLarge ? 'gap-3' : 'gap-2'} flex flex-wrap items-center`}>
+    <article data-testid="ai-build-card" className={`${isLarge ? 'rounded-[22px] p-5' : 'rounded-2xl p-3'} border border-slate-200 bg-white shadow-sm`}>
+      <div style={sectionStyle(headerIdx)} className={`${isLarge ? 'gap-3' : 'gap-2'} flex flex-wrap items-center`}>
         <span className={`${isLarge ? 'px-3 py-1.5 text-[15px]' : 'px-2.5 py-1 text-[11px]'} rounded-full bg-brand-blue font-black text-white`}>{build.label}</span>
         {build.appliedPartCategories.map((category) => (
           <span key={category} className={`${isLarge ? 'px-3 py-1.5 text-[15px]' : 'px-2.5 py-1 text-[11px]'} rounded-full bg-emerald-50 font-black text-emerald-700`}>
@@ -1322,10 +1604,10 @@ function CompactBuildCard({
           </span>
         ))}
       </div>
-      <div className={`${isLarge ? 'mt-4 gap-3' : 'mt-3 gap-2'} flex flex-col sm:flex-row sm:items-start sm:justify-between`}>
+      <div style={sectionStyle(titleIdx)} className={`${isLarge ? 'mt-4 gap-3' : 'mt-3 gap-2'} flex flex-col sm:flex-row sm:items-start sm:justify-between`}>
         <div className="min-w-0">
           <h3 className={`${isLarge ? 'text-[20px] leading-8' : 'text-sm leading-5'} font-black text-commerce-ink`}>{build.title}</h3>
-          <p className={`${isLarge ? 'mt-2 text-base leading-7' : 'mt-1 text-xs leading-5'} line-clamp-2 break-keep text-slate-500`}>{build.summary}</p>
+          <p className={`${isLarge ? 'mt-2 text-base leading-7' : 'mt-1 text-xs leading-5'} line-clamp-2 break-keep ${distinction ? 'font-bold text-slate-600' : 'text-slate-500'}`}>{distinction || build.summary}</p>
         </div>
         <div className="shrink-0 text-left sm:text-right">
           <div className={`${isLarge ? 'text-[22px] leading-8' : 'text-base'} font-black text-brand-blue`}>{build.totalPrice.toLocaleString()}원</div>
@@ -1334,31 +1616,11 @@ function CompactBuildCard({
           </div>
         </div>
       </div>
-      {build.toolResults?.length ? (
-        <div className={`${isLarge ? 'mt-4 gap-2' : 'mt-3 gap-1.5'} flex flex-wrap`} aria-label="검증 결과">
-          {build.toolResults.map((result) => (
-            <span
-              key={`${result.tool}-${result.status}`}
-              title={result.summary}
-              className={`${isLarge ? 'px-3 py-1.5 text-[15px]' : 'px-2 py-1 text-[11px]'} rounded-full border font-black ${toolStatusChipClass(result.status)}`}
-            >
-              {toolDisplayLabel(result.tool)} {toolStatusLabel(result.status)}
-            </span>
-          ))}
-        </div>
-      ) : null}
-      <div className={`${isLarge ? 'mt-4 gap-2 text-base' : 'mt-3 gap-1.5 text-xs'} grid`}>
-        {primaryItems.map((item) => (
-          <div key={item.partId} className={`${isLarge ? 'grid-cols-[78px_minmax(0,1fr)] gap-3 rounded-xl px-4 py-2.5' : 'grid-cols-[56px_minmax(0,1fr)] gap-2 rounded-lg px-2.5 py-1.5'} grid bg-slate-50`}>
-            <span className="font-black text-brand-blue">{PART_CATEGORY_LABELS[item.category]}</span>
-            <span className="truncate font-semibold text-slate-700">{item.name}</span>
-          </div>
-        ))}
-      </div>
       <button
         type="button"
         onClick={() => onSelectBuild(build)}
         disabled={isApplyDisabled}
+        style={sectionStyle(buttonIdx)}
         className={`${isLarge ? 'mt-4 min-h-14 gap-3 px-4 text-base' : 'mt-3 min-h-10 gap-2 px-3 text-xs'} flex w-full items-center justify-center rounded-full border border-blue-200 bg-white font-black text-brand-blue transition hover:border-brand-blue hover:bg-blue-50 focus:outline-none focus:ring-4 focus:ring-blue-100 disabled:border-slate-200 disabled:bg-slate-50 disabled:text-slate-400`}
       >
         <ShoppingCart size={isLarge ? 21 : 15} />
@@ -1366,29 +1628,6 @@ function CompactBuildCard({
       </button>
     </article>
   );
-}
-
-function toolDisplayLabel(tool: AiToolResult['tool']) {
-  const labels: Record<string, string> = {
-    compatibility: '호환성',
-    power: '전력',
-    size: '규격',
-    performance: '성능',
-    price: '가격'
-  };
-  return labels[tool] ?? tool;
-}
-
-function toolStatusLabel(status: AiToolResult['status']) {
-  if (status === 'PASS') return '통과';
-  if (status === 'WARN') return '주의';
-  return '불가';
-}
-
-function toolStatusChipClass(status: AiToolResult['status']) {
-  if (status === 'PASS') return 'border-emerald-200 bg-emerald-50 text-emerald-700';
-  if (status === 'WARN') return 'border-amber-200 bg-amber-50 text-amber-700';
-  return 'border-red-200 bg-red-50 text-red-700';
 }
 
 function formatPlainNumber(value?: number | null) {
