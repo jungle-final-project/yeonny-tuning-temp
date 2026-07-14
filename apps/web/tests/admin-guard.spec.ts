@@ -837,8 +837,8 @@ test('renders manufacturer release demo intake on admin parts page', async ({ pa
   await expect(page.locator('main')).toContainText('Source 수정');
 
   await page.getByRole('button', { name: '전체 scan' }).click();
-  expect(scanAllCalls).toBe(1);
   await expect(page.locator('main')).toContainText('전체 scan 완료');
+  expect(scanAllCalls).toBe(1);
 
   await page.getByRole('button', { name: 'scan', exact: true }).click();
   expect(scanCalls).toBe(1);
