@@ -29,7 +29,7 @@ export function pickByPareto(items) {
     return pool[Math.floor(Math.random() * pool.length)];
 }
 
-/* 1. 로그인 함수 */
+/* 로그인 함수 */
 export function login(
     targetBaseUrl = baseUrl(),
     email = __ENV.TEST_EMAIL,

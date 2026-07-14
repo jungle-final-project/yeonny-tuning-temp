@@ -28,7 +28,7 @@
 </head>
 <body>
   <h1>k6 Cache Comparison Report</h1>
-  <p>각 시나리오 시작을 0초로 정규화 · Bucket: 10s · Source: infra/k6/results/self-quote.ndjson</p>
+  <p>각 시나리오 시작을 0초로 정규화 · Bucket: 10s · Source: N+1 baseline test record</p>
   <div class="summary">
     <div class="metric none"><span>캐싱 없음 요청</span><strong>16398</strong></div>
     <div class="metric none"><span>캐싱 없음 Median</span><strong>2793.75 ms</strong></div>
@@ -73,13 +73,11 @@
 <tr><td>100s</td><td>1093</td><td>4011.78</td><td>9943.33</td><td>3739</td><td>376.1</td><td>1184.46</td></tr>
 <tr><td>110s</td><td>1186</td><td>3998.69</td><td>8371.46</td><td>3379</td><td>153.62</td><td>971.35</td></tr>
 <tr><td>120s</td><td>1211</td><td>3720.11</td><td>6134.2</td><td>50</td><td>6</td><td>12.51</td></tr>
-<tr><td>130s</td><td>1160</td><td>3403.52</td><td>6379.27</td><td>-</td><td>-</td><td>-</td></tr>
-<tr><td>140s</td><td>1142</td><td>2565.86</td><td>5380.45</td><td>-</td><td>-</td><td>-</td></tr>
     </tbody>
   </table>
   <script>
-    const labels = [0,10,20,30,40,50,60,70,80,90,100,110,120,130,140];
-    const noneRows = {"0":{"second":0,"count":482,"median":53.03,"p95":153.97},"10":{"second":10,"count":1067,"median":121.23,"p95":678.81},"20":{"second":20,"count":1119,"median":691.65,"p95":2119.36},"30":{"second":30,"count":1136,"median":1324.38,"p95":3915.67},"40":{"second":40,"count":1155,"median":1995.38,"p95":4960.17},"50":{"second":50,"count":1178,"median":2784.62,"p95":6426.85},"60":{"second":60,"count":1168,"median":3549.86,"p95":6382.53},"70":{"second":70,"count":1049,"median":4201.98,"p95":8222.62},"80":{"second":80,"count":1081,"median":4274.73,"p95":7973},"90":{"second":90,"count":1171,"median":3874.18,"p95":10398.98},"100":{"second":100,"count":1093,"median":4011.78,"p95":9943.33},"110":{"second":110,"count":1186,"median":3998.69,"p95":8371.46},"120":{"second":120,"count":1211,"median":3720.11,"p95":6134.2},"130":{"second":130,"count":1160,"median":3403.52,"p95":6379.27},"140":{"second":140,"count":1142,"median":2565.86,"p95":5380.45}};
+    const labels = [0,10,20,30,40,50,60,70,80,90,100,110,120];
+    const noneRows = {"0":{"second":0,"count":482,"median":53.03,"p95":153.97},"10":{"second":10,"count":1067,"median":121.23,"p95":678.81},"20":{"second":20,"count":1119,"median":691.65,"p95":2119.36},"30":{"second":30,"count":1136,"median":1324.38,"p95":3915.67},"40":{"second":40,"count":1155,"median":1995.38,"p95":4960.17},"50":{"second":50,"count":1178,"median":2784.62,"p95":6426.85},"60":{"second":60,"count":1168,"median":3549.86,"p95":6382.53},"70":{"second":70,"count":1049,"median":4201.98,"p95":8222.62},"80":{"second":80,"count":1081,"median":4274.73,"p95":7973},"90":{"second":90,"count":1171,"median":3874.18,"p95":10398.98},"100":{"second":100,"count":1093,"median":4011.78,"p95":9943.33},"110":{"second":110,"count":1186,"median":3998.69,"p95":8371.46},"120":{"second":120,"count":1211,"median":3720.11,"p95":6134.2}};
     const caffeineRows = {"0":{"second":0,"count":540,"median":8.31,"p95":44},"10":{"second":10,"count":1810,"median":7,"p95":44},"20":{"second":20,"count":3327,"median":24.08,"p95":136.41},"30":{"second":30,"count":3600,"median":112,"p95":529.75},"40":{"second":40,"count":3655,"median":158.95,"p95":607.42},"50":{"second":50,"count":3730,"median":203.38,"p95":790.93},"60":{"second":60,"count":3799,"median":241.51,"p95":850.87},"70":{"second":70,"count":3712,"median":298.39,"p95":1049.04},"80":{"second":80,"count":3551,"median":390.52,"p95":1388.91},"90":{"second":90,"count":3652,"median":422.54,"p95":1187.15},"100":{"second":100,"count":3739,"median":376.1,"p95":1184.46},"110":{"second":110,"count":3379,"median":153.62,"p95":971.35},"120":{"second":120,"count":50,"median":6,"p95":12.51}};
     const values = (rows, field) => labels.map((second) => rows[second]?.[field] ?? null);
 

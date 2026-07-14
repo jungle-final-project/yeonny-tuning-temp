@@ -21,13 +21,11 @@ import lombok.RequiredArgsConstructor;
 public class PartQuery {
     
     private final JdbcTemplate jdbcTemplate;
-    private final PartQueryCached partQueryCached;
+    private final PartQueryCachedLoader partQueryCachedLoader;
 
     /* DB에서 특정 카테고리 부품 정보를 "리스트"로 가져오는 함수 */
     public List<ToolBuildPart> partsByPublicIds(List<String> partIds) {
-        return partIds.stream()
-                .map(partQueryCached::partByPublicId)
-                .toList();
+        return partQueryCachedLoader.partsByPublicIds(partIds);
     }
 
     /* DB에서 특정 조건들에 따라 부품 정보를 "리스트"로 가져옴 */
@@ -35,16 +33,14 @@ public class PartQuery {
         /* 특정 조건에 맞는 부품 id를 순차적으로 먼저 가져온다: 1차 DB 방문 */
         List<String> partIds = partIdsBySearchConditions(search);
 
-        return partIds.stream()
-                .map(partQueryCached::partByPublicId)
-                .toList();
+        return partQueryCachedLoader.partsByPublicIds(partIds);
     }
 
     /* draftId => partIds 목록 => parts 객체 리스트(캐싱) */
     public List<ToolBuildPart> partsByDraftIds(Long draftId) {
-        return partIdsByDraftId(draftId).stream()
-                .map(partQueryCached::partByPublicId)
-                .toList();
+        List<String> partIds = partIdsByDraftId(draftId);
+
+        return partQueryCachedLoader.partsByPublicIds(partIds);
     }
 
     /* helper 함수들 */

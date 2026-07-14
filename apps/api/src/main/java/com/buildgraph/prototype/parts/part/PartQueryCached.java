@@ -20,7 +20,8 @@ public class PartQueryCached {
     private final AtomicLong dbQueryCount = new AtomicLong();
     
     /* 부품을 개별 항목으로 가져오는 함수(이곳으로 단일화)
-    : 캐싱 적용.. id기반 단일 품목 정보 */
+       : 캐싱 적용.. id기반 단일 품목 정보 
+       : 현재 사용하지 않고 있음 */
     @Cacheable(
         cacheNames = "tool-part",
         key = "#partId",

@@ -1,8 +1,7 @@
 package com.buildgraph.prototype.part;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.contains;
+import static org.mockito.ArgumentMatchers.anyList;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
@@ -11,6 +10,7 @@ import java.util.Map;
 import org.junit.jupiter.api.Test;
 import org.springframework.jdbc.core.JdbcTemplate;
 
+import com.buildgraph.prototype.parts.benchmark.BenchmarkQueryCached;
 import com.buildgraph.prototype.parts.part.PartQuery;
 import com.buildgraph.prototype.parts.tool.ToolBuildPart;
 import com.buildgraph.prototype.parts.tool.ToolRepository;
@@ -22,14 +22,15 @@ class ToolCheckServiceBenchmarkTest {
     @Test
     void performanceToolUsesLatestBenchmarkSummariesWhenAvailable() {
         JdbcTemplate jdbcTemplate = mock(JdbcTemplate.class);
-        when(jdbcTemplate.queryForList(contains("FROM benchmark_summaries"), any(Object[].class)))
-                .thenReturn(List.of(
-                        Map.of("part_id", 1L, "score", 86.5, "summary", "CPU category-local normalized score"),
-                        Map.of("part_id", 2L, "score", 92.0, "summary", "GPU category-local normalized score")
-        ));
+        BenchmarkQueryCached benchmarkQuery = mock(BenchmarkQueryCached.class);
+        when(benchmarkQuery.latestBenchmarkInfos(anyList()))
+                .thenReturn(Map.of(
+                        1L, Map.of("part_id", 1L, "score", 86.5, "summary", "CPU category-local normalized score"),
+                        2L, Map.of("part_id", 2L, "score", 92.0, "summary", "GPU category-local normalized score")
+                ));
         ToolRepository toolRepository = mock(ToolRepository.class);
         PartQuery toolQuery = mock(PartQuery.class);
-        PerformaceRule performaceRule = new PerformaceRule(jdbcTemplate);
+        PerformaceRule performaceRule = new PerformaceRule(benchmarkQuery);
         ToolService service = new ToolService(jdbcTemplate, toolRepository, performaceRule, toolQuery);
 
         List<Map<String, Object>> results = service.checkBuild(List.of(

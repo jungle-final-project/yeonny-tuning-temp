@@ -86,29 +86,6 @@ public class PartCompatibleCandidateService {
 
         /* draftId 기반 part 정보 가져오기*/
         return toolQuery.partsByDraftIds(draftId);
-
-        /* 레거시(한꺼번에 List 가져오는 쿼리문): Trad-Off 테스트 가능 */
-        // return jdbcTemplate.queryForList("""
-        //                 SELECT p.id AS internal_id,
-        //                         p.public_id::text AS part_id,
-        //                         p.public_id::text AS id,
-        //                         p.category,
-        //                         p.name,
-        //                         p.manufacturer,
-        //                         p.price AS current_price,
-        //                         p.price,
-        //                         qdi.quantity,
-        //                         p.attributes
-        //                 FROM quote_draft_items qdi
-        //                 JOIN parts p ON p.id = qdi.part_id
-        //                 WHERE qdi.quote_draft_id = ?
-        //                     AND qdi.deleted_at IS NULL
-        //                     AND p.deleted_at IS NULL
-        //                 ORDER BY qdi.created_at ASC, qdi.id ASC
-        //                 """, draftId)
-        //         .stream()
-        //         .map(this::toolPart)
-        //         .toList();
     }
 
     /* 추가된 함수: 후보검증실행 */

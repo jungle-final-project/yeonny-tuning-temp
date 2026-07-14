@@ -1,6 +1,6 @@
 import http from 'k6/http';
 import { check, sleep } from 'k6';
-import { login, pickByPareto } from '../util/general-helper.js';
+import { login } from '../util/general-helper.js';
 import { addPart, getParts, checkAllConditions } from '../util/quote-url.js';
 
 /* 테스트 설정값: 시나리오
@@ -108,17 +108,8 @@ export function selfQuoteFlow(data) {
 
 /* 각 단계 수행 함수들 */
 export function addingPart(token, partCategory){
-    /* 부품 후보 리스트 조회
-       + 현재 draft 조회
-       + 후보별 호환 검증 */
-    const listRes = getParts(token, partCategory);
-    check(listRes, { [`${partCategory} 후보 리스트 200`]: (res) => res.status === 200, });
-    if (listRes.status !== 200) return;
-
-    /* 가중치 넣어서 부품 하나 선택 */
-    const body = JSON.parse(listRes.body);
-    const picked = pickByPareto(body.items);
-    const PART_ID = picked.id;
+    /* 스크롤링을 하여 특정 부품을 선택 */
+    const PART_ID = scrollPage(token, partCategory);
 
     /* 이 중 부품 하나 선택 => draft(장바구니)에 들어감 */
     const putRes = addPart(token, PART_ID);
@@ -130,6 +121,47 @@ export function addingPart(token, partCategory){
     check(graphRes, { [`${partCategory} 의존성 확인 200`]: (res) => res.status === 200, });
 
     sleep(0.3);
+}
+
+/* 페이지 넘기기 시나리오 함수 */
+export function scrollPage(token, partCategory){
+    /* 첫 페이지 조회하여 총 페이지 수 구하기 */
+    const firstPageRes = getParts(token, partCategory, 0);
+    check(firstPageRes, { [`${partCategory} 후보 리스트 200`]: (res) => res.status === 200, });
+    if (firstPageRes.status !== 200) return;
+    
+    /* 총 페이지 수 구하기
+       : json 파싱
+       : 선택할 객체 index 구하기 */
+    const firstBody = JSON.parse(firstPageRes.body);
+    const totalPages = Number(firstBody.total);
+    const pickIndex = Math.min(
+        totalPages - 1,
+        Math.floor(Math.pow(Math.random(), 0.8) * firstBody.total)
+    );
+    
+    /* 객체 index 기반 타겟 페이지 + 마지막 페이지 index 산출 */
+    const targetPage = Math.floor(pickIndex / 10);
+    const indexInPage = pickIndex % 10;
+
+    /* 페이지 스크롤링(넘기기) => 마지막 페이지 까지
+       : 첫 페이지라면 for 문 수행 안됨 */
+    let pageRes = firstPageRes;
+
+    for(let i = 1; i <= targetPage; i++){
+        /* 스크롤 지연 시간 추가 */
+        sleep(0.3 + Math.random() * 0.7);
+
+        pageRes = getParts(token, partCategory, i);
+        check(pageRes, { [`${partCategory} 후보 리스트 200`]: (res) => res.status === 200, });
+        if (pageRes.status !== 200) return;
+    }
+
+    /* 타겟 부품 선택 => ID 추출 */
+    const body = JSON.parse(pageRes.body);
+    const pickedPart = body.items[indexInPage];
+    
+    return pickedPart.id;
 }
 
 

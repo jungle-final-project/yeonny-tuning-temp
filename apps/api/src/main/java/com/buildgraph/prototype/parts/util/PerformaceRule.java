@@ -1,17 +1,14 @@
 package com.buildgraph.prototype.parts.util;
 
 import static com.buildgraph.prototype.parts.util.RuleValueReader.decimalValue;
-import static com.buildgraph.prototype.parts.util.RuleValueReader.numberLong;
 
-import java.util.Collections;
-import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
-import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Component;
 
 import com.buildgraph.prototype.common.DbValueMapper;
+import com.buildgraph.prototype.parts.benchmark.BenchmarkQueryCached;
 import com.buildgraph.prototype.parts.tool.ToolBuildPart;
 
 import lombok.RequiredArgsConstructor;
@@ -21,9 +18,9 @@ import lombok.RequiredArgsConstructor;
 @RequiredArgsConstructor
 public class PerformaceRule {
 
-    private final JdbcTemplate jdbcTemplate;
+    private final BenchmarkQueryCached benchmarkQuery;
  
-    /* 최신 벤치마크 가져오기 */
+    /* 최신 벤치마크 가져오기: DB 접근 */
     public Map<Long, Map<String, Object>> latestBenchmarks(List<ToolBuildPart> parts) {
         @SuppressWarnings("null")
         List<Long> partIds = parts.stream()
@@ -34,22 +31,8 @@ public class PerformaceRule {
         if (partIds.isEmpty()) {
             return Map.of();
         }
-        String placeholders = String.join(", ", Collections.nCopies(partIds.size(), "?"));
-        Map<Long, Map<String, Object>> result = new LinkedHashMap<>();
-        jdbcTemplate.queryForList("""
-                        SELECT DISTINCT ON (part_id)
-                               part_id,
-                               summary,
-                               score
-                        FROM benchmark_summaries
-                        WHERE part_id IN (
-                        """ + placeholders + """
-                        )
-                          AND deleted_at IS NULL
-                        ORDER BY part_id, created_at DESC, id DESC
-                        """, partIds.toArray())
-                .forEach(row -> result.put(numberLong(row.get("part_id")), row));
-        return result;
+        /* Query 호출 */
+        return benchmarkQuery.latestBenchmarkInfos(partIds);
     }
 
     public Double benchmarkScore(Map<Long, Map<String, Object>> benchmarkRows, ToolBuildPart part) {

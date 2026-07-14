@@ -19,9 +19,9 @@ export function addPart(token, partId, quantity = 1) {
 }
 
 /* 부품 리스트를 불러오는 url */
-export function getParts(token, category) {
+export function getParts(token, category, page) {
     return http.get(
-        `${baseUrl()}/api/parts?category=${category}&page=0&size=100&sort=price_asc&compatibilitySource=QUOTE_DRAFT_CURRENT`,
+        `${baseUrl()}/api/parts?category=${category}&page=${page}&size=10&sort=price_asc&compatibilitySource=QUOTE_DRAFT_CURRENT`,
         {
             headers: authHeaders(token),
             tags: { step: category.toLowerCase(), phase: 'candidate-list' },
