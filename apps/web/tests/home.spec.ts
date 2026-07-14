@@ -1109,13 +1109,8 @@ test('docks the desktop AI assistant and shifts the page while open', async ({ p
   await expect(page.getByTestId('ai-chatbot-panel').getByRole('heading', { name: 'AI 견적 어시스턴트' })).toHaveCount(0);
   await expect(page.getByTestId('ai-chatbot-panel')).not.toContainText('내부 견적 자산 기준 · 호환성 자동 체크');
   await expect(page.getByTestId('ai-chatbot-panel').getByRole('button', { name: 'AI 견적 챗봇 닫기' })).toBeVisible();
-  await expect(page.getByText('이렇게 물어보세요').locator('../..')).toHaveCSS('background-color', 'rgb(247, 247, 248)');
-  const quickPromptHeadingRow = page.getByText('이렇게 물어보세요', { exact: true }).locator('..');
-  await expect(quickPromptHeadingRow.getByRole('button', { name: 'AI 견적 챗봇 닫기' })).toBeVisible();
-  const quickPromptButtons = quickPromptHeadingRow.locator('..').locator(':scope > div').nth(1).getByRole('button');
-  await expect(quickPromptButtons).toHaveCount(4);
-  const quickPromptTopValues = await quickPromptButtons.evaluateAll((buttons) => buttons.map((button) => button.getBoundingClientRect().top));
-  expect(Math.max(...quickPromptTopValues) - Math.min(...quickPromptTopValues)).toBeLessThan(2);
+  await expect(page.getByTestId('ai-chatbot-panel')).not.toContainText('이렇게 물어보세요');
+  await expect(page.getByTestId('ai-chatbot-panel').getByRole('button', { name: '200만원 게이밍 PC' })).toHaveCount(0);
   await expect(page.getByTestId('ai-chatbot-panel')).not.toHaveCSS('box-shadow', 'none');
   await expect(page.getByTestId('ai-chatbot-panel')).not.toContainText('대화 기록은 브라우저에만 임시 저장됩니다');
   await expect.poll(async () => {
@@ -1221,7 +1216,7 @@ test('chatbot asks for login when token disappears before submit', async ({ page
   await expect(page.getByTestId('ai-chatbot-panel').getByRole('heading', { name: 'AI 견적 어시스턴트' })).toHaveCount(0);
   await expect(page.getByTestId('ai-chatbot-panel')).not.toContainText('내부 견적 자산 기준 · 호환성 자동 체크');
   await expect(page.getByTestId('ai-chatbot-panel').getByRole('button', { name: 'AI 견적 챗봇 닫기' })).toBeVisible();
-  await expect(page.getByText('이렇게 물어보세요').locator('../..')).toHaveCSS('background-color', 'rgb(247, 247, 248)');
+  await expect(page.getByTestId('ai-chatbot-panel')).not.toContainText('이렇게 물어보세요');
   await expect(page.getByTestId('ai-chatbot-panel')).not.toContainText('대화 기록은 브라우저에만 임시 저장됩니다');
   await expect.poll(async () => {
     const shellMarginRight = await page.locator('.screen-shell').evaluate((element) => window.getComputedStyle(element).marginRight);
