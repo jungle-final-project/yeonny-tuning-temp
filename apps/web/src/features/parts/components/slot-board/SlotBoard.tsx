@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react';
-import { AlertTriangle, ChevronDown, CircleX, Sparkles, X } from 'lucide-react';
+import { AlertTriangle, ChevronDown, CircleX, HelpCircle, Sparkles, X } from 'lucide-react';
 import {
   PART_CATEGORY_LABELS,
   type BuildGraphFocus,
@@ -296,49 +296,55 @@ export function SlotBoard({
         />
       )}
       {!isIsometric ? (
-        <div className="absolute bottom-4 right-4 z-30 hidden items-center gap-1.5 lg:flex">
-          <HelpTip
-            label="실장도 설명"
-            text="부품이 메인보드 어디에 장착되는지 실제 배치 모습으로 보여줍니다. CPU·램·그래픽카드가 꽂히는 자리를 확인할 수 있습니다."
-            placement="top"
-            align="right"
-          />
+        <div className="absolute bottom-4 right-4 z-30 hidden lg:block">
           <button
             type="button"
             aria-pressed={isMotherboard}
             onClick={toggleMotherboard}
             disabled={isMotherboardClosing}
-            className={`rounded-lg border px-3.5 py-2 text-xs font-black shadow-lg transition focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-blue focus-visible:ring-offset-2 ${
+            className={`inline-flex items-center gap-1.5 rounded-lg border px-3.5 py-2 text-xs font-black shadow-lg transition focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-blue focus-visible:ring-offset-2 ${
               isMotherboard
                 ? 'border-brand-blue bg-brand-blue text-white hover:bg-blue-700'
                 : 'border-slate-200 bg-white text-slate-700 hover:border-brand-blue hover:text-brand-blue'
             }`}
           >
             {isMotherboard ? '실장도 접기' : '실장도 보기'}
+            <HelpTip
+              text="부품이 메인보드 어디에 장착되는지 실제 배치 모습으로 보여줍니다. CPU·램·그래픽카드가 꽂히는 자리를 확인할 수 있습니다."
+              placement="top"
+              align="right"
+            >
+              <span className="grid place-items-center opacity-60 transition group-hover:opacity-100">
+                <HelpCircle size={13} aria-hidden="true" />
+              </span>
+            </HelpTip>
           </button>
         </div>
       ) : null}
       {!isIsometric ? (
-        <div className="absolute bottom-4 left-4 z-30 hidden items-center gap-1.5 lg:flex">
+        <div className="absolute bottom-4 left-4 z-30 hidden lg:block">
           <button
             type="button"
             data-testid="relation-map-open"
             aria-pressed={isRelationMapVisible}
             onClick={toggleRelationMap}
-            className={`rounded-lg border px-3.5 py-2 text-xs font-black shadow-lg transition focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-blue focus-visible:ring-offset-2 ${
+            className={`inline-flex items-center gap-1.5 rounded-lg border px-3.5 py-2 text-xs font-black shadow-lg transition focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-blue focus-visible:ring-offset-2 ${
               isRelationMapVisible
                 ? 'border-brand-blue bg-brand-blue text-white hover:bg-blue-700'
                 : 'border-slate-200 bg-white text-slate-700 hover:border-brand-blue hover:text-brand-blue'
             }`}
           >
             {isRelationMapVisible ? '기본 관계도 보기' : '영향 지도 보기'}
+            <HelpTip
+              text="선택한 부품이 다른 부품들과 어떻게 연결되는지 한눈에 보여주는 지도입니다. 선 색으로 호환 가능(초록)·간섭 주의(노랑)·장착 불가(빨강)를 확인할 수 있습니다."
+              placement="top"
+              align="left"
+            >
+              <span className="grid place-items-center opacity-60 transition group-hover:opacity-100">
+                <HelpCircle size={13} aria-hidden="true" />
+              </span>
+            </HelpTip>
           </button>
-          <HelpTip
-            label="영향 지도 설명"
-            text="선택한 부품이 다른 부품들과 어떻게 연결되는지 한눈에 보여주는 지도입니다. 선 색으로 호환 가능(초록)·간섭 주의(노랑)·장착 불가(빨강)를 확인할 수 있습니다."
-            placement="top"
-            align="left"
-          />
         </div>
       ) : null}
     </div>

@@ -393,8 +393,9 @@ function PerfPanelBody({
                   <HelpTip
                     label="종합 점수 설명"
                     text="현재 견적의 호환성·성능·전력 여유를 종합해 1000점 만점으로 계산한 점수입니다. 부품을 바꾸면 점수 변화를 바로 보여줍니다."
-                    placement="bottom"
+                    placement="top"
                     align="left"
+                    overlay
                   />
                 </span>
                 {hasWorkspace ? (
@@ -1131,6 +1132,9 @@ function isPartCategory(category: string): category is PartCategory {
 // CompositeScoreGauge와 같은 반원 아크 경로(공용 컴포넌트는 수정 금지라 패널 로컬로 둔다).
 const COMPOSITE_ARC_PATH = 'M 24 112 A 86 86 0 0 1 196 112';
 const COMPOSITE_INNER_ARC_PATH = 'M 36 112 A 74 74 0 0 1 184 112';
+// compact 고스트 비교용 — CompositeScoreGauge size="compact"의 넓은 아크와 같은 폭으로 맞춘다.
+const COMPACT_GHOST_ARC_PATH = 'M 8 112 A 102 86 0 0 1 212 112';
+const COMPACT_GHOST_INNER_ARC_PATH = 'M 20 112 A 90 74 0 0 1 200 112';
 
 // 한 화면용 비교 게이지 — 기준 점수는 바깥 회색 아크, 변경 점수는 안쪽 파란 아크에 그려
 // 작은 카드에서도 두 값이 겹치지 않는다. 상세 게이지와 같은 숫자·델타 구조는 유지한다.
@@ -1154,13 +1158,19 @@ function CompactCompositeGhostArc({
   return (
     <div
       data-testid="quote-composite-ghost-gauge"
-      className="mx-auto w-[220px] text-center"
+      className="mx-auto w-[168px] text-center"
       aria-label={`종합 점수 기존 ${Math.round(baseScore).toLocaleString('ko-KR')}점 → 변경 ${Math.round(compareScore).toLocaleString('ko-KR')}점`}
     >
-      <div className="relative h-[48px]">
-        <svg className="h-[48px] w-full overflow-visible" viewBox="0 0 220 132" role="img" aria-hidden="true">
+      <div className="relative">
+        <svg
+          className="h-[78px] w-full overflow-visible"
+          viewBox="0 12 220 108"
+          preserveAspectRatio="none"
+          role="img"
+          aria-hidden="true"
+        >
           <path
-            d={COMPOSITE_ARC_PATH}
+            d={COMPACT_GHOST_ARC_PATH}
             fill="none"
             className="stroke-slate-200"
             strokeWidth={14}
@@ -1168,7 +1178,7 @@ function CompactCompositeGhostArc({
             pathLength={100}
           />
           <path
-            d={COMPOSITE_ARC_PATH}
+            d={COMPACT_GHOST_ARC_PATH}
             fill="none"
             className="stroke-slate-400"
             strokeWidth={6}
@@ -1177,7 +1187,7 @@ function CompactCompositeGhostArc({
             strokeDasharray={`${basePercent} 100`}
           />
           <path
-            d={COMPOSITE_INNER_ARC_PATH}
+            d={COMPACT_GHOST_INNER_ARC_PATH}
             fill="none"
             className="stroke-brand-blue"
             strokeWidth={9}
@@ -1186,7 +1196,7 @@ function CompactCompositeGhostArc({
             strokeDasharray={`${comparePercent} 100`}
           />
         </svg>
-        <div className="absolute inset-x-0 bottom-1 z-10 flex justify-center">
+        <div className="absolute inset-x-0 top-3 z-10 flex justify-center">
           <span
             key={compareKey}
             data-testid="quote-composite-compare-delta"
@@ -1195,17 +1205,17 @@ function CompactCompositeGhostArc({
             {delta > 0 ? '+' : ''}{delta}점
           </span>
         </div>
+        <div className="absolute inset-x-0 bottom-2 flex items-baseline justify-center gap-1 font-black leading-none">
+          <span data-testid="quote-composite-ghost-base" className="text-sm text-slate-400">
+            {Math.round(baseScore).toLocaleString('ko-KR')}
+          </span>
+          <span aria-hidden="true" className="text-xs text-slate-400">→</span>
+          <span data-testid="quote-composite-compare-score" className="text-xl text-brand-blue">
+            {Math.round(displayCompare).toLocaleString('ko-KR')}
+          </span>
+        </div>
       </div>
-      <div className="-mt-px flex items-baseline justify-center gap-1 bg-transparent font-black leading-none">
-        <span data-testid="quote-composite-ghost-base" className="text-sm text-slate-400">
-          {Math.round(baseScore).toLocaleString('ko-KR')}
-        </span>
-        <span aria-hidden="true" className="text-xs text-slate-400">→</span>
-        <span data-testid="quote-composite-compare-score" className="text-xl text-brand-blue">
-          {Math.round(displayCompare).toLocaleString('ko-KR')}
-        </span>
-      </div>
-      <div className="-mt-1 flex items-center justify-between px-3 text-[8px] font-bold text-slate-400" aria-hidden="true">
+      <div className="-mt-1 flex items-center justify-between px-1 text-[8px] font-bold text-slate-400" aria-hidden="true">
         <span>0</span>
         <span>{safeMax.toLocaleString('ko-KR')}</span>
       </div>
