@@ -399,6 +399,7 @@ export function SlotCandidatePanel({
               <article
                 key={part.id}
                 data-compat={part.compatibility?.status ?? 'NONE'}
+                data-recommended={part.recommendation?.recommended ? 'true' : 'false'}
                 className={`flex items-center gap-3 rounded-md border p-2.5 ${
                   isFail ? 'border-red-200 bg-red-50/40' : 'border-commerce-line bg-white'
                 }`}
@@ -421,6 +422,14 @@ export function SlotCandidatePanel({
                     {part.externalOffer?.supplierName ? ` · ${part.externalOffer.supplierName}` : ''}
                   </div>
                   <div className="mt-1 flex flex-wrap items-center gap-1.5">
+                    {part.recommendation?.recommended ? (
+                      <span
+                        data-testid="candidate-recommendation-badge"
+                        className="rounded-full border border-orange-200 bg-orange-50 px-1.5 py-0.5 text-[10px] font-black text-orange-700"
+                      >
+                        추천 {part.recommendation.rank}
+                      </span>
+                    ) : null}
                     <span className="font-black text-commerce-ink">{part.price.toLocaleString()}원</span>
                     {part.compatibility?.status === 'WARN' ? (
                       <span className="rounded border border-amber-100 bg-amber-50 px-1.5 py-0.5 text-[10px] font-black text-amber-700">간섭 주의</span>
@@ -429,6 +438,11 @@ export function SlotCandidatePanel({
                       <span className="rounded border border-red-200 bg-red-50 px-1.5 py-0.5 text-[10px] font-black text-red-700">장착 불가</span>
                     ) : null}
                   </div>
+                  {part.recommendation?.recommended && part.recommendation.reasons[0] ? (
+                    <div data-testid="candidate-recommendation-reason" className="mt-0.5 line-clamp-1 text-[10px] font-semibold text-orange-700">
+                      {part.recommendation.reasons[0]}
+                    </div>
+                  ) : null}
                   {part.compatibility?.status === 'WARN' && part.compatibility.summary ? (
                     <div className="mt-0.5 line-clamp-1 text-[10px] text-slate-500">{part.compatibility.summary}</div>
                   ) : null}
@@ -602,11 +616,10 @@ function PartQuickView({
             <div className="text-[11px] font-bold text-slate-500">{part.manufacturer ?? '-'}</div>
             <div className="mt-1 text-lg font-black text-commerce-ink">{part.price.toLocaleString()}원</div>
             <div className="mt-1 flex flex-wrap items-center gap-1.5">
-              {status === 'PASS' ? <span className="rounded border border-emerald-100 bg-emerald-50 px-1.5 py-0.5 text-[10px] font-black text-emerald-700">호환 가능</span> : null}
               {status === 'WARN' ? <span className="rounded border border-amber-100 bg-amber-50 px-1.5 py-0.5 text-[10px] font-black text-amber-700">간섭 주의</span> : null}
               {status === 'FAIL' ? <span className="rounded border border-red-200 bg-red-50 px-1.5 py-0.5 text-[10px] font-black text-red-700">장착 불가</span> : null}
             </div>
-            {part.compatibility?.summary ? (
+            {status !== 'PASS' && part.compatibility?.summary ? (
               <div className="mt-1 text-[11px] leading-4 text-slate-500">{part.compatibility.summary}</div>
             ) : null}
           </div>

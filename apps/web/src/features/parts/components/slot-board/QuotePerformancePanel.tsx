@@ -1042,6 +1042,11 @@ function CandidateCombo({
                   const isFail = status === 'FAIL';
                   const isCurrent = part.id === categoryCurrentPart.partId;
                   const isSelected = categoryComparison?.partId === part.id;
+                  const statusLabel = isCurrent
+                    ? '지금 담긴 부품'
+                    : isSelected
+                      ? '비교 중'
+                      : candidateStatusLabel(part.compatibility);
                   return (
                     <button
                       key={part.id}
@@ -1069,9 +1074,11 @@ function CandidateCombo({
                       </div>
                       <div className="mt-1 flex items-center justify-between gap-2 text-[10px]">
                         <span className="truncate text-slate-500">{part.manufacturer ?? '제조사 미상'}</span>
-                        <span className={`shrink-0 font-black ${candidateStatusTone(status, isCurrent, isSelected)}`}>
-                          {isCurrent ? '지금 담긴 부품' : isSelected ? '비교 중' : candidateStatusLabel(part.compatibility)}
-                        </span>
+                        {statusLabel ? (
+                          <span className={`shrink-0 font-black ${candidateStatusTone(status, isCurrent, isSelected)}`}>
+                            {statusLabel}
+                          </span>
+                        ) : null}
                       </div>
                       {isFail ? (
                         <div className="mt-1 text-[10px] font-bold text-red-500">
@@ -1092,10 +1099,9 @@ function CandidateCombo({
 
 // 호환 상태 → 사용자 언어 배지(서버 라벨 우선). 원어(PASS/WARN/FAIL)는 노출하지 않는다.
 function candidateStatusLabel(compatibility?: PartCompatibility | null): string {
+  if (compatibility?.status === 'PASS') return '';
   if (compatibility?.statusLabel) return compatibility.statusLabel;
   switch (compatibility?.status) {
-    case 'PASS':
-      return '호환 가능';
     case 'WARN':
       return '간섭 주의';
     case 'FAIL':

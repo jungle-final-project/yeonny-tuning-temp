@@ -61,29 +61,32 @@ textarea {
 }
 
 .ai-assistant-docked-panel {
+  --ai-assistant-accent: #ce7237;
   background-color: #f7f7f8 !important;
   border: 0 !important;
   box-shadow: -12px 0 30px rgb(15 23 42 / 0.12) !important;
 }
 
 .ai-assistant-docked-panel .bg-brand-blue {
-  background-color: #ce7237 !important;
+  background-color: var(--ai-assistant-accent) !important;
+  transition-property: opacity, transform, box-shadow !important;
 }
 
 .ai-assistant-docked-panel .text-brand-blue {
-  color: #ce7237 !important;
+  color: var(--ai-assistant-accent) !important;
+  transition-property: opacity, transform, box-shadow !important;
 }
 
 .ai-assistant-docked-panel .border-brand-blue {
-  border-color: #ce7237 !important;
+  border-color: var(--ai-assistant-accent) !important;
 }
 
 .ai-assistant-docked-panel .border-blue-700 {
-  border-color: #a95120 !important;
+  border-color: var(--ai-assistant-accent) !important;
 }
 
 .ai-assistant-docked-panel .border-blue-200 {
-  border-color: #ebbea1 !important;
+  border-color: var(--ai-assistant-accent) !important;
 }
 
 .ai-assistant-docked-panel .border-blue-100 {
@@ -115,19 +118,20 @@ textarea {
 }
 
 .ai-assistant-docked-panel .hover\:bg-blue-50:hover {
-  background-color: #fff1e8 !important;
+  background-color: var(--ai-assistant-accent) !important;
+  color: #ffffff !important;
 }
 
 .ai-assistant-docked-panel .hover\:bg-blue-700:hover {
-  background-color: #b95f2b !important;
+  background-color: var(--ai-assistant-accent) !important;
 }
 
 .ai-assistant-docked-panel .hover\:border-brand-blue:hover {
-  border-color: #ce7237 !important;
+  border-color: var(--ai-assistant-accent) !important;
 }
 
 .ai-assistant-docked-panel .hover\:text-brand-blue:hover {
-  color: #ce7237 !important;
+  color: var(--ai-assistant-accent) !important;
 }
 
 .ai-assistant-docked-panel .focus\:ring-blue-100:focus {
@@ -136,6 +140,11 @@ textarea {
 
 .ai-assistant-docked-panel .focus\:ring-blue-200:focus {
   --tw-ring-color: rgb(206 114 55 / 0.32) !important;
+}
+
+.ai-assistant-docked-panel .ai-message-author-icon {
+  background-color: var(--ai-assistant-accent) !important;
+  color: #ffffff !important;
 }
 
 .panel {

@@ -707,6 +707,7 @@ test('renders the slot board as an information-first compatibility diagram with 
   await expect(gpuSlot.getByTestId('slot-part-image')).toHaveAttribute('src', '/slot-board/parts/gpu.svg');
   await expect(gpuSlot).toHaveAttribute('title', 'NVIDIA GeForce RTX 4070 Ti SUPER');
   await expect(gpuSlot).toContainText('PCIe x16 4.0');
+  await expect(gpuSlot).not.toContainText('호환 가능');
 
   // 정상 관계선은 상태 점만 — 상세 문장은 title 툴팁으로 확인한다.
   const gpuEdge = page.getByTestId('slot-edge-GPU-MOTHERBOARD');
@@ -1180,6 +1181,7 @@ test('toggles the selected checklist category and keeps it open while replacing 
   await page.goto('/self-quote?category=CPU');
   const candidates = page.getByTestId('checklist-candidates-CPU');
   await expect(candidates).toBeVisible();
+  await expect(candidates).not.toContainText('PASS');
 
   // 이미 열린 카테고리를 다시 누르면 닫히고, 한 번 더 누르면 같은 후보 목록이 다시 열린다.
   await page.getByTestId('checklist-CPU').click();
@@ -2290,11 +2292,11 @@ test('picks a replacement candidate in the performance panel, compares, and appl
   await panel.getByTestId('perf-candidate-category-CPU').click();
   await expect(popover.getByTestId('perf-candidate-current')).toContainText('라이젠 9600X');
 
-  // PASS 후보는 이름+가격+호환 배지, FAIL 후보는 숨기지 않고 회색 비활성 + 선택 불가 사유.
+  // PASS 후보는 이름+가격만 표시하고, FAIL 후보는 숨기지 않고 회색 비활성 + 선택 불가 사유.
   const firstOption = popover.getByTestId('perf-candidate-option-0');
   await expect(firstOption).toContainText('인텔 245K');
   await expect(firstOption).toContainText('350,000원');
-  await expect(firstOption).toContainText('호환 가능');
+  await expect(firstOption).not.toContainText('호환 가능');
   const failOption = popover.getByTestId('perf-candidate-option-1');
   await expect(failOption).toBeDisabled();
   await expect(failOption).toContainText('장착 불가');

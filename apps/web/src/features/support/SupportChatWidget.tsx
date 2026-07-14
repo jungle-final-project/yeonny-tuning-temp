@@ -109,7 +109,6 @@ export function SupportChatWidget() {
   const contact = activeChat?.contact ?? null;
   const messages = activeChat?.messages ?? [];
   const messageCount = messages.length;
-  const unreadCount = currentQuery.data?.contact?.userUnreadCount ?? 0;
   const canSend = Boolean(contact?.canSendMessage && message.trim() && !sendMutation.isPending);
   const canRequestVisit = Boolean(contact?.canSendMessage && visitScheduledAt && !visitReservationMutation.isPending);
 
@@ -309,23 +308,18 @@ export function SupportChatWidget() {
         type="button"
         aria-label="상담방 열기"
         onClick={() => openChat()}
-        className="fixed bottom-5 left-5 z-50 grid h-14 w-14 place-items-center rounded-2xl border border-emerald-900 bg-emerald-700 text-white shadow-2xl transition hover:-translate-y-0.5 hover:bg-emerald-800 focus:outline-none focus:ring-4 focus:ring-emerald-100"
+        className="fixed bottom-5 left-5 z-50 grid h-14 w-14 place-items-center rounded-2xl bg-[#ce7237] text-white shadow-2xl transition hover:-translate-y-0.5 hover:bg-[#b85f2c] focus:outline-none focus:ring-4 focus:ring-[#ce7237]/20"
       >
         <MessageCircle size={24} />
-        {unreadCount > 0 ? (
-          <span className="absolute -right-1 -top-1 grid h-6 min-w-6 place-items-center rounded-full border-2 border-white bg-rose-600 px-1 text-[11px] font-black">
-            {unreadCount > 9 ? '9+' : unreadCount}
-          </span>
-        ) : null}
       </button>
     );
   }
 
   return (
     <section className="fixed bottom-4 left-4 z-50 flex h-[min(620px,calc(100vh-2rem))] w-[min(390px,calc(100vw-2rem))] flex-col overflow-hidden rounded-lg border border-slate-200 bg-white shadow-2xl">
-      <div className="flex items-center justify-between border-b border-slate-200 bg-slate-950 px-4 py-3 text-white">
+      <div className="flex items-center justify-between border-b border-slate-200 bg-[#ce7237] px-4 py-3 text-white">
         <div className="flex min-w-0 items-center gap-3">
-          <div className="grid h-9 w-9 shrink-0 place-items-center rounded-md bg-emerald-500 text-slate-950">
+          <div className="grid h-9 w-9 shrink-0 place-items-center rounded-md bg-white text-[#ce7237]">
             <LifeBuoy size={20} />
           </div>
           <div className="min-w-0">
@@ -401,7 +395,7 @@ export function SupportChatWidget() {
                   wasAtBottomRef.current = true;
                   setNewMarkerMessageId(null);
                 }}
-                className="absolute bottom-3 left-1/2 -translate-x-1/2 rounded-full bg-emerald-700 px-4 py-2 text-xs font-bold text-white shadow-lg"
+                className="absolute bottom-3 left-1/2 -translate-x-1/2 rounded-full bg-[#ce7237] px-4 py-2 text-xs font-bold text-white shadow-lg"
               >
                 새 메시지로 이동
               </button>
@@ -412,7 +406,7 @@ export function SupportChatWidget() {
               <div className="space-y-2">
                 <div className="flex gap-2">
                   <input
-                    className="h-11 min-w-0 flex-1 rounded-md border border-slate-300 px-3 text-sm focus:border-emerald-600 focus:outline-none focus:ring-4 focus:ring-emerald-100"
+                    className="h-11 min-w-0 flex-1 rounded-md border border-slate-300 px-3 text-sm focus:border-[#ce7237] focus:outline-none focus:ring-4 focus:ring-[#ce7237]/20"
                     placeholder="메시지를 입력하세요"
                     value={message}
                     maxLength={2000}
@@ -423,7 +417,7 @@ export function SupportChatWidget() {
                   />
                   <button
                     disabled={!canSend}
-                    className="grid h-11 w-11 place-items-center rounded-md bg-emerald-700 text-white transition hover:bg-emerald-800 disabled:cursor-not-allowed disabled:bg-slate-400"
+                    className="grid h-11 w-11 place-items-center rounded-md bg-[#ce7237] text-white transition hover:bg-[#b85f2c] disabled:cursor-not-allowed disabled:bg-slate-400"
                     aria-label="전송"
                   >
                     <Send size={18} />
@@ -454,7 +448,7 @@ export function SupportChatWidget() {
         </div>
       ) : (
         <div className="flex flex-1 flex-col items-center justify-center gap-4 bg-slate-50 p-6 text-center">
-          <div className="grid h-12 w-12 place-items-center rounded-lg bg-white text-emerald-700 shadow-sm">
+          <div className="grid h-12 w-12 place-items-center rounded-lg bg-white text-[#ce7237] shadow-sm">
             <LifeBuoy size={24} />
           </div>
           <div>
@@ -463,7 +457,7 @@ export function SupportChatWidget() {
               상담방은 AS 접수 후 자동으로 생성됩니다. PC Agent 로그와 증상을 접수하면 담당자와 대화할 수 있습니다.
             </p>
           </div>
-          <Link to={activeChat?.supportNewPath ?? '/support/new'} className="rounded-md bg-emerald-700 px-4 py-3 text-sm font-bold text-white hover:bg-emerald-800">
+          <Link to={activeChat?.supportNewPath ?? '/support/new'} className="rounded-md bg-[#ce7237] px-4 py-3 text-sm font-bold text-white hover:bg-[#b85f2c]">
             AS 접수로 이동
           </Link>
         </div>
@@ -501,7 +495,7 @@ function VisitReservationPanel({
       <div className="mb-2 flex items-center justify-between gap-2">
         <div>
           <div className="text-xs font-black text-slate-900">방문 예약</div>
-          <div className="mt-1 text-[11px] font-bold text-emerald-700">{visitStatusLabel(reservation?.status)}</div>
+          <div className="mt-1 text-[11px] font-bold text-[#ce7237]">{visitStatusLabel(reservation?.status)}</div>
         </div>
         {reservation?.scheduledAt ? (
           <div className="text-right text-xs font-bold text-slate-700">{formatVisitTime(reservation.scheduledAt)}</div>
@@ -530,7 +524,7 @@ function VisitReservationPanel({
         <button
           type="submit"
           disabled={disabled || !canSubmit}
-          className="h-10 rounded-md bg-emerald-700 px-3 text-xs font-black text-white disabled:cursor-not-allowed disabled:bg-slate-400"
+          className="h-10 rounded-md bg-[#ce7237] px-3 text-xs font-black text-white disabled:cursor-not-allowed disabled:bg-slate-400"
         >
           {pending ? '요청 중' : actionLabel}
         </button>
@@ -547,7 +541,7 @@ function SupportChatBubble({ message }: { message: SupportChatMessage }) {
     <div className={`flex ${isUser ? 'justify-end' : 'justify-start'}`}>
       <div className={`max-w-[78%] rounded-md px-3 py-2 text-sm leading-6 shadow-sm ${
         isUser
-          ? 'bg-emerald-700 text-white'
+          ? 'bg-[#ce7237] text-white'
           : isSystem
             ? 'border border-slate-200 bg-white text-slate-600'
             : 'border border-slate-200 bg-white text-slate-900'
@@ -564,9 +558,9 @@ function SupportChatBubble({ message }: { message: SupportChatMessage }) {
 function NewMessageMarker() {
   return (
     <div className="my-3 flex items-center gap-3" aria-label="새 메시지">
-      <div className="h-px flex-1 bg-emerald-200" />
-      <span className="rounded-full bg-emerald-100 px-3 py-1 text-[11px] font-black text-emerald-800">새 메시지</span>
-      <div className="h-px flex-1 bg-emerald-200" />
+      <div className="h-px flex-1 bg-[#ce7237]/30" />
+      <span className="rounded-full bg-[#ce7237]/10 px-3 py-1 text-[11px] font-black text-[#ce7237]">새 메시지</span>
+      <div className="h-px flex-1 bg-[#ce7237]/30" />
     </div>
   );
 }

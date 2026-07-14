@@ -92,12 +92,21 @@ public class PartCompatibleCandidateService {
             case "QUOTE_DRAFT_CURRENT" -> currentQuoteDraftParts(user);
             default -> throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "지원하지 않는 compatibilitySource입니다.");
         };
+        List<String> selectedCategories = baseParts.stream()
+                .map(ToolBuildPart::category)
+                .filter(value -> value != null && !value.isBlank())
+                .distinct()
+                .toList();
         List<String> checkedTools = checkedTools(normalizedCategory);
         return rows.stream()
                 .map(row -> {
                     CandidateEvaluation evaluation = evaluate(baseParts, new CandidatePart(toolPart(row), responsePart(row)), normalizedCategory, checkedTools, normalizedMode, normalizedTarget);
                     Map<String, Object> part = new LinkedHashMap<>(evaluation.partMap());
                     part.put("compatibility", evaluation.partListCompatibility());
+                    // 추천기는 Tool이 이미 적재한 결과와 현재 선택 category만 읽는다. 응답 직전
+                    // PartQueryService가 제거하는 내부 필드라 클라이언트 계약에는 노출되지 않는다.
+                    part.put("_candidateToolResults", evaluation.toolResults());
+                    part.put("_recommendationContext", Map.of("selectedCategories", selectedCategories));
                     return part;
                 })
                 .toList();
@@ -378,7 +387,7 @@ public class PartCompatibleCandidateService {
 
     private CandidateEvaluation evaluate(List<ToolBuildPart> baseParts, CandidatePart candidate, String category, List<String> checkedTools, String mode, String replaceTargetPartId) {
         if (checkedTools.isEmpty()) {
-            return new CandidateEvaluation(candidate.partMap(), "PASS", "ACTIVE 부품 후보입니다.", checkedTools);
+            return new CandidateEvaluation(candidate.partMap(), "PASS", "ACTIVE 부품 후보입니다.", checkedTools, List.of());
         }
         List<ToolBuildPart> nextParts;
         if ("ADD".equals(mode)) {
@@ -432,7 +441,7 @@ public class PartCompatibleCandidateService {
                 .toList();
         String status = worstStatus(relevantResults);
         String summary = summary(status, relevantResults);
-        return new CandidateEvaluation(candidate.partMap(), status, summary, applicableCheckedTools);
+        return new CandidateEvaluation(candidate.partMap(), status, summary, applicableCheckedTools, relevantResults);
     }
 
     /**
@@ -819,7 +828,13 @@ public class PartCompatibleCandidateService {
         }
     }
 
-    private record CandidateEvaluation(Map<String, Object> partMap, String status, String summary, List<String> checkedTools) {
+    private record CandidateEvaluation(
+            Map<String, Object> partMap,
+            String status,
+            String summary,
+            List<String> checkedTools,
+            List<Map<String, Object>> toolResults
+    ) {
         private Map<String, Object> response() {
             return MockData.map(
                     "part", partMap,

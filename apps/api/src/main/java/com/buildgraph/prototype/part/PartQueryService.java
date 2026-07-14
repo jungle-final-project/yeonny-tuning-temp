@@ -2,12 +2,14 @@ package com.buildgraph.prototype.part;
 
 import com.buildgraph.prototype.common.DbValueMapper;
 import com.buildgraph.prototype.common.MockData;
+import com.buildgraph.prototype.recommendation.PartContextRecommendationService;
 import com.buildgraph.prototype.user.CurrentUserService;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.web.server.ResponseStatusException;
@@ -19,10 +21,21 @@ public class PartQueryService {
     private static final Set<String> STATUSES = Set.of("ACTIVE", "INACTIVE", "DISCONTINUED");
     private final JdbcTemplate jdbcTemplate;
     private final PartCompatibleCandidateService compatibilityService;
+    private final PartContextRecommendationService recommendationService;
 
-    public PartQueryService(JdbcTemplate jdbcTemplate, PartCompatibleCandidateService compatibilityService) {
+    @Autowired
+    public PartQueryService(
+            JdbcTemplate jdbcTemplate,
+            PartCompatibleCandidateService compatibilityService,
+            PartContextRecommendationService recommendationService
+    ) {
         this.jdbcTemplate = jdbcTemplate;
         this.compatibilityService = compatibilityService;
+        this.recommendationService = recommendationService;
+    }
+
+    public PartQueryService(JdbcTemplate jdbcTemplate, PartCompatibleCandidateService compatibilityService) {
+        this(jdbcTemplate, compatibilityService, new PartContextRecommendationService());
     }
 
     public Map<String, Object> parts(
@@ -275,42 +288,26 @@ public class PartQueryService {
         if (user == null) {
             throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "로그인이 필요합니다.");
         }
-        if ("compatibility".equals(search.sort())) {
-            List<Map<String, Object>> rows = compatibilityService.partRowsWithCompatibility(
-                    user,
-                    compatibilitySource,
-                    search.category(),
-                    compatibilityMode,
-                    replaceTargetPartId,
-                    allPartRowsForCompatibility(search)
-            ).stream()
-                    .sorted(Comparator
-                            .comparingInt(PartQueryService::compatibilityRank)
-                            .thenComparingInt(row -> DbValueMapper.integer(row, "price") == null ? 0 : DbValueMapper.integer(row, "price")))
-                    .toList();
-            return MockData.map(
-                    "items", paginate(rows, search).stream().map(this::stripInternalFields).toList(),
-                    "page", search.page(),
-                    "size", search.size(),
-                    "total", rows.size()
-            );
-        }
-        List<Map<String, Object>> rows = compatibilityService.partRowsWithCompatibility(
+        // 추천 후보가 어느 페이지에 있든 목록 최상단에 고정하려면 전체 필터 결과를 같은 Tool 정책으로
+        // 평가한 뒤 추천 점수와 사용자가 고른 보조 정렬을 적용하고 마지막에 페이지를 잘라야 한다.
+        List<Map<String, Object>> evaluatedRows = compatibilityService.partRowsWithCompatibility(
                 user,
                 compatibilitySource,
                 search.category(),
                 compatibilityMode,
                 replaceTargetPartId,
-                partRows(search)
+                allPartRowsForCompatibility(search)
         );
+        List<Map<String, Object>> rows = recommendationService.annotate(search.category(), evaluatedRows).stream()
+                .sorted(candidateComparator(search.sort()))
+                .toList();
         return MockData.map(
-                "items", rows.stream().map(this::stripInternalFields).toList(),
+                "items", paginate(rows, search).stream().map(this::stripInternalFields).toList(),
                 "page", search.page(),
                 "size", search.size(),
-                "total", countParts(search)
+                "total", rows.size()
         );
     }
-
     private List<Map<String, Object>> allPartRowsForCompatibility(PartSearch search) {
         SqlWhere where = whereClause(search);
         return jdbcTemplate.queryForList("""
@@ -373,6 +370,8 @@ public class PartQueryService {
     private Map<String, Object> stripInternalFields(Map<String, Object> row) {
         Map<String, Object> copy = new java.util.LinkedHashMap<>(row);
         copy.remove("internal_id");
+        copy.remove("_candidateToolResults");
+        copy.remove("_recommendationContext");
         return copy;
     }
 
@@ -685,6 +684,34 @@ public class PartQueryService {
             return upper;
         }
         throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "지원하지 않는 compatibilitySource입니다.");
+    }
+
+    private static Comparator<Map<String, Object>> candidateComparator(String sort) {
+        Comparator<Map<String, Object>> recommendation = Comparator.comparingInt(PartQueryService::recommendationRank);
+        Comparator<Map<String, Object>> secondary = switch (sort) {
+            case "price_asc" -> Comparator.comparingInt(PartQueryService::priceValue);
+            case "price_desc" -> Comparator.comparingInt(PartQueryService::priceValue).reversed();
+            case "name" -> Comparator.comparing(row -> String.valueOf(row.getOrDefault("name", "")), String.CASE_INSENSITIVE_ORDER);
+            default -> Comparator.comparingInt(PartQueryService::compatibilityRank)
+                    .thenComparingInt(PartQueryService::priceValue);
+        };
+        return recommendation.thenComparing(secondary)
+                .thenComparing(row -> String.valueOf(row.getOrDefault("id", "")));
+    }
+
+    @SuppressWarnings("unchecked")
+    private static int recommendationRank(Map<String, Object> row) {
+        Object value = row.get("recommendation");
+        if (!(value instanceof Map<?, ?> map)) {
+            return Integer.MAX_VALUE;
+        }
+        Object rank = map.get("rank");
+        return rank instanceof Number number ? number.intValue() : Integer.MAX_VALUE;
+    }
+
+    private static int priceValue(Map<String, Object> row) {
+        Integer price = DbValueMapper.integer(row, "price");
+        return price == null ? 0 : price;
     }
 
     @SuppressWarnings("unchecked")

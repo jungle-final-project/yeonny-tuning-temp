@@ -975,7 +975,7 @@ paths:
             enum: [category, price_asc, price_desc, name, compatibility]
         - in: query
           name: compatibilitySource
-          description: 특정 category 조회에서 현재 견적초안 기준 호환성 상태를 PartDto.compatibility에 포함한다. sort=compatibility와 함께 사용할 수 있다.
+          description: 특정 category 조회에서 현재 견적초안 기준 호환성 상태를 PartDto.compatibility에 포함한다. 연계 부품이 선택되어 있으면 PASS 후보 최대 3개에 PartDto.recommendation을 추가하고 목록 최상단에 둔다.
           schema:
             type: string
             enum: [QUOTE_DRAFT_CURRENT]
@@ -6041,6 +6041,10 @@ components:
           nullable: true
           allOf:
             - $ref: "#/components/schemas/PartCompatibilityDto"
+        recommendation:
+          nullable: true
+          allOf:
+            - $ref: "#/components/schemas/PartRecommendationDto"
     PartExternalOfferDto:
       type: object
       properties:
@@ -6065,6 +6069,27 @@ components:
           type: string
           format: date-time
           nullable: true
+    PartRecommendationDto:
+      type: object
+      required: [recommended, rank, score, reasons]
+      properties:
+        recommended:
+          type: boolean
+          enum: [true]
+        rank:
+          type: integer
+          minimum: 1
+          maximum: 3
+        score:
+          type: integer
+          minimum: 0
+          maximum: 100
+        reasons:
+          type: array
+          minItems: 1
+          maxItems: 2
+          items:
+            type: string
     PartCompatibilityDto:
       type: object
       required: [status, statusLabel, summary, checkedTools]
