@@ -1,5 +1,5 @@
 import type { KeyboardEvent, SyntheticEvent } from 'react';
-import { GitBranch, Heart, ShoppingCart } from 'lucide-react';
+import { Heart, ShoppingCart } from 'lucide-react';
 import { partImageUrl } from '../../parts/partDisplay';
 import type { PartRow } from '../../parts/types';
 import type { BuildGraphResolveResponse, PartCategory } from '../aiSelection';
@@ -151,18 +151,18 @@ function FeaturedPreviewCard({
     <article
       role="button"
       tabIndex={0}
-      data-testid={`home-featured-preview-card-${item.build.id}`}
-      aria-label={`${item.build.name} 관계도 미리보기`}
+      data-testid={'home-featured-preview-card-' + item.build.id}
+      aria-label={item.build.name + ' 관계도 미리보기'}
       aria-pressed={isSelected}
       onClick={onSelect}
       onKeyDown={handleKeyDown}
-      className={`home-featured-preview-card group bg-gradient-to-br ${item.build.tone} ${isSelected ? 'home-featured-preview-card--selected' : ''}`}
+      className={'home-featured-preview-card home-featured-interest-card group ' + (isSelected ? 'home-featured-preview-card--selected' : '')}
     >
       <div className="home-featured-preview-thumb-wrap">
         {item.casePart ? (
           <img
             src={partImageUrl(item.casePart)}
-            alt={`${item.casePart.name} 제품 사진`}
+            alt={item.casePart.name + ' 제품 사진'}
             onError={onImageError}
             className="home-featured-preview-thumb"
           />
@@ -173,42 +173,31 @@ function FeaturedPreviewCard({
         )}
       </div>
 
-      <div className="home-featured-preview-body min-w-0 flex-1">
-        <div className="home-featured-preview-heading flex items-start justify-between gap-2">
-          <div className="min-w-0">
-            <div className="home-featured-preview-title truncate text-sm font-black text-commerce-ink">{item.build.name}</div>
-            <div className="home-featured-preview-spec truncate text-xs font-bold text-slate-500">{item.build.spec}</div>
+      <div className="home-featured-preview-body min-w-0">
+        <div className="home-featured-preview-title truncate text-base font-semibold text-[#222222]">{item.build.name}</div>
+        {item.assetTotalPrice !== null ? (
+          <div className="home-featured-preview-price mt-1 truncate text-sm font-normal text-[#595959]">
+            약 {Math.round(item.assetTotalPrice / 10_000).toLocaleString()}만원
           </div>
-          <span className="home-featured-preview-tag shrink-0 rounded bg-commerce-sale px-1.5 py-0.5 text-[10px] font-black text-white">{item.build.tag}</span>
-        </div>
+        ) : (
+          <div className="home-featured-preview-price mt-1 text-sm font-normal text-[#777777]">가격 계산 중</div>
+        )}
 
-        <div className="home-featured-preview-actions mt-2 flex items-end justify-between gap-2">
-          <div className="min-w-0">
-            {item.assetTotalPrice !== null ? (
-              <div className="home-featured-preview-price truncate text-sm font-black text-commerce-sale">{item.assetTotalPrice.toLocaleString()}원</div>
-            ) : (
-              <div className="home-featured-preview-price text-xs font-black text-slate-400">가격 계산 중</div>
-            )}
-            <div className="home-featured-preview-status flex items-center gap-1 text-[11px] font-black text-brand-blue">
-              <GitBranch size={12} />
-              {isSelected ? '관계도 표시 중' : '관계도 미리보기'}
-            </div>
-          </div>
-
+        {isSelected ? (
           <button
             type="button"
-            aria-label={`${item.build.name} 셀프 견적에 담기`}
+            aria-label={item.build.name + ' 셀프 견적에 담기'}
             onClick={(event) => {
               event.stopPropagation();
               onApply();
             }}
             disabled={!isComplete || isApplying}
-            className="home-featured-preview-apply inline-flex shrink-0 items-center gap-1 rounded-md bg-commerce-ink px-2.5 py-1.5 text-[11px] font-black text-white transition hover:bg-brand-blue disabled:cursor-wait disabled:bg-slate-300"
+            className="home-featured-preview-apply mt-3 inline-flex items-center gap-1 rounded-full bg-[#235df7] px-4 py-2 text-xs font-semibold text-white transition hover:bg-[#174ad1] disabled:cursor-wait disabled:bg-slate-300"
           >
             {isApplying ? <ShoppingCart size={12} /> : <Heart size={12} />}
-            담기
+            견적에 담기
           </button>
-        </div>
+        ) : null}
       </div>
     </article>
   );

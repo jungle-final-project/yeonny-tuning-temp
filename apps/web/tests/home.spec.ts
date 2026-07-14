@@ -308,17 +308,16 @@ async function moveHomeFullPageDown(page: Page) {
 }
 
 async function openDesktopAiAssistant(page: Page) {
-  await expect(page.getByTestId('ai-chatbot-launcher')).toHaveCount(0);
-  await page.evaluate(() => {
-    window.dispatchEvent(new CustomEvent('buildgraph.aiAssistant.open', { detail: { placement: 'side' } }));
-  });
+  const launcher = page.getByTestId('ai-chatbot-launcher');
+  await expect(launcher).toBeVisible();
+  await launcher.click();
   const chatbotPanel = page.getByTestId('ai-chatbot-panel');
   await expect(chatbotPanel).toBeVisible();
-  await expect(chatbotPanel).toHaveCSS('width', '420px');
+  await expect(chatbotPanel).toHaveCSS('width', '390px');
   await expect.poll(async () => {
     const shellMarginRight = await page.locator('.screen-shell').evaluate((element) => window.getComputedStyle(element).marginRight);
     return Number.parseFloat(shellMarginRight);
-  }).toBeGreaterThanOrEqual(400);
+  }).toBeLessThan(1);
 }
 
 function budgetBuilds(budgetWon: number, appliedPartCategories: PartCategory[] = []) {
@@ -571,6 +570,59 @@ async function mockHomePartsApi(page: Page) {
     'home-case-frame',
     'home-cooler-phantom'
   ];
+  const validatedBuildPartIds = [
+    'home-cpu-ryzen7',
+    'home-board-b850',
+    'home-ram-ddr5-32',
+    'home-gpu-rtx5070',
+    'home-ssd-nvme-1tb',
+    'home-psu-850',
+    'home-case-frame',
+    'home-cooler-phantom'
+  ];
+  const validatedBuildItems = validatedBuildPartIds.map((id) => {
+    const part = homeParts.find((candidate) => candidate.id === id)!;
+    return {
+      partId: part.id,
+      category: part.category,
+      name: part.name,
+      manufacturer: part.manufacturer,
+      quantity: 1,
+      price: part.price,
+      note: '서버 Tool 검증 완료'
+    };
+  });
+  await page.route('**/api/recommendations/home-builds', async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        items: [{
+          id: 'home-validated-build-1',
+          tier: 'balanced',
+          label: '균형',
+          title: '균형형 예산 맞춤 조합',
+          summary: '서버의 예산·호환성·전력·장착 검증을 통과한 구성입니다.',
+          totalPrice: validatedBuildItems.reduce((sum, part) => sum + part.price * part.quantity, 0),
+          badges: ['균형형', '검증 완료'],
+          budgetWon: 2_000_000,
+          budgetLabel: '200만원',
+          tierLabel: '균형형',
+          appliedPartCategories: [],
+          items: validatedBuildItems,
+          toolResults: [
+            { tool: 'compatibility', status: 'PASS', confidence: 'HIGH', summary: '호환 가능합니다.' },
+            { tool: 'power', status: 'PASS', confidence: 'HIGH', summary: '전력 조건을 통과했습니다.' },
+            { tool: 'size', status: 'PASS', confidence: 'HIGH', summary: '장착 조건을 통과했습니다.' }
+          ],
+          warnings: [],
+          confidence: 'HIGH'
+        }],
+        generatedAt: '2026-07-14T00:00:00Z',
+        fallbackUsed: false
+      })
+    });
+  });
   await page.route('**/api/recommendations/home-parts**', async (route) => {
     const items = recommendedOrder
       .map((id, index) => {
@@ -616,6 +668,20 @@ async function mockHomePartsApi(page: Page) {
 
   await page.route('**/api/parts**', async (route) => {
     const url = new URL(route.request().url());
+    const detailPartId = url.pathname.startsWith('/api/parts/')
+      ? decodeURIComponent(url.pathname.slice('/api/parts/'.length))
+      : null;
+    if (detailPartId) {
+      const detailPart = homeParts.find((part) => part.id === detailPartId);
+      if (detailPart) {
+        await route.fulfill({
+          status: 200,
+          contentType: 'application/json',
+          body: JSON.stringify(detailPart)
+        });
+        return;
+      }
+    }
     const category = url.searchParams.get('category');
     const query = url.searchParams.get('q');
     const matchedParts = homeParts.filter((part) => part.category === category && (!query || part.attributes.shortSpec === query));
@@ -652,7 +718,6 @@ async function openHomeAsUser(page: Page, options: { dismissHomeChoice?: boolean
     } else {
       localStorage.removeItem('buildgraph.homeLoginChoice.dismissed');
     }
-    sessionStorage.clear();
   }, { dismissHomeChoice });
   await page.route('**/api/auth/me', async (route) => {
     await route.fulfill({
@@ -855,29 +920,43 @@ test('renders the editorial home with the quote validation flow', async ({ page 
   await expect(main.getByRole('img', { name: /조립 PC 광고/ })).toHaveCount(0);
   await expect(page.getByTestId('home-fullpage-scroll')).toHaveCount(0);
   await expect(main.getByRole('heading', { name: '견적부터 조립 후 AS까지, 한 흐름으로' })).toBeVisible();
-  const processFlow = main.getByTestId('home-hero-process-flow');
-  await expect(processFlow).toBeVisible();
-  for (const step of ['AI 견적', '호환성 검증', '조립 후 AS']) {
-    await expect(processFlow.getByText(step, { exact: true })).toBeVisible();
-  }
-  await expect(main.getByTestId('home-part-art')).toHaveCount(0);
-  await expect(main.getByRole('button', { name: 'AI로 견적 만들기' })).toBeVisible();
-  await expect(main.getByRole('link', { name: '직접 구성하기' })).toHaveAttribute('href', '/self-quote');
-  await expect(main.getByTestId('home-quick-start-panel')).toBeVisible();
-  for (const category of ['CPU', 'GPU', '메인보드', '메모리', '저장장치', '파워', '케이스', '쿨러']) {
-    await expect(main.getByRole('link', { name: category, exact: true })).toBeVisible();
-  }
-  await expect(main.getByRole('heading', { name: '검증된 추천 조합' })).toBeVisible();
-  const qhdRecommendationCard = main.getByTestId('home-featured-preview-card-home-featured-qhd-gaming');
+  await expect(main.locator('.modern-home-hero')).toHaveCSS('border-color', 'rgb(229, 231, 236)');
+  await expect(main.getByTestId('home-hero-dummy-collage').locator('img.modern-home-hero-dummy')).toHaveCount(8);
+  await expect(main.getByTestId('home-hero-gradient-layer')).toHaveClass(/opacity-60/);
+  const heroDescription = main.locator('.modern-home-intro p');
+  await expect(heroDescription).toContainText('당신이 원하는 맞춤형 PC를 가상으로 견적을 맞추고,');
+  await expect(heroDescription).toContainText('조립 및 AS 기사까지 매칭되는 올인원 플랫폼입니다.');
+  await expect(main.getByRole('link', { name: '나만의 견적 알아보기' })).toHaveAttribute('href', '/self-quote');
+  await expect(main.getByTestId('home-hero-process-flow')).toHaveCount(0);
+  await expect(main.getByTestId('home-quick-start-panel')).toHaveCount(0);
+  await expect(main.getByRole('heading', { name: '인기있는 조합을 추천드려요' })).toBeVisible();
+  await expect(main.locator('.home-featured-interest-card')).toHaveCount(0);
+  const qhdRecommendationCard = main.getByTestId('home-ai-preview-card-home-validated-build-1');
   await expect(qhdRecommendationCard).toBeVisible();
   await expect(qhdRecommendationCard.getByText('2,293,000원')).toBeVisible();
   await expect(qhdRecommendationCard.getByRole('img', { name: /Home FRAME 4000D Case/ })).toBeVisible();
-  await expect(qhdRecommendationCard.getByRole('button', { name: 'QHD 게이밍 추천팩 셀프 견적에 담기' })).toBeVisible();
-  await expect(main.getByRole('heading', { name: '추천하는 부품' })).toBeVisible();
+  await expect(qhdRecommendationCard.getByRole('button', { name: '균형형 예산 맞춤 조합 셀프 견적에 담기' })).toBeVisible();
+  await expect(main.getByRole('heading', { name: '맞춤형 부품을 추천드려요' })).toBeVisible();
+  await expect(main.getByRole('link', { name: 'MORE >' })).toHaveAttribute('href', '/parts');
+  await expect(main.getByText('다짜줘의 검증 원칙')).toHaveCount(0);
   await expect(main.getByRole('img', { name: /Home RTX 5070 GPU/ })).toBeVisible();
+  await expect(main.locator('.modern-home-product-card')).toHaveCount(5);
   const firstPartCard = main.getByRole('link', { name: '인기 부품 1번 보기' });
-  await expect(firstPartCard.getByText('벤치마크 점수 포함')).toBeVisible();
-  await expect(firstPartCard.getByText('상품 정보 확인')).toBeVisible();
+  await expect(firstPartCard.locator('.modern-home-product-image')).toHaveCSS('aspect-ratio', '1 / 1');
+  const productName = firstPartCard.getByRole('heading', { name: 'Home RTX 5070 GPU' });
+  await expect(productName).toHaveCSS('font-weight', '400');
+  await expect(productName).toHaveCSS('text-overflow', 'ellipsis');
+  const categoryBadge = firstPartCard.getByText('GPU', { exact: true });
+  await expect(categoryBadge).toHaveClass(/absolute/);
+  await expect(categoryBadge).toHaveClass(/font-medium/);
+  await expect(categoryBadge).toHaveClass(/text-black/);
+  await expect(categoryBadge).toHaveCSS('background-color', 'rgb(255, 255, 255)');
+  await expect(categoryBadge).toHaveCSS('border-color', 'rgb(148, 163, 184)');
+  const productPrice = firstPartCard.getByText('890,000원', { exact: true });
+  expect(await productPrice.getAttribute('class')).toContain('w-[80%]');
+  await expect(productPrice).toHaveCSS('font-weight', '600');
+  await expect(firstPartCard.getByText('벤치마크 점수 포함')).toHaveCount(0);
+  await expect(firstPartCard.getByText('상품 정보 확인')).toHaveCount(0);
   await expect(firstPartCard).toHaveAttribute(
     'href',
     '/parts/home-gpu-rtx5070?recId=home-part-home-gpu-rtx5070&recSurface=HOME_RECOMMENDED_PARTS&rank=0'
@@ -890,13 +969,13 @@ test('selects a featured recommendation and applies every build part to self quo
   await openHomeAsUser(page);
   const main = page.getByRole('main');
 
-  const qhdRecommendationCard = main.getByTestId('home-featured-preview-card-home-featured-qhd-gaming');
+  const qhdRecommendationCard = main.getByTestId('home-ai-preview-card-home-validated-build-1');
   await expect(qhdRecommendationCard.getByRole('img', { name: /Home FRAME 4000D Case/ })).toBeVisible();
-  await qhdRecommendationCard.getByRole('button', { name: 'QHD 게이밍 추천팩 셀프 견적에 담기' }).click();
+  await qhdRecommendationCard.getByRole('button', { name: '균형형 예산 맞춤 조합 셀프 견적에 담기' }).click();
 
   await expect.poll(() => applyRequests.length).toBe(1);
   const request = applyRequests[0] as { buildId?: string; items?: Array<{ partId: string; category: string; quantity: number }> };
-  expect(request.buildId).toBe('home-featured-qhd-gaming');
+  expect(request.buildId).toBe('home-validated-build-1');
   expect(request.items?.map((item) => item.category)).toEqual(['CPU', 'MOTHERBOARD', 'RAM', 'GPU', 'STORAGE', 'PSU', 'CASE', 'COOLER']);
   expect(request.items).toContainEqual({ partId: 'home-gpu-rtx5070', category: 'GPU', quantity: 1 });
   expect(request.items).toContainEqual({ partId: 'home-case-frame', category: 'CASE', quantity: 1 });
@@ -911,7 +990,7 @@ test('renders the full draggable home preview graph', async ({ page }) => {
   await openHomeAsUser(page);
   const main = page.getByRole('main');
 
-  await main.getByTestId('home-featured-preview-card-home-featured-qhd-gaming').click();
+  await main.getByTestId('home-ai-preview-card-home-validated-build-1').click();
   const graphCanvas = main.getByTestId('graph-flow-canvas');
   await expect(graphCanvas.locator('.react-flow__node')).toHaveCount(4);
   await expect(graphCanvas.locator('.react-flow__edge.buildgraph-flow-edge')).toHaveCount(2);
@@ -967,7 +1046,7 @@ test('chatbot uses build-chat API and updates latest home AI recommendations', a
   expect(buildChatRequests[0].message).toBe('200만원 PC 추천');
   expect(buildChatRequests[0].currentQuoteDraft).toBeUndefined();
   await expect(chatbotPanel).toContainText('AI 견적 어시스턴트');
-  await expect(chatbotPanel).toContainText('가격 통과');
+  await expect(chatbotPanel).toContainText('이 조합으로 셀프 견적 보기');
   await expect(main.getByTestId('home-ai-recommendations')).toContainText('200만원 실속형');
   await expect(main.getByTestId('home-ai-recommendations')).toContainText('200만원 균형형');
   await expect(main.getByTestId('home-ai-recommendations').getByRole('img', { name: /케이스 이미지/ })).toHaveCount(0);
@@ -1122,7 +1201,7 @@ test('chatbot gives symptom-based possibilities and connects to the separate Age
   await expect(page).toHaveURL(/\/support\/new$/);
 });
 
-test('toggles the desktop AI assistant drawer from the header button', async ({ page }) => {
+test('toggles the desktop AI assistant popup without shifting the page', async ({ page }) => {
   await openHomeAsUser(page);
   await expect(page.getByTestId('ai-chatbot-panel')).toHaveCount(0);
 
@@ -1132,7 +1211,7 @@ test('toggles the desktop AI assistant drawer from the header button', async ({ 
   });
 
   await expect(page.getByTestId('ai-chatbot-panel')).toHaveCount(0);
-  await expect(page.getByTestId('ai-chatbot-launcher')).toHaveCount(0);
+  await expect(page.getByTestId('ai-chatbot-launcher')).toBeVisible();
   await expect.poll(async () => {
     const shellMarginRight = await page.locator('.screen-shell').evaluate((element) => window.getComputedStyle(element).marginRight);
     return Number.parseFloat(shellMarginRight);
@@ -1503,19 +1582,30 @@ test('selects a chatbot recommendation and shows the applied cart without a late
   await expect(page.getByRole('button', { name: /서버 반영 RTX 5070 서버 GPU 견적에서 제거/ })).toBeVisible();
 });
 
-test('keeps shared header and navigation destinations unchanged', async ({ page }) => {
+test('renders the Etsy-style header and PC category navigation', async ({ page }) => {
   await openHomeAsUser(page);
+  await expect(page.locator('.modern-home-screen')).toHaveCSS('background-color', 'rgb(255, 255, 255)');
   const header = page.locator('header');
-  const nav = page.getByRole('navigation');
+  const nav = page.getByRole('navigation', { name: '견적 및 PC 부품 카테고리' });
 
-  await expect(header.getByRole('link', { name: 'AI 견적' })).toHaveCount(0);
+  await expect(header.getByRole('link', { name: '다짜줘 홈' })).toHaveAttribute('href', '/');
+  await expect(header.getByTestId('header-logo-placeholder')).toHaveCSS('border-radius', '9999px');
+  await expect(header.getByText('Dazzajo', { exact: true })).toBeVisible();
+  await expect(header.getByRole('textbox', { name: 'AI에게 견적 질문하기' })).toHaveAttribute('placeholder', /어떤 PC를 맞춰드릴까요/);
+  const searchCenterOffset = await header.getByTestId('header-ai-search').evaluate((element) => {
+    const bounds = element.getBoundingClientRect();
+    return Math.abs(bounds.left + bounds.width / 2 - window.innerWidth / 2);
+  });
+  expect(searchCenterOffset).toBeLessThan(2);
   await expect(header.getByRole('link', { name: '내 견적함' })).toHaveAttribute('href', '/my/quotes');
+  await expect(header.getByRole('link', { name: '현재 견적' })).toHaveAttribute('href', '/self-quote');
+  await header.getByText('계정', { exact: true }).click();
   await expect(header.getByRole('link', { name: 'AS 접수' })).toHaveAttribute('href', '/support/new');
-  await expect(nav.getByRole('link', { name: '홈' })).toHaveAttribute('href', '/');
+  await expect(nav.getByRole('button', { name: 'AI 견적' })).toBeVisible();
   await expect(nav.getByRole('link', { name: '셀프 견적' })).toHaveAttribute('href', '/self-quote');
+  await expect(nav.getByRole('link', { name: 'CPU' })).toHaveAttribute('href', '/parts?category=CPU');
+  await expect(nav.getByRole('link', { name: 'GPU' })).toHaveAttribute('href', '/parts?category=GPU');
   await expect(nav.getByRole('link', { name: '전체 부품' })).toHaveAttribute('href', '/parts');
-  await expect(nav.getByRole('link', { name: '추천 결과' })).toHaveAttribute('href', '/builds/latest');
-  await expect(nav.getByRole('link', { name: '관리자' })).toHaveCount(0);
 });
 
 test('shows chatbot session recommendations on the recommendation result page without build history lookup', async ({ page }) => {
@@ -1534,7 +1624,7 @@ test('shows chatbot session recommendations on the recommendation result page wi
   await page.evaluate(({ session }) => {
     sessionStorage.setItem('buildgraph.ai.assistantSession:user-1004', JSON.stringify(session));
   }, { session: storedAssistantSessionWithBuilds('200만원 PC 추천', latestBuilds) });
-  await page.getByRole('navigation').getByRole('link', { name: '추천 결과' }).click();
+  await page.goto('/builds/latest');
 
   await expect(page).toHaveURL('/builds/latest');
   await expect(page.getByRole('heading', { name: '추천 결과' })).toBeVisible();
@@ -1591,7 +1681,7 @@ test('accumulates chatbot recommendations up to nine and sends only the latest r
   ]);
   expect(storedBuilds.map((build) => build.id)).not.toContain(uniqueBudgetBuilds(2_000_000, '1차')[0].id);
 
-  await page.getByRole('navigation').getByRole('link', { name: '추천 결과' }).click();
+  await page.goto('/builds/latest');
   const latestGrid = page.getByTestId('latest-build-card-grid');
   await expect(page.getByText('최근 AI 추천 조합을 최대 9개까지 보관합니다. 현재 9/9개')).toBeVisible();
   await expect(page.getByRole('button', { name: '상세 보기' })).toHaveCount(9);
@@ -1623,7 +1713,7 @@ test('deduplicates identical build compositions when accumulating chatbot recomm
   expect(storedBuilds).toHaveLength(3);
   expect(storedBuilds.map((build) => build.id)).toEqual(duplicateBuilds.map((build) => build.id));
 
-  await page.getByRole('navigation').getByRole('link', { name: '추천 결과' }).click();
+  await page.goto('/builds/latest');
   const latestGrid = page.getByTestId('latest-build-card-grid');
   await expect(page.getByText('최근 AI 추천 조합을 최대 9개까지 보관합니다. 현재 3/9개')).toBeVisible();
   await expect(latestGrid.getByText('200만원 실속형 새추천')).toBeVisible();
@@ -1640,7 +1730,7 @@ test('filters latest recommendation cards and closes the detail drawer when the 
   await page.evaluate(({ session }) => {
     sessionStorage.setItem('buildgraph.ai.assistantSession:user-1004', JSON.stringify(session));
   }, { session: storedAssistantSessionWithBuilds('최근 추천', latestBuilds) });
-  await page.getByRole('navigation').getByRole('link', { name: '추천 결과' }).click();
+  await page.goto('/builds/latest');
   const latestGrid = page.getByTestId('latest-build-card-grid');
 
   await expect(page.getByRole('button', { name: '상세 보기' })).toHaveCount(9);
@@ -1673,7 +1763,7 @@ test('shows chatbot guide empty state when there are no temporary recommendation
   });
 
   await openHomeAsUser(page);
-  await page.getByRole('navigation').getByRole('link', { name: '추천 결과' }).click();
+  await page.goto('/builds/latest');
 
   await expect(page).toHaveURL('/builds/latest');
   await expect(page.getByRole('heading', { name: '추천 결과' })).toBeVisible();
@@ -1773,7 +1863,7 @@ test('opens chatbot build details in a side drawer and saves in place', async ({
   await page.evaluate(({ session }) => {
     sessionStorage.setItem('buildgraph.ai.assistantSession:user-1004', JSON.stringify(session));
   }, { session });
-  await page.getByRole('navigation').getByRole('link', { name: '추천 결과' }).click();
+  await page.goto('/builds/latest');
 
   await page.getByRole('button', { name: '상세 보기' }).nth(1).click();
 
@@ -1834,7 +1924,7 @@ test('opens self quote from the drawer graph card without replacing the current 
   await page.evaluate(({ session }) => {
     sessionStorage.setItem('buildgraph.ai.assistantSession:user-1004', JSON.stringify(session));
   }, { session: storedAssistantSessionWithBuilds('200만원 PC 추천', latestBuilds) });
-  await page.getByRole('navigation').getByRole('link', { name: '추천 결과' }).click();
+  await page.goto('/builds/latest');
 
   await page.getByRole('button', { name: '상세 보기' }).first().click();
   const drawer = page.getByRole('dialog', { name: '추천 조합 상세' });
@@ -1859,7 +1949,7 @@ test('opens self quote from the drawer graph card when the current cart is empty
   await page.evaluate(({ session }) => {
     sessionStorage.setItem('buildgraph.ai.assistantSession:user-1004', JSON.stringify(session));
   }, { session: storedAssistantSessionWithBuilds('200만원 PC 추천', latestBuilds) });
-  await page.getByRole('navigation').getByRole('link', { name: '추천 결과' }).click();
+  await page.goto('/builds/latest');
 
   await page.getByRole('button', { name: '상세 보기' }).first().click();
   const drawer = page.getByRole('dialog', { name: '추천 조합 상세' });
@@ -1882,7 +1972,7 @@ test('keeps hover preview graph read-only and uses only the drawer graph card as
   await page.evaluate(({ session }) => {
     sessionStorage.setItem('buildgraph.ai.assistantSession:user-1004', JSON.stringify(session));
   }, { session: storedAssistantSessionWithBuilds('200만원 PC 추천', latestBuilds) });
-  await page.getByRole('navigation').getByRole('link', { name: '추천 결과' }).click();
+  await page.goto('/builds/latest');
 
   await page.getByRole('button', { name: /200만원 실속형/ }).hover();
   const preview = page.getByTestId('latest-build-graph-preview');
@@ -1945,7 +2035,7 @@ test('opens the exact recommendation card details when temporary build ids are d
   await page.evaluate(({ session }) => {
     sessionStorage.setItem('buildgraph.ai.assistantSession:user-1004', JSON.stringify(session));
   }, { session: storedAssistantSessionWithBuilds('중복 id 추천', latestBuilds) });
-  await page.getByRole('navigation').getByRole('link', { name: '추천 결과' }).click();
+  await page.goto('/builds/latest');
 
   const selectedCard = page.locator('[data-latest-build-card="true"]').filter({ hasText: '421만원 균형형 추천 조합' });
   await expect(selectedCard.getByText(`${latestBuilds[1].totalPrice.toLocaleString()}원`)).toBeVisible();
@@ -1967,7 +2057,7 @@ test('keeps recommendation cards full width while the detail drawer overlays on 
   await page.evaluate(({ session }) => {
     sessionStorage.setItem('buildgraph.ai.assistantSession:user-1004', JSON.stringify(session));
   }, { session: storedAssistantSessionWithBuilds('200만원 PC 추천', latestBuilds) });
-  await page.getByRole('navigation').getByRole('link', { name: '추천 결과' }).click();
+  await page.goto('/builds/latest');
 
   const layout = page.getByTestId('latest-build-results-layout');
   const grid = page.getByTestId('latest-build-card-grid');
@@ -1998,7 +2088,7 @@ test('shows a read-only build graph preview on recommendation card hover and reu
   await page.evaluate(({ session }) => {
     sessionStorage.setItem('buildgraph.ai.assistantSession:user-1004', JSON.stringify(session));
   }, { session: storedAssistantSessionWithBuilds('200만원 PC 추천', latestBuilds) });
-  await page.getByRole('navigation').getByRole('link', { name: '추천 결과' }).click();
+  await page.goto('/builds/latest');
 
   await page.getByRole('button', { name: /200만원 실속형/ }).hover();
   const firstCard = page.locator('[data-latest-build-card]').first();
@@ -2050,7 +2140,7 @@ test('shows the graph preview on card focus and suppresses hover preview while t
   await page.evaluate(({ session }) => {
     sessionStorage.setItem('buildgraph.ai.assistantSession:user-1004', JSON.stringify(session));
   }, { session: storedAssistantSessionWithBuilds('200만원 PC 추천', latestBuilds) });
-  await page.getByRole('navigation').getByRole('link', { name: '추천 결과' }).click();
+  await page.goto('/builds/latest');
 
   await page.getByRole('button', { name: /200만원 실속형/ }).focus();
   await expect(page.getByTestId('latest-build-graph-preview')).toBeVisible();
@@ -2073,7 +2163,7 @@ test('does not show hover graph preview on mobile', async ({ page }) => {
   await page.evaluate(({ session }) => {
     sessionStorage.setItem('buildgraph.ai.assistantSession:user-1004', JSON.stringify(session));
   }, { session: storedAssistantSessionWithBuilds('200만원 PC 추천', latestBuilds) });
-  await page.getByRole('navigation').getByRole('link', { name: '추천 결과' }).click();
+  await page.goto('/builds/latest');
 
   await page.getByRole('button', { name: /200만원 실속형/ }).hover();
   await expect(page.getByTestId('latest-build-graph-preview')).toHaveCount(0);
@@ -2085,7 +2175,7 @@ test('closes the recommendation detail drawer with close button, escape, and out
   await page.evaluate(({ session }) => {
     sessionStorage.setItem('buildgraph.ai.assistantSession:user-1004', JSON.stringify(session));
   }, { session: storedAssistantSessionWithBuilds('200만원 PC 추천', latestBuilds) });
-  await page.getByRole('navigation').getByRole('link', { name: '추천 결과' }).click();
+  await page.goto('/builds/latest');
 
   await page.getByRole('button', { name: '상세 보기' }).first().click();
   await expect(page.getByRole('dialog', { name: '추천 조합 상세' })).toBeVisible();
@@ -2110,7 +2200,7 @@ test('opens recommendation details as a right overlay drawer on mobile', async (
   await page.evaluate(({ session }) => {
     sessionStorage.setItem('buildgraph.ai.assistantSession:user-1004', JSON.stringify(session));
   }, { session: storedAssistantSessionWithBuilds('200만원 PC 추천', latestBuilds) });
-  await page.getByRole('navigation').getByRole('link', { name: '추천 결과' }).click();
+  await page.goto('/builds/latest');
 
   await page.getByRole('button', { name: '상세 보기' }).first().click();
 
@@ -2173,102 +2263,285 @@ test('keeps the editorial home usable on mobile width', async ({ page }) => {
   const main = page.getByRole('main');
 
   await expect(main.getByRole('heading', { name: '견적부터 조립 후 AS까지, 한 흐름으로' })).toBeVisible();
-  const quickStartPanel = page.getByTestId('home-quick-start-panel');
-  await expect(quickStartPanel).toBeVisible();
-  const quickStartBounds = await quickStartPanel.boundingBox();
-  expect(quickStartBounds?.y).toBeLessThan(844);
+  await expect(main.locator('.modern-home-hero')).toHaveCSS('border-color', 'rgb(229, 231, 236)');
+  await expect(page.getByTestId('home-quick-start-panel')).toHaveCount(0);
+  await expect(main.getByRole('link', { name: '나만의 견적 알아보기' })).toHaveAttribute('href', '/self-quote');
   await expect(page.getByTestId('ai-chatbot-panel')).toHaveCount(0);
-  await quickStartPanel.getByRole('button', { name: /게임용/ }).click();
-  await expect(page.getByTestId('ai-chatbot-modal')).toBeVisible();
-  await expect(page.getByTestId('ai-chatbot-modal')).toHaveAttribute('role', 'dialog');
   await expect(main.getByTestId('build-dependency-graph')).toHaveCount(0);
-  await page.getByTestId('ai-chat-close-button').click();
-  await expect(page.getByTestId('ai-chatbot-modal')).toHaveCount(0);
-  await main.getByTestId('home-ai-preview-card-server-2000000-balanced-base').click();
-  await expect(main.getByTestId('build-dependency-graph')).toContainText('AI 추천 관계도');
-  await main.getByTestId('build-dependency-graph').getByRole('button', { name: '관계 안내 닫기' }).click();
-  const mobileGpuNode = main.getByTestId('graph-flow-canvas').locator('.react-flow__node').filter({ hasText: 'RTX 5070' }).first();
-  await expectFlowNodeReady(mobileGpuNode);
-  await mobileGpuNode.dispatchEvent('click');
-  await expect(main.getByTestId('graph-flow-canvas').getByTestId('graph-node-candidate-panel')).toContainText('호환 후보');
-  await moveHomeFullPageDown(page);
-  await expect(page.getByTestId('floating-dependency-graph')).toHaveCount(0);
 
   const hasBodyOverflow = await page.evaluate(() => document.documentElement.scrollWidth > window.innerWidth + 1);
   expect(hasBodyOverflow).toBe(false);
 });
 
-test('fetches the quote draft once and hides the empty home summary', async ({ page }) => {
-  let draftGetCount = 0;
-  await page.route('**/api/quote-drafts/current', async (route) => {
-    if (route.request().method() === 'GET') {
-      draftGetCount += 1;
-    }
+test('allows guests to view the public home and requires login for self quote', async ({ page }) => {
+  let authenticatedHomeCalls = 0;
+  await page.addInitScript(() => {
+    localStorage.clear();
+    sessionStorage.clear();
+  });
+  await page.route('**/api/parts**', async (route) => {
+    authenticatedHomeCalls += 1;
+    await route.fulfill({ status: 401, contentType: 'application/json', body: JSON.stringify({ code: 'UNAUTHORIZED' }) });
+  });
+  await page.route('**/api/recommendations/home-parts**', async (route) => {
+    authenticatedHomeCalls += 1;
+    await route.fulfill({ status: 401, contentType: 'application/json', body: JSON.stringify({ code: 'UNAUTHORIZED' }) });
+  });
+  await page.route('**/api/public/home', async (route) => {
+    const categoryParts = Object.fromEntries(
+      ['CPU', 'GPU', 'MOTHERBOARD', 'RAM', 'STORAGE', 'PSU', 'CASE', 'COOLER'].map((category) => [category, [{
+        id: `public-${category.toLowerCase()}`,
+        category,
+        name: `Public ${category}`,
+        manufacturer: 'BuildGraph',
+        price: 100000,
+        status: 'ACTIVE',
+        attributes: {},
+        externalOffer: null
+      }]])
+    );
     await route.fulfill({
       status: 200,
       contentType: 'application/json',
       body: JSON.stringify({
-        id: 'draft-home-empty',
-        status: 'ACTIVE',
-        name: '셀프 견적',
-        items: [],
-        totalPrice: 0,
-        itemCount: 0
+        categoryParts,
+        recommendedParts: {
+          items: [{
+            recommendationId: 'public-home-cpu',
+            rankPosition: 0,
+            part: categoryParts.CPU[0],
+            scoreSource: 'FALLBACK',
+            modelVersion: null,
+            reasonTags: []
+          }],
+          generatedAt: '2026-07-14T00:00:00Z',
+          fallbackUsed: true
+        }
       })
     });
   });
 
-  await openHomeAsUser(page);
+  await page.goto('/');
 
-  await expect(page.getByTestId('home-quote-summary-panel')).toHaveCount(0);
-  await expect(page.getByTestId('home-quick-start-panel').getByRole('button', { name: /게임용/ })).toBeVisible();
-  await expect.poll(() => draftGetCount).toBeGreaterThan(0);
-  expect(draftGetCount).toBe(1);
+  await expect(page).toHaveURL('/');
+  await expect(page.getByRole('heading', { name: /견적부터 조립 후 AS까지/ })).toBeVisible();
+  await expect(page.getByTestId('home-login-choice-dialog')).toHaveCount(0);
+  await expect.poll(() => authenticatedHomeCalls).toBe(0);
+
+  await page.getByRole('link', { name: '나만의 견적 알아보기' }).click();
+  await expect(page).toHaveURL(/\/login\?redirect=%2Fself-quote/);
 });
 
-test('summarizes a partial draft and its highest-priority warning', async ({ page }) => {
-  await page.route('**/api/quote-drafts/current', async (route) => {
-    await route.fulfill({
-      status: 200,
-      contentType: 'application/json',
-      body: JSON.stringify({
-        id: 'draft-partial',
-        status: 'ACTIVE',
-        name: '셀프 견적',
-        items: [
-          { id: 'draft-cpu', partId: 'cpu-1', category: 'CPU', name: 'CPU', quantity: 1, unitPriceAtAdd: 500000, currentPrice: 500000, lineTotal: 500000 },
-          { id: 'draft-ram', partId: 'ram-1', category: 'RAM', name: 'RAM', quantity: 2, unitPriceAtAdd: 150000, currentPrice: 150000, lineTotal: 300000 },
-          { id: 'draft-gpu', partId: 'gpu-1', category: 'GPU', name: 'GPU', quantity: 1, unitPriceAtAdd: 770000, currentPrice: 770000, lineTotal: 770000 }
-        ],
-        totalPrice: 1570000,
-        itemCount: 4
-      })
+// AI 챗봇 응답 대기 버블 — 느린 LLM 응답 구간에만 임시 말풍선을 띄운다.
+// 신규 describe 블록으로만 추가하고 기존 테스트/헬퍼는 수정하지 않는다.
+test.describe('AI 챗봇 응답 대기 표시', () => {
+  const CHAT_INPUT = 'AI 챗봇에게 PC 사양 질문';
+  const SEND_BUTTON = '질문 보내기';
+
+  // 지연·상태코드를 제어할 수 있는 build-chat mock. LIFO 라우팅이라 다른 mock 뒤에 등록하면 우선한다.
+  async function mockBuildChat(page: Page, options: { delayMs?: number; status?: number; message?: string; builds?: ReturnType<typeof budgetBuilds> } = {}) {
+    const { delayMs = 0, status = 200, message = '200만원 예산 기준으로 조합을 계산했습니다.', builds = [] } = options;
+    const state = { calls: 0 };
+    await page.route('**/api/ai/build-chat', async (route) => {
+      state.calls += 1;
+      if (delayMs > 0) {
+        await new Promise((resolve) => setTimeout(resolve, delayMs));
+      }
+      if (status !== 200) {
+        await route.fulfill({ status, contentType: 'application/json', body: JSON.stringify({ message: '서버 오류' }) });
+        return;
+      }
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ answerType: 'BUDGET', message, builds, warnings: [] })
+      });
     });
-  });
-  await page.route('**/api/build-graphs/resolve', async (route) => {
-    await route.fulfill({
-      status: 200,
-      contentType: 'application/json',
-      body: JSON.stringify({
-        mode: 'BUILD_OVERVIEW',
-        summary: '현재 구성에서 파워 여유를 확인해야 합니다.',
-        nodes: [],
-        edges: [],
-        focusNodeIds: [],
-        insights: [{ id: 'power-warning', status: 'WARN', title: '파워 여유 확인', description: '권장 출력 여유가 낮습니다.', relatedNodeIds: [] }],
-        toolResults: [{ tool: 'power', status: 'WARN', confidence: 'MEDIUM', summary: '권장 출력 여유가 낮습니다.' }]
-      })
-    });
+    return state;
+  }
+
+  async function openAssistant(page: Page) {
+    await mockCurrentQuoteDraftApi(page);
+    await openHomeAsUser(page);
+    await openDesktopAiAssistant(page);
+    const panel = page.getByTestId('ai-chatbot-panel');
+    return {
+      panel,
+      input: page.getByRole('textbox', { name: CHAT_INPUT }),
+      send: page.getByRole('button', { name: SEND_BUTTON })
+    };
+  }
+
+  test('느린 응답 동안 대기 버블과 요약 인용을 보여준다', async ({ page }) => {
+    await mockBuildChat(page, { delayMs: 1500 });
+    const { panel, input, send } = await openAssistant(page);
+
+    await input.fill('200만원 게이밍 PC 추천');
+    await send.click();
+
+    const pending = panel.getByTestId('ai-chat-pending');
+    await expect(pending).toBeVisible();
+    await expect(pending).toContainText('답변을 준비하고 있어요');
+    await expect(panel.getByTestId('ai-chat-pending-excerpt')).toContainText('200만원 게이밍 PC 추천');
   });
 
-  await openHomeAsUser(page);
+  test('요약 인용은 30자에서 잘리고 말줄임표가 붙는다', async ({ page }) => {
+    await mockBuildChat(page, { delayMs: 1500 });
+    const { panel, input, send } = await openAssistant(page);
 
-  const summary = page.getByTestId('home-quote-summary-panel');
-  await expect(summary).toContainText('3 / 8');
-  await expect(summary).toContainText('1,570,000원');
-  await expect(summary).toContainText('주의 확인');
-  await expect(summary).toContainText('파워 여유 확인');
-  await expect(summary.getByTestId('home-quote-slot-cpu')).toContainText('CPU');
-  await expect(summary.getByTestId('home-quote-slot-motherboard')).toContainText('미선택');
-  await expect(summary.getByTestId('home-quote-slot-case')).toContainText('미선택');
+    const unit = '가나다라마바사아자차'; // 10자
+    await input.fill(unit.repeat(4)); // 40자
+    await send.click();
+
+    const excerpt = panel.getByTestId('ai-chat-pending-excerpt');
+    await expect(excerpt).toBeVisible();
+    const text = (await excerpt.textContent()) ?? '';
+    expect(text).toContain(unit.repeat(3)); // 앞 30자는 남는다
+    expect(text).toContain('…');
+    expect(text).not.toContain(unit.repeat(4)); // 원문 40자는 잘려서 없다
+  });
+
+  test('응답이 도착하면 대기 버블이 사라지고 실제 답변만 남는다', async ({ page }) => {
+    await mockBuildChat(page, { delayMs: 700, message: '실제 추천 답변이 도착했습니다.' });
+    const { panel, input, send } = await openAssistant(page);
+
+    await input.fill('200만원 PC 추천');
+    await send.click();
+
+    await expect(panel.getByTestId('ai-chat-pending')).toBeVisible();
+    await expect(panel).toContainText('실제 추천 답변이 도착했습니다.');
+    await expect(panel.getByTestId('ai-chat-pending')).toHaveCount(0); // 실답과 대기 버블은 공존하지 않는다
+  });
+
+  test('300ms 이내 빠른 응답에는 대기 버블이 뜨지 않는다', async ({ page }) => {
+    const state = await mockBuildChat(page, { delayMs: 40, message: '빠른 응답 도착.' });
+    const { panel, input, send } = await openAssistant(page);
+
+    await input.fill('200만원 PC 추천');
+    await send.click();
+
+    await expect(panel).toContainText('빠른 응답 도착.');
+    expect(state.calls).toBe(1);
+    await expect(panel.getByTestId('ai-chat-pending')).toHaveCount(0);
+  });
+
+  test('빠른 카테고리 이동은 API 없이 처리되고 대기 버블을 만들지 않는다', async ({ page }) => {
+    const state = await mockBuildChat(page, { delayMs: 1500 });
+    const { input, send } = await openAssistant(page);
+
+    await input.fill('메인보드 보여줘');
+    await send.click();
+
+    await expect(page).toHaveURL(/\/self-quote\?category=MOTHERBOARD/);
+    expect(state.calls).toBe(0);
+    await expect(page.getByTestId('ai-chat-pending')).toHaveCount(0);
+  });
+
+  test('서버 오류 시 대기 버블이 사라지고 기존 오류 안내가 뜬다', async ({ page }) => {
+    await mockBuildChat(page, { delayMs: 500, status: 500 });
+    const { panel, input, send } = await openAssistant(page);
+
+    await input.fill('200만원 PC 추천');
+    await send.click();
+
+    await expect(panel.getByRole('alert')).toContainText('AI 추천 API 호출에 실패했습니다');
+    await expect(panel.getByTestId('ai-chat-pending')).toHaveCount(0);
+  });
+
+  test('전송 중 중복 제출은 무시되어 대기 버블이 중복되지 않는다', async ({ page }) => {
+    const state = await mockBuildChat(page, { delayMs: 900, message: '단일 응답만 반영.' });
+    const { panel, input, send } = await openAssistant(page);
+
+    await input.fill('200만원 PC 추천');
+    await send.click();
+    await expect(panel.getByTestId('ai-chat-pending')).toBeVisible();
+    await send.click({ force: true }); // isSending 가드로 두 번째 제출은 막혀야 한다
+
+    await expect(panel.getByTestId('ai-chat-pending')).toHaveCount(1);
+    await expect(panel).toContainText('단일 응답만 반영.');
+    await expect(panel.getByTestId('ai-chat-pending')).toHaveCount(0);
+    expect(state.calls).toBe(1);
+  });
+
+  test('모션 최소화 설정에서는 점 애니메이션이 정지한다', async ({ page }) => {
+    await page.emulateMedia({ reducedMotion: 'reduce' });
+    await mockBuildChat(page, { delayMs: 1500 });
+    const { panel, input, send } = await openAssistant(page);
+
+    await input.fill('200만원 PC 추천');
+    await send.click();
+
+    const dot = panel.getByTestId('ai-chat-pending-dot').first();
+    await expect(dot).toBeVisible();
+    const animationName = await dot.evaluate((element) => window.getComputedStyle(element).animationName);
+    expect(animationName).toBe('none');
+  });
+
+  test('다중 문장 답변은 문장 단위로 순차 노출된다', async ({ page }) => {
+    const first = '첫 번째 문장입니다.';
+    const last = '마지막 세 번째 문장으로 끝납니다.';
+    await mockBuildChat(page, { delayMs: 300, message: `${first} 두 번째 문장이 이어집니다. ${last}` });
+    const { panel, input, send } = await openAssistant(page);
+
+    await input.fill('200만원 PC 추천');
+    await send.click();
+
+    // 첫 문장은 곧바로 보이지만 마지막 문장은 아직 노출되지 않는다(한 번에 팍 뜨지 않음).
+    await expect(panel).toContainText(first);
+    await expect(panel).not.toContainText(last, { timeout: 150 });
+
+    // 잠시 뒤 세 문장이 모두 노출된다.
+    await expect(panel).toContainText(last);
+    await expect(panel.getByTestId('ai-message-sentence')).toHaveCount(3);
+  });
+
+  test('모션 최소화 설정에서는 답변이 문장 분할 없이 한 번에 노출된다', async ({ page }) => {
+    await page.emulateMedia({ reducedMotion: 'reduce' });
+    const last = '마지막 세 번째 문장으로 끝납니다.';
+    await mockBuildChat(page, { delayMs: 300, message: `첫 번째 문장입니다. 두 번째 문장이 이어집니다. ${last}` });
+    const { panel, input, send } = await openAssistant(page);
+
+    await input.fill('200만원 PC 추천');
+    await send.click();
+
+    await expect(panel).toContainText(last); // 전체가 즉시 노출
+    await expect(panel.getByTestId('ai-message-sentence')).toHaveCount(0); // 문장 span 없이 통짜 렌더
+  });
+
+  test('카드형(견적) 답변은 카드가 하나씩 순차로 노출된다', async ({ page }) => {
+    await mockBuildChat(page, { delayMs: 300, message: '요청하신 예산으로 세 조합을 계산했어요.', builds: budgetBuilds(2_000_000) });
+    const { panel, input, send } = await openAssistant(page);
+
+    await input.fill('200만원 PC 추천');
+    await send.click();
+
+    const cards = panel.getByTestId('ai-build-card');
+    // 첫 카드가 뜬 직후엔 3장이 한꺼번에 뜨지 않는다(확 나오지 않고 순차).
+    await expect(cards.first()).toBeVisible();
+    await expect(cards).not.toHaveCount(3, { timeout: 150 });
+    // 잠시 뒤 3장이 모두 노출된다.
+    await expect(cards).toHaveCount(3);
+
+    // AI 견적 카드는 툴 통과 상태·부품 목록 없이, 담기 버튼과 조합별 특이점(짧은 설명)을 보여준다.
+    const firstCard = cards.first();
+    await expect(firstCard).toContainText('이 조합으로 셀프 견적 보기');
+    await expect(firstCard).not.toContainText('통과'); // 툴 검증 칩 제거
+    await expect(firstCard).not.toContainText('서버 추천'); // 부품명 미노출(잘림 방지)
+    // 조합마다 특이점 설명이 달라야 한다: 최저가는 가성비, 최고가는 고사양.
+    await expect(cards.first()).toContainText('가성비');
+    await expect(cards.nth(2)).toContainText('고사양');
+  });
+
+  test('모션 최소화 설정에서는 카드가 한 번에 노출된다', async ({ page }) => {
+    await page.emulateMedia({ reducedMotion: 'reduce' });
+    await mockBuildChat(page, { delayMs: 300, message: '요청하신 예산으로 세 조합을 계산했어요.', builds: budgetBuilds(2_000_000) });
+    const { panel, input, send } = await openAssistant(page);
+
+    await input.fill('200만원 PC 추천');
+    await send.click();
+
+    // 첫 카드가 보이는 순간 이미 3장이 모두 있어야 한다(순차 노출 없음).
+    await expect(panel.getByTestId('ai-build-card').first()).toBeVisible();
+    await expect(panel.getByTestId('ai-build-card')).toHaveCount(3);
+  });
 });

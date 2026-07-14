@@ -53,6 +53,10 @@ export type HomeRecommendedPartsResponse = {
   generatedAt: string;
   fallbackUsed: boolean;
 };
+export type PublicHomeResponse = {
+  categoryParts: Partial<Record<string, PartRow[]>>;
+  recommendedParts: HomeRecommendedPartsResponse;
+};
 
 export type RecommendationEventRequest = {
   eventType: 'IMPRESSION' | 'CLICK' | 'DETAIL_VIEW' | 'SAVE' | 'CHANGE_ADOPTED' | 'ADD_BUILD_TO_DRAFT' | 'ADD_PART_TO_DRAFT' | 'ORDER_INTENT' | 'REJECT' | 'CHANGE_REVERTED';

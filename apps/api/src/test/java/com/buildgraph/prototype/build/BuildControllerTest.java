@@ -6,6 +6,7 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -223,6 +224,37 @@ class BuildControllerTest {
                 .andExpect(jsonPath("$.partRecommendation.category").value("GPU"));
 
         verify(buildChatService).chat(anyMap(), eq(USER));
+    }
+
+    @Test
+    void homeRecommendationsReturnServerValidatedBuilds() throws Exception {
+        when(buildChatService.homeRecommendedBuilds()).thenReturn(Map.of(
+                "items", List.of(Map.of(
+                        "id", "home-safe-build",
+                        "totalPrice", 1_950_000,
+                        "toolResults", List.of(Map.of("tool", "compatibility", "status", "PASS"))
+                )),
+                "generatedAt", "2026-07-14T00:00:00Z",
+                "fallbackUsed", false
+        ));
+
+        mockMvc.perform(get("/api/recommendations/home-builds")
+                        .header("Authorization", USER_TOKEN))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.items[0].id").value("home-safe-build"))
+                .andExpect(jsonPath("$.items[0].toolResults[0].status").value("PASS"));
+
+        verify(currentUserService).requireUser(USER_TOKEN);
+        verify(buildChatService).homeRecommendedBuilds();
+    }
+
+    @Test
+    void homeRecommendationsRequireLogin() throws Exception {
+        mockMvc.perform(get("/api/recommendations/home-builds"))
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.code").value("UNAUTHORIZED"));
+
+        verifyNoInteractions(buildChatService);
     }
 
     @Test

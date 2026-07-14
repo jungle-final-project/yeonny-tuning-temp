@@ -97,6 +97,16 @@ export function buildChat(payload: AiBuildChatRequest) {
   });
 }
 
+export type HomeRecommendedBuildsResponse = {
+  items: AiRecommendedBuild[];
+  generatedAt: string;
+  fallbackUsed: boolean;
+};
+
+export function listHomeRecommendedBuilds() {
+  return api<HomeRecommendedBuildsResponse>('/api/recommendations/home-builds');
+}
+
 export function resolveBuildGraph(payload: BuildGraphResolveRequest) {
   return api<BuildGraphResolveResponse>('/api/build-graphs/resolve', {
     method: 'POST',

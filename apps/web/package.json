@@ -10,11 +10,15 @@
     "test": "playwright test",
     "test:e2e:mvp": "playwright test -c playwright.mvp.config.ts",
     "test:e2e:ai-latency": "playwright test -c playwright.ai-latency.config.ts",
-    "test:e2e:build-chat-qa": "playwright test -c playwright.build-chat-qa.config.ts"
+    "test:e2e:build-chat-qa": "playwright test -c playwright.build-chat-qa.config.ts",
+    "test:e2e:build-chat-stateful-qa": "playwright test -c playwright.build-chat-stateful-qa.config.ts",
+    "test:e2e:demo-stateful-qa": "playwright test -c playwright.demo-stateful-qa.config.ts",
+    "test:e2e:user-surface-stateful-qa": "playwright test -c playwright.user-surface-stateful-qa.config.ts"
   },
   "dependencies": {
     "@fullpage/react-fullpage": "^0.1.49",
     "@tanstack/react-query": "^5.66.0",
+    "@tosspayments/tosspayments-sdk": "^2.7.1",
     "@xyflow/react": "^12.11.1",
     "lucide-react": "^0.468.0",
     "react": "^18.3.1",

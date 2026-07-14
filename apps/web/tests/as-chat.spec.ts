@@ -14,6 +14,23 @@ test('renders AS AI chat response with Tool and RAG details', async ({ page }) =
     localStorage.setItem('buildgraph.token', 'jwt-user-token');
   });
 
+  await page.route('**/api/support/chat-sessions/current', async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        contact: {
+          id: 'support-session-1',
+          asTicketId: ticketId,
+          status: 'OPEN',
+          title: '게임 중 프레임 급락'
+        },
+        messages: [],
+        supportNewPath: '/support/new'
+      })
+    });
+  });
+
   await page.route('**/api/ai/as-chat?**', async (route) => {
     await route.fulfill({
       status: 200,
@@ -122,6 +139,34 @@ test('renders AS AI chat response with Tool and RAG details', async ({ page }) =
   await expect(page.getByText('GPU 과열 가능성을 먼저 확인하세요.')).toBeVisible();
   await expect(page.getByText('Thermal throttling candidate')).toBeVisible();
   await expect(page.getByText('support-guide-gpu-thermal')).toBeVisible();
+});
+
+test('does not request AS AI without a user-owned ticket and guides to support intake', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.addInitScript(() => {
+    localStorage.setItem('buildgraph.token', 'jwt-user-token');
+  });
+
+  let asChatRequestCount = 0;
+  await page.route('**/api/support/chat-sessions/current', async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({ contact: null, messages: [], supportNewPath: '/support/new' })
+    });
+  });
+  await page.route('**/api/ai/as-chat?**', async (route) => {
+    asChatRequestCount += 1;
+    await route.fulfill({ status: 404, contentType: 'application/json', body: '{}' });
+  });
+
+  await page.goto('/support/ai-chat');
+
+  await expect(page.getByText('연결된 AS 접수가 없습니다')).toBeVisible();
+  await expect(page.getByRole('link', { name: 'AS 접수 시작하기' })).toHaveAttribute('href', '/support/new');
+  await expect.poll(() => asChatRequestCount).toBe(0);
+  await expect(page.getByRole('button', { name: '전송' })).toBeDisabled();
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1)).toBe(true);
 });
 
 test('loads AS AI chat ticket id from query string', async ({ page }) => {

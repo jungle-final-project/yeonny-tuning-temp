@@ -1,0 +1,3317 @@
+[
+  {
+    "id": "surface-state-001",
+    "group": "AUTH_PROFILE_REDIRECT",
+    "profile": "BUILD_CHAT_54_MINI_FAST",
+    "routes": [
+      "/login",
+      "/my/profile"
+    ],
+    "interactionMode": "normal",
+    "viewport": "desktop",
+    "steps": [
+      {
+        "kind": "NAVIGATE_DECLARED_ROUTES"
+      },
+      {
+        "kind": "ASSERT_MAIN_VISIBLE"
+      },
+      {
+        "kind": "ASSERT_AUTH_REDIRECT"
+      },
+      {
+        "kind": "LOGIN"
+      },
+      {
+        "kind": "ASSERT_RETURN_PATH"
+      }
+    ],
+    "expectedInvariants": [
+      "NO_BLANK_PAGE",
+      "NO_UNHANDLED_CONSOLE_ERROR",
+      "NO_HORIZONTAL_OVERFLOW",
+      "ACCESS_CONTROL_VALID"
+    ],
+    "webReplay": true,
+    "risk": "HIGH"
+  },
+  {
+    "id": "surface-state-002",
+    "group": "AUTH_PROFILE_REDIRECT",
+    "profile": "BUILD_CHAT_54_MINI_FAST",
+    "routes": [
+      "/login",
+      "/my/profile"
+    ],
+    "interactionMode": "reload",
+    "viewport": "desktop",
+    "steps": [
+      {
+        "kind": "NAVIGATE_DECLARED_ROUTES"
+      },
+      {
+        "kind": "ASSERT_MAIN_VISIBLE"
+      },
+      {
+        "kind": "ASSERT_AUTH_REDIRECT"
+      },
+      {
+        "kind": "LOGIN"
+      },
+      {
+        "kind": "ASSERT_RETURN_PATH"
+      }
+    ],
+    "expectedInvariants": [
+      "NO_BLANK_PAGE",
+      "NO_UNHANDLED_CONSOLE_ERROR",
+      "NO_HORIZONTAL_OVERFLOW",
+      "ACCESS_CONTROL_VALID"
+    ],
+    "webReplay": true,
+    "risk": "HIGH"
+  },
+  {
+    "id": "surface-state-003",
+    "group": "AUTH_PROFILE_REDIRECT",
+    "profile": "BUILD_CHAT_54_MINI_FAST",
+    "routes": [
+      "/login",
+      "/my/profile"
+    ],
+    "interactionMode": "back-forward",
+    "viewport": "desktop",
+    "steps": [
+      {
+        "kind": "NAVIGATE_DECLARED_ROUTES"
+      },
+      {
+        "kind": "ASSERT_MAIN_VISIBLE"
+      },
+      {
+        "kind": "ASSERT_AUTH_REDIRECT"
+      },
+      {
+        "kind": "LOGIN"
+      },
+      {
+        "kind": "ASSERT_RETURN_PATH"
+      }
+    ],
+    "expectedInvariants": [
+      "NO_BLANK_PAGE",
+      "NO_UNHANDLED_CONSOLE_ERROR",
+      "NO_HORIZONTAL_OVERFLOW",
+      "ACCESS_CONTROL_VALID"
+    ],
+    "webReplay": true,
+    "risk": "HIGH"
+  },
+  {
+    "id": "surface-state-004",
+    "group": "AUTH_PROFILE_REDIRECT",
+    "profile": "BUILD_CHAT_54_MINI_FAST",
+    "routes": [
+      "/login",
+      "/my/profile"
+    ],
+    "interactionMode": "double-submit",
+    "viewport": "desktop",
+    "steps": [
+      {
+        "kind": "NAVIGATE_DECLARED_ROUTES"
+      },
+      {
+        "kind": "ASSERT_MAIN_VISIBLE"
+      },
+      {
+        "kind": "ASSERT_AUTH_REDIRECT"
+      },
+      {
+        "kind": "LOGIN"
+      },
+      {
+        "kind": "ASSERT_RETURN_PATH"
+      }
+    ],
+    "expectedInvariants": [
+      "NO_BLANK_PAGE",
+      "NO_UNHANDLED_CONSOLE_ERROR",
+      "NO_HORIZONTAL_OVERFLOW",
+      "ACCESS_CONTROL_VALID"
+    ],
+    "webReplay": true,
+    "risk": "MEDIUM"
+  },
+  {
+    "id": "surface-state-005",
+    "group": "AUTH_PROFILE_REDIRECT",
+    "profile": "BUILD_CHAT_54_MINI_FAST",
+    "routes": [
+      "/login",
+      "/my/profile"
+    ],
+    "interactionMode": "empty-state",
+    "viewport": "desktop",
+    "steps": [
+      {
+        "kind": "NAVIGATE_DECLARED_ROUTES"
+      },
+      {
+        "kind": "ASSERT_MAIN_VISIBLE"
+      },
+      {
+        "kind": "ASSERT_AUTH_REDIRECT"
+      },
+      {
+        "kind": "LOGIN"
+      },
+      {
+        "kind": "ASSERT_RETURN_PATH"
+      }
+    ],
+    "expectedInvariants": [
+      "NO_BLANK_PAGE",
+      "NO_UNHANDLED_CONSOLE_ERROR",
+      "NO_HORIZONTAL_OVERFLOW",
+      "ACCESS_CONTROL_VALID"
+    ],
+    "webReplay": true,
+    "risk": "MEDIUM"
+  },
+  {
+    "id": "surface-state-006",
+    "group": "AUTH_PROFILE_REDIRECT",
+    "profile": "BUILD_CHAT_54_MINI_FAST",
+    "routes": [
+      "/login",
+      "/my/profile"
+    ],
+    "interactionMode": "normal",
+    "viewport": "desktop",
+    "steps": [
+      {
+        "kind": "NAVIGATE_DECLARED_ROUTES"
+      },
+      {
+        "kind": "ASSERT_MAIN_VISIBLE"
+      },
+      {
+        "kind": "ASSERT_AUTH_REDIRECT"
+      },
+      {
+        "kind": "LOGIN"
+      },
+      {
+        "kind": "ASSERT_RETURN_PATH"
+      }
+    ],
+    "expectedInvariants": [
+      "NO_BLANK_PAGE",
+      "NO_UNHANDLED_CONSOLE_ERROR",
+      "NO_HORIZONTAL_OVERFLOW",
+      "ACCESS_CONTROL_VALID"
+    ],
+    "webReplay": true,
+    "risk": "MEDIUM"
+  },
+  {
+    "id": "surface-state-007",
+    "group": "AUTH_PROFILE_REDIRECT",
+    "profile": "BUILD_CHAT_54_MINI_FAST",
+    "routes": [
+      "/login",
+      "/my/profile"
+    ],
+    "interactionMode": "reload",
+    "viewport": "mobile",
+    "steps": [
+      {
+        "kind": "NAVIGATE_DECLARED_ROUTES"
+      },
+      {
+        "kind": "ASSERT_MAIN_VISIBLE"
+      },
+      {
+        "kind": "ASSERT_AUTH_REDIRECT"
+      },
+      {
+        "kind": "LOGIN"
+      },
+      {
+        "kind": "ASSERT_RETURN_PATH"
+      }
+    ],
+    "expectedInvariants": [
+      "NO_BLANK_PAGE",
+      "NO_UNHANDLED_CONSOLE_ERROR",
+      "NO_HORIZONTAL_OVERFLOW",
+      "ACCESS_CONTROL_VALID"
+    ],
+    "webReplay": true,
+    "risk": "MEDIUM"
+  },
+  {
+    "id": "surface-state-008",
+    "group": "AUTH_PROFILE_REDIRECT",
+    "profile": "BUILD_CHAT_54_MINI_FAST",
+    "routes": [
+      "/login",
+      "/my/profile"
+    ],
+    "interactionMode": "back-forward",
+    "viewport": "desktop",
+    "steps": [
+      {
+        "kind": "NAVIGATE_DECLARED_ROUTES"
+      },
+      {
+        "kind": "ASSERT_MAIN_VISIBLE"
+      },
+      {
+        "kind": "ASSERT_AUTH_REDIRECT"
+      },
+      {
+        "kind": "LOGIN"
+      },
+      {
+        "kind": "ASSERT_RETURN_PATH"
+      }
+    ],
+    "expectedInvariants": [
+      "NO_BLANK_PAGE",
+      "NO_UNHANDLED_CONSOLE_ERROR",
+      "NO_HORIZONTAL_OVERFLOW",
+      "ACCESS_CONTROL_VALID"
+    ],
+    "webReplay": true,
+    "risk": "MEDIUM"
+  },
+  {
+    "id": "surface-state-009",
+    "group": "AUTH_PROFILE_REDIRECT",
+    "profile": "BUILD_CHAT_54_MINI_FAST",
+    "routes": [
+      "/login",
+      "/my/profile"
+    ],
+    "interactionMode": "double-submit",
+    "viewport": "desktop",
+    "steps": [
+      {
+        "kind": "NAVIGATE_DECLARED_ROUTES"
+      },
+      {
+        "kind": "ASSERT_MAIN_VISIBLE"
+      },
+      {
+        "kind": "ASSERT_AUTH_REDIRECT"
+      },
+      {
+        "kind": "LOGIN"
+      },
+      {
+        "kind": "ASSERT_RETURN_PATH"
+      }
+    ],
+    "expectedInvariants": [
+      "NO_BLANK_PAGE",
+      "NO_UNHANDLED_CONSOLE_ERROR",
+      "NO_HORIZONTAL_OVERFLOW",
+      "ACCESS_CONTROL_VALID"
+    ],
+    "webReplay": true,
+    "risk": "MEDIUM"
+  },
+  {
+    "id": "surface-state-010",
+    "group": "AUTH_PROFILE_REDIRECT",
+    "profile": "BUILD_CHAT_54_MINI_FAST",
+    "routes": [
+      "/login",
+      "/my/profile"
+    ],
+    "interactionMode": "empty-state",
+    "viewport": "desktop",
+    "steps": [
+      {
+        "kind": "NAVIGATE_DECLARED_ROUTES"
+      },
+      {
+        "kind": "ASSERT_MAIN_VISIBLE"
+      },
+      {
+        "kind": "ASSERT_AUTH_REDIRECT"
+      },
+      {
+        "kind": "LOGIN"
+      },
+      {
+        "kind": "ASSERT_RETURN_PATH"
+      }
+    ],
+    "expectedInvariants": [
+      "NO_BLANK_PAGE",
+      "NO_UNHANDLED_CONSOLE_ERROR",
+      "NO_HORIZONTAL_OVERFLOW",
+      "ACCESS_CONTROL_VALID"
+    ],
+    "webReplay": true,
+    "risk": "MEDIUM"
+  },
+  {
+    "id": "surface-state-011",
+    "group": "HOME",
+    "profile": "BUILD_CHAT_54_MINI_FAST",
+    "routes": [
+      "/"
+    ],
+    "interactionMode": "normal",
+    "viewport": "desktop",
+    "steps": [
+      {
+        "kind": "NAVIGATE_DECLARED_ROUTES"
+      },
+      {
+        "kind": "ASSERT_MAIN_VISIBLE"
+      },
+      {
+        "kind": "ASSERT_HOME_RECOMMENDATIONS"
+      },
+      {
+        "kind": "OPEN_GLOBAL_ASSISTANT"
+      }
+    ],
+    "expectedInvariants": [
+      "NO_BLANK_PAGE",
+      "NO_UNHANDLED_CONSOLE_ERROR",
+      "NO_HORIZONTAL_OVERFLOW",
+      "ACCESS_CONTROL_VALID"
+    ],
+    "webReplay": true,
+    "risk": "HIGH"
+  },
+  {
+    "id": "surface-state-012",
+    "group": "HOME",
+    "profile": "BUILD_CHAT_54_MINI_FAST",
+    "routes": [
+      "/"
+    ],
+    "interactionMode": "reload",
+    "viewport": "desktop",
+    "steps": [
+      {
+        "kind": "NAVIGATE_DECLARED_ROUTES"
+      },
+      {
+        "kind": "ASSERT_MAIN_VISIBLE"
+      },
+      {
+        "kind": "ASSERT_HOME_RECOMMENDATIONS"
+      },
+      {
+        "kind": "OPEN_GLOBAL_ASSISTANT"
+      }
+    ],
+    "expectedInvariants": [
+      "NO_BLANK_PAGE",
+      "NO_UNHANDLED_CONSOLE_ERROR",
+      "NO_HORIZONTAL_OVERFLOW",
+      "ACCESS_CONTROL_VALID"
+    ],
+    "webReplay": true,
+    "risk": "HIGH"
+  },
+  {
+    "id": "surface-state-013",
+    "group": "HOME",
+    "profile": "BUILD_CHAT_54_MINI_FAST",
+    "routes": [
+      "/"
+    ],
+    "interactionMode": "back-forward",
+    "viewport": "desktop",
+    "steps": [
+      {
+        "kind": "NAVIGATE_DECLARED_ROUTES"
+      },
+      {
+        "kind": "ASSERT_MAIN_VISIBLE"
+      },
+      {
+        "kind": "ASSERT_HOME_RECOMMENDATIONS"
+      },
+      {
+        "kind": "OPEN_GLOBAL_ASSISTANT"
+      }
+    ],
+    "expectedInvariants": [
+      "NO_BLANK_PAGE",
+      "NO_UNHANDLED_CONSOLE_ERROR",
+      "NO_HORIZONTAL_OVERFLOW",
+      "ACCESS_CONTROL_VALID"
+    ],
+    "webReplay": true,
+    "risk": "HIGH"
+  },
+  {
+    "id": "surface-state-014",
+    "group": "HOME",
+    "profile": "BUILD_CHAT_54_MINI_FAST",
+    "routes": [
+      "/"
+    ],
+    "interactionMode": "double-submit",
+    "viewport": "desktop",
+    "steps": [
+      {
+        "kind": "NAVIGATE_DECLARED_ROUTES"
+      },
+      {
+        "kind": "ASSERT_MAIN_VISIBLE"
+      },
+      {
+        "kind": "ASSERT_HOME_RECOMMENDATIONS"
+      },
+      {
+        "kind": "OPEN_GLOBAL_ASSISTANT"
+      }
+    ],
+    "expectedInvariants": [
+      "NO_BLANK_PAGE",
+      "NO_UNHANDLED_CONSOLE_ERROR",
+      "NO_HORIZONTAL_OVERFLOW",
+      "ACCESS_CONTROL_VALID"
+    ],
+    "webReplay": true,
+    "risk": "MEDIUM"
+  },
+  {
+    "id": "surface-state-015",
+    "group": "HOME",
+    "profile": "BUILD_CHAT_54_MINI_FAST",
+    "routes": [
+      "/"
+    ],
+    "interactionMode": "empty-state",
+    "viewport": "desktop",
+    "steps": [
+      {
+        "kind": "NAVIGATE_DECLARED_ROUTES"
+      },
+      {
+        "kind": "ASSERT_MAIN_VISIBLE"
+      },
+      {
+        "kind": "ASSERT_HOME_RECOMMENDATIONS"
+      },
+      {
+        "kind": "OPEN_GLOBAL_ASSISTANT"
+      }
+    ],
+    "expectedInvariants": [
+      "NO_BLANK_PAGE",
+      "NO_UNHANDLED_CONSOLE_ERROR",
+      "NO_HORIZONTAL_OVERFLOW",
+      "ACCESS_CONTROL_VALID"
+    ],
+    "webReplay": true,
+    "risk": "MEDIUM"
+  },
+  {
+    "id": "surface-state-016",
+    "group": "HOME",
+    "profile": "BUILD_CHAT_54_MINI_FAST",
+    "routes": [
+      "/"
+    ],
+    "interactionMode": "normal",
+    "viewport": "desktop",
+    "steps": [
+      {
+        "kind": "NAVIGATE_DECLARED_ROUTES"
+      },
+      {
+        "kind": "ASSERT_MAIN_VISIBLE"
+      },
+      {
+        "kind": "ASSERT_HOME_RECOMMENDATIONS"
+      },
+      {
+        "kind": "OPEN_GLOBAL_ASSISTANT"
+      }
+    ],
+    "expectedInvariants": [
+      "NO_BLANK_PAGE",
+      "NO_UNHANDLED_CONSOLE_ERROR",
+      "NO_HORIZONTAL_OVERFLOW",
+      "ACCESS_CONTROL_VALID"
+    ],
+    "webReplay": true,
+    "risk": "MEDIUM"
+  },
+  {
+    "id": "surface-state-017",
+    "group": "HOME",
+    "profile": "BUILD_CHAT_54_MINI_FAST",
+    "routes": [
+      "/"
+    ],
+    "interactionMode": "reload",
+    "viewport": "mobile",
+    "steps": [
+      {
+        "kind": "NAVIGATE_DECLARED_ROUTES"
+      },
+      {
+        "kind": "ASSERT_MAIN_VISIBLE"
+      },
+      {
+        "kind": "ASSERT_HOME_RECOMMENDATIONS"
+      },
+      {
+        "kind": "OPEN_GLOBAL_ASSISTANT"
+      }
+    ],
+    "expectedInvariants": [
+      "NO_BLANK_PAGE",
+      "NO_UNHANDLED_CONSOLE_ERROR",
+      "NO_HORIZONTAL_OVERFLOW",
+      "ACCESS_CONTROL_VALID"
+    ],
+    "webReplay": true,
+    "risk": "MEDIUM"
+  },
+  {
+    "id": "surface-state-018",
+    "group": "HOME",
+    "profile": "BUILD_CHAT_54_MINI_FAST",
+    "routes": [
+      "/"
+    ],
+    "interactionMode": "back-forward",
+    "viewport": "desktop",
+    "steps": [
+      {
+        "kind": "NAVIGATE_DECLARED_ROUTES"
+      },
+      {
+        "kind": "ASSERT_MAIN_VISIBLE"
+      },
+      {
+        "kind": "ASSERT_HOME_RECOMMENDATIONS"
+      },
+      {
+        "kind": "OPEN_GLOBAL_ASSISTANT"
+      }
+    ],
+    "expectedInvariants": [
+      "NO_BLANK_PAGE",
+      "NO_UNHANDLED_CONSOLE_ERROR",
+      "NO_HORIZONTAL_OVERFLOW",
+      "ACCESS_CONTROL_VALID"
+    ],
+    "webReplay": true,
+    "risk": "MEDIUM"
+  },
+  {
+    "id": "surface-state-019",
+    "group": "HOME",
+    "profile": "BUILD_CHAT_54_MINI_FAST",
+    "routes": [
+      "/"
+    ],
+    "interactionMode": "double-submit",
+    "viewport": "desktop",
+    "steps": [
+      {
+        "kind": "NAVIGATE_DECLARED_ROUTES"
+      },
+      {
+        "kind": "ASSERT_MAIN_VISIBLE"
+      },
+      {
+        "kind": "ASSERT_HOME_RECOMMENDATIONS"
+      },
+      {
+        "kind": "OPEN_GLOBAL_ASSISTANT"
+      }
+    ],
+    "expectedInvariants": [
+      "NO_BLANK_PAGE",
+      "NO_UNHANDLED_CONSOLE_ERROR",
+      "NO_HORIZONTAL_OVERFLOW",
+      "ACCESS_CONTROL_VALID"
+    ],
+    "webReplay": true,
+    "risk": "MEDIUM"
+  },
+  {
+    "id": "surface-state-020",
+    "group": "HOME",
+    "profile": "BUILD_CHAT_54_MINI_FAST",
+    "routes": [
+      "/"
+    ],
+    "interactionMode": "empty-state",
+    "viewport": "desktop",
+    "steps": [
+      {
+        "kind": "NAVIGATE_DECLARED_ROUTES"
+      },
+      {
+        "kind": "ASSERT_MAIN_VISIBLE"
+      },
+      {
+        "kind": "ASSERT_HOME_RECOMMENDATIONS"
+      },
+      {
+        "kind": "OPEN_GLOBAL_ASSISTANT"
+      }
+    ],
+    "expectedInvariants": [
+      "NO_BLANK_PAGE",
+      "NO_UNHANDLED_CONSOLE_ERROR",
+      "NO_HORIZONTAL_OVERFLOW",
+      "ACCESS_CONTROL_VALID"
+    ],
+    "webReplay": true,
+    "risk": "MEDIUM"
+  },
+  {
+    "id": "surface-state-021",
+    "group": "SELF_QUOTE_TOOL",
+    "profile": "BUILD_CHAT_54_MINI_FAST",
+    "routes": [
+      "/self-quote"
+    ],
+    "interactionMode": "normal",
+    "viewport": "desktop",
+    "steps": [
+      {
+        "kind": "NAVIGATE_DECLARED_ROUTES"
+      },
+      {
+        "kind": "ASSERT_MAIN_VISIBLE"
+      },
+      {
+        "kind": "SELECT_CATEGORY",
+        "category": "CPU"
+      },
+      {
+        "kind": "ASSERT_TOOL_PANEL"
+      }
+    ],
+    "expectedInvariants": [
+      "NO_BLANK_PAGE",
+      "NO_UNHANDLED_CONSOLE_ERROR",
+      "NO_HORIZONTAL_OVERFLOW",
+      "ACCESS_CONTROL_VALID"
+    ],
+    "webReplay": true,
+    "risk": "HIGH"
+  },
+  {
+    "id": "surface-state-022",
+    "group": "SELF_QUOTE_TOOL",
+    "profile": "BUILD_CHAT_54_MINI_FAST",
+    "routes": [
+      "/self-quote"
+    ],
+    "interactionMode": "reload",
+    "viewport": "desktop",
+    "steps": [
+      {
+        "kind": "NAVIGATE_DECLARED_ROUTES"
+      },
+      {
+        "kind": "ASSERT_MAIN_VISIBLE"
+      },
+      {
+        "kind": "SELECT_CATEGORY",
+        "category": "GPU"
+      },
+      {
+        "kind": "ASSERT_TOOL_PANEL"
+      }
+    ],
+    "expectedInvariants": [
+      "NO_BLANK_PAGE",
+      "NO_UNHANDLED_CONSOLE_ERROR",
+      "NO_HORIZONTAL_OVERFLOW",
+      "ACCESS_CONTROL_VALID"
+    ],
+    "webReplay": true,
+    "risk": "HIGH"
+  },
+  {
+    "id": "surface-state-023",
+    "group": "SELF_QUOTE_TOOL",
+    "profile": "BUILD_CHAT_54_MINI_FAST",
+    "routes": [
+      "/self-quote"
+    ],
+    "interactionMode": "back-forward",
+    "viewport": "desktop",
+    "steps": [
+      {
+        "kind": "NAVIGATE_DECLARED_ROUTES"
+      },
+      {
+        "kind": "ASSERT_MAIN_VISIBLE"
+      },
+      {
+        "kind": "SELECT_CATEGORY",
+        "category": "RAM"
+      },
+      {
+        "kind": "ASSERT_TOOL_PANEL"
+      }
+    ],
+    "expectedInvariants": [
+      "NO_BLANK_PAGE",
+      "NO_UNHANDLED_CONSOLE_ERROR",
+      "NO_HORIZONTAL_OVERFLOW",
+      "ACCESS_CONTROL_VALID"
+    ],
+    "webReplay": true,
+    "risk": "HIGH"
+  },
+  {
+    "id": "surface-state-024",
+    "group": "SELF_QUOTE_TOOL",
+    "profile": "BUILD_CHAT_54_MINI_FAST",
+    "routes": [
+      "/self-quote"
+    ],
+    "interactionMode": "double-submit",
+    "viewport": "desktop",
+    "steps": [
+      {
+        "kind": "NAVIGATE_DECLARED_ROUTES"
+      },
+      {
+        "kind": "ASSERT_MAIN_VISIBLE"
+      },
+      {
+        "kind": "SELECT_CATEGORY",
+        "category": "CASE"
+      },
+      {
+        "kind": "ASSERT_TOOL_PANEL"
+      }
+    ],
+    "expectedInvariants": [
+      "NO_BLANK_PAGE",
+      "NO_UNHANDLED_CONSOLE_ERROR",
+      "NO_HORIZONTAL_OVERFLOW",
+      "ACCESS_CONTROL_VALID"
+    ],
+    "webReplay": true,
+    "risk": "HIGH"
+  },
+  {
+    "id": "surface-state-025",
+    "group": "SELF_QUOTE_TOOL",
+    "profile": "BUILD_CHAT_54_MINI_FAST",
+    "routes": [
+      "/self-quote"
+    ],
+    "interactionMode": "empty-state",
+    "viewport": "desktop",
+    "steps": [
+      {
+        "kind": "NAVIGATE_DECLARED_ROUTES"
+      },
+      {
+        "kind": "ASSERT_MAIN_VISIBLE"
+      },
+      {
+        "kind": "SELECT_CATEGORY",
+        "category": "CPU"
+      },
+      {
+        "kind": "ASSERT_TOOL_PANEL"
+      }
+    ],
+    "expectedInvariants": [
+      "NO_BLANK_PAGE",
+      "NO_UNHANDLED_CONSOLE_ERROR",
+      "NO_HORIZONTAL_OVERFLOW",
+      "ACCESS_CONTROL_VALID"
+    ],
+    "webReplay": true,
+    "risk": "HIGH"
+  },
+  {
+    "id": "surface-state-026",
+    "group": "SELF_QUOTE_TOOL",
+    "profile": "BUILD_CHAT_54_MINI_FAST",
+    "routes": [
+      "/self-quote"
+    ],
+    "interactionMode": "normal",
+    "viewport": "desktop",
+    "steps": [
+      {
+        "kind": "NAVIGATE_DECLARED_ROUTES"
+      },
+      {
+        "kind": "ASSERT_MAIN_VISIBLE"
+      },
+      {
+        "kind": "SELECT_CATEGORY",
+        "category": "GPU"
+      },
+      {
+        "kind": "ASSERT_TOOL_PANEL"
+      }
+    ],
+    "expectedInvariants": [
+      "NO_BLANK_PAGE",
+      "NO_UNHANDLED_CONSOLE_ERROR",
+      "NO_HORIZONTAL_OVERFLOW",
+      "ACCESS_CONTROL_VALID"
+    ],
+    "webReplay": true,
+    "risk": "MEDIUM"
+  },
+  {
+    "id": "surface-state-027",
+    "group": "SELF_QUOTE_TOOL",
+    "profile": "BUILD_CHAT_54_MINI_FAST",
+    "routes": [
+      "/self-quote"
+    ],
+    "interactionMode": "reload",
+    "viewport": "mobile",
+    "steps": [
+      {
+        "kind": "NAVIGATE_DECLARED_ROUTES"
+      },
+      {
+        "kind": "ASSERT_MAIN_VISIBLE"
+      },
+      {
+        "kind": "SELECT_CATEGORY",
+        "category": "RAM"
+      },
+      {
+        "kind": "ASSERT_TOOL_PANEL"
+      }
+    ],
+    "expectedInvariants": [
+      "NO_BLANK_PAGE",
+      "NO_UNHANDLED_CONSOLE_ERROR",
+      "NO_HORIZONTAL_OVERFLOW",
+      "ACCESS_CONTROL_VALID"
+    ],
+    "webReplay": true,
+    "risk": "MEDIUM"
+  },
+  {
+    "id": "surface-state-028",
+    "group": "SELF_QUOTE_TOOL",
+    "profile": "BUILD_CHAT_54_MINI_FAST",
+    "routes": [
+      "/self-quote"
+    ],
+    "interactionMode": "back-forward",
+    "viewport": "desktop",
+    "steps": [
+      {
+        "kind": "NAVIGATE_DECLARED_ROUTES"
+      },
+      {
+        "kind": "ASSERT_MAIN_VISIBLE"
+      },
+      {
+        "kind": "SELECT_CATEGORY",
+        "category": "CASE"
+      },
+      {
+        "kind": "ASSERT_TOOL_PANEL"
+      }
+    ],
+    "expectedInvariants": [
+      "NO_BLANK_PAGE",
+      "NO_UNHANDLED_CONSOLE_ERROR",
+      "NO_HORIZONTAL_OVERFLOW",
+      "ACCESS_CONTROL_VALID"
+    ],
+    "webReplay": true,
+    "risk": "MEDIUM"
+  },
+  {
+    "id": "surface-state-029",
+    "group": "SELF_QUOTE_TOOL",
+    "profile": "BUILD_CHAT_54_MINI_FAST",
+    "routes": [
+      "/self-quote"
+    ],
+    "interactionMode": "double-submit",
+    "viewport": "desktop",
+    "steps": [
+      {
+        "kind": "NAVIGATE_DECLARED_ROUTES"
+      },
+      {
+        "kind": "ASSERT_MAIN_VISIBLE"
+      },
+      {
+        "kind": "SELECT_CATEGORY",
+        "category": "CPU"
+      },
+      {
+        "kind": "ASSERT_TOOL_PANEL"
+      }
+    ],
+    "expectedInvariants": [
+      "NO_BLANK_PAGE",
+      "NO_UNHANDLED_CONSOLE_ERROR",
+      "NO_HORIZONTAL_OVERFLOW",
+      "ACCESS_CONTROL_VALID"
+    ],
+    "webReplay": true,
+    "risk": "MEDIUM"
+  },
+  {
+    "id": "surface-state-030",
+    "group": "SELF_QUOTE_TOOL",
+    "profile": "BUILD_CHAT_54_MINI_FAST",
+    "routes": [
+      "/self-quote"
+    ],
+    "interactionMode": "empty-state",
+    "viewport": "desktop",
+    "steps": [
+      {
+        "kind": "NAVIGATE_DECLARED_ROUTES"
+      },
+      {
+        "kind": "ASSERT_MAIN_VISIBLE"
+      },
+      {
+        "kind": "SELECT_CATEGORY",
+        "category": "GPU"
+      },
+      {
+        "kind": "ASSERT_TOOL_PANEL"
+      }
+    ],
+    "expectedInvariants": [
+      "NO_BLANK_PAGE",
+      "NO_UNHANDLED_CONSOLE_ERROR",
+      "NO_HORIZONTAL_OVERFLOW",
+      "ACCESS_CONTROL_VALID"
+    ],
+    "webReplay": true,
+    "risk": "MEDIUM"
+  },
+  {
+    "id": "surface-state-031",
+    "group": "SELF_QUOTE_TOOL",
+    "profile": "BUILD_CHAT_54_MINI_FAST",
+    "routes": [
+      "/self-quote"
+    ],
+    "interactionMode": "normal",
+    "viewport": "desktop",
+    "steps": [
+      {
+        "kind": "NAVIGATE_DECLARED_ROUTES"
+      },
+      {
+        "kind": "ASSERT_MAIN_VISIBLE"
+      },
+      {
+        "kind": "SELECT_CATEGORY",
+        "category": "RAM"
+      },
+      {
+        "kind": "ASSERT_TOOL_PANEL"
+      }
+    ],
+    "expectedInvariants": [
+      "NO_BLANK_PAGE",
+      "NO_UNHANDLED_CONSOLE_ERROR",
+      "NO_HORIZONTAL_OVERFLOW",
+      "ACCESS_CONTROL_VALID"
+    ],
+    "webReplay": true,
+    "risk": "MEDIUM"
+  },
+  {
+    "id": "surface-state-032",
+    "group": "SELF_QUOTE_TOOL",
+    "profile": "BUILD_CHAT_54_MINI_FAST",
+    "routes": [
+      "/self-quote"
+    ],
+    "interactionMode": "reload",
+    "viewport": "desktop",
+    "steps": [
+      {
+        "kind": "NAVIGATE_DECLARED_ROUTES"
+      },
+      {
+        "kind": "ASSERT_MAIN_VISIBLE"
+      },
+      {
+        "kind": "SELECT_CATEGORY",
+        "category": "CASE"
+      },
+      {
+        "kind": "ASSERT_TOOL_PANEL"
+      }
+    ],
+    "expectedInvariants": [
+      "NO_BLANK_PAGE",
+      "NO_UNHANDLED_CONSOLE_ERROR",
+      "NO_HORIZONTAL_OVERFLOW",
+      "ACCESS_CONTROL_VALID"
+    ],
+    "webReplay": true,
+    "risk": "MEDIUM"
+  },
+  {
+    "id": "surface-state-033",
+    "group": "SELF_QUOTE_TOOL",
+    "profile": "BUILD_CHAT_54_MINI_FAST",
+    "routes": [
+      "/self-quote"
+    ],
+    "interactionMode": "back-forward",
+    "viewport": "desktop",
+    "steps": [
+      {
+        "kind": "NAVIGATE_DECLARED_ROUTES"
+      },
+      {
+        "kind": "ASSERT_MAIN_VISIBLE"
+      },
+      {
+        "kind": "SELECT_CATEGORY",
+        "category": "CPU"
+      },
+      {
+        "kind": "ASSERT_TOOL_PANEL"
+      }
+    ],
+    "expectedInvariants": [
+      "NO_BLANK_PAGE",
+      "NO_UNHANDLED_CONSOLE_ERROR",
+      "NO_HORIZONTAL_OVERFLOW",
+      "ACCESS_CONTROL_VALID"
+    ],
+    "webReplay": true,
+    "risk": "MEDIUM"
+  },
+  {
+    "id": "surface-state-034",
+    "group": "SELF_QUOTE_TOOL",
+    "profile": "BUILD_CHAT_54_MINI_FAST",
+    "routes": [
+      "/self-quote"
+    ],
+    "interactionMode": "double-submit",
+    "viewport": "mobile",
+    "steps": [
+      {
+        "kind": "NAVIGATE_DECLARED_ROUTES"
+      },
+      {
+        "kind": "ASSERT_MAIN_VISIBLE"
+      },
+      {
+        "kind": "SELECT_CATEGORY",
+        "category": "GPU"
+      },
+      {
+        "kind": "ASSERT_TOOL_PANEL"
+      }
+    ],
+    "expectedInvariants": [
+      "NO_BLANK_PAGE",
+      "NO_UNHANDLED_CONSOLE_ERROR",
+      "NO_HORIZONTAL_OVERFLOW",
+      "ACCESS_CONTROL_VALID"
+    ],
+    "webReplay": true,
+    "risk": "MEDIUM"
+  },
+  {
+    "id": "surface-state-035",
+    "group": "SELF_QUOTE_TOOL",
+    "profile": "BUILD_CHAT_54_MINI_FAST",
+    "routes": [
+      "/self-quote"
+    ],
+    "interactionMode": "empty-state",
+    "viewport": "desktop",
+    "steps": [
+      {
+        "kind": "NAVIGATE_DECLARED_ROUTES"
+      },
+      {
+        "kind": "ASSERT_MAIN_VISIBLE"
+      },
+      {
+        "kind": "SELECT_CATEGORY",
+        "category": "RAM"
+      },
+      {
+        "kind": "ASSERT_TOOL_PANEL"
+      }
+    ],
+    "expectedInvariants": [
+      "NO_BLANK_PAGE",
+      "NO_UNHANDLED_CONSOLE_ERROR",
+      "NO_HORIZONTAL_OVERFLOW",
+      "ACCESS_CONTROL_VALID"
+    ],
+    "webReplay": true,
+    "risk": "MEDIUM"
+  },
+  {
+    "id": "surface-state-036",
+    "group": "PART_DETAIL_PRICE",
+    "profile": "BUILD_CHAT_54_MINI_FAST",
+    "routes": [
+      "/self-quote",
+      "/parts/{activePartId}"
+    ],
+    "interactionMode": "normal",
+    "viewport": "desktop",
+    "steps": [
+      {
+        "kind": "NAVIGATE_DECLARED_ROUTES"
+      },
+      {
+        "kind": "ASSERT_MAIN_VISIBLE"
+      },
+      {
+        "kind": "OPEN_ACTIVE_PART"
+      },
+      {
+        "kind": "ASSERT_PRICE_AND_SPECS"
+      }
+    ],
+    "expectedInvariants": [
+      "NO_BLANK_PAGE",
+      "NO_UNHANDLED_CONSOLE_ERROR",
+      "NO_HORIZONTAL_OVERFLOW",
+      "ACCESS_CONTROL_VALID"
+    ],
+    "webReplay": true,
+    "risk": "HIGH"
+  },
+  {
+    "id": "surface-state-037",
+    "group": "PART_DETAIL_PRICE",
+    "profile": "BUILD_CHAT_54_MINI_FAST",
+    "routes": [
+      "/self-quote",
+      "/parts/{activePartId}"
+    ],
+    "interactionMode": "reload",
+    "viewport": "desktop",
+    "steps": [
+      {
+        "kind": "NAVIGATE_DECLARED_ROUTES"
+      },
+      {
+        "kind": "ASSERT_MAIN_VISIBLE"
+      },
+      {
+        "kind": "OPEN_ACTIVE_PART"
+      },
+      {
+        "kind": "ASSERT_PRICE_AND_SPECS"
+      }
+    ],
+    "expectedInvariants": [
+      "NO_BLANK_PAGE",
+      "NO_UNHANDLED_CONSOLE_ERROR",
+      "NO_HORIZONTAL_OVERFLOW",
+      "ACCESS_CONTROL_VALID"
+    ],
+    "webReplay": true,
+    "risk": "HIGH"
+  },
+  {
+    "id": "surface-state-038",
+    "group": "PART_DETAIL_PRICE",
+    "profile": "BUILD_CHAT_54_MINI_FAST",
+    "routes": [
+      "/self-quote",
+      "/parts/{activePartId}"
+    ],
+    "interactionMode": "back-forward",
+    "viewport": "desktop",
+    "steps": [
+      {
+        "kind": "NAVIGATE_DECLARED_ROUTES"
+      },
+      {
+        "kind": "ASSERT_MAIN_VISIBLE"
+      },
+      {
+        "kind": "OPEN_ACTIVE_PART"
+      },
+      {
+        "kind": "ASSERT_PRICE_AND_SPECS"
+      }
+    ],
+    "expectedInvariants": [
+      "NO_BLANK_PAGE",
+      "NO_UNHANDLED_CONSOLE_ERROR",
+      "NO_HORIZONTAL_OVERFLOW",
+      "ACCESS_CONTROL_VALID"
+    ],
+    "webReplay": true,
+    "risk": "HIGH"
+  },
+  {
+    "id": "surface-state-039",
+    "group": "PART_DETAIL_PRICE",
+    "profile": "BUILD_CHAT_54_MINI_FAST",
+    "routes": [
+      "/self-quote",
+      "/parts/{activePartId}"
+    ],
+    "interactionMode": "double-submit",
+    "viewport": "desktop",
+    "steps": [
+      {
+        "kind": "NAVIGATE_DECLARED_ROUTES"
+      },
+      {
+        "kind": "ASSERT_MAIN_VISIBLE"
+      },
+      {
+        "kind": "OPEN_ACTIVE_PART"
+      },
+      {
+        "kind": "ASSERT_PRICE_AND_SPECS"
+      }
+    ],
+    "expectedInvariants": [
+      "NO_BLANK_PAGE",
+      "NO_UNHANDLED_CONSOLE_ERROR",
+      "NO_HORIZONTAL_OVERFLOW",
+      "ACCESS_CONTROL_VALID"
+    ],
+    "webReplay": true,
+    "risk": "MEDIUM"
+  },
+  {
+    "id": "surface-state-040",
+    "group": "PART_DETAIL_PRICE",
+    "profile": "BUILD_CHAT_54_MINI_FAST",
+    "routes": [
+      "/self-quote",
+      "/parts/{activePartId}"
+    ],
+    "interactionMode": "empty-state",
+    "viewport": "desktop",
+    "steps": [
+      {
+        "kind": "NAVIGATE_DECLARED_ROUTES"
+      },
+      {
+        "kind": "ASSERT_MAIN_VISIBLE"
+      },
+      {
+        "kind": "OPEN_ACTIVE_PART"
+      },
+      {
+        "kind": "ASSERT_PRICE_AND_SPECS"
+      }
+    ],
+    "expectedInvariants": [
+      "NO_BLANK_PAGE",
+      "NO_UNHANDLED_CONSOLE_ERROR",
+      "NO_HORIZONTAL_OVERFLOW",
+      "ACCESS_CONTROL_VALID"
+    ],
+    "webReplay": true,
+    "risk": "MEDIUM"
+  },
+  {
+    "id": "surface-state-041",
+    "group": "PART_DETAIL_PRICE",
+    "profile": "BUILD_CHAT_54_MINI_FAST",
+    "routes": [
+      "/self-quote",
+      "/parts/{activePartId}"
+    ],
+    "interactionMode": "normal",
+    "viewport": "desktop",
+    "steps": [
+      {
+        "kind": "NAVIGATE_DECLARED_ROUTES"
+      },
+      {
+        "kind": "ASSERT_MAIN_VISIBLE"
+      },
+      {
+        "kind": "OPEN_ACTIVE_PART"
+      },
+      {
+        "kind": "ASSERT_PRICE_AND_SPECS"
+      }
+    ],
+    "expectedInvariants": [
+      "NO_BLANK_PAGE",
+      "NO_UNHANDLED_CONSOLE_ERROR",
+      "NO_HORIZONTAL_OVERFLOW",
+      "ACCESS_CONTROL_VALID"
+    ],
+    "webReplay": true,
+    "risk": "MEDIUM"
+  },
+  {
+    "id": "surface-state-042",
+    "group": "PART_DETAIL_PRICE",
+    "profile": "BUILD_CHAT_54_MINI_FAST",
+    "routes": [
+      "/self-quote",
+      "/parts/{activePartId}"
+    ],
+    "interactionMode": "reload",
+    "viewport": "mobile",
+    "steps": [
+      {
+        "kind": "NAVIGATE_DECLARED_ROUTES"
+      },
+      {
+        "kind": "ASSERT_MAIN_VISIBLE"
+      },
+      {
+        "kind": "OPEN_ACTIVE_PART"
+      },
+      {
+        "kind": "ASSERT_PRICE_AND_SPECS"
+      }
+    ],
+    "expectedInvariants": [
+      "NO_BLANK_PAGE",
+      "NO_UNHANDLED_CONSOLE_ERROR",
+      "NO_HORIZONTAL_OVERFLOW",
+      "ACCESS_CONTROL_VALID"
+    ],
+    "webReplay": true,
+    "risk": "MEDIUM"
+  },
+  {
+    "id": "surface-state-043",
+    "group": "PART_DETAIL_PRICE",
+    "profile": "BUILD_CHAT_54_MINI_FAST",
+    "routes": [
+      "/self-quote",
+      "/parts/{activePartId}"
+    ],
+    "interactionMode": "back-forward",
+    "viewport": "desktop",
+    "steps": [
+      {
+        "kind": "NAVIGATE_DECLARED_ROUTES"
+      },
+      {
+        "kind": "ASSERT_MAIN_VISIBLE"
+      },
+      {
+        "kind": "OPEN_ACTIVE_PART"
+      },
+      {
+        "kind": "ASSERT_PRICE_AND_SPECS"
+      }
+    ],
+    "expectedInvariants": [
+      "NO_BLANK_PAGE",
+      "NO_UNHANDLED_CONSOLE_ERROR",
+      "NO_HORIZONTAL_OVERFLOW",
+      "ACCESS_CONTROL_VALID"
+    ],
+    "webReplay": true,
+    "risk": "MEDIUM"
+  },
+  {
+    "id": "surface-state-044",
+    "group": "PART_DETAIL_PRICE",
+    "profile": "BUILD_CHAT_54_MINI_FAST",
+    "routes": [
+      "/self-quote",
+      "/parts/{activePartId}"
+    ],
+    "interactionMode": "double-submit",
+    "viewport": "desktop",
+    "steps": [
+      {
+        "kind": "NAVIGATE_DECLARED_ROUTES"
+      },
+      {
+        "kind": "ASSERT_MAIN_VISIBLE"
+      },
+      {
+        "kind": "OPEN_ACTIVE_PART"
+      },
+      {
+        "kind": "ASSERT_PRICE_AND_SPECS"
+      }
+    ],
+    "expectedInvariants": [
+      "NO_BLANK_PAGE",
+      "NO_UNHANDLED_CONSOLE_ERROR",
+      "NO_HORIZONTAL_OVERFLOW",
+      "ACCESS_CONTROL_VALID"
+    ],
+    "webReplay": true,
+    "risk": "MEDIUM"
+  },
+  {
+    "id": "surface-state-045",
+    "group": "PART_DETAIL_PRICE",
+    "profile": "BUILD_CHAT_54_MINI_FAST",
+    "routes": [
+      "/self-quote",
+      "/parts/{activePartId}"
+    ],
+    "interactionMode": "empty-state",
+    "viewport": "desktop",
+    "steps": [
+      {
+        "kind": "NAVIGATE_DECLARED_ROUTES"
+      },
+      {
+        "kind": "ASSERT_MAIN_VISIBLE"
+      },
+      {
+        "kind": "OPEN_ACTIVE_PART"
+      },
+      {
+        "kind": "ASSERT_PRICE_AND_SPECS"
+      }
+    ],
+    "expectedInvariants": [
+      "NO_BLANK_PAGE",
+      "NO_UNHANDLED_CONSOLE_ERROR",
+      "NO_HORIZONTAL_OVERFLOW",
+      "ACCESS_CONTROL_VALID"
+    ],
+    "webReplay": true,
+    "risk": "MEDIUM"
+  },
+  {
+    "id": "surface-state-046",
+    "group": "CHECKOUT_ASSEMBLY",
+    "profile": "BUILD_CHAT_54_MINI_FAST",
+    "routes": [
+      "/checkout",
+      "/my/assembly-requests"
+    ],
+    "interactionMode": "normal",
+    "viewport": "desktop",
+    "steps": [
+      {
+        "kind": "NAVIGATE_DECLARED_ROUTES"
+      },
+      {
+        "kind": "ASSERT_MAIN_VISIBLE"
+      },
+      {
+        "kind": "ASSERT_CHECKOUT_FORM"
+      },
+      {
+        "kind": "ASSERT_ASSEMBLY_ENTRY"
+      }
+    ],
+    "expectedInvariants": [
+      "NO_BLANK_PAGE",
+      "NO_UNHANDLED_CONSOLE_ERROR",
+      "NO_HORIZONTAL_OVERFLOW",
+      "ACCESS_CONTROL_VALID"
+    ],
+    "webReplay": true,
+    "risk": "HIGH"
+  },
+  {
+    "id": "surface-state-047",
+    "group": "CHECKOUT_ASSEMBLY",
+    "profile": "BUILD_CHAT_54_MINI_FAST",
+    "routes": [
+      "/checkout",
+      "/my/assembly-requests"
+    ],
+    "interactionMode": "reload",
+    "viewport": "desktop",
+    "steps": [
+      {
+        "kind": "NAVIGATE_DECLARED_ROUTES"
+      },
+      {
+        "kind": "ASSERT_MAIN_VISIBLE"
+      },
+      {
+        "kind": "ASSERT_CHECKOUT_FORM"
+      },
+      {
+        "kind": "ASSERT_ASSEMBLY_ENTRY"
+      }
+    ],
+    "expectedInvariants": [
+      "NO_BLANK_PAGE",
+      "NO_UNHANDLED_CONSOLE_ERROR",
+      "NO_HORIZONTAL_OVERFLOW",
+      "ACCESS_CONTROL_VALID"
+    ],
+    "webReplay": true,
+    "risk": "HIGH"
+  },
+  {
+    "id": "surface-state-048",
+    "group": "CHECKOUT_ASSEMBLY",
+    "profile": "BUILD_CHAT_54_MINI_FAST",
+    "routes": [
+      "/checkout",
+      "/my/assembly-requests"
+    ],
+    "interactionMode": "back-forward",
+    "viewport": "desktop",
+    "steps": [
+      {
+        "kind": "NAVIGATE_DECLARED_ROUTES"
+      },
+      {
+        "kind": "ASSERT_MAIN_VISIBLE"
+      },
+      {
+        "kind": "ASSERT_CHECKOUT_FORM"
+      },
+      {
+        "kind": "ASSERT_ASSEMBLY_ENTRY"
+      }
+    ],
+    "expectedInvariants": [
+      "NO_BLANK_PAGE",
+      "NO_UNHANDLED_CONSOLE_ERROR",
+      "NO_HORIZONTAL_OVERFLOW",
+      "ACCESS_CONTROL_VALID"
+    ],
+    "webReplay": true,
+    "risk": "HIGH"
+  },
+  {
+    "id": "surface-state-049",
+    "group": "CHECKOUT_ASSEMBLY",
+    "profile": "BUILD_CHAT_54_MINI_FAST",
+    "routes": [
+      "/checkout",
+      "/my/assembly-requests"
+    ],
+    "interactionMode": "double-submit",
+    "viewport": "desktop",
+    "steps": [
+      {
+        "kind": "NAVIGATE_DECLARED_ROUTES"
+      },
+      {
+        "kind": "ASSERT_MAIN_VISIBLE"
+      },
+      {
+        "kind": "ASSERT_CHECKOUT_FORM"
+      },
+      {
+        "kind": "ASSERT_ASSEMBLY_ENTRY"
+      }
+    ],
+    "expectedInvariants": [
+      "NO_BLANK_PAGE",
+      "NO_UNHANDLED_CONSOLE_ERROR",
+      "NO_HORIZONTAL_OVERFLOW",
+      "ACCESS_CONTROL_VALID"
+    ],
+    "webReplay": true,
+    "risk": "HIGH"
+  },
+  {
+    "id": "surface-state-050",
+    "group": "CHECKOUT_ASSEMBLY",
+    "profile": "BUILD_CHAT_54_MINI_FAST",
+    "routes": [
+      "/checkout",
+      "/my/assembly-requests"
+    ],
+    "interactionMode": "empty-state",
+    "viewport": "desktop",
+    "steps": [
+      {
+        "kind": "NAVIGATE_DECLARED_ROUTES"
+      },
+      {
+        "kind": "ASSERT_MAIN_VISIBLE"
+      },
+      {
+        "kind": "ASSERT_CHECKOUT_FORM"
+      },
+      {
+        "kind": "ASSERT_ASSEMBLY_ENTRY"
+      }
+    ],
+    "expectedInvariants": [
+      "NO_BLANK_PAGE",
+      "NO_UNHANDLED_CONSOLE_ERROR",
+      "NO_HORIZONTAL_OVERFLOW",
+      "ACCESS_CONTROL_VALID"
+    ],
+    "webReplay": true,
+    "risk": "HIGH"
+  },
+  {
+    "id": "surface-state-051",
+    "group": "CHECKOUT_ASSEMBLY",
+    "profile": "BUILD_CHAT_54_MINI_FAST",
+    "routes": [
+      "/checkout",
+      "/my/assembly-requests"
+    ],
+    "interactionMode": "normal",
+    "viewport": "desktop",
+    "steps": [
+      {
+        "kind": "NAVIGATE_DECLARED_ROUTES"
+      },
+      {
+        "kind": "ASSERT_MAIN_VISIBLE"
+      },
+      {
+        "kind": "ASSERT_CHECKOUT_FORM"
+      },
+      {
+        "kind": "ASSERT_ASSEMBLY_ENTRY"
+      }
+    ],
+    "expectedInvariants": [
+      "NO_BLANK_PAGE",
+      "NO_UNHANDLED_CONSOLE_ERROR",
+      "NO_HORIZONTAL_OVERFLOW",
+      "ACCESS_CONTROL_VALID"
+    ],
+    "webReplay": true,
+    "risk": "MEDIUM"
+  },
+  {
+    "id": "surface-state-052",
+    "group": "CHECKOUT_ASSEMBLY",
+    "profile": "BUILD_CHAT_54_MINI_FAST",
+    "routes": [
+      "/checkout",
+      "/my/assembly-requests"
+    ],
+    "interactionMode": "reload",
+    "viewport": "mobile",
+    "steps": [
+      {
+        "kind": "NAVIGATE_DECLARED_ROUTES"
+      },
+      {
+        "kind": "ASSERT_MAIN_VISIBLE"
+      },
+      {
+        "kind": "ASSERT_CHECKOUT_FORM"
+      },
+      {
+        "kind": "ASSERT_ASSEMBLY_ENTRY"
+      }
+    ],
+    "expectedInvariants": [
+      "NO_BLANK_PAGE",
+      "NO_UNHANDLED_CONSOLE_ERROR",
+      "NO_HORIZONTAL_OVERFLOW",
+      "ACCESS_CONTROL_VALID"
+    ],
+    "webReplay": true,
+    "risk": "MEDIUM"
+  },
+  {
+    "id": "surface-state-053",
+    "group": "CHECKOUT_ASSEMBLY",
+    "profile": "BUILD_CHAT_54_MINI_FAST",
+    "routes": [
+      "/checkout",
+      "/my/assembly-requests"
+    ],
+    "interactionMode": "back-forward",
+    "viewport": "desktop",
+    "steps": [
+      {
+        "kind": "NAVIGATE_DECLARED_ROUTES"
+      },
+      {
+        "kind": "ASSERT_MAIN_VISIBLE"
+      },
+      {
+        "kind": "ASSERT_CHECKOUT_FORM"
+      },
+      {
+        "kind": "ASSERT_ASSEMBLY_ENTRY"
+      }
+    ],
+    "expectedInvariants": [
+      "NO_BLANK_PAGE",
+      "NO_UNHANDLED_CONSOLE_ERROR",
+      "NO_HORIZONTAL_OVERFLOW",
+      "ACCESS_CONTROL_VALID"
+    ],
+    "webReplay": true,
+    "risk": "MEDIUM"
+  },
+  {
+    "id": "surface-state-054",
+    "group": "CHECKOUT_ASSEMBLY",
+    "profile": "BUILD_CHAT_54_MINI_FAST",
+    "routes": [
+      "/checkout",
+      "/my/assembly-requests"
+    ],
+    "interactionMode": "double-submit",
+    "viewport": "desktop",
+    "steps": [
+      {
+        "kind": "NAVIGATE_DECLARED_ROUTES"
+      },
+      {
+        "kind": "ASSERT_MAIN_VISIBLE"
+      },
+      {
+        "kind": "ASSERT_CHECKOUT_FORM"
+      },
+      {
+        "kind": "ASSERT_ASSEMBLY_ENTRY"
+      }
+    ],
+    "expectedInvariants": [
+      "NO_BLANK_PAGE",
+      "NO_UNHANDLED_CONSOLE_ERROR",
+      "NO_HORIZONTAL_OVERFLOW",
+      "ACCESS_CONTROL_VALID"
+    ],
+    "webReplay": true,
+    "risk": "MEDIUM"
+  },
+  {
+    "id": "surface-state-055",
+    "group": "CHECKOUT_ASSEMBLY",
+    "profile": "BUILD_CHAT_54_MINI_FAST",
+    "routes": [
+      "/checkout",
+      "/my/assembly-requests"
+    ],
+    "interactionMode": "empty-state",
+    "viewport": "desktop",
+    "steps": [
+      {
+        "kind": "NAVIGATE_DECLARED_ROUTES"
+      },
+      {
+        "kind": "ASSERT_MAIN_VISIBLE"
+      },
+      {
+        "kind": "ASSERT_CHECKOUT_FORM"
+      },
+      {
+        "kind": "ASSERT_ASSEMBLY_ENTRY"
+      }
+    ],
+    "expectedInvariants": [
+      "NO_BLANK_PAGE",
+      "NO_UNHANDLED_CONSOLE_ERROR",
+      "NO_HORIZONTAL_OVERFLOW",
+      "ACCESS_CONTROL_VALID"
+    ],
+    "webReplay": true,
+    "risk": "MEDIUM"
+  },
+  {
+    "id": "surface-state-056",
+    "group": "CHECKOUT_ASSEMBLY",
+    "profile": "BUILD_CHAT_54_MINI_FAST",
+    "routes": [
+      "/checkout",
+      "/my/assembly-requests"
+    ],
+    "interactionMode": "normal",
+    "viewport": "desktop",
+    "steps": [
+      {
+        "kind": "NAVIGATE_DECLARED_ROUTES"
+      },
+      {
+        "kind": "ASSERT_MAIN_VISIBLE"
+      },
+      {
+        "kind": "ASSERT_CHECKOUT_FORM"
+      },
+      {
+        "kind": "ASSERT_ASSEMBLY_ENTRY"
+      }
+    ],
+    "expectedInvariants": [
+      "NO_BLANK_PAGE",
+      "NO_UNHANDLED_CONSOLE_ERROR",
+      "NO_HORIZONTAL_OVERFLOW",
+      "ACCESS_CONTROL_VALID"
+    ],
+    "webReplay": true,
+    "risk": "MEDIUM"
+  },
+  {
+    "id": "surface-state-057",
+    "group": "CHECKOUT_ASSEMBLY",
+    "profile": "BUILD_CHAT_54_MINI_FAST",
+    "routes": [
+      "/checkout",
+      "/my/assembly-requests"
+    ],
+    "interactionMode": "reload",
+    "viewport": "desktop",
+    "steps": [
+      {
+        "kind": "NAVIGATE_DECLARED_ROUTES"
+      },
+      {
+        "kind": "ASSERT_MAIN_VISIBLE"
+      },
+      {
+        "kind": "ASSERT_CHECKOUT_FORM"
+      },
+      {
+        "kind": "ASSERT_ASSEMBLY_ENTRY"
+      }
+    ],
+    "expectedInvariants": [
+      "NO_BLANK_PAGE",
+      "NO_UNHANDLED_CONSOLE_ERROR",
+      "NO_HORIZONTAL_OVERFLOW",
+      "ACCESS_CONTROL_VALID"
+    ],
+    "webReplay": true,
+    "risk": "MEDIUM"
+  },
+  {
+    "id": "surface-state-058",
+    "group": "CHECKOUT_ASSEMBLY",
+    "profile": "BUILD_CHAT_54_MINI_FAST",
+    "routes": [
+      "/checkout",
+      "/my/assembly-requests"
+    ],
+    "interactionMode": "back-forward",
+    "viewport": "desktop",
+    "steps": [
+      {
+        "kind": "NAVIGATE_DECLARED_ROUTES"
+      },
+      {
+        "kind": "ASSERT_MAIN_VISIBLE"
+      },
+      {
+        "kind": "ASSERT_CHECKOUT_FORM"
+      },
+      {
+        "kind": "ASSERT_ASSEMBLY_ENTRY"
+      }
+    ],
+    "expectedInvariants": [
+      "NO_BLANK_PAGE",
+      "NO_UNHANDLED_CONSOLE_ERROR",
+      "NO_HORIZONTAL_OVERFLOW",
+      "ACCESS_CONTROL_VALID"
+    ],
+    "webReplay": true,
+    "risk": "MEDIUM"
+  },
+  {
+    "id": "surface-state-059",
+    "group": "CHECKOUT_ASSEMBLY",
+    "profile": "BUILD_CHAT_54_MINI_FAST",
+    "routes": [
+      "/checkout",
+      "/my/assembly-requests"
+    ],
+    "interactionMode": "double-submit",
+    "viewport": "mobile",
+    "steps": [
+      {
+        "kind": "NAVIGATE_DECLARED_ROUTES"
+      },
+      {
+        "kind": "ASSERT_MAIN_VISIBLE"
+      },
+      {
+        "kind": "ASSERT_CHECKOUT_FORM"
+      },
+      {
+        "kind": "ASSERT_ASSEMBLY_ENTRY"
+      }
+    ],
+    "expectedInvariants": [
+      "NO_BLANK_PAGE",
+      "NO_UNHANDLED_CONSOLE_ERROR",
+      "NO_HORIZONTAL_OVERFLOW",
+      "ACCESS_CONTROL_VALID"
+    ],
+    "webReplay": true,
+    "risk": "MEDIUM"
+  },
+  {
+    "id": "surface-state-060",
+    "group": "CHECKOUT_ASSEMBLY",
+    "profile": "BUILD_CHAT_54_MINI_FAST",
+    "routes": [
+      "/checkout",
+      "/my/assembly-requests"
+    ],
+    "interactionMode": "empty-state",
+    "viewport": "desktop",
+    "steps": [
+      {
+        "kind": "NAVIGATE_DECLARED_ROUTES"
+      },
+      {
+        "kind": "ASSERT_MAIN_VISIBLE"
+      },
+      {
+        "kind": "ASSERT_CHECKOUT_FORM"
+      },
+      {
+        "kind": "ASSERT_ASSEMBLY_ENTRY"
+      }
+    ],
+    "expectedInvariants": [
+      "NO_BLANK_PAGE",
+      "NO_UNHANDLED_CONSOLE_ERROR",
+      "NO_HORIZONTAL_OVERFLOW",
+      "ACCESS_CONTROL_VALID"
+    ],
+    "webReplay": true,
+    "risk": "MEDIUM"
+  },
+  {
+    "id": "surface-state-061",
+    "group": "TECHNICIAN_PORTAL",
+    "profile": "BUILD_CHAT_54_MINI_FAST",
+    "routes": [
+      "/technician",
+      "/technician/jobs"
+    ],
+    "interactionMode": "normal",
+    "viewport": "desktop",
+    "steps": [
+      {
+        "kind": "NAVIGATE_DECLARED_ROUTES"
+      },
+      {
+        "kind": "ASSERT_MAIN_VISIBLE"
+      },
+      {
+        "kind": "ASSERT_TECHNICIAN_STATE"
+      },
+      {
+        "kind": "ASSERT_NO_SHOPPING_WIDGET"
+      }
+    ],
+    "expectedInvariants": [
+      "NO_BLANK_PAGE",
+      "NO_UNHANDLED_CONSOLE_ERROR",
+      "NO_HORIZONTAL_OVERFLOW",
+      "ACCESS_CONTROL_VALID"
+    ],
+    "webReplay": true,
+    "risk": "HIGH"
+  },
+  {
+    "id": "surface-state-062",
+    "group": "TECHNICIAN_PORTAL",
+    "profile": "BUILD_CHAT_54_MINI_FAST",
+    "routes": [
+      "/technician",
+      "/technician/jobs"
+    ],
+    "interactionMode": "reload",
+    "viewport": "desktop",
+    "steps": [
+      {
+        "kind": "NAVIGATE_DECLARED_ROUTES"
+      },
+      {
+        "kind": "ASSERT_MAIN_VISIBLE"
+      },
+      {
+        "kind": "ASSERT_TECHNICIAN_STATE"
+      },
+      {
+        "kind": "ASSERT_NO_SHOPPING_WIDGET"
+      }
+    ],
+    "expectedInvariants": [
+      "NO_BLANK_PAGE",
+      "NO_UNHANDLED_CONSOLE_ERROR",
+      "NO_HORIZONTAL_OVERFLOW",
+      "ACCESS_CONTROL_VALID"
+    ],
+    "webReplay": true,
+    "risk": "HIGH"
+  },
+  {
+    "id": "surface-state-063",
+    "group": "TECHNICIAN_PORTAL",
+    "profile": "BUILD_CHAT_54_MINI_FAST",
+    "routes": [
+      "/technician",
+      "/technician/jobs"
+    ],
+    "interactionMode": "back-forward",
+    "viewport": "desktop",
+    "steps": [
+      {
+        "kind": "NAVIGATE_DECLARED_ROUTES"
+      },
+      {
+        "kind": "ASSERT_MAIN_VISIBLE"
+      },
+      {
+        "kind": "ASSERT_TECHNICIAN_STATE"
+      },
+      {
+        "kind": "ASSERT_NO_SHOPPING_WIDGET"
+      }
+    ],
+    "expectedInvariants": [
+      "NO_BLANK_PAGE",
+      "NO_UNHANDLED_CONSOLE_ERROR",
+      "NO_HORIZONTAL_OVERFLOW",
+      "ACCESS_CONTROL_VALID"
+    ],
+    "webReplay": true,
+    "risk": "HIGH"
+  },
+  {
+    "id": "surface-state-064",
+    "group": "TECHNICIAN_PORTAL",
+    "profile": "BUILD_CHAT_54_MINI_FAST",
+    "routes": [
+      "/technician",
+      "/technician/jobs"
+    ],
+    "interactionMode": "double-submit",
+    "viewport": "desktop",
+    "steps": [
+      {
+        "kind": "NAVIGATE_DECLARED_ROUTES"
+      },
+      {
+        "kind": "ASSERT_MAIN_VISIBLE"
+      },
+      {
+        "kind": "ASSERT_TECHNICIAN_STATE"
+      },
+      {
+        "kind": "ASSERT_NO_SHOPPING_WIDGET"
+      }
+    ],
+    "expectedInvariants": [
+      "NO_BLANK_PAGE",
+      "NO_UNHANDLED_CONSOLE_ERROR",
+      "NO_HORIZONTAL_OVERFLOW",
+      "ACCESS_CONTROL_VALID"
+    ],
+    "webReplay": true,
+    "risk": "MEDIUM"
+  },
+  {
+    "id": "surface-state-065",
+    "group": "TECHNICIAN_PORTAL",
+    "profile": "BUILD_CHAT_54_MINI_FAST",
+    "routes": [
+      "/technician",
+      "/technician/jobs"
+    ],
+    "interactionMode": "empty-state",
+    "viewport": "desktop",
+    "steps": [
+      {
+        "kind": "NAVIGATE_DECLARED_ROUTES"
+      },
+      {
+        "kind": "ASSERT_MAIN_VISIBLE"
+      },
+      {
+        "kind": "ASSERT_TECHNICIAN_STATE"
+      },
+      {
+        "kind": "ASSERT_NO_SHOPPING_WIDGET"
+      }
+    ],
+    "expectedInvariants": [
+      "NO_BLANK_PAGE",
+      "NO_UNHANDLED_CONSOLE_ERROR",
+      "NO_HORIZONTAL_OVERFLOW",
+      "ACCESS_CONTROL_VALID"
+    ],
+    "webReplay": true,
+    "risk": "MEDIUM"
+  },
+  {
+    "id": "surface-state-066",
+    "group": "TECHNICIAN_PORTAL",
+    "profile": "BUILD_CHAT_54_MINI_FAST",
+    "routes": [
+      "/technician",
+      "/technician/jobs"
+    ],
+    "interactionMode": "normal",
+    "viewport": "desktop",
+    "steps": [
+      {
+        "kind": "NAVIGATE_DECLARED_ROUTES"
+      },
+      {
+        "kind": "ASSERT_MAIN_VISIBLE"
+      },
+      {
+        "kind": "ASSERT_TECHNICIAN_STATE"
+      },
+      {
+        "kind": "ASSERT_NO_SHOPPING_WIDGET"
+      }
+    ],
+    "expectedInvariants": [
+      "NO_BLANK_PAGE",
+      "NO_UNHANDLED_CONSOLE_ERROR",
+      "NO_HORIZONTAL_OVERFLOW",
+      "ACCESS_CONTROL_VALID"
+    ],
+    "webReplay": true,
+    "risk": "MEDIUM"
+  },
+  {
+    "id": "surface-state-067",
+    "group": "TECHNICIAN_PORTAL",
+    "profile": "BUILD_CHAT_54_MINI_FAST",
+    "routes": [
+      "/technician",
+      "/technician/jobs"
+    ],
+    "interactionMode": "reload",
+    "viewport": "mobile",
+    "steps": [
+      {
+        "kind": "NAVIGATE_DECLARED_ROUTES"
+      },
+      {
+        "kind": "ASSERT_MAIN_VISIBLE"
+      },
+      {
+        "kind": "ASSERT_TECHNICIAN_STATE"
+      },
+      {
+        "kind": "ASSERT_NO_SHOPPING_WIDGET"
+      }
+    ],
+    "expectedInvariants": [
+      "NO_BLANK_PAGE",
+      "NO_UNHANDLED_CONSOLE_ERROR",
+      "NO_HORIZONTAL_OVERFLOW",
+      "ACCESS_CONTROL_VALID"
+    ],
+    "webReplay": true,
+    "risk": "MEDIUM"
+  },
+  {
+    "id": "surface-state-068",
+    "group": "TECHNICIAN_PORTAL",
+    "profile": "BUILD_CHAT_54_MINI_FAST",
+    "routes": [
+      "/technician",
+      "/technician/jobs"
+    ],
+    "interactionMode": "back-forward",
+    "viewport": "desktop",
+    "steps": [
+      {
+        "kind": "NAVIGATE_DECLARED_ROUTES"
+      },
+      {
+        "kind": "ASSERT_MAIN_VISIBLE"
+      },
+      {
+        "kind": "ASSERT_TECHNICIAN_STATE"
+      },
+      {
+        "kind": "ASSERT_NO_SHOPPING_WIDGET"
+      }
+    ],
+    "expectedInvariants": [
+      "NO_BLANK_PAGE",
+      "NO_UNHANDLED_CONSOLE_ERROR",
+      "NO_HORIZONTAL_OVERFLOW",
+      "ACCESS_CONTROL_VALID"
+    ],
+    "webReplay": true,
+    "risk": "MEDIUM"
+  },
+  {
+    "id": "surface-state-069",
+    "group": "TECHNICIAN_PORTAL",
+    "profile": "BUILD_CHAT_54_MINI_FAST",
+    "routes": [
+      "/technician",
+      "/technician/jobs"
+    ],
+    "interactionMode": "double-submit",
+    "viewport": "desktop",
+    "steps": [
+      {
+        "kind": "NAVIGATE_DECLARED_ROUTES"
+      },
+      {
+        "kind": "ASSERT_MAIN_VISIBLE"
+      },
+      {
+        "kind": "ASSERT_TECHNICIAN_STATE"
+      },
+      {
+        "kind": "ASSERT_NO_SHOPPING_WIDGET"
+      }
+    ],
+    "expectedInvariants": [
+      "NO_BLANK_PAGE",
+      "NO_UNHANDLED_CONSOLE_ERROR",
+      "NO_HORIZONTAL_OVERFLOW",
+      "ACCESS_CONTROL_VALID"
+    ],
+    "webReplay": true,
+    "risk": "MEDIUM"
+  },
+  {
+    "id": "surface-state-070",
+    "group": "TECHNICIAN_PORTAL",
+    "profile": "BUILD_CHAT_54_MINI_FAST",
+    "routes": [
+      "/technician",
+      "/technician/jobs"
+    ],
+    "interactionMode": "empty-state",
+    "viewport": "desktop",
+    "steps": [
+      {
+        "kind": "NAVIGATE_DECLARED_ROUTES"
+      },
+      {
+        "kind": "ASSERT_MAIN_VISIBLE"
+      },
+      {
+        "kind": "ASSERT_TECHNICIAN_STATE"
+      },
+      {
+        "kind": "ASSERT_NO_SHOPPING_WIDGET"
+      }
+    ],
+    "expectedInvariants": [
+      "NO_BLANK_PAGE",
+      "NO_UNHANDLED_CONSOLE_ERROR",
+      "NO_HORIZONTAL_OVERFLOW",
+      "ACCESS_CONTROL_VALID"
+    ],
+    "webReplay": true,
+    "risk": "MEDIUM"
+  },
+  {
+    "id": "surface-state-071",
+    "group": "MY_QUOTES_HISTORY",
+    "profile": "BUILD_CHAT_54_MINI_FAST",
+    "routes": [
+      "/my/quotes"
+    ],
+    "interactionMode": "normal",
+    "viewport": "desktop",
+    "steps": [
+      {
+        "kind": "NAVIGATE_DECLARED_ROUTES"
+      },
+      {
+        "kind": "ASSERT_MAIN_VISIBLE"
+      },
+      {
+        "kind": "ASSERT_QUOTE_HISTORY"
+      },
+      {
+        "kind": "ASSERT_ASSEMBLY_ENTRY"
+      }
+    ],
+    "expectedInvariants": [
+      "NO_BLANK_PAGE",
+      "NO_UNHANDLED_CONSOLE_ERROR",
+      "NO_HORIZONTAL_OVERFLOW",
+      "ACCESS_CONTROL_VALID"
+    ],
+    "webReplay": true,
+    "risk": "HIGH"
+  },
+  {
+    "id": "surface-state-072",
+    "group": "MY_QUOTES_HISTORY",
+    "profile": "BUILD_CHAT_54_MINI_FAST",
+    "routes": [
+      "/my/quotes"
+    ],
+    "interactionMode": "reload",
+    "viewport": "desktop",
+    "steps": [
+      {
+        "kind": "NAVIGATE_DECLARED_ROUTES"
+      },
+      {
+        "kind": "ASSERT_MAIN_VISIBLE"
+      },
+      {
+        "kind": "ASSERT_QUOTE_HISTORY"
+      },
+      {
+        "kind": "ASSERT_ASSEMBLY_ENTRY"
+      }
+    ],
+    "expectedInvariants": [
+      "NO_BLANK_PAGE",
+      "NO_UNHANDLED_CONSOLE_ERROR",
+      "NO_HORIZONTAL_OVERFLOW",
+      "ACCESS_CONTROL_VALID"
+    ],
+    "webReplay": true,
+    "risk": "HIGH"
+  },
+  {
+    "id": "surface-state-073",
+    "group": "MY_QUOTES_HISTORY",
+    "profile": "BUILD_CHAT_54_MINI_FAST",
+    "routes": [
+      "/my/quotes"
+    ],
+    "interactionMode": "back-forward",
+    "viewport": "desktop",
+    "steps": [
+      {
+        "kind": "NAVIGATE_DECLARED_ROUTES"
+      },
+      {
+        "kind": "ASSERT_MAIN_VISIBLE"
+      },
+      {
+        "kind": "ASSERT_QUOTE_HISTORY"
+      },
+      {
+        "kind": "ASSERT_ASSEMBLY_ENTRY"
+      }
+    ],
+    "expectedInvariants": [
+      "NO_BLANK_PAGE",
+      "NO_UNHANDLED_CONSOLE_ERROR",
+      "NO_HORIZONTAL_OVERFLOW",
+      "ACCESS_CONTROL_VALID"
+    ],
+    "webReplay": true,
+    "risk": "HIGH"
+  },
+  {
+    "id": "surface-state-074",
+    "group": "MY_QUOTES_HISTORY",
+    "profile": "BUILD_CHAT_54_MINI_FAST",
+    "routes": [
+      "/my/quotes"
+    ],
+    "interactionMode": "double-submit",
+    "viewport": "desktop",
+    "steps": [
+      {
+        "kind": "NAVIGATE_DECLARED_ROUTES"
+      },
+      {
+        "kind": "ASSERT_MAIN_VISIBLE"
+      },
+      {
+        "kind": "ASSERT_QUOTE_HISTORY"
+      },
+      {
+        "kind": "ASSERT_ASSEMBLY_ENTRY"
+      }
+    ],
+    "expectedInvariants": [
+      "NO_BLANK_PAGE",
+      "NO_UNHANDLED_CONSOLE_ERROR",
+      "NO_HORIZONTAL_OVERFLOW",
+      "ACCESS_CONTROL_VALID"
+    ],
+    "webReplay": true,
+    "risk": "MEDIUM"
+  },
+  {
+    "id": "surface-state-075",
+    "group": "MY_QUOTES_HISTORY",
+    "profile": "BUILD_CHAT_54_MINI_FAST",
+    "routes": [
+      "/my/quotes"
+    ],
+    "interactionMode": "empty-state",
+    "viewport": "desktop",
+    "steps": [
+      {
+        "kind": "NAVIGATE_DECLARED_ROUTES"
+      },
+      {
+        "kind": "ASSERT_MAIN_VISIBLE"
+      },
+      {
+        "kind": "ASSERT_QUOTE_HISTORY"
+      },
+      {
+        "kind": "ASSERT_ASSEMBLY_ENTRY"
+      }
+    ],
+    "expectedInvariants": [
+      "NO_BLANK_PAGE",
+      "NO_UNHANDLED_CONSOLE_ERROR",
+      "NO_HORIZONTAL_OVERFLOW",
+      "ACCESS_CONTROL_VALID"
+    ],
+    "webReplay": true,
+    "risk": "MEDIUM"
+  },
+  {
+    "id": "surface-state-076",
+    "group": "MY_QUOTES_HISTORY",
+    "profile": "BUILD_CHAT_54_MINI_FAST",
+    "routes": [
+      "/my/quotes"
+    ],
+    "interactionMode": "normal",
+    "viewport": "desktop",
+    "steps": [
+      {
+        "kind": "NAVIGATE_DECLARED_ROUTES"
+      },
+      {
+        "kind": "ASSERT_MAIN_VISIBLE"
+      },
+      {
+        "kind": "ASSERT_QUOTE_HISTORY"
+      },
+      {
+        "kind": "ASSERT_ASSEMBLY_ENTRY"
+      }
+    ],
+    "expectedInvariants": [
+      "NO_BLANK_PAGE",
+      "NO_UNHANDLED_CONSOLE_ERROR",
+      "NO_HORIZONTAL_OVERFLOW",
+      "ACCESS_CONTROL_VALID"
+    ],
+    "webReplay": true,
+    "risk": "MEDIUM"
+  },
+  {
+    "id": "surface-state-077",
+    "group": "MY_QUOTES_HISTORY",
+    "profile": "BUILD_CHAT_54_MINI_FAST",
+    "routes": [
+      "/my/quotes"
+    ],
+    "interactionMode": "reload",
+    "viewport": "mobile",
+    "steps": [
+      {
+        "kind": "NAVIGATE_DECLARED_ROUTES"
+      },
+      {
+        "kind": "ASSERT_MAIN_VISIBLE"
+      },
+      {
+        "kind": "ASSERT_QUOTE_HISTORY"
+      },
+      {
+        "kind": "ASSERT_ASSEMBLY_ENTRY"
+      }
+    ],
+    "expectedInvariants": [
+      "NO_BLANK_PAGE",
+      "NO_UNHANDLED_CONSOLE_ERROR",
+      "NO_HORIZONTAL_OVERFLOW",
+      "ACCESS_CONTROL_VALID"
+    ],
+    "webReplay": true,
+    "risk": "MEDIUM"
+  },
+  {
+    "id": "surface-state-078",
+    "group": "MY_QUOTES_HISTORY",
+    "profile": "BUILD_CHAT_54_MINI_FAST",
+    "routes": [
+      "/my/quotes"
+    ],
+    "interactionMode": "back-forward",
+    "viewport": "desktop",
+    "steps": [
+      {
+        "kind": "NAVIGATE_DECLARED_ROUTES"
+      },
+      {
+        "kind": "ASSERT_MAIN_VISIBLE"
+      },
+      {
+        "kind": "ASSERT_QUOTE_HISTORY"
+      },
+      {
+        "kind": "ASSERT_ASSEMBLY_ENTRY"
+      }
+    ],
+    "expectedInvariants": [
+      "NO_BLANK_PAGE",
+      "NO_UNHANDLED_CONSOLE_ERROR",
+      "NO_HORIZONTAL_OVERFLOW",
+      "ACCESS_CONTROL_VALID"
+    ],
+    "webReplay": true,
+    "risk": "MEDIUM"
+  },
+  {
+    "id": "surface-state-079",
+    "group": "MY_QUOTES_HISTORY",
+    "profile": "BUILD_CHAT_54_MINI_FAST",
+    "routes": [
+      "/my/quotes"
+    ],
+    "interactionMode": "double-submit",
+    "viewport": "desktop",
+    "steps": [
+      {
+        "kind": "NAVIGATE_DECLARED_ROUTES"
+      },
+      {
+        "kind": "ASSERT_MAIN_VISIBLE"
+      },
+      {
+        "kind": "ASSERT_QUOTE_HISTORY"
+      },
+      {
+        "kind": "ASSERT_ASSEMBLY_ENTRY"
+      }
+    ],
+    "expectedInvariants": [
+      "NO_BLANK_PAGE",
+      "NO_UNHANDLED_CONSOLE_ERROR",
+      "NO_HORIZONTAL_OVERFLOW",
+      "ACCESS_CONTROL_VALID"
+    ],
+    "webReplay": true,
+    "risk": "MEDIUM"
+  },
+  {
+    "id": "surface-state-080",
+    "group": "MY_QUOTES_HISTORY",
+    "profile": "BUILD_CHAT_54_MINI_FAST",
+    "routes": [
+      "/my/quotes"
+    ],
+    "interactionMode": "empty-state",
+    "viewport": "desktop",
+    "steps": [
+      {
+        "kind": "NAVIGATE_DECLARED_ROUTES"
+      },
+      {
+        "kind": "ASSERT_MAIN_VISIBLE"
+      },
+      {
+        "kind": "ASSERT_QUOTE_HISTORY"
+      },
+      {
+        "kind": "ASSERT_ASSEMBLY_ENTRY"
+      }
+    ],
+    "expectedInvariants": [
+      "NO_BLANK_PAGE",
+      "NO_UNHANDLED_CONSOLE_ERROR",
+      "NO_HORIZONTAL_OVERFLOW",
+      "ACCESS_CONTROL_VALID"
+    ],
+    "webReplay": true,
+    "risk": "MEDIUM"
+  },
+  {
+    "id": "surface-state-081",
+    "group": "SUPPORT_AS",
+    "profile": "BUILD_CHAT_54_MINI_FAST",
+    "routes": [
+      "/support/new",
+      "/support/ai-chat"
+    ],
+    "interactionMode": "normal",
+    "viewport": "desktop",
+    "steps": [
+      {
+        "kind": "NAVIGATE_DECLARED_ROUTES"
+      },
+      {
+        "kind": "ASSERT_MAIN_VISIBLE"
+      },
+      {
+        "kind": "ASSERT_SUPPORT_ENTRY"
+      },
+      {
+        "kind": "ASSERT_AGENT_DOWNLOAD_PATH"
+      }
+    ],
+    "expectedInvariants": [
+      "NO_BLANK_PAGE",
+      "NO_UNHANDLED_CONSOLE_ERROR",
+      "NO_HORIZONTAL_OVERFLOW",
+      "ACCESS_CONTROL_VALID"
+    ],
+    "webReplay": true,
+    "risk": "HIGH"
+  },
+  {
+    "id": "surface-state-082",
+    "group": "SUPPORT_AS",
+    "profile": "BUILD_CHAT_54_MINI_FAST",
+    "routes": [
+      "/support/new",
+      "/support/ai-chat"
+    ],
+    "interactionMode": "reload",
+    "viewport": "desktop",
+    "steps": [
+      {
+        "kind": "NAVIGATE_DECLARED_ROUTES"
+      },
+      {
+        "kind": "ASSERT_MAIN_VISIBLE"
+      },
+      {
+        "kind": "ASSERT_SUPPORT_ENTRY"
+      },
+      {
+        "kind": "ASSERT_AGENT_DOWNLOAD_PATH"
+      }
+    ],
+    "expectedInvariants": [
+      "NO_BLANK_PAGE",
+      "NO_UNHANDLED_CONSOLE_ERROR",
+      "NO_HORIZONTAL_OVERFLOW",
+      "ACCESS_CONTROL_VALID"
+    ],
+    "webReplay": true,
+    "risk": "HIGH"
+  },
+  {
+    "id": "surface-state-083",
+    "group": "SUPPORT_AS",
+    "profile": "BUILD_CHAT_54_MINI_FAST",
+    "routes": [
+      "/support/new",
+      "/support/ai-chat"
+    ],
+    "interactionMode": "back-forward",
+    "viewport": "desktop",
+    "steps": [
+      {
+        "kind": "NAVIGATE_DECLARED_ROUTES"
+      },
+      {
+        "kind": "ASSERT_MAIN_VISIBLE"
+      },
+      {
+        "kind": "ASSERT_SUPPORT_ENTRY"
+      },
+      {
+        "kind": "ASSERT_AGENT_DOWNLOAD_PATH"
+      }
+    ],
+    "expectedInvariants": [
+      "NO_BLANK_PAGE",
+      "NO_UNHANDLED_CONSOLE_ERROR",
+      "NO_HORIZONTAL_OVERFLOW",
+      "ACCESS_CONTROL_VALID"
+    ],
+    "webReplay": true,
+    "risk": "HIGH"
+  },
+  {
+    "id": "surface-state-084",
+    "group": "SUPPORT_AS",
+    "profile": "BUILD_CHAT_54_MINI_FAST",
+    "routes": [
+      "/support/new",
+      "/support/ai-chat"
+    ],
+    "interactionMode": "double-submit",
+    "viewport": "desktop",
+    "steps": [
+      {
+        "kind": "NAVIGATE_DECLARED_ROUTES"
+      },
+      {
+        "kind": "ASSERT_MAIN_VISIBLE"
+      },
+      {
+        "kind": "ASSERT_SUPPORT_ENTRY"
+      },
+      {
+        "kind": "ASSERT_AGENT_DOWNLOAD_PATH"
+      }
+    ],
+    "expectedInvariants": [
+      "NO_BLANK_PAGE",
+      "NO_UNHANDLED_CONSOLE_ERROR",
+      "NO_HORIZONTAL_OVERFLOW",
+      "ACCESS_CONTROL_VALID"
+    ],
+    "webReplay": true,
+    "risk": "MEDIUM"
+  },
+  {
+    "id": "surface-state-085",
+    "group": "SUPPORT_AS",
+    "profile": "BUILD_CHAT_54_MINI_FAST",
+    "routes": [
+      "/support/new",
+      "/support/ai-chat"
+    ],
+    "interactionMode": "empty-state",
+    "viewport": "desktop",
+    "steps": [
+      {
+        "kind": "NAVIGATE_DECLARED_ROUTES"
+      },
+      {
+        "kind": "ASSERT_MAIN_VISIBLE"
+      },
+      {
+        "kind": "ASSERT_SUPPORT_ENTRY"
+      },
+      {
+        "kind": "ASSERT_AGENT_DOWNLOAD_PATH"
+      }
+    ],
+    "expectedInvariants": [
+      "NO_BLANK_PAGE",
+      "NO_UNHANDLED_CONSOLE_ERROR",
+      "NO_HORIZONTAL_OVERFLOW",
+      "ACCESS_CONTROL_VALID"
+    ],
+    "webReplay": true,
+    "risk": "MEDIUM"
+  },
+  {
+    "id": "surface-state-086",
+    "group": "SUPPORT_AS",
+    "profile": "BUILD_CHAT_54_MINI_FAST",
+    "routes": [
+      "/support/new",
+      "/support/ai-chat"
+    ],
+    "interactionMode": "normal",
+    "viewport": "desktop",
+    "steps": [
+      {
+        "kind": "NAVIGATE_DECLARED_ROUTES"
+      },
+      {
+        "kind": "ASSERT_MAIN_VISIBLE"
+      },
+      {
+        "kind": "ASSERT_SUPPORT_ENTRY"
+      },
+      {
+        "kind": "ASSERT_AGENT_DOWNLOAD_PATH"
+      }
+    ],
+    "expectedInvariants": [
+      "NO_BLANK_PAGE",
+      "NO_UNHANDLED_CONSOLE_ERROR",
+      "NO_HORIZONTAL_OVERFLOW",
+      "ACCESS_CONTROL_VALID"
+    ],
+    "webReplay": true,
+    "risk": "MEDIUM"
+  },
+  {
+    "id": "surface-state-087",
+    "group": "SUPPORT_AS",
+    "profile": "BUILD_CHAT_54_MINI_FAST",
+    "routes": [
+      "/support/new",
+      "/support/ai-chat"
+    ],
+    "interactionMode": "reload",
+    "viewport": "mobile",
+    "steps": [
+      {
+        "kind": "NAVIGATE_DECLARED_ROUTES"
+      },
+      {
+        "kind": "ASSERT_MAIN_VISIBLE"
+      },
+      {
+        "kind": "ASSERT_SUPPORT_ENTRY"
+      },
+      {
+        "kind": "ASSERT_AGENT_DOWNLOAD_PATH"
+      }
+    ],
+    "expectedInvariants": [
+      "NO_BLANK_PAGE",
+      "NO_UNHANDLED_CONSOLE_ERROR",
+      "NO_HORIZONTAL_OVERFLOW",
+      "ACCESS_CONTROL_VALID"
+    ],
+    "webReplay": true,
+    "risk": "MEDIUM"
+  },
+  {
+    "id": "surface-state-088",
+    "group": "SUPPORT_AS",
+    "profile": "BUILD_CHAT_54_MINI_FAST",
+    "routes": [
+      "/support/new",
+      "/support/ai-chat"
+    ],
+    "interactionMode": "back-forward",
+    "viewport": "desktop",
+    "steps": [
+      {
+        "kind": "NAVIGATE_DECLARED_ROUTES"
+      },
+      {
+        "kind": "ASSERT_MAIN_VISIBLE"
+      },
+      {
+        "kind": "ASSERT_SUPPORT_ENTRY"
+      },
+      {
+        "kind": "ASSERT_AGENT_DOWNLOAD_PATH"
+      }
+    ],
+    "expectedInvariants": [
+      "NO_BLANK_PAGE",
+      "NO_UNHANDLED_CONSOLE_ERROR",
+      "NO_HORIZONTAL_OVERFLOW",
+      "ACCESS_CONTROL_VALID"
+    ],
+    "webReplay": true,
+    "risk": "MEDIUM"
+  },
+  {
+    "id": "surface-state-089",
+    "group": "SUPPORT_AS",
+    "profile": "BUILD_CHAT_54_MINI_FAST",
+    "routes": [
+      "/support/new",
+      "/support/ai-chat"
+    ],
+    "interactionMode": "double-submit",
+    "viewport": "desktop",
+    "steps": [
+      {
+        "kind": "NAVIGATE_DECLARED_ROUTES"
+      },
+      {
+        "kind": "ASSERT_MAIN_VISIBLE"
+      },
+      {
+        "kind": "ASSERT_SUPPORT_ENTRY"
+      },
+      {
+        "kind": "ASSERT_AGENT_DOWNLOAD_PATH"
+      }
+    ],
+    "expectedInvariants": [
+      "NO_BLANK_PAGE",
+      "NO_UNHANDLED_CONSOLE_ERROR",
+      "NO_HORIZONTAL_OVERFLOW",
+      "ACCESS_CONTROL_VALID"
+    ],
+    "webReplay": true,
+    "risk": "MEDIUM"
+  },
+  {
+    "id": "surface-state-090",
+    "group": "SUPPORT_AS",
+    "profile": "BUILD_CHAT_54_MINI_FAST",
+    "routes": [
+      "/support/new",
+      "/support/ai-chat"
+    ],
+    "interactionMode": "empty-state",
+    "viewport": "desktop",
+    "steps": [
+      {
+        "kind": "NAVIGATE_DECLARED_ROUTES"
+      },
+      {
+        "kind": "ASSERT_MAIN_VISIBLE"
+      },
+      {
+        "kind": "ASSERT_SUPPORT_ENTRY"
+      },
+      {
+        "kind": "ASSERT_AGENT_DOWNLOAD_PATH"
+      }
+    ],
+    "expectedInvariants": [
+      "NO_BLANK_PAGE",
+      "NO_UNHANDLED_CONSOLE_ERROR",
+      "NO_HORIZONTAL_OVERFLOW",
+      "ACCESS_CONTROL_VALID"
+    ],
+    "webReplay": true,
+    "risk": "MEDIUM"
+  },
+  {
+    "id": "surface-state-091",
+    "group": "GLOBAL_AI_NAVIGATION",
+    "profile": "BUILD_CHAT_54_MINI_FAST",
+    "routes": [
+      "/",
+      "/self-quote"
+    ],
+    "interactionMode": "normal",
+    "viewport": "desktop",
+    "steps": [
+      {
+        "kind": "NAVIGATE_DECLARED_ROUTES"
+      },
+      {
+        "kind": "ASSERT_MAIN_VISIBLE"
+      },
+      {
+        "kind": "OPEN_GLOBAL_ASSISTANT"
+      },
+      {
+        "kind": "FAST_ROUTE",
+        "message": "GPU 보여줘"
+      }
+    ],
+    "expectedInvariants": [
+      "NO_BLANK_PAGE",
+      "NO_UNHANDLED_CONSOLE_ERROR",
+      "NO_HORIZONTAL_OVERFLOW",
+      "ACCESS_CONTROL_VALID"
+    ],
+    "webReplay": true,
+    "risk": "HIGH"
+  },
+  {
+    "id": "surface-state-092",
+    "group": "GLOBAL_AI_NAVIGATION",
+    "profile": "BUILD_CHAT_54_MINI_FAST",
+    "routes": [
+      "/",
+      "/self-quote"
+    ],
+    "interactionMode": "reload",
+    "viewport": "desktop",
+    "steps": [
+      {
+        "kind": "NAVIGATE_DECLARED_ROUTES"
+      },
+      {
+        "kind": "ASSERT_MAIN_VISIBLE"
+      },
+      {
+        "kind": "OPEN_GLOBAL_ASSISTANT"
+      },
+      {
+        "kind": "FAST_ROUTE",
+        "message": "GPU 보여줘"
+      }
+    ],
+    "expectedInvariants": [
+      "NO_BLANK_PAGE",
+      "NO_UNHANDLED_CONSOLE_ERROR",
+      "NO_HORIZONTAL_OVERFLOW",
+      "ACCESS_CONTROL_VALID"
+    ],
+    "webReplay": true,
+    "risk": "HIGH"
+  },
+  {
+    "id": "surface-state-093",
+    "group": "GLOBAL_AI_NAVIGATION",
+    "profile": "BUILD_CHAT_54_MINI_FAST",
+    "routes": [
+      "/",
+      "/self-quote"
+    ],
+    "interactionMode": "back-forward",
+    "viewport": "desktop",
+    "steps": [
+      {
+        "kind": "NAVIGATE_DECLARED_ROUTES"
+      },
+      {
+        "kind": "ASSERT_MAIN_VISIBLE"
+      },
+      {
+        "kind": "OPEN_GLOBAL_ASSISTANT"
+      },
+      {
+        "kind": "FAST_ROUTE",
+        "message": "GPU 보여줘"
+      }
+    ],
+    "expectedInvariants": [
+      "NO_BLANK_PAGE",
+      "NO_UNHANDLED_CONSOLE_ERROR",
+      "NO_HORIZONTAL_OVERFLOW",
+      "ACCESS_CONTROL_VALID"
+    ],
+    "webReplay": true,
+    "risk": "MEDIUM"
+  },
+  {
+    "id": "surface-state-094",
+    "group": "GLOBAL_AI_NAVIGATION",
+    "profile": "BUILD_CHAT_54_MINI_FAST",
+    "routes": [
+      "/",
+      "/self-quote"
+    ],
+    "interactionMode": "double-submit",
+    "viewport": "desktop",
+    "steps": [
+      {
+        "kind": "NAVIGATE_DECLARED_ROUTES"
+      },
+      {
+        "kind": "ASSERT_MAIN_VISIBLE"
+      },
+      {
+        "kind": "OPEN_GLOBAL_ASSISTANT"
+      },
+      {
+        "kind": "FAST_ROUTE",
+        "message": "GPU 보여줘"
+      }
+    ],
+    "expectedInvariants": [
+      "NO_BLANK_PAGE",
+      "NO_UNHANDLED_CONSOLE_ERROR",
+      "NO_HORIZONTAL_OVERFLOW",
+      "ACCESS_CONTROL_VALID"
+    ],
+    "webReplay": true,
+    "risk": "MEDIUM"
+  },
+  {
+    "id": "surface-state-095",
+    "group": "GLOBAL_AI_NAVIGATION",
+    "profile": "BUILD_CHAT_54_MINI_FAST",
+    "routes": [
+      "/",
+      "/self-quote"
+    ],
+    "interactionMode": "empty-state",
+    "viewport": "desktop",
+    "steps": [
+      {
+        "kind": "NAVIGATE_DECLARED_ROUTES"
+      },
+      {
+        "kind": "ASSERT_MAIN_VISIBLE"
+      },
+      {
+        "kind": "OPEN_GLOBAL_ASSISTANT"
+      },
+      {
+        "kind": "FAST_ROUTE",
+        "message": "GPU 보여줘"
+      }
+    ],
+    "expectedInvariants": [
+      "NO_BLANK_PAGE",
+      "NO_UNHANDLED_CONSOLE_ERROR",
+      "NO_HORIZONTAL_OVERFLOW",
+      "ACCESS_CONTROL_VALID"
+    ],
+    "webReplay": true,
+    "risk": "MEDIUM"
+  },
+  {
+    "id": "surface-state-096",
+    "group": "MOBILE_ERROR_ACCESS",
+    "profile": "BUILD_CHAT_54_MINI_FAST",
+    "routes": [
+      "/self-quote",
+      "/my/quotes"
+    ],
+    "interactionMode": "normal",
+    "viewport": "mobile",
+    "steps": [
+      {
+        "kind": "NAVIGATE_DECLARED_ROUTES"
+      },
+      {
+        "kind": "ASSERT_MAIN_VISIBLE"
+      },
+      {
+        "kind": "ASSERT_RESPONSIVE"
+      },
+      {
+        "kind": "ASSERT_ERROR_RECOVERY"
+      }
+    ],
+    "expectedInvariants": [
+      "NO_BLANK_PAGE",
+      "NO_UNHANDLED_CONSOLE_ERROR",
+      "NO_HORIZONTAL_OVERFLOW",
+      "ACCESS_CONTROL_VALID"
+    ],
+    "webReplay": true,
+    "risk": "HIGH"
+  },
+  {
+    "id": "surface-state-097",
+    "group": "MOBILE_ERROR_ACCESS",
+    "profile": "BUILD_CHAT_54_MINI_FAST",
+    "routes": [
+      "/self-quote",
+      "/my/quotes"
+    ],
+    "interactionMode": "reload",
+    "viewport": "mobile",
+    "steps": [
+      {
+        "kind": "NAVIGATE_DECLARED_ROUTES"
+      },
+      {
+        "kind": "ASSERT_MAIN_VISIBLE"
+      },
+      {
+        "kind": "ASSERT_RESPONSIVE"
+      },
+      {
+        "kind": "ASSERT_ERROR_RECOVERY"
+      }
+    ],
+    "expectedInvariants": [
+      "NO_BLANK_PAGE",
+      "NO_UNHANDLED_CONSOLE_ERROR",
+      "NO_HORIZONTAL_OVERFLOW",
+      "ACCESS_CONTROL_VALID"
+    ],
+    "webReplay": true,
+    "risk": "HIGH"
+  },
+  {
+    "id": "surface-state-098",
+    "group": "MOBILE_ERROR_ACCESS",
+    "profile": "BUILD_CHAT_54_MINI_FAST",
+    "routes": [
+      "/self-quote",
+      "/my/quotes"
+    ],
+    "interactionMode": "back-forward",
+    "viewport": "mobile",
+    "steps": [
+      {
+        "kind": "NAVIGATE_DECLARED_ROUTES"
+      },
+      {
+        "kind": "ASSERT_MAIN_VISIBLE"
+      },
+      {
+        "kind": "ASSERT_RESPONSIVE"
+      },
+      {
+        "kind": "ASSERT_ERROR_RECOVERY"
+      }
+    ],
+    "expectedInvariants": [
+      "NO_BLANK_PAGE",
+      "NO_UNHANDLED_CONSOLE_ERROR",
+      "NO_HORIZONTAL_OVERFLOW",
+      "ACCESS_CONTROL_VALID"
+    ],
+    "webReplay": true,
+    "risk": "MEDIUM"
+  },
+  {
+    "id": "surface-state-099",
+    "group": "MOBILE_ERROR_ACCESS",
+    "profile": "BUILD_CHAT_54_MINI_FAST",
+    "routes": [
+      "/self-quote",
+      "/my/quotes"
+    ],
+    "interactionMode": "double-submit",
+    "viewport": "mobile",
+    "steps": [
+      {
+        "kind": "NAVIGATE_DECLARED_ROUTES"
+      },
+      {
+        "kind": "ASSERT_MAIN_VISIBLE"
+      },
+      {
+        "kind": "ASSERT_RESPONSIVE"
+      },
+      {
+        "kind": "ASSERT_ERROR_RECOVERY"
+      }
+    ],
+    "expectedInvariants": [
+      "NO_BLANK_PAGE",
+      "NO_UNHANDLED_CONSOLE_ERROR",
+      "NO_HORIZONTAL_OVERFLOW",
+      "ACCESS_CONTROL_VALID"
+    ],
+    "webReplay": true,
+    "risk": "MEDIUM"
+  },
+  {
+    "id": "surface-state-100",
+    "group": "MOBILE_ERROR_ACCESS",
+    "profile": "BUILD_CHAT_54_MINI_FAST",
+    "routes": [
+      "/self-quote",
+      "/my/quotes"
+    ],
+    "interactionMode": "empty-state",
+    "viewport": "mobile",
+    "steps": [
+      {
+        "kind": "NAVIGATE_DECLARED_ROUTES"
+      },
+      {
+        "kind": "ASSERT_MAIN_VISIBLE"
+      },
+      {
+        "kind": "ASSERT_RESPONSIVE"
+      },
+      {
+        "kind": "ASSERT_ERROR_RECOVERY"
+      }
+    ],
+    "expectedInvariants": [
+      "NO_BLANK_PAGE",
+      "NO_UNHANDLED_CONSOLE_ERROR",
+      "NO_HORIZONTAL_OVERFLOW",
+      "ACCESS_CONTROL_VALID"
+    ],
+    "webReplay": true,
+    "risk": "MEDIUM"
+  }
+]

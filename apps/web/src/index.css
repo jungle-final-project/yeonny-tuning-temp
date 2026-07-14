@@ -47,31 +47,7 @@ textarea {
 
 .screen-shell {
   min-height: 100vh;
-background:
-  linear-gradient(
-    180deg,
-    #ffffff 0,
-    #ffffff 112px,
-    #edf7ff 112px,
-    #f6fbff 55%,
-    #f3f6fa 100%
-  );
-}
-
-@media (min-width: 768px) {
-  .screen-shell {
-    transition: margin-right 180ms ease;
-  }
-
-  .ai-assistant-open .screen-shell {
-    margin-right: 420px;
-  }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .screen-shell {
-    transition: none;
-  }
+  background: #ffffff;
 }
 
 .panel {
@@ -94,6 +70,12 @@ background:
     inset 0 1px 0 rgba(255, 255, 255, 0.06),
     inset 0 0 0 1px rgba(148, 163, 184, 0.14),
     inset 0 12px 40px rgba(0, 0, 0, 0.34);
+}
+/* 실장도 카드맵: 영향 지도처럼 흰 캔버스 위에 물리 배치와 보드 아트를 유지한다. */
+.slot-board-tray.slot-board-motherboard-card-map {
+  background-color: #fff;
+  background-image: none;
+  box-shadow: none;
 }
 
 /* 구성 관계도 패널을 페이지에서 한 단계 띄운다 — 주변 흰 박스보다 또렷한 테두리·그림자. */
@@ -276,20 +258,6 @@ background:
 .checklist-warning-fill-pulse {
   animation: checklist-warning-fill-pulse 2s ease-in-out infinite;
 }
-@keyframes slot-board-fail-banner-pulse {
-  0%,
-  100% {
-    box-shadow: 0 8px 18px rgba(239, 68, 68, 0.18);
-  }
-  50% {
-    box-shadow: 0 10px 26px rgba(239, 68, 68, 0.42);
-  }
-}
-
-.slot-board-fail-banner-pulse {
-  animation: slot-board-fail-banner-pulse 2s ease-in-out infinite;
-}
-
 /* 상태색 히어로 펄스: 장착된 슬롯을 상태색 링으로 숨쉬게 한다.
    쉬는 구간(0%/100%)에도 상시 보이는 실선 링 + 소프트 글로우를 유지하고, 50%에 바깥으로 퍼진다
    — 어두운 트레이 위에서도 색이 확실히 읽히도록 시인성을 높였다.
@@ -386,7 +354,6 @@ background:
   .slot-empty-pulse,
   .checklist-problem-fill-pulse,
   .checklist-warning-fill-pulse,
-  .slot-board-fail-banner-pulse,
   .slot-pass-pulse,
   .slot-warn-pulse,
   .slot-fail-pulse,
@@ -1519,21 +1486,103 @@ body.fp-viewing-popular-parts .home-fullpage-shell .fullpage-wrapper {
 }
 
 /* Modern home — option 1: editorial validation workspace with a persistent AI assistant. */
+.screen-shell.modern-home-screen {
+  background: #ffffff;
+}
 .modern-home-main {
   font-kerning: normal;
 }
 
-.modern-home-intro {
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.8);
+
+.modern-home-hero-dummy {
+  position: absolute;
+  display: block;
+  aspect-ratio: 1;
+  border: 1px solid rgba(148, 163, 184, 0.22);
+  border-radius: 12px;
+  background: #d9dde3;
+  object-fit: cover;
+  object-position: center;
+  box-shadow: 0 10px 24px rgba(100, 116, 139, 0.12);
 }
 
+.modern-home-hero-dummy-1 {
+  top: 18px;
+  left: 16px;
+  width: 90px;
+}
+
+.modern-home-hero-dummy-2 {
+  top: 38px;
+  left: 122px;
+  width: 130px;
+}
+
+.modern-home-hero-dummy-3 {
+  top: 142px;
+  left: 28px;
+  width: 73px;
+}
+
+.modern-home-hero-dummy-4 {
+  bottom: -20px;
+  left: 112px;
+  width: 148px;
+}
+
+.modern-home-hero-dummy-5 {
+  top: 78px;
+  right: 140px;
+  width: 78px;
+}
+
+.modern-home-hero-dummy-6 {
+  top: 160px;
+  right: 20px;
+  width: 108px;
+}
+
+.modern-home-hero-dummy-7 {
+  top: 18px;
+  right: 20px;
+  width: 103px;
+}
+
+.modern-home-hero-dummy-8 {
+  right: 82px;
+  bottom: -20px;
+  width: 135px;
+}
 .modern-home-category-rail,
 .modern-home-product-rail {
   scrollbar-width: thin;
   scrollbar-color: #cbd5e1 transparent;
 }
 
-.modern-home-recommendations .home-featured-picker-grid,
+.modern-home-product-rail {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 18px;
+}
+
+.modern-home-product-image {
+  box-shadow: 0 3px 8px #c4c0bb;
+  transition: box-shadow 160ms ease;
+}
+
+.modern-home-product-card:hover .modern-home-product-image,
+.modern-home-product-card:focus-visible .modern-home-product-image {
+  box-shadow: 0 6px 15px #c4c0bb;
+}
+
+.modern-home-recommendations .home-featured-picker-grid {
+  display: grid;
+  min-height: 0;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-rows: auto;
+  gap: 18px;
+}
+
 .modern-home-recommendations .home-ai-picker-grid {
   display: grid;
   min-height: 360px;
@@ -1603,11 +1652,86 @@ body.fp-viewing-popular-parts .home-fullpage-shell .fullpage-wrapper {
   background: #f8fafc;
 }
 
-.modern-home-evidence {
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.85);
+.modern-home-recommendations .home-featured-interest-card {
+  display: flex;
+  align-items: stretch;
+  gap: 0;
+  overflow: visible;
+  border: 0;
+  border-radius: 0;
+  padding: 0;
+  background: transparent !important;
+  box-shadow: none;
+  transform: none;
 }
 
+.modern-home-recommendations .home-featured-interest-card:hover,
+.modern-home-recommendations .home-featured-interest-card:focus-visible,
+.modern-home-recommendations .home-featured-interest-card.home-featured-preview-card--selected {
+  border: 0;
+  box-shadow: none;
+  transform: none;
+}
+
+.modern-home-recommendations .home-featured-interest-card .home-featured-preview-thumb-wrap,
+.modern-home-recommendations .home-featured-picker-grid > :first-child.home-featured-interest-card .home-featured-preview-thumb-wrap {
+  width: 100%;
+  height: auto !important;
+  min-height: 0;
+  aspect-ratio: 1 / 1.2;
+  overflow: hidden;
+  border: 0;
+  border-radius: 18px;
+  background: transparent;
+  box-shadow: 0 3px 8px #c4c0bb;
+  transition: box-shadow 160ms ease;
+}
+
+.modern-home-recommendations .home-featured-interest-card:hover .home-featured-preview-thumb-wrap,
+.modern-home-recommendations .home-featured-interest-card:focus-visible .home-featured-preview-thumb-wrap {
+  box-shadow: 0 6px 15px #c4c0bb;
+}
+
+.modern-home-recommendations .home-featured-interest-card .home-featured-preview-thumb {
+  width: 100%;
+  height: 100%;
+  padding: 0;
+  object-fit: cover;
+  transform: none;
+}
+
+.modern-home-recommendations .home-featured-interest-card:hover .home-featured-preview-thumb {
+  transform: none;
+}
+
+.modern-home-recommendations .home-featured-interest-card .home-featured-preview-body {
+  width: 100%;
+  flex: 0 0 auto;
+  gap: 0;
+  padding-top: 12px;
+  text-align: center;
+}
+
+.modern-home-recommendations .home-featured-interest-card .home-featured-preview-title {
+  color: #222222 !important;
+  font-size: 16px;
+  font-weight: 600;
+  line-height: 1.4;
+}
+
+.modern-home-recommendations .home-featured-interest-card .home-featured-preview-price {
+  color: #595959 !important;
+  font-size: 14px;
+  font-weight: 400;
+  line-height: 1.4;
+}
+
+
 @media (max-width: 1279px) {
+  .modern-home-hero-collage {
+    display: none;
+  }
+
   .modern-home-intro {
     min-height: auto !important;
   }
@@ -1636,6 +1760,19 @@ body.fp-viewing-popular-parts .home-fullpage-shell .fullpage-wrapper {
   }
 }
 
+@media (max-width: 1023px) {
+  .modern-home-product-rail {
+    display: flex;
+    gap: 16px;
+    overflow-x: auto;
+  }
+
+  .modern-home-product-card {
+    width: 210px;
+    flex: 0 0 210px;
+  }
+}
+
 @media (max-width: 639px) {
   .modern-home-main {
     padding-top: 20px;
@@ -1643,6 +1780,7 @@ body.fp-viewing-popular-parts .home-fullpage-shell .fullpage-wrapper {
 
   .modern-home-product-rail > a {
     width: 176px;
+    flex-basis: 176px;
   }
 
   .modern-home-recommendations .home-featured-selected-panel {

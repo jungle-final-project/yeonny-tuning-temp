@@ -2,19 +2,21 @@ import { Navigate, Route, Routes, useLocation } from 'react-router-dom';
 import { AdminLoginPage, AuthCallbackPage, LoginPage, MyProfilePage, SignupPage } from './features/auth/AuthPages';
 import { RequireAdmin } from './features/auth/RequireAdmin';
 import { RequireUser } from './features/auth/RequireUser';
-import { AllPartsPage, AssemblyRequestDetailPage, AssemblyRequestHistoryPage, CheckoutCompletePage, CheckoutOffersPage, CheckoutPage, CheckoutPaymentPage, PartDetailPage, SelfQuotePage } from './features/parts/PartsPages';
+import { CheckoutPaymentPage, TossPointPaymentFailPage, TossPointPaymentSuccessPage } from './features/payment';
+import { AllPartsPage, AssemblyRequestDetailPage, AssemblyRequestHistoryPage, CheckoutCompletePage, CheckoutOffersPage, CheckoutPage, PartDetailPage, SelfQuotePage } from './features/parts/PartsPages';
 import { BuildResultPage, ChangePartPage, HomePage, LatestBuildResultPage, MyQuotesPage, RequirementPage } from './features/quote/QuotePages';
 import { AsChatPage, SupportNewPage, SupportTicketPage } from './features/support/SupportPages';
 import { SupportChatWidget } from './features/support/SupportChatWidget';
 import { AdminAssemblyPage, AdminBuildGraphLayoutsPage, AdminDashboardPage, AdminLoadTestsPage, AdminPartsPage, AdminPriceJobsPage, AdminSupportChatSessionsPage, AdminTicketDetailPage, AdminTicketsPage, AgentSessionAdminPage, AgentSessionsListAdminPage, RagEvidenceAdminPage, RagEvidenceListAdminPage, ToolInvocationAdminPage, ToolInvocationsListAdminPage } from './features/admin/AdminPages';
 import { AiBuildAssistant } from './features/quote/components/AiBuildAssistant';
 import { TechnicianApplyPage, TechnicianDashboardPage, TechnicianJobsPage, TechnicianRequestDetailPage } from './features/technician/TechnicianPages';
+import { getToken } from './lib/api';
 
 export default function App() {
   return (
     <>
       <Routes>
-        <Route path="/" element={<RequireUser preserveRedirect={false}><HomePage /></RequireUser>} />
+        <Route path="/" element={<HomePage />} />
         <Route path="/requirements/new" element={<RequireUser><RequirementPage /></RequireUser>} />
         <Route path="/builds/latest" element={<RequireUser><LatestBuildResultPage /></RequireUser>} />
         <Route path="/builds/:buildId" element={<RequireUser><BuildResultPage /></RequireUser>} />
@@ -22,6 +24,8 @@ export default function App() {
         <Route path="/checkout" element={<RequireUser><CheckoutPage /></RequireUser>} />
         <Route path="/checkout/offers/:requestId" element={<RequireUser><CheckoutOffersPage /></RequireUser>} />
         <Route path="/checkout/payment/:requestId" element={<RequireUser><CheckoutPaymentPage /></RequireUser>} />
+        <Route path="/checkout/toss/success/:requestId" element={<RequireUser><TossPointPaymentSuccessPage /></RequireUser>} />
+        <Route path="/checkout/toss/fail/:requestId" element={<RequireUser><TossPointPaymentFailPage /></RequireUser>} />
         <Route path="/checkout/complete/:requestId" element={<RequireUser><CheckoutCompletePage /></RequireUser>} />
         <Route path="/checkout/offers" element={<Navigate to="/my/assembly-requests" replace />} />
         <Route path="/checkout/complete" element={<Navigate to="/my/assembly-requests" replace />} />
@@ -68,7 +72,7 @@ export default function App() {
 
 function GlobalSupportChatWidget() {
   const { pathname } = useLocation();
-  if (pathname === '/login' || pathname === '/signup' || pathname === '/auth/callback' || pathname.startsWith('/admin') || pathname.startsWith('/technician') || pathname === '/support/new' || pathname === '/my/profile') {
+  if (!getToken() || pathname === '/login' || pathname === '/signup' || pathname === '/auth/callback' || pathname.startsWith('/admin') || pathname.startsWith('/technician') || pathname === '/support/new' || pathname === '/my/profile') {
     return null;
   }
   return <SupportChatWidget />;
@@ -76,7 +80,7 @@ function GlobalSupportChatWidget() {
 
 function GlobalAiBuildAssistant() {
   const { pathname } = useLocation();
-  if (pathname === '/login' || pathname === '/signup' || pathname === '/auth/callback' || pathname.startsWith('/admin') || pathname.startsWith('/technician') || pathname === '/self-quote' || pathname === '/my/profile') {
+  if (!getToken() || pathname === '/login' || pathname === '/signup' || pathname === '/auth/callback' || pathname.startsWith('/admin') || pathname.startsWith('/technician') || pathname === '/self-quote' || pathname === '/my/profile') {
     return null;
   }
   return <AiBuildAssistant surface="home" />;

@@ -7,6 +7,7 @@ import type {
   PartPage,
   PartPriceHistory,
   PartPriceHistoryParams,
+  PublicHomeResponse,
   PartSearchParams,
   PartRow,
   QuoteDraft,
@@ -26,6 +27,9 @@ export function listParts(params: PartSearchParams = {}) {
 
 export function listHomeRecommendedParts(limit = 4) {
   return api<HomeRecommendedPartsResponse>(`/api/recommendations/home-parts?limit=${limit}`);
+}
+export function getPublicHome() {
+  return api<PublicHomeResponse>('/api/public/home');
 }
 
 export function recordRecommendationEvent(payload: RecommendationEventRequest) {

@@ -137,6 +137,42 @@ public class HomePartRecommendationService {
         );
     }
 
+    public Map<String, Object> publicHomeParts(Integer limit) {
+        int safeLimit = limit == null ? 4 : Math.min(Math.max(limit, 1), 12);
+        List<HomePartCandidate> candidates = loadCandidates();
+        if (candidates.isEmpty()) {
+            return MockData.map(
+                    "items", List.of(),
+                    "generatedAt", Instant.now().toString(),
+                    "fallbackUsed", true
+            );
+        }
+        ScoringOutcome scoring = new ScoringOutcome("FALLBACK", null, true);
+        List<HomePartCandidate> ranked = candidates.stream()
+                .sorted(Comparator
+                        .<HomePartCandidate>comparingDouble(HomePartCandidate::score).reversed()
+                        .thenComparingInt(candidate -> categoryRank(candidate.category()))
+                        .thenComparing(HomePartCandidate::publicId))
+                .toList();
+        List<HomePartCandidate> selected = diverseTop(ranked, safeLimit);
+        List<Map<String, Object>> items = new ArrayList<>();
+        for (int index = 0; index < selected.size(); index += 1) {
+            HomePartCandidate candidate = selected.get(index);
+            items.add(MockData.map(
+                    "recommendationId", "home-part-" + candidate.publicId(),
+                    "rankPosition", index,
+                    "part", partMap(candidate.row()),
+                    "scoreSource", scoring.scoreSource(),
+                    "modelVersion", scoring.modelVersion(),
+                    "reasonTags", reasonTags(candidate, scoring)
+            ));
+        }
+        return MockData.map(
+                "items", items,
+                "generatedAt", Instant.now().toString(),
+                "fallbackUsed", true
+        );
+    }
     private List<HomePartCandidate> loadCandidates() {
         return jdbcTemplate.queryForList("""
                         SELECT p.id AS internal_id,
