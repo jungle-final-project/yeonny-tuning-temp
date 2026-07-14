@@ -26,6 +26,7 @@ import {
   type SlotEdgeConfig
 } from './slotBoardConfig';
 import { FusedPlateArt } from './FusedPlateArt';
+import { HelpTip } from './HelpTip';
 import { withObjectParticle } from './koreanParticle';
 
 // 3뷰: 배치판(fused, 기본) / 실장도(motherboard, 구 평면도 복원) / 3D 등각(isometric).
@@ -295,34 +296,50 @@ export function SlotBoard({
         />
       )}
       {!isIsometric ? (
-        <button
-          type="button"
-          aria-pressed={isMotherboard}
-          onClick={toggleMotherboard}
-          disabled={isMotherboardClosing}
-          className={`absolute bottom-4 right-4 z-30 hidden rounded-lg border px-3.5 py-2 text-xs font-black shadow-lg transition focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-blue focus-visible:ring-offset-2 lg:block ${
-            isMotherboard
-              ? 'border-brand-blue bg-brand-blue text-white hover:bg-blue-700'
-              : 'border-slate-200 bg-white text-slate-700 hover:border-brand-blue hover:text-brand-blue'
-          }`}
-        >
-          {isMotherboard ? '실장도 접기' : '실장도 보기'}
-        </button>
+        <div className="absolute bottom-4 right-4 z-30 hidden items-center gap-1.5 lg:flex">
+          <HelpTip
+            label="실장도 설명"
+            text="부품이 메인보드 어디에 장착되는지 실제 배치 모습으로 보여줍니다. CPU·램·그래픽카드가 꽂히는 자리를 확인할 수 있습니다."
+            placement="top"
+            align="right"
+          />
+          <button
+            type="button"
+            aria-pressed={isMotherboard}
+            onClick={toggleMotherboard}
+            disabled={isMotherboardClosing}
+            className={`rounded-lg border px-3.5 py-2 text-xs font-black shadow-lg transition focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-blue focus-visible:ring-offset-2 ${
+              isMotherboard
+                ? 'border-brand-blue bg-brand-blue text-white hover:bg-blue-700'
+                : 'border-slate-200 bg-white text-slate-700 hover:border-brand-blue hover:text-brand-blue'
+            }`}
+          >
+            {isMotherboard ? '실장도 접기' : '실장도 보기'}
+          </button>
+        </div>
       ) : null}
       {!isIsometric ? (
-        <button
-          type="button"
-          data-testid="relation-map-open"
-          aria-pressed={isRelationMapVisible}
-          onClick={toggleRelationMap}
-          className={`absolute bottom-4 left-4 z-30 hidden rounded-lg border px-3.5 py-2 text-xs font-black shadow-lg transition focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-blue focus-visible:ring-offset-2 lg:block ${
-            isRelationMapVisible
-              ? 'border-brand-blue bg-brand-blue text-white hover:bg-blue-700'
-              : 'border-slate-200 bg-white text-slate-700 hover:border-brand-blue hover:text-brand-blue'
-          }`}
-        >
-          {isRelationMapVisible ? '기본 관계도 보기' : '영향 지도 보기'}
-        </button>
+        <div className="absolute bottom-4 left-4 z-30 hidden items-center gap-1.5 lg:flex">
+          <button
+            type="button"
+            data-testid="relation-map-open"
+            aria-pressed={isRelationMapVisible}
+            onClick={toggleRelationMap}
+            className={`rounded-lg border px-3.5 py-2 text-xs font-black shadow-lg transition focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-blue focus-visible:ring-offset-2 ${
+              isRelationMapVisible
+                ? 'border-brand-blue bg-brand-blue text-white hover:bg-blue-700'
+                : 'border-slate-200 bg-white text-slate-700 hover:border-brand-blue hover:text-brand-blue'
+            }`}
+          >
+            {isRelationMapVisible ? '기본 관계도 보기' : '영향 지도 보기'}
+          </button>
+          <HelpTip
+            label="영향 지도 설명"
+            text="선택한 부품이 다른 부품들과 어떻게 연결되는지 한눈에 보여주는 지도입니다. 선 색으로 호환 가능(초록)·간섭 주의(노랑)·장착 불가(빨강)를 확인할 수 있습니다."
+            placement="top"
+            align="left"
+          />
+        </div>
       ) : null}
     </div>
   );

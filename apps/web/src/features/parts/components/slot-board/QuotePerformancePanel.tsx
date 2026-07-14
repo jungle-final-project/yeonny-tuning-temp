@@ -7,6 +7,7 @@ import { openAiAssistant, type PerfCompareTarget } from '../../../../lib/events'
 import { checkBuildPerformance, resolveBuildGraph, type GameFpsEvidence } from '../../../quote/quoteApi';
 import { listParts } from '../../partsApi';
 import type { PartCompatibility } from '../../types';
+import { HelpTip } from './HelpTip';
 import { withObjectParticle } from './koreanParticle';
 
 // 담긴 견적으로 FPS를 조회할 수 있는 게임·해상도 — game_fps_benchmarks 시드 커버리지 기준.
@@ -387,7 +388,15 @@ function PerfPanelBody({
           }`}>
             <div className="w-full min-w-0">
               <div className="flex flex-nowrap items-center justify-between gap-2 text-[9px] font-black">
-                <span data-testid="quote-composite-score-title" className="shrink-0 whitespace-nowrap text-slate-600">종합 점수</span>
+                <span className="flex shrink-0 items-center gap-0.5">
+                  <span data-testid="quote-composite-score-title" className="whitespace-nowrap text-slate-600">종합 점수</span>
+                  <HelpTip
+                    label="종합 점수 설명"
+                    text="현재 견적의 호환성·성능·전력 여유를 종합해 1000점 만점으로 계산한 점수입니다. 부품을 바꾸면 점수 변화를 바로 보여줍니다."
+                    placement="bottom"
+                    align="left"
+                  />
+                </span>
                 {hasWorkspace ? (
                   <span className="flex min-w-0 items-center gap-1">
                     <span className="truncate text-slate-400">호환·성능·여유 종합 1000점</span>
