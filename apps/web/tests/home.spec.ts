@@ -989,13 +989,14 @@ test('chatbot uses build-chat API without replacing featured home recommendation
   const chatbotPanel = page.getByTestId('ai-chatbot-panel');
   const chatbotInput = page.getByRole('textbox', { name: 'AI 챗봇에게 PC 사양 질문' });
 
-  await expect(chatbotPanel.getByRole('button', { name: '200만원 게이밍 PC' })).toBeVisible();
-  await expect(chatbotPanel.getByRole('button', { name: '견적 마저 채우기' })).toBeVisible();
-  await expect(chatbotPanel.getByRole('button', { name: '성능 비교' })).toBeVisible();
-  await expect(chatbotPanel.getByRole('button', { name: 'PC 문제 상담' })).toBeVisible();
-  await chatbotPanel.getByRole('button', { name: '200만원 게이밍 PC' }).click();
-  await expect(chatbotInput).toHaveValue('200만원으로 게이밍 PC 추천해줘');
-
+  await expect(chatbotPanel.getByText('이렇게 물어보세요')).toHaveCount(0);
+  await expect(chatbotPanel.getByRole('button', { name: '200만원 게이밍 PC' })).toHaveCount(0);
+  await expect(chatbotPanel.getByRole('button', { name: '견적 마저 채우기' })).toHaveCount(0);
+  await expect(chatbotPanel.getByRole('button', { name: '성능 비교' })).toHaveCount(0);
+  await expect(chatbotPanel.getByRole('button', { name: 'PC 문제 상담' })).toHaveCount(0);
+  await expect(chatbotPanel.getByRole('button', { name: '800만원 PC 추천' })).toHaveCount(0);
+  await expect(chatbotPanel.getByRole('button', { name: '9950X3D 상세' })).toHaveCount(0);
+  await expect(chatbotPanel.getByRole('button', { name: '내 견적함' })).toHaveCount(0);
   await chatbotInput.fill('200만원 PC 추천');
   await page.getByRole('button', { name: '질문 보내기' }).click();
 
@@ -1108,13 +1109,8 @@ test('docks the desktop AI assistant and shifts the page while open', async ({ p
   await expect(page.getByTestId('ai-chatbot-panel').getByRole('heading', { name: 'AI 견적 어시스턴트' })).toHaveCount(0);
   await expect(page.getByTestId('ai-chatbot-panel')).not.toContainText('내부 견적 자산 기준 · 호환성 자동 체크');
   await expect(page.getByTestId('ai-chatbot-panel').getByRole('button', { name: 'AI 견적 챗봇 닫기' })).toBeVisible();
-  await expect(page.getByText('이렇게 물어보세요').locator('../..')).toHaveCSS('background-color', 'rgb(247, 247, 248)');
-  const quickPromptHeadingRow = page.getByText('이렇게 물어보세요', { exact: true }).locator('..');
-  await expect(quickPromptHeadingRow.getByRole('button', { name: 'AI 견적 챗봇 닫기' })).toBeVisible();
-  const quickPromptButtons = quickPromptHeadingRow.locator('..').locator(':scope > div').nth(1).getByRole('button');
-  await expect(quickPromptButtons).toHaveCount(4);
-  const quickPromptTopValues = await quickPromptButtons.evaluateAll((buttons) => buttons.map((button) => button.getBoundingClientRect().top));
-  expect(Math.max(...quickPromptTopValues) - Math.min(...quickPromptTopValues)).toBeLessThan(2);
+  await expect(page.getByTestId('ai-chatbot-panel')).not.toContainText('이렇게 물어보세요');
+  await expect(page.getByTestId('ai-chatbot-panel').getByRole('button', { name: '200만원 게이밍 PC' })).toHaveCount(0);
   await expect(page.getByTestId('ai-chatbot-panel')).not.toHaveCSS('box-shadow', 'none');
   await expect(page.getByTestId('ai-chatbot-panel')).not.toContainText('대화 기록은 브라우저에만 임시 저장됩니다');
   await expect.poll(async () => {
@@ -1220,7 +1216,7 @@ test('chatbot asks for login when token disappears before submit', async ({ page
   await expect(page.getByTestId('ai-chatbot-panel').getByRole('heading', { name: 'AI 견적 어시스턴트' })).toHaveCount(0);
   await expect(page.getByTestId('ai-chatbot-panel')).not.toContainText('내부 견적 자산 기준 · 호환성 자동 체크');
   await expect(page.getByTestId('ai-chatbot-panel').getByRole('button', { name: 'AI 견적 챗봇 닫기' })).toBeVisible();
-  await expect(page.getByText('이렇게 물어보세요').locator('../..')).toHaveCSS('background-color', 'rgb(247, 247, 248)');
+  await expect(page.getByTestId('ai-chatbot-panel')).not.toContainText('이렇게 물어보세요');
   await expect(page.getByTestId('ai-chatbot-panel')).not.toContainText('대화 기록은 브라우저에만 임시 저장됩니다');
   await expect.poll(async () => {
     const shellMarginRight = await page.locator('.screen-shell').evaluate((element) => window.getComputedStyle(element).marginRight);

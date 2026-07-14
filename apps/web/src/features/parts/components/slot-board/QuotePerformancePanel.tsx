@@ -379,8 +379,8 @@ function PerfPanelBody({
       >
         <div className={`grid gap-3 lg:items-center ${
           activeComparison
-            ? 'lg:grid-cols-[calc(clamp(256px,18vw,320px)-10px)_minmax(0,1fr)_auto]'
-            : 'lg:grid-cols-[calc(clamp(256px,18vw,320px)-10px)_minmax(0,1fr)]'
+            ? 'lg:grid-cols-[calc(clamp(256px,18vw,320px)-12px)_minmax(0,1fr)_auto]'
+            : 'lg:grid-cols-[calc(clamp(256px,18vw,320px)-12px)_minmax(0,1fr)]'
         }`}>
           <div data-testid="quote-performance-score-column" className={`flex items-center justify-center border-b border-commerce-line pb-1.5 lg:border-b-0 lg:border-r lg:pb-0 lg:pr-2 ${
             activeComparison ? 'min-h-[88px]' : 'min-h-[80px]'

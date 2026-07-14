@@ -1141,7 +1141,7 @@ test('renders the quote checklist with progress, next-slot guide, and total', as
   await expect(page.getByTestId('slot-candidate-panel')).toHaveCount(0);
 });
 
-test('keeps the selected checklist category open while replacing single-slot parts repeatedly', async ({ page }) => {
+test('toggles the selected checklist category and keeps it open while replacing single-slot parts repeatedly', async ({ page }) => {
   await loginAsUser(page);
   const putRequests: string[] = [];
   const cpuCandidates = [
@@ -1181,9 +1181,16 @@ test('keeps the selected checklist category open while replacing single-slot par
   const candidates = page.getByTestId('checklist-candidates-CPU');
   await expect(candidates).toBeVisible();
 
-  // 이미 열린 카테고리를 다시 눌러도 목록을 닫지 않는다. 빠른 연속 교체가 핵심 동선이다.
+  // 이미 열린 카테고리를 다시 누르면 닫히고, 한 번 더 누르면 같은 후보 목록이 다시 열린다.
   await page.getByTestId('checklist-CPU').click();
+  await expect(page).toHaveURL('/self-quote');
+  await expect(candidates).toHaveCount(0);
+  await expect(page.getByTestId('checklist-CPU')).toHaveAttribute('aria-expanded', 'false');
+
+  await page.getByTestId('checklist-CPU').click();
+  await expect(page).toHaveURL('/self-quote?category=CPU');
   await expect(candidates).toBeVisible();
+  await expect(page.getByTestId('checklist-CPU')).toHaveAttribute('aria-expanded', 'true');
 
   await candidates.getByRole('button', { name: /AMD Ryzen 5 9600X/ }).click();
   await expect.poll(() => putRequests).toEqual(['cpu-9600x']);
@@ -3681,7 +3688,7 @@ test('persists an assembly request, selects an offer, and pays points after Toss
   await expect(page).toHaveURL(`/checkout/payment/${requestId}`);
   await page.reload();
   await expect(page.getByText('박준호 기사')).toBeVisible();
-  await expect(page.getByRole('button', { name: '토스 결제하기' })).toBeVisible();
+  await expect(page.getByRole('button', { name: '결제하기', exact: true })).toBeVisible();
   await page.goto(`/checkout/toss/success/${requestId}?paymentType=NORMAL&paymentKey=test_payment_key&orderId=${requestId}&amount=1470000`);
 
   await expect(page).toHaveURL(`/checkout/complete/${requestId}`);
@@ -3939,9 +3946,10 @@ test('self quote chatbot sends current draft and never mutates the draft automat
   await expect(page.getByTestId('checklist-GPU')).toContainText('RTX 5070 챗봇 테스트');
   const chatbotPanel = page.getByTestId('ai-chatbot-panel');
   await expect(chatbotPanel).toBeVisible();
-  await expect(chatbotPanel.getByRole('button', { name: '200만원 게이밍 PC' })).toBeVisible();
-  await expect(chatbotPanel.getByRole('button', { name: '견적 마저 채우기' })).toBeVisible();
-  await expect(chatbotPanel.getByRole('button', { name: '성능 비교' })).toBeVisible();
+  await expect(chatbotPanel.getByText('이렇게 물어보세요')).toHaveCount(0);
+  await expect(chatbotPanel.getByRole('button', { name: '200만원 게이밍 PC' })).toHaveCount(0);
+  await expect(chatbotPanel.getByRole('button', { name: '견적 마저 채우기' })).toHaveCount(0);
+  await expect(chatbotPanel.getByRole('button', { name: '성능 비교' })).toHaveCount(0);
   await expect(chatbotPanel.getByRole('button', { name: '800만원 PC 추천' })).toHaveCount(0);
   await expect(chatbotPanel.getByRole('button', { name: '9950X3D 상세' })).toHaveCount(0);
   await expect(chatbotPanel.getByRole('button', { name: '내 견적함' })).toHaveCount(0);

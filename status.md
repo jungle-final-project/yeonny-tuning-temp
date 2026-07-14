@@ -1,5 +1,18 @@
 # 작업 상태
 
+## 2026-07-14 AI 채팅 입력 자동완성·안내 영역 정리
+
+- 현재 목표: 최신 `main` 기준으로 AI 채팅 입력의 브라우저 자동완성을 끄고 불필요한 상단 예시·하단 저장 안내를 제거한다.
+- 완료: 중앙/측면 채팅 폼과 입력창에 `autoComplete="off"`를 적용하고, `이렇게 물어보세요` 빠른 질문 영역과 대화 기록 임시 저장 안내문을 삭제했다.
+- 완료: 견적 체크리스트에서 열려 있는 CPU 등 같은 카테고리를 다시 누르면 후보 목록과 URL 선택이 함께 닫히도록 토글 동작을 추가했다. Enter·Space 키에도 같은 동작을 적용했다.
+- 완료: 결제 버튼의 기본 표시 문구를 `토스 결제하기`에서 `결제하기`로 변경했으며 결제 동작은 유지했다.
+- Git: EXE 작업 브랜치 `codex/self-quote-ui-main-merge`와 분리된 `codex/ai-chat-cleanup` 브랜치를 `origin/main` `7841145`에서 생성했다. `front-ui`는 이미 PR #164로 main에 포함되어 있어 merge 충돌은 없었다.
+- CI 수정: 최신 `origin/main`을 병합하고 채팅 UI 충돌 1건을 해결했다. 최신 도킹형 UI와 닫기 동작은 유지하면서 자동완성 차단, 빠른 질문 삭제, 임시 저장 안내 삭제를 반영했다.
+- 마지막 검증: 실패했던 Playwright `desktop-chromium` 테스트 4개를 단일 워커로 재실행해 4/4 통과했다. 전체 웹 테스트는 사용자 요청에 따라 실행하지 않았다. 이후 CI에서 발견된 빠른 질문 영역 관련 테스트 2개도 새 UI 계약에 맞춰 수정하고 해당 테스트만 재실행했다.
+
+- CI follow-up: Adjusted the compact performance panel first-column offset from `-10px` to `-12px` after the latest main padding change, restoring checklist edge alignment.
+- Verification: The single FPS performance-panel Playwright test passed on `desktop-chromium` (1/1).
+
 ## 현재 목표
 - PR #32(`feat/goal3-agent-idempotency`)가 최신 `upstream/main`과 충돌 없이 머지 가능하도록 정리한다.
 

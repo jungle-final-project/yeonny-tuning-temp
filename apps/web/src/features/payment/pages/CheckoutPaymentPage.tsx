@@ -101,7 +101,7 @@ export function CheckoutPaymentPage() {
                 className="mt-5 flex min-h-12 w-full items-center justify-center gap-2 rounded-md bg-commerce-ink px-4 text-sm font-black text-white disabled:bg-slate-300"
               >
                 <CreditCard size={17} />
-                {tossWindowMutation.isPending ? '토스 결제창 준비 중...' : '토스 결제하기'}
+                {tossWindowMutation.isPending ? '토스 결제창 준비 중...' : '결제하기'}
               </button>
             )}
             {request.payment.latestAttempt && request.payment.latestAttempt.status !== 'SUCCEEDED' ? (
