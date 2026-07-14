@@ -65,6 +65,29 @@ const CENTER_SCROLLBAR_TRACK_BOTTOM = 12;
 const CENTER_SCROLLBAR_MIN_THUMB_HEIGHT = 32;
 const CENTER_SCROLLBAR_HIDE_DELAY_MS = 700;
 
+const FAST_CATEGORY_ROUTE_TERMS: Array<[PartCategory, string[]]> = [
+  ['MOTHERBOARD', ['메인보드', '마더보드', 'motherboard']],
+  ['COOLER', ['쿨러', 'cooler']],
+  ['STORAGE', ['ssd', '스토리지', '저장장치', 'storage']],
+  ['PSU', ['파워', 'psu', '전원공급장치']],
+  ['CASE', ['케이스', 'case']],
+  ['GPU', ['gpu', '그래픽카드', '그래픽 카드', '글카', '지피유']],
+  ['CPU', ['cpu', '씨피유', '씨퓨', '프로세서']],
+  ['RAM', ['ram', '램', '메모리']]
+];
+
+function fastCategoryRouteIntent(message: string): PartCategory | null {
+  const normalized = message.toLowerCase().replace(/\s+/g, ' ').trim();
+  if (!/(보여\s*줘|열어\s*줘|화면|목록|카테고리|이동)/.test(normalized)) return null;
+  if (/(추천|후보|바꿔|교체|담아|넣어|빼|삭제|추가|성능|프레임|fps|비교|위치|어디|상세|상품\s*페이지|제품\s*페이지)/.test(normalized)) return null;
+  if (/(rtx|지포스|라이젠|ryzen|core|m\.2|nvme|\d{3,})/i.test(normalized)) return null;
+
+  const matches = FAST_CATEGORY_ROUTE_TERMS
+    .filter(([, terms]) => terms.some((term) => normalized.includes(term)))
+    .map(([category]) => category);
+  return matches.length === 1 ? matches[0] : null;
+}
+
 export function AiBuildAssistant({ surface = 'home', variant = 'floating', onBoardFocus }: AiBuildAssistantProps) {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
@@ -323,6 +346,29 @@ export function AiBuildAssistant({ surface = 'home', variant = 'floating', onBoa
     saveAssistantSession(optimisticSession, ownerKey);
     setPrompt('');
     setSubmitError(null);
+
+    const fastCategory = fastCategoryRouteIntent(nextPrompt);
+    if (fastCategory) {
+      const responseTime = new Date().toISOString();
+      const assistantMessage: AiChatMessage = {
+        id: createAiMessageId('route'),
+        role: 'assistant',
+        text: `${PART_CATEGORY_LABELS[fastCategory]} 부품 화면으로 이동했습니다.`,
+        createdAt: responseTime,
+        kind: 'general'
+      };
+      const nextSession = {
+        ...optimisticSession,
+        messages: [...optimisticSession.messages, assistantMessage],
+        updatedAt: responseTime
+      };
+      setSession(nextSession);
+      saveAssistantSession(nextSession, ownerKey);
+      setPendingClarification(null);
+      navigate(`/self-quote?category=${fastCategory}`);
+      return;
+    }
+
     setIsSending(true);
 
     try {

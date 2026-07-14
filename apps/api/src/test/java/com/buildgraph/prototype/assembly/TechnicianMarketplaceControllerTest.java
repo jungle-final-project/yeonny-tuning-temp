@@ -11,6 +11,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
@@ -31,7 +32,7 @@ class TechnicianMarketplaceControllerTest {
     @Test
     void applicationAndProfileRoutesAreWired() throws Exception {
         when(service.apply(eq(TOKEN), anyMap())).thenReturn(Map.of("id", "tech-1", "verificationStatus", "PENDING"));
-        when(service.profile(TOKEN)).thenReturn(Map.of("id", "tech-1", "verificationStatus", "APPROVED"));
+        when(service.profileIfPresent(TOKEN)).thenReturn(Optional.of(Map.of("id", "tech-1", "verificationStatus", "APPROVED")));
         when(service.updateProfile(eq(TOKEN), anyMap())).thenReturn(Map.of("id", "tech-1", "displayName", "수정 기사"));
 
         mockMvc.perform(post("/api/technician/applications").header("Authorization", TOKEN)
@@ -42,6 +43,14 @@ class TechnicianMarketplaceControllerTest {
         mockMvc.perform(patch("/api/technician/profile").header("Authorization", TOKEN)
                         .contentType(MediaType.APPLICATION_JSON).content("{}"))
                 .andExpect(status().isOk()).andExpect(jsonPath("$.displayName").value("수정 기사"));
+    }
+
+    @Test
+    void missingTechnicianProfileIsANormalNoContentResponse() throws Exception {
+        when(service.profileIfPresent(TOKEN)).thenReturn(Optional.empty());
+
+        mockMvc.perform(get("/api/technician/profile").header("Authorization", TOKEN))
+                .andExpect(status().isNoContent());
     }
 
     @Test

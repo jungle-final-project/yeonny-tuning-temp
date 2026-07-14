@@ -32,12 +32,12 @@ import {
   getPart,
   getPublicHome,
   listHomeRecommendedParts,
-  listParts,
   recordRecommendationEvent
 } from '../../parts/partsApi';
-import type { HomeRecommendedPart, PartPage, PartRow } from '../../parts/types';
+import type { HomeRecommendedPart, PartRow } from '../../parts/types';
 import {
   AI_ASSISTANT_SESSION_CHANGED_EVENT,
+  normalizeAiBuilds,
   normalizeAiRecommendedBuild,
   readAssistantSession,
   recentBuildsForChatContext,
@@ -51,7 +51,7 @@ import {
   HomeFeaturedBuildPreview,
   type HomeFeaturedBuildPreviewItem
 } from '../components/HomeFeaturedBuildPreview';
-import { resolveBuildGraph } from '../quoteApi';
+import { listHomeRecommendedBuilds, resolveBuildGraph } from '../quoteApi';
 
 type CategoryItem = {
   value: PartCategory;
@@ -173,22 +173,22 @@ export function HomePage() {
     staleTime: 60_000
   });
 
-  const categoryPartQueries = useQueries({
-    queries: PART_CATEGORIES.map((category) => ({
-      queryKey: ['parts', 'modern-home-curated', category.value],
-      queryFn: () => listParts({ category: category.value, status: 'ACTIVE', page: 0, size: 4, sort: 'price_desc' as const }),
-      staleTime: 60_000,
-      enabled: isAuthenticated
-    }))
+  const homeRecommendedBuildsQuery = useQuery({
+    queryKey: ['recommendations', 'home-builds'],
+    queryFn: listHomeRecommendedBuilds,
+    enabled: isAuthenticated,
+    staleTime: 60_000
   });
+  const validatedBuilds = useMemo(
+    () => normalizeAiBuilds(homeRecommendedBuildsQuery.data?.items ?? []),
+    [homeRecommendedBuildsQuery.data?.items]
+  );
 
-  const curatedPreviewItems = useMemo<HomeFeaturedBuildPreviewItem[]>(() => (
+  const publicCuratedPreviewItems = useMemo<HomeFeaturedBuildPreviewItem[]>(() => (
     CURATED_BUILD_TEMPLATES.map((template, buildIndex) => {
-      const buildParts = PART_CATEGORIES.map((category, categoryIndex) => {
-        const page = categoryPartQueries[categoryIndex]?.data as PartPage | undefined;
+      const buildParts = PART_CATEGORIES.map((category) => {
         const publicCandidates = publicHomeQuery.data?.categoryParts[category.value] ?? [];
-        const candidates = isAuthenticated ? (page?.items ?? []) : publicCandidates;
-        const part = candidates[buildIndex] ?? candidates[0];
+        const part = publicCandidates[buildIndex] ?? publicCandidates[0];
         if (!part) return null;
         return {
           search: { category: category.value, searchQuery: part.name },
@@ -214,14 +214,14 @@ export function HomePage() {
           : null
       };
     })
-  ), [categoryPartQueries, isAuthenticated, publicHomeQuery.data]);
+  ), [publicHomeQuery.data]);
 
   const latestHomeAiBuilds = useMemo(
     () => isAuthenticated ? recentBuildsForChatContext(assistantSession) : [],
     [assistantSession, isAuthenticated]
   );
   const selectedCuratedBuild = selectedCuratedBuildId
-    ? curatedPreviewItems.find((item) => item.build.id === selectedCuratedBuildId) ?? null
+    ? validatedBuilds.find((build) => build.id === selectedCuratedBuildId) ?? null
     : null;
   const selectedAiBuild = selectedAiBuildId
     ? latestHomeAiBuilds.find((build) => build.id === selectedAiBuildId) ?? null
@@ -246,21 +246,39 @@ export function HomePage() {
     imagePart: (aiImageQueries[index]?.data as PartRow | undefined) ?? null
   }));
 
-  const curatedGraphItems = selectedCuratedBuild?.buildParts.map(({ search, part }) => ({
-    partId: part.id,
-    category: search.category,
-    quantity: 1
+  const validatedImageQueries = useQueries({
+    queries: validatedBuilds.map((build) => {
+      const imageItem = build.items.find((item) => item.category === 'CASE')
+        ?? build.items.find((item) => item.category === 'GPU')
+        ?? build.items[0];
+      return {
+        queryKey: ['parts', 'modern-home-validated-image', build.id, imageItem?.partId ?? 'none'],
+        queryFn: () => getPart(imageItem!.partId),
+        enabled: isAuthenticated && Boolean(imageItem?.partId),
+        staleTime: 60_000
+      };
+    })
+  });
+  const validatedPreviewItems = validatedBuilds.map((build, index) => ({
+    build,
+    imagePart: (validatedImageQueries[index]?.data as PartRow | undefined) ?? null
+  }));
+
+  const curatedGraphItems = selectedCuratedBuild?.items.map((item) => ({
+    partId: item.partId,
+    category: item.category,
+    quantity: item.quantity
   })) ?? [];
-  const curatedGraphSignature = curatedGraphItems.map((item) => `${item.category}:${item.partId}`).sort().join('|');
+  const curatedGraphSignature = curatedGraphItems.map((item) => `${item.category}:${item.partId}:${item.quantity}`).sort().join('|');
   const curatedGraphQuery = useQuery({
-    queryKey: ['build-graph', 'modern-home-curated', selectedCuratedBuild?.build.id, curatedGraphSignature],
+    queryKey: ['build-graph', 'modern-home-curated', selectedCuratedBuild?.id, curatedGraphSignature],
     queryFn: () => resolveBuildGraph({
       source: 'AI_BUILD',
       view: 'FOCUSED',
-      budgetWon: selectedCuratedBuild?.assetTotalPrice ?? undefined,
+      budgetWon: selectedCuratedBuild?.budgetWon,
       items: curatedGraphItems
     }),
-    enabled: isAuthenticated && Boolean(selectedCuratedBuild && curatedGraphItems.length === PART_CATEGORIES.length),
+    enabled: isAuthenticated && Boolean(selectedCuratedBuild && curatedGraphItems.length > 0),
     staleTime: 30_000
   });
 
@@ -332,6 +350,12 @@ export function HomePage() {
       window.removeEventListener(AI_BUILD_ASSISTANT_VISIBILITY_CHANGED_EVENT, closeChoicesForAiAssistant);
     };
   }, []);
+
+  useEffect(() => {
+    if (selectedCuratedBuildId && !validatedBuilds.some((build) => build.id === selectedCuratedBuildId)) {
+      setSelectedCuratedBuildId(null);
+    }
+  }, [selectedCuratedBuildId, validatedBuilds]);
 
   useEffect(() => {
     if (selectedAiBuildId && !latestHomeAiBuilds.some((build) => build.id === selectedAiBuildId)) {
@@ -533,22 +557,37 @@ export function HomePage() {
                   onImageError={handleProductImageError}
                 />
               </div>
+            ) : isAuthenticated ? (
+              validatedPreviewItems.length ? (
+                <HomeAiBuildPreview
+                  items={validatedPreviewItems}
+                  selectedBuildId={selectedCuratedBuild?.id ?? null}
+                  applyingBuildId={applyingBuildId}
+                  graph={curatedGraphQuery.data}
+                  isGraphLoading={curatedGraphQuery.isLoading}
+                  isGraphError={curatedGraphQuery.isError}
+                  onSelectBuild={setSelectedCuratedBuildId}
+                  onClearSelection={() => setSelectedCuratedBuildId(null)}
+                  onApplyBuild={applyAiBuild}
+                  onImageError={handleProductImageError}
+                />
+              ) : (
+                <div className="rounded-lg border border-commerce-line bg-white px-5 py-6 text-sm font-bold text-slate-600">
+                  {homeRecommendedBuildsQuery.isLoading
+                    ? '검증된 추천 조합을 준비하고 있습니다.'
+                    : '현재 검증을 통과한 기본 조합이 없습니다. AI에게 예산과 용도를 알려주면 새 조합을 계산합니다.'}
+                </div>
+              )
             ) : (
               <HomeFeaturedBuildPreview
-                items={curatedPreviewItems}
-                selectedBuildId={selectedCuratedBuild?.build.id ?? null}
+                items={publicCuratedPreviewItems}
+                selectedBuildId={null}
                 applyingBuildId={applyingBuildId}
-                graph={curatedGraphQuery.data}
-                isGraphLoading={curatedGraphQuery.isLoading}
-                isGraphError={curatedGraphQuery.isError}
-                onSelectBuild={(buildId) => {
-                  if (!isAuthenticated) {
-                    navigate(`/login?redirect=${encodeURIComponent('/')}`);
-                    return;
-                  }
-                  setSelectedCuratedBuildId(buildId);
-                }}
-                onClearSelection={() => setSelectedCuratedBuildId(null)}
+                graph={undefined}
+                isGraphLoading={false}
+                isGraphError={false}
+                onSelectBuild={() => navigate(`/login?redirect=${encodeURIComponent('/')}`)}
+                onClearSelection={() => undefined}
                 onApplyBuild={applyCuratedBuild}
                 onImageError={handleProductImageError}
               />

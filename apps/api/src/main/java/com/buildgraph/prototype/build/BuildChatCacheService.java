@@ -177,7 +177,7 @@ public class BuildChatCacheService {
         }
         fingerprint.put("versions", dataVersions());
         String json = OBJECT_MAPPER.writeValueAsString(fingerprint);
-        return "buildgraph:build-chat:v48:" + sha256(json);
+        return "buildgraph:build-chat:v61:" + sha256(json);
     }
 
     private static Map<String, Object> uiContextFingerprint(Object value) {

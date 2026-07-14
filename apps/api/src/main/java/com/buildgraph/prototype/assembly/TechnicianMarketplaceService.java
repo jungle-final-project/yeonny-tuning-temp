@@ -9,6 +9,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import org.springframework.http.HttpStatus;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -80,6 +81,11 @@ public class TechnicianMarketplaceService {
         Map<String, Object> technician = technicianByUser(user.internalId());
         if (technician == null) throw notFound();
         return profileMap(technician);
+    }
+
+    public Optional<Map<String, Object>> profileIfPresent(String authorization) {
+        CurrentUserService.CurrentUser user = requireRegularUser(authorization);
+        return Optional.ofNullable(technicianByUser(user.internalId())).map(this::profileMap);
     }
 
     @Transactional

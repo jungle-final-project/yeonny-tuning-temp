@@ -5,6 +5,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import org.springframework.stereotype.Service;
 
@@ -43,7 +44,12 @@ public class BuildChatIntentRouter {
     public BuildChatIntentDecision decide(Map<String, Object> request, String message) {
         Map<String, Object> body = request == null ? Map.of() : request;
         String normalized = normalize(message);
-        String category = firstText(text(body.get("selectedCategory")), BuildChatService.detectPartCategory(message), PartRouteResolver.inferCategory(message));
+        String category = firstText(
+                text(body.get("selectedCategory")),
+                BuildChatService.detectRecommendationTargetCategory(message),
+                BuildChatService.detectPartCategory(message),
+                PartRouteResolver.inferCategory(message)
+        );
         String partQuery = PartRouteResolver.extractPartQuery(message);
         boolean hasDraftItems = !objectMaps(objectMap(body.get("currentQuoteDraft")).get("items")).isEmpty();
 
@@ -85,6 +91,13 @@ public class BuildChatIntentRouter {
                     null,
                     List.of("PC_SYMPTOM_REPORTED")
             );
+        }
+
+        // 제외할 모델만 말하고 예산·용도를 주지 않은 요청은 임의 기본 예산으로 추천하지 않는다.
+        // 원문의 제외 조건을 clarificationContext에 보존한 채 기준을 되물으면 다음 턴에서 안전하게 합성된다.
+        if (isNegatedPreferenceOnlyBuildRequest(normalized, message)) {
+            return decision(BuildChatIntent.ASK_CLARIFICATION, "LOW", "NONE", category, partQuery,
+                    "FAST_CLARIFICATION", "NONE", null, List.of("LOW_INFORMATION"));
         }
 
         if (isBuildRecommend(normalized, message, category)) {
@@ -168,9 +181,12 @@ public class BuildChatIntentRouter {
         boolean storageSaturation = containsAny(normalized,
                 "ssd사용률100", "ssd사용률이100", "디스크사용률100", "디스크사용률이100",
                 "ssd디스크가계속100", "디스크가계속100", "디스크가100");
+        boolean candidateReview = containsAny(normalized, "후보", "추천", "적용하면", "호환", "장착")
+                && containsAny(normalized, "현재구성", "현재견적", "다시선택", "문제없는지", "문제가없는지");
         boolean storageSymptom = storageSaturation
                 || containsAny(normalized, "ssd", "디스크", "저장장치")
-                        && containsAny(normalized, "느려", "멈", "오류", "문제", "인식안", "공간부족");
+                        && containsAny(normalized, "느려", "멈", "오류", "문제", "인식안", "공간부족")
+                        && !candidateReview;
         if (storageSymptom) {
             return true;
         }
@@ -200,7 +216,7 @@ public class BuildChatIntentRouter {
         boolean currentBuildSignal = containsAny(normalized,
                 "현재견적", "이견적", "담긴견적", "내견적", "지금견적", "현재구성", "이구성", "지금구성");
         boolean scoreSignal = containsAny(normalized,
-                "종합점수", "총점", "이점수", "점수가", "점수왜", "점수설명", "점수낮", "점수높");
+                "종합점수", "총점", "이점수", "점수가", "점수를", "점수왜", "점수설명", "점수낮", "점수높");
         boolean weaknessSignal = containsAny(normalized,
                 "병목", "약점", "부족한부분", "아쉬운부분", "문제점", "균형", "밸런스");
         boolean prioritySignal = containsAny(normalized,
@@ -208,6 +224,18 @@ public class BuildChatIntentRouter {
         boolean cpuGpuContrast = containsAny(normalized, "cpu", "씨피유", "프로세서")
                 && containsAny(normalized, "gpu", "그래픽카드", "글카")
                 && containsAny(normalized, "왜", "이유", "낮", "높", "차이", "균형", "밸런스");
+
+        // "현재 견적에 호환되는 GPU 추천"은 점수 설명이 아니라 후보 요청이다. 반면
+        // "점수를 높일 부품 추천"처럼 카테고리를 정하지 않은 질문은 평가 결과가 개선 우선순위를 정한다.
+        boolean explicitCategoryRecommendation = category != null
+                && isRecommendationVerb(normalized)
+                && !scoreSignal
+                && !weaknessSignal
+                && !prioritySignal
+                && !cpuGpuContrast;
+        if (explicitCategoryRecommendation) {
+            return false;
+        }
 
         if (!(scoreSignal || weaknessSignal || prioritySignal || (currentBuildSignal && isExplanationQuestion(normalized)) || cpuGpuContrast)) {
             return false;
@@ -456,6 +484,15 @@ public class BuildChatIntentRouter {
                 || budgetWithCompositionConstraint || budgetWithPurchaseIntent;
     }
 
+    private static boolean isNegatedPreferenceOnlyBuildRequest(String normalized, String message) {
+        return specificPartSignalPolarity(message).negatedOnly()
+                && BuildChatService.parseBudgetWon(message) == null
+                && !hasOpenBudgetSignal(normalized)
+                && !hasBuildUseCaseSignal(normalized)
+                && isRecommendationVerb(normalized)
+                && hasBuildNoun(normalized);
+    }
+
     private static boolean hasBuildCompositionConstraint(String normalized) {
         if (containsAny(normalized, "포함", "들어간", "들어가는", "장착", "조합")) {
             return true;
@@ -483,8 +520,25 @@ public class BuildChatIntentRouter {
     }
 
     private static boolean hasSpecificPartSignal(String message) {
-        String compact = message == null ? "" : message.replaceAll("\\s+", "");
-        return GPU_MODEL_SIGNAL.matcher(compact).find() || CPU_MODEL_SIGNAL.matcher(compact).find();
+        return specificPartSignalPolarity(message).positive();
+    }
+
+    private static SpecificPartSignalPolarity specificPartSignalPolarity(String message) {
+        String compact = message == null ? "" : message.replaceAll("\\s+", "").toLowerCase(Locale.ROOT);
+        boolean positive = false;
+        boolean negated = false;
+        for (Pattern pattern : List.of(GPU_MODEL_SIGNAL, CPU_MODEL_SIGNAL)) {
+            Matcher matcher = pattern.matcher(compact);
+            while (matcher.find()) {
+                String suffix = compact.substring(matcher.end(), Math.min(compact.length(), matcher.end() + 10));
+                if (containsAny(suffix, "말고", "말구", "빼고", "제외", "없이", "아닌", "대신")) {
+                    negated = true;
+                } else {
+                    positive = true;
+                }
+            }
+        }
+        return new SpecificPartSignalPolarity(positive, negated && !positive);
     }
 
     private static boolean isDraftCompletionIntent(String normalized, boolean hasDraftItems) {
@@ -606,5 +660,8 @@ public class BuildChatIntentRouter {
     }
 
     private record LocationCategoryMatch(String category, int index) {
+    }
+
+    private record SpecificPartSignalPolarity(boolean positive, boolean negatedOnly) {
     }
 }

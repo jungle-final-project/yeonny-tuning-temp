@@ -570,6 +570,59 @@ async function mockHomePartsApi(page: Page) {
     'home-case-frame',
     'home-cooler-phantom'
   ];
+  const validatedBuildPartIds = [
+    'home-cpu-ryzen7',
+    'home-board-b850',
+    'home-ram-ddr5-32',
+    'home-gpu-rtx5070',
+    'home-ssd-nvme-1tb',
+    'home-psu-850',
+    'home-case-frame',
+    'home-cooler-phantom'
+  ];
+  const validatedBuildItems = validatedBuildPartIds.map((id) => {
+    const part = homeParts.find((candidate) => candidate.id === id)!;
+    return {
+      partId: part.id,
+      category: part.category,
+      name: part.name,
+      manufacturer: part.manufacturer,
+      quantity: 1,
+      price: part.price,
+      note: '서버 Tool 검증 완료'
+    };
+  });
+  await page.route('**/api/recommendations/home-builds', async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        items: [{
+          id: 'home-validated-build-1',
+          tier: 'balanced',
+          label: '균형',
+          title: '균형형 예산 맞춤 조합',
+          summary: '서버의 예산·호환성·전력·장착 검증을 통과한 구성입니다.',
+          totalPrice: validatedBuildItems.reduce((sum, part) => sum + part.price * part.quantity, 0),
+          badges: ['균형형', '검증 완료'],
+          budgetWon: 2_000_000,
+          budgetLabel: '200만원',
+          tierLabel: '균형형',
+          appliedPartCategories: [],
+          items: validatedBuildItems,
+          toolResults: [
+            { tool: 'compatibility', status: 'PASS', confidence: 'HIGH', summary: '호환 가능합니다.' },
+            { tool: 'power', status: 'PASS', confidence: 'HIGH', summary: '전력 조건을 통과했습니다.' },
+            { tool: 'size', status: 'PASS', confidence: 'HIGH', summary: '장착 조건을 통과했습니다.' }
+          ],
+          warnings: [],
+          confidence: 'HIGH'
+        }],
+        generatedAt: '2026-07-14T00:00:00Z',
+        fallbackUsed: false
+      })
+    });
+  });
   await page.route('**/api/recommendations/home-parts**', async (route) => {
     const items = recommendedOrder
       .map((id, index) => {
@@ -615,6 +668,20 @@ async function mockHomePartsApi(page: Page) {
 
   await page.route('**/api/parts**', async (route) => {
     const url = new URL(route.request().url());
+    const detailPartId = url.pathname.startsWith('/api/parts/')
+      ? decodeURIComponent(url.pathname.slice('/api/parts/'.length))
+      : null;
+    if (detailPartId) {
+      const detailPart = homeParts.find((part) => part.id === detailPartId);
+      if (detailPart) {
+        await route.fulfill({
+          status: 200,
+          contentType: 'application/json',
+          body: JSON.stringify(detailPart)
+        });
+        return;
+      }
+    }
     const category = url.searchParams.get('category');
     const query = url.searchParams.get('q');
     const matchedParts = homeParts.filter((part) => part.category === category && (!query || part.attributes.shortSpec === query));
@@ -863,13 +930,12 @@ test('renders the editorial home with the quote validation flow', async ({ page 
   await expect(main.getByTestId('home-hero-process-flow')).toHaveCount(0);
   await expect(main.getByTestId('home-quick-start-panel')).toHaveCount(0);
   await expect(main.getByRole('heading', { name: '인기있는 조합을 추천드려요' })).toBeVisible();
-  await expect(main.locator('.home-featured-interest-card')).toHaveCount(4);
-  await expect(main.getByTestId('home-featured-preview-card-home-featured-budget-starter')).toContainText('가성비 입문 추천팩');
-  const qhdRecommendationCard = main.getByTestId('home-featured-preview-card-home-featured-qhd-gaming');
+  await expect(main.locator('.home-featured-interest-card')).toHaveCount(0);
+  const qhdRecommendationCard = main.getByTestId('home-ai-preview-card-home-validated-build-1');
   await expect(qhdRecommendationCard).toBeVisible();
-  await expect(qhdRecommendationCard.getByText('약 229만원')).toBeVisible();
+  await expect(qhdRecommendationCard.getByText('2,293,000원')).toBeVisible();
   await expect(qhdRecommendationCard.getByRole('img', { name: /Home FRAME 4000D Case/ })).toBeVisible();
-  await expect(qhdRecommendationCard.getByRole('button', { name: 'QHD 게이밍 추천팩 셀프 견적에 담기' })).toHaveCount(0);
+  await expect(qhdRecommendationCard.getByRole('button', { name: '균형형 예산 맞춤 조합 셀프 견적에 담기' })).toBeVisible();
   await expect(main.getByRole('heading', { name: '맞춤형 부품을 추천드려요' })).toBeVisible();
   await expect(main.getByRole('link', { name: 'MORE >' })).toHaveAttribute('href', '/parts');
   await expect(main.getByText('다짜줘의 검증 원칙')).toHaveCount(0);
@@ -903,14 +969,13 @@ test('selects a featured recommendation and applies every build part to self quo
   await openHomeAsUser(page);
   const main = page.getByRole('main');
 
-  const qhdRecommendationCard = main.getByTestId('home-featured-preview-card-home-featured-qhd-gaming');
+  const qhdRecommendationCard = main.getByTestId('home-ai-preview-card-home-validated-build-1');
   await expect(qhdRecommendationCard.getByRole('img', { name: /Home FRAME 4000D Case/ })).toBeVisible();
-  await qhdRecommendationCard.click();
-  await qhdRecommendationCard.getByRole('button', { name: 'QHD 게이밍 추천팩 셀프 견적에 담기' }).click();
+  await qhdRecommendationCard.getByRole('button', { name: '균형형 예산 맞춤 조합 셀프 견적에 담기' }).click();
 
   await expect.poll(() => applyRequests.length).toBe(1);
   const request = applyRequests[0] as { buildId?: string; items?: Array<{ partId: string; category: string; quantity: number }> };
-  expect(request.buildId).toBe('home-featured-qhd-gaming');
+  expect(request.buildId).toBe('home-validated-build-1');
   expect(request.items?.map((item) => item.category)).toEqual(['CPU', 'MOTHERBOARD', 'RAM', 'GPU', 'STORAGE', 'PSU', 'CASE', 'COOLER']);
   expect(request.items).toContainEqual({ partId: 'home-gpu-rtx5070', category: 'GPU', quantity: 1 });
   expect(request.items).toContainEqual({ partId: 'home-case-frame', category: 'CASE', quantity: 1 });
@@ -925,7 +990,7 @@ test('renders the full draggable home preview graph', async ({ page }) => {
   await openHomeAsUser(page);
   const main = page.getByRole('main');
 
-  await main.getByTestId('home-featured-preview-card-home-featured-qhd-gaming').click();
+  await main.getByTestId('home-ai-preview-card-home-validated-build-1').click();
   const graphCanvas = main.getByTestId('graph-flow-canvas');
   await expect(graphCanvas.locator('.react-flow__node')).toHaveCount(4);
   await expect(graphCanvas.locator('.react-flow__edge.buildgraph-flow-edge')).toHaveCount(2);

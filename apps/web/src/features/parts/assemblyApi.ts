@@ -305,7 +305,7 @@ export function applyAsTechnician(payload: TechnicianApplicationPayload) {
 }
 
 export function getTechnicianProfile() {
-  return api<Technician>('/api/technician/profile');
+  return api<Technician | undefined>('/api/technician/profile').then((profile) => profile ?? null);
 }
 
 export function updateTechnicianProfile(payload: TechnicianApplicationPayload) {

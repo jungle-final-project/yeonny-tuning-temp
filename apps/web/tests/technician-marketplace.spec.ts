@@ -34,7 +34,7 @@ test.beforeEach(async ({ page }) => {
   await page.addInitScript(() => localStorage.setItem('buildgraph.token', 'jwt-user-token'));
   await page.route('**/api/auth/me', (route) => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ id: 'user-tech', email: 'technician@example.com', name: 'Demo Technician', role: 'USER' }) }));
   await page.route('**/api/support/chat-sessions/current**', (route) => route.fulfill({ status: 404, contentType: 'application/json', body: JSON.stringify({ code: 'NOT_FOUND', message: '상담방 없음' }) }));
-  await page.route('**/api/technician/profile', (route) => route.fulfill({ status: 404, contentType: 'application/json', body: JSON.stringify({ code: 'NOT_FOUND', message: '기사 프로필 없음' }) }));
+  await page.route('**/api/technician/profile', (route) => route.fulfill({ status: 204 }));
 });
 
 test('refreshes checkout offers when a new technician offer arrives', async ({ page }) => {
@@ -79,7 +79,7 @@ test('refreshes checkout offers when a new technician offer arrives', async ({ p
 
 test('submits a lightweight external technician application', async ({ page }) => {
   let submitted = false;
-  await page.route('**/api/technician/profile', (route) => route.fulfill({ status: 404, contentType: 'application/json', body: JSON.stringify({ code: 'NOT_FOUND', message: '기사 프로필 없음' }) }));
+  await page.route('**/api/technician/profile', (route) => route.fulfill({ status: 204 }));
   await page.route('**/api/technician/applications', async (route) => {
     submitted = true;
     const body = route.request().postDataJSON();

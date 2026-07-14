@@ -141,7 +141,7 @@ export function RequirementPage() {
         {recommendations.length > 0 ? (
           <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_420px]">
             <div className="space-y-5">
-              <Panel title="추천 조합 3개" subtitle="내부 자산, 저장된 현재가, 검증 결과를 기반으로 생성">
+              <Panel title={`추천 조합 ${recommendations.length}개`} subtitle="내부 자산, 저장된 현재가, 검증 결과를 기반으로 생성">
                 <div className="flex gap-4 overflow-x-auto pb-1">
                   {recommendations.map((build) => (
                     <QuoteCard key={build.id} build={build} selected={build.id === selectedBuild?.id} onSelect={(nextBuild) => setSelectedBuildId(nextBuild.id)} />

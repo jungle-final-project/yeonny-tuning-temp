@@ -68,7 +68,7 @@ export function AppHeader() {
       return;
     }
     getTechnicianProfile()
-      .then(() => { if (!cancelled) setHasTechnicianProfile(true); })
+      .then((profile) => { if (!cancelled) setHasTechnicianProfile(Boolean(profile)); })
       .catch(() => { if (!cancelled) setHasTechnicianProfile(false); });
     return () => { cancelled = true; };
   }, [user?.id, user?.role]);
