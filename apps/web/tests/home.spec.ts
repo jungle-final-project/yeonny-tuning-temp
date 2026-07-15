@@ -1600,9 +1600,9 @@ test('renders the Etsy-style header and PC category navigation', async ({ page }
   await expect(generalSearchMode).toHaveAttribute('aria-pressed', 'true');
   await expect(generalSearchMode).toHaveCSS('border-bottom-color', 'rgb(222, 108, 45)');
   await expect(aiSearchMode).toHaveAttribute('aria-pressed', 'false');
-  await expect(header.getByRole('textbox', { name: '부품 일반 검색' })).toHaveAttribute('placeholder', /부품명이나 모델명/);
+  await expect(header.getByRole('textbox', { name: '부품 일반 검색' })).toHaveAttribute('placeholder', /부품명이나 모델명을 검색/);
   await expect(header.getByRole('button', { name: '부품 검색' })).toHaveCSS('background-color', 'rgb(222, 108, 45)');
-
+  // 일반검색 모드 확인을 마쳤으니 AI 검색 모드로 되돌려 이어지는 AI 검색 흐름을 검증한다.
   await aiSearchMode.click();
   await expect(aiSearchMode).toHaveAttribute('aria-pressed', 'true');
   await expect(header.getByRole('textbox', { name: 'AI에게 견적 질문하기' })).toHaveAttribute('placeholder', /어떤 PC를 맞춰드릴까요/);

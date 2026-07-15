@@ -163,7 +163,7 @@ AGENT_ICON_PNG = "specup-agent.png"
 AGENT_ICON_ICO = "specup-agent.ico"
 BACKGROUND_INSTANCE_MUTEX_NAME = r"Local\SpecUpPcAgentBackground"
 VIEWER_INSTANCE_MUTEX_NAME = r"Local\SpecUpPcAgentViewer"
-DEFAULT_AGENT_VERSION = "0.1.17"
+DEFAULT_AGENT_VERSION = "0.1.18"
 DEFAULT_POLICY_VERSION = "policy-v1"
 STATUS_HOME_SIGNAL_LIMIT = 3
 LOG_TABLE_LIMIT = 500
@@ -6502,6 +6502,9 @@ def show_log_viewer(
         panel.title("진단 정보 전송 동의")
         panel.geometry("700x620")
         panel.resizable(False, False)
+        # 창이 콘텐츠 자연 크기로 줄어들면(pack propagation) 하단 버튼이 창 밖으로 밀려
+        # 안 보인다. 700x620을 고정해 버튼이 항상 창 안에 들어오게 한다.
+        panel.pack_propagate(False)
         panel.configure(background="#ffffff")
         apply_agent_window_icon(panel)
         tk.Label(
@@ -6569,8 +6572,15 @@ def show_log_viewer(
         summary_box.insert("1.0", summary)
         summary_box.configure(state="disabled")
         consent = tk.BooleanVar(panel, value=False)
+
+        # 버튼과 체크박스를 창 하단에 먼저 고정한다. 그래야 진단 근거가 많아 요약 상자가
+        # 길어져도 '동의 후 AS 접수' 버튼이 창 밖으로 밀리지 않는다. 요약 상자는 남은 공간만 채운다.
+        action_row = tk.Frame(panel, background="#ffffff")
+        action_row.pack(side="bottom", fill="x", padx=32, pady=(0, 24))
+        # 접수 버튼은 action_row의 직접 자식으로 만든다. 다른 부모(panel)에서 in_= 로
+        # 얹으면 배치가 불안정해 버튼이 렌더되지 않는 경우가 있었다.
         consent_button = tk.Button(
-            panel,
+            action_row,
             text="동의 후 AS 접수",
             state="disabled",
             font=font(12, "semibold"),
@@ -6593,10 +6603,6 @@ def show_log_viewer(
         def update_consent() -> None:
             consent_button.configure(state="normal" if consent.get() else "disabled")
 
-        # 버튼과 체크박스를 창 하단에 먼저 고정한다. 그래야 진단 근거가 많아 요약 상자가
-        # 길어져도 '동의 후 AS 접수' 버튼이 창 밖으로 밀리지 않는다. 요약 상자는 남은 공간만 채운다.
-        action_row = tk.Frame(panel, background="#ffffff")
-        action_row.pack(side="bottom", fill="x", padx=32, pady=(0, 24))
         tk.Checkbutton(
             panel,
             text="위 진단 정보 전송에 동의합니다.",
@@ -6619,7 +6625,7 @@ def show_log_viewer(
             padx=28,
             pady=9,
         ).pack(side="left")
-        consent_button.pack(in_=action_row, side="right")
+        consent_button.pack(side="right")
         summary_box.pack(fill="both", expand=True, padx=32, pady=(0, 4))
         panel.transient(root)
         panel.grab_set()
