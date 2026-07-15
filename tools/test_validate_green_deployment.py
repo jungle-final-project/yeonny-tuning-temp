@@ -1,6 +1,10 @@
 from __future__ import annotations
 
+import os
 import re
+import subprocess
+import tempfile
+import textwrap
 import unittest
 from pathlib import Path
 from typing import Any
@@ -22,6 +26,18 @@ EXPECTED_API_IMAGE = "${API_IMAGE_URI:?API_IMAGE_URI is required}"
 EXPECTED_XGB_IMAGE = "${XGB_IMAGE_URI:?XGB_IMAGE_URI is required}"
 GREEN_CLOUDFRONT_VARIABLE = "vars.GREEN_CF_DISTRIBUTION_ID"
 BLUE_CLOUDFRONT_ID = "EI6MMNZLTTN3H"
+AWS_ACCOUNT_ID = "443915990705"
+AWS_REGION = "ap-northeast-2"
+ECR_REGISTRY = f"{AWS_ACCOUNT_ID}.dkr.ecr.{AWS_REGION}.amazonaws.com"
+API_REPOSITORY = "buildgraph-demo-api-green"
+XGB_REPOSITORY = "buildgraph-demo-xgb-reranker-green"
+OLD_API_SHA = "a" * 40
+NEW_SHA = "b" * 40
+OLD_XGB_SHA = "c" * 40
+OLD_API_IMAGE = f"{ECR_REGISTRY}/{API_REPOSITORY}:{OLD_API_SHA}"
+NEW_API_IMAGE = f"{ECR_REGISTRY}/{API_REPOSITORY}:{NEW_SHA}"
+OLD_XGB_IMAGE = f"{ECR_REGISTRY}/{XGB_REPOSITORY}:{OLD_XGB_SHA}"
+NEW_XGB_IMAGE = f"{ECR_REGISTRY}/{XGB_REPOSITORY}:{NEW_SHA}"
 
 
 def load_yaml(path: Path) -> dict[str, Any]:
@@ -35,6 +51,14 @@ def load_yaml(path: Path) -> dict[str, Any]:
 def published_ports(service: dict[str, Any]) -> list[Any]:
     ports = service.get("ports", [])
     return ports if isinstance(ports, list) else [ports]
+
+
+def parse_dotenv(path: Path) -> dict[str, str]:
+    return dict(
+        line.split("=", 1)
+        for line in path.read_text(encoding="utf-8").splitlines()
+        if line and not line.startswith("#")
+    )
 
 
 class GreenDeploymentContractTest(unittest.TestCase):
@@ -147,6 +171,390 @@ class GreenDeploymentContractTest(unittest.TestCase):
         self.assertEqual({"API_IMAGE_URI", "XGB_IMAGE_URI"}, set(values))
         for value in values.values():
             self.assertRegex(value, r"^[^\s:]+(?:/[^\s:]+)+:[0-9a-f]{40}$")
+
+
+class GreenDeploymentImageSelectionRegressionTest(unittest.TestCase):
+    maxDiff = None
+
+    def setUp(self) -> None:
+        self.temporary_directory = tempfile.TemporaryDirectory()
+        self.temp_root = Path(self.temporary_directory.name)
+        self.app_root = self.temp_root / "app"
+        self.fake_bin = self.temp_root / "bin"
+        self.state_dir = self.temp_root / "state"
+        self.deploy_temp_dir = self.temp_root / "deploy-temp"
+        self.image_manifest = self.temp_root / "green-images.env"
+        self.lock_file = self.temp_root / "green-deploy.lock"
+
+        (self.app_root / ".git").mkdir(parents=True)
+        self.fake_bin.mkdir()
+        self.state_dir.mkdir()
+        (self.app_root / "compose.api.ecr.prod.yaml").write_text(
+            ECR_COMPOSE.read_text(encoding="utf-8"),
+            encoding="utf-8",
+        )
+        (self.app_root / ".env.prod").write_text(
+            "RUNTIME_SENTINEL=true\n",
+            encoding="utf-8",
+        )
+        self._write_manifest(OLD_API_IMAGE, OLD_XGB_IMAGE)
+        self._write_state("api", OLD_API_IMAGE)
+        self._write_state("xgb-reranker", OLD_XGB_IMAGE)
+        self._install_fake_commands()
+
+        self.environment = os.environ.copy()
+        self.environment.update(
+            {
+                "PATH": f"{self.fake_bin}{os.pathsep}{self.environment['PATH']}",
+                "AWS_ACCOUNT_ID": AWS_ACCOUNT_ID,
+                "AWS_REGION": AWS_REGION,
+                "BUILDGRAPH_APP_ROOT": str(self.app_root),
+                "GREEN_IMAGE_MANIFEST": str(self.image_manifest),
+                "GREEN_DEPLOY_LOCK_FILE": str(self.lock_file),
+                "FAKE_DEPLOY_TEMP_DIR": str(self.deploy_temp_dir),
+                "FAKE_DOCKER_STATE_DIR": str(self.state_dir),
+                "FAKE_PREVIOUS_GIT_SHA": OLD_API_SHA,
+                # Reproduce the production bug: an inherited shell value is older
+                # than the candidate manifest passed with --env-file.
+                "API_IMAGE_URI": OLD_API_IMAGE,
+                "XGB_IMAGE_URI": OLD_XGB_IMAGE,
+            }
+        )
+
+    def tearDown(self) -> None:
+        self.temporary_directory.cleanup()
+
+    def _write_executable(self, name: str, body: str) -> None:
+        path = self.fake_bin / name
+        path.write_text(textwrap.dedent(body).lstrip(), encoding="utf-8")
+        path.chmod(0o755)
+
+    def _write_manifest(self, api_image: str, xgb_image: str) -> None:
+        self.image_manifest.write_text(
+            f"API_IMAGE_URI={api_image}\nXGB_IMAGE_URI={xgb_image}\n",
+            encoding="utf-8",
+        )
+
+    def _write_state(self, service: str, image: str) -> None:
+        (self.state_dir / f"{service}.image").write_text(
+            f"{image}\n",
+            encoding="utf-8",
+        )
+
+    def _read_state(self, service: str) -> str:
+        return (self.state_dir / f"{service}.image").read_text(encoding="utf-8").strip()
+
+    def _run_deploy(
+        self,
+        service: str,
+        target_image: str,
+        *,
+        refuse_target_update: bool = False,
+    ) -> subprocess.CompletedProcess[str]:
+        environment = self.environment.copy()
+        if refuse_target_update:
+            environment["FAKE_DOCKER_REFUSE_TARGET_UPDATE"] = "true"
+
+        return subprocess.run(
+            ["bash", str(DEPLOY_SCRIPT), service, NEW_SHA, target_image],
+            cwd=ROOT,
+            env=environment,
+            capture_output=True,
+            text=True,
+            timeout=20,
+            check=False,
+        )
+
+    def _install_fake_commands(self) -> None:
+        self._write_executable(
+            "aws",
+            r"""
+            #!/usr/bin/env bash
+            set -euo pipefail
+
+            case "${1:-}:${2:-}" in
+              secretsmanager:get-secret-value)
+                printf '%s\n' 'RUNTIME_SENTINEL=true'
+                ;;
+              ecr:get-login-password)
+                printf '%s\n' 'fake-ecr-token'
+                ;;
+              *)
+                echo "unexpected fake aws invocation: $*" >&2
+                exit 64
+                ;;
+            esac
+            """,
+        )
+        self._write_executable(
+            "curl",
+            r"""
+            #!/usr/bin/env bash
+            set -euo pipefail
+            printf '%s\n' '{"database":"UP","status":"UP"}'
+            """,
+        )
+        self._write_executable(
+            "flock",
+            r"""
+            #!/usr/bin/env bash
+            exit 0
+            """,
+        )
+        self._write_executable(
+            "git",
+            r"""
+            #!/usr/bin/env bash
+            set -euo pipefail
+
+            case "${1:-}" in
+              rev-parse)
+                printf '%s\n' "$FAKE_PREVIOUS_GIT_SHA"
+                ;;
+              fetch|cat-file|merge-base)
+                exit 0
+                ;;
+              checkout)
+                printf 'HEAD is now at %.7s fake deployment commit\n' "${3:-unknown}"
+                ;;
+              *)
+                echo "unexpected fake git invocation: $*" >&2
+                exit 64
+                ;;
+            esac
+            """,
+        )
+        self._write_executable(
+            "mktemp",
+            r"""
+            #!/usr/bin/env bash
+            set -euo pipefail
+            rm -rf "$FAKE_DEPLOY_TEMP_DIR"
+            mkdir -p "$FAKE_DEPLOY_TEMP_DIR"
+            printf '%s\n' "$FAKE_DEPLOY_TEMP_DIR"
+            """,
+        )
+        self._write_executable(
+            "docker",
+            r"""
+            #!/usr/bin/env bash
+            set -euo pipefail
+
+            state_dir="$FAKE_DOCKER_STATE_DIR"
+
+            dotenv_value() {
+              local key="$1"
+              local file="$2"
+              sed -n "s/^${key}=//p" "$file" | tail -n 1
+            }
+
+            case "${1:-}" in
+              login)
+                cat >/dev/null
+                exit 0
+                ;;
+              inspect)
+                format="${3:-}"
+                container_id="${4:-}"
+                if [[ "$format" == *State.Health.Status* ]]; then
+                  printf '%s\n' 'healthy'
+                elif [[ "$format" == *Config.Image* ]]; then
+                  if [[ "$container_id" == api-* ]]; then
+                    cat "$state_dir/api.image"
+                  else
+                    cat "$state_dir/xgb-reranker.image"
+                  fi
+                else
+                  echo "unexpected inspect format: $format" >&2
+                  exit 64
+                fi
+                exit 0
+                ;;
+              compose)
+                shift
+                env_files=()
+                compose_command=''
+
+                while [[ "$#" -gt 0 ]]; do
+                  case "$1" in
+                    --env-file)
+                      env_files+=("$2")
+                      shift 2
+                      ;;
+                    -p|-f)
+                      shift 2
+                      ;;
+                    config|pull|up|ps|exec)
+                      compose_command="$1"
+                      shift
+                      break
+                      ;;
+                    *)
+                      shift
+                      ;;
+                  esac
+                done
+
+                file_api=''
+                file_xgb=''
+                for env_file in "${env_files[@]}"; do
+                  value="$(dotenv_value API_IMAGE_URI "$env_file")"
+                  [[ -z "$value" ]] || file_api="$value"
+                  value="$(dotenv_value XGB_IMAGE_URI "$env_file")"
+                  [[ -z "$value" ]] || file_xgb="$value"
+                done
+
+                resolved_api="${API_IMAGE_URI:-$file_api}"
+                resolved_xgb="${XGB_IMAGE_URI:-$file_xgb}"
+                printf '%s\n' "$resolved_api" >"$state_dir/last-resolved-api.image"
+                printf '%s\n' "$resolved_xgb" >"$state_dir/last-resolved-xgb.image"
+
+                case "$compose_command" in
+                  config|pull|exec)
+                    exit 0
+                    ;;
+                  up)
+                    target_service=''
+                    for argument in "$@"; do
+                      case "$argument" in
+                        api|xgb-reranker)
+                          target_service="$argument"
+                          ;;
+                      esac
+                    done
+                    [[ -n "$target_service" ]]
+
+                    if [[ "${FAKE_DOCKER_REFUSE_TARGET_UPDATE:-false}" != 'true' ]]; then
+                      if [[ "$target_service" == 'api' ]]; then
+                        printf '%s\n' "$resolved_api" >"$state_dir/api.image"
+                      else
+                        printf '%s\n' "$resolved_xgb" >"$state_dir/xgb-reranker.image"
+                      fi
+                    fi
+                    ;;
+                  ps)
+                    service=''
+                    for argument in "$@"; do
+                      case "$argument" in
+                        api|xgb-reranker)
+                          service="$argument"
+                          ;;
+                      esac
+                    done
+                    [[ -n "$service" ]]
+                    printf '%s-container\n' "$service"
+                    ;;
+                  *)
+                    echo "unexpected fake compose invocation: $compose_command $*" >&2
+                    exit 64
+                    ;;
+                esac
+                ;;
+              *)
+                echo "unexpected fake docker invocation: $*" >&2
+                exit 64
+                ;;
+            esac
+            """,
+        )
+
+    def test_api_candidate_image_wins_over_inherited_shell_value(self) -> None:
+        result = self._run_deploy("api", NEW_API_IMAGE)
+
+        self.assertEqual(0, result.returncode, result.stdout + result.stderr)
+        self.assertEqual(NEW_API_IMAGE, self._read_state("api"))
+        self.assertEqual(OLD_XGB_IMAGE, self._read_state("xgb-reranker"))
+        self.assertEqual(
+            {
+                "API_IMAGE_URI": NEW_API_IMAGE,
+                "XGB_IMAGE_URI": OLD_XGB_IMAGE,
+            },
+            parse_dotenv(self.image_manifest),
+        )
+
+    def test_duplicate_manifest_key_is_rejected_before_deployment(self) -> None:
+        self.image_manifest.write_text(
+            "\n".join(
+                [
+                    f"API_IMAGE_URI={OLD_API_IMAGE}",
+                    f"API_IMAGE_URI={NEW_API_IMAGE}",
+                    f"XGB_IMAGE_URI={OLD_XGB_IMAGE}",
+                    "",
+                ]
+            ),
+            encoding="utf-8",
+        )
+
+        result = self._run_deploy("api", NEW_API_IMAGE)
+
+        self.assertNotEqual(0, result.returncode, result.stdout + result.stderr)
+        self.assertIn(
+            "manifest must contain exactly one API_IMAGE_URI",
+            result.stderr,
+        )
+        self.assertEqual(OLD_API_IMAGE, self._read_state("api"))
+        self.assertEqual(OLD_XGB_IMAGE, self._read_state("xgb-reranker"))
+
+    def test_empty_manifest_value_is_rejected_before_deployment(self) -> None:
+        self.image_manifest.write_text(
+            f"API_IMAGE_URI={OLD_API_IMAGE}\nXGB_IMAGE_URI=\n",
+            encoding="utf-8",
+        )
+
+        result = self._run_deploy("api", NEW_API_IMAGE)
+
+        self.assertNotEqual(0, result.returncode, result.stdout + result.stderr)
+        self.assertIn("manifest value is empty: XGB_IMAGE_URI", result.stderr)
+        self.assertEqual(OLD_API_IMAGE, self._read_state("api"))
+        self.assertEqual(OLD_XGB_IMAGE, self._read_state("xgb-reranker"))
+
+    def test_running_image_mismatch_rejects_manifest_promotion(self) -> None:
+        result = self._run_deploy(
+            "api",
+            NEW_API_IMAGE,
+            refuse_target_update=True,
+        )
+
+        self.assertNotEqual(0, result.returncode, result.stdout + result.stderr)
+        self.assertEqual(OLD_API_IMAGE, self._read_state("api"))
+        self.assertEqual(
+            {
+                "API_IMAGE_URI": OLD_API_IMAGE,
+                "XGB_IMAGE_URI": OLD_XGB_IMAGE,
+            },
+            parse_dotenv(self.image_manifest),
+        )
+
+    def test_xgb_candidate_image_wins_over_inherited_shell_value(self) -> None:
+        result = self._run_deploy("xgb-reranker", NEW_XGB_IMAGE)
+
+        self.assertEqual(0, result.returncode, result.stdout + result.stderr)
+        self.assertEqual(OLD_API_IMAGE, self._read_state("api"))
+        self.assertEqual(NEW_XGB_IMAGE, self._read_state("xgb-reranker"))
+        self.assertEqual(
+            {
+                "API_IMAGE_URI": OLD_API_IMAGE,
+                "XGB_IMAGE_URI": NEW_XGB_IMAGE,
+            },
+            parse_dotenv(self.image_manifest),
+        )
+
+    def test_xgb_running_image_mismatch_rejects_manifest_promotion(self) -> None:
+        result = self._run_deploy(
+            "xgb-reranker",
+            NEW_XGB_IMAGE,
+            refuse_target_update=True,
+        )
+
+        self.assertNotEqual(0, result.returncode, result.stdout + result.stderr)
+        self.assertEqual(OLD_XGB_IMAGE, self._read_state("xgb-reranker"))
+        self.assertEqual(
+            {
+                "API_IMAGE_URI": OLD_API_IMAGE,
+                "XGB_IMAGE_URI": OLD_XGB_IMAGE,
+            },
+            parse_dotenv(self.image_manifest),
+        )
 
 
 if __name__ == "__main__":

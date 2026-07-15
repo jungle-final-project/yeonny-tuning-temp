@@ -115,6 +115,22 @@ curl -fsS http://127.0.0.1/api/health | jq .
 
 비밀번호, AUTH token, `.env.prod` 원문은 출력하거나 문서에 기록하지 않는다.
 
+7d7caeb3bb2a78f1fa1f38346a22fa6b04209a0f
+600 ubuntu:ubuntu /opt/buildgraph/green-images.env
+600 ubuntu:ubuntu .env.prod
+API_IMAGE_URI=443915990705.dkr.ecr.ap-northeast-2.amazonaws.com/buildgraph-demo-api-green:7d7caeb3bb2a78f1fa1f38346a22fa6b04209a0f
+XGB_IMAGE_URI=443915990705.dkr.ecr.ap-northeast-2.amazonaws.com/buildgraph-demo-xgb-reranker-green:93a7f672f84added76246f55c8fc368a36c12e00
+api_id=d8a646ce3374fb355102a1b17d45f01310b2a2d08f04599f1e7b2c40767185bf api_image=443915990705.dkr.ecr.ap-northeast-2.amazonaws.com/buildgraph-demo-api-green:908ee01917a03da1b326628fe50154ff2d1aa9d1
+xgb_id=a249becca03bb77cfd49a9e7a83b835ca8fee7f3926f4648f81a0ca78698fce4 xgb_image=443915990705.dkr.ecr.ap-northeast-2.amazonaws.com/buildgraph-demo-xgb-reranker-green:93a7f672f84added76246f55c8fc368a36c12e00 health=healthy
+ok
+
+{
+  "status": "UP",
+  "database": "UP"
+}
+ubuntu@ip-10-0-23-7:/opt/buildgraph/prototype$
+
+
 ---
 
 ## 3. Green 자동 CD 일시 중지
