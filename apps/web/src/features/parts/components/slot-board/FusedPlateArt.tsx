@@ -180,6 +180,7 @@ export function FusedPlateArt({
           const categoryItems = itemsByCategory.get(area.category) ?? [];
           const filled = area.category === 'RAM' ? ramSlotCount > 0 : categoryItems.length > 0;
           const hovered = !hasAiFocus && hoveredCategory === area.category;
+          const selected = selectedCategory === area.category;
           const aiSpotlighted = aiFocusSet.has(area.category);
           const aiDimmed = hasAiFocus && !aiSpotlighted;
           const status = statusByCategory.get(area.category) ?? 'PASS';
@@ -189,6 +190,7 @@ export function FusedPlateArt({
               data-testid={`slot-fused-area-wrap-${area.category}`}
               data-filled={filled ? 'true' : 'false'}
               data-hovered={hovered ? 'true' : 'false'}
+              data-selected={selected ? 'true' : 'false'}
               data-ai-spotlight={aiSpotlighted ? 'true' : 'false'}
               data-ai-dimmed={aiDimmed ? 'true' : 'false'}
               data-mounted={filled ? 'true' : 'false'}
@@ -208,6 +210,7 @@ export function FusedPlateArt({
                 onClick={() => onSlotSelect(area.category)}
                 className="fused-part-select-button absolute inset-0 cursor-pointer rounded focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-blue"
               />
+              {selected ? <span className="fused-part-selected-badge">선택됨</span> : null}
               {aiSpotlighted && !filled ? (
                 <span
                   data-testid={`slot-fused-ai-unmounted-${area.category}`}

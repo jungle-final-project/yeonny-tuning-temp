@@ -770,7 +770,7 @@ function RelationMapNode({
     ? items.length > 1 ? `${primaryItem.name} 외 ${items.length - 1}개` : primaryItem.name
     : '부품 선택 필요';
   const fullNameTitle = filled ? items.map((item) => item.name).join('\n') : itemTitle;
-  const statusLabel = relationMapNodeStatusLabel(filled, isFocused, status, reason?.label);
+  const statusLabel = relationMapNodeStatusLabel(filled, status, reason?.label);
   const layoutVars: CSSProperties = {
     ['--rx' as string]: `${layout.x}%`,
     ['--ry' as string]: `${layout.y}%`,
@@ -789,29 +789,26 @@ function RelationMapNode({
       data-ai-dimmed={isAiDimmed ? 'true' : 'false'}
       style={layoutVars}
       className={`group absolute left-[var(--rx)] top-[var(--ry)] z-20 h-[var(--rh)] w-[var(--rw)] rounded-md border bg-white text-left shadow-sm transition ${
-        isFocused
-          ? 'border-2 border-brand-blue shadow-md ring-2 ring-blue-100'
-          : status === 'FAIL'
-            ? 'border-2 border-red-400'
-            : status === 'WARN'
-              ? 'border-2 border-amber-300'
-              : filled
-                ? 'border-slate-200 hover:border-brand-blue/70'
-                : isNext
-                  ? 'border-brand-blue/50 bg-blue-50/40'
-                  : 'border-slate-200'
+        status === 'FAIL'
+          ? 'border-2 border-red-400'
+          : status === 'WARN'
+            ? 'border-2 border-amber-300'
+            : filled
+              ? 'border-slate-200 hover:border-brand-blue/70'
+              : isNext
+                ? 'border-brand-blue/50 bg-blue-50/40'
+                : 'border-slate-200'
       } ${isAiDimmed ? 'opacity-40' : ''} ${isFlashing ? 'slot-attach-flash' : ''}`}
     >
-      {isFocused ? (
-        <span className="absolute -left-3 -top-3 z-30 grid h-7 w-7 place-items-center rounded-full bg-brand-blue text-[13px] font-black text-white shadow-sm">
-          {slotOrderNumber(slot.category)}
-        </span>
-      ) : status === 'FAIL' || status === 'WARN' ? (
+      {status === 'FAIL' || status === 'WARN' ? (
         <span className={`absolute -left-3 -top-3 z-30 grid h-7 w-7 place-items-center rounded-full text-[13px] font-black text-white shadow-sm ${
           status === 'FAIL' ? 'bg-red-500' : 'bg-amber-500'
         }`}>
           {slotOrderNumber(slot.category)}
         </span>
+      ) : null}
+      {isSelected ? (
+        <SelectedStateBadge className={`absolute -top-3 z-30 ${status === 'FAIL' || status === 'WARN' ? 'left-5' : '-left-2'}`} />
       ) : null}
       <button
         type="button"
@@ -842,15 +839,13 @@ function RelationMapNode({
             <span
               title={reason?.detail ?? statusLabel}
               className={`max-w-[58%] shrink-0 truncate rounded-full px-2 py-0.5 text-[10px] font-black leading-none ${
-                isFocused
-                  ? 'bg-blue-50 text-brand-blue'
-                  : status === 'FAIL'
-                    ? 'bg-red-50 text-red-600'
-                    : status === 'WARN'
-                      ? 'bg-amber-50 text-amber-700'
-                      : filled
-                        ? 'bg-slate-50 text-slate-500'
-                        : 'bg-white text-slate-400'
+                status === 'FAIL'
+                  ? 'bg-red-50 text-red-600'
+                  : status === 'WARN'
+                    ? 'bg-amber-50 text-amber-700'
+                    : filled
+                      ? 'bg-slate-50 text-slate-500'
+                      : 'bg-white text-slate-400'
               }`}
             >
               {statusLabel}
@@ -1021,12 +1016,19 @@ type RelationMapReason = {
   detail: string;
 };
 
-function relationMapNodeStatusLabel(filled: boolean, isFocused: boolean, status?: 'PASS' | 'WARN' | 'FAIL', reasonLabel?: string) {
-  if (isFocused) return '선택 부품';
+function relationMapNodeStatusLabel(filled: boolean, status?: 'PASS' | 'WARN' | 'FAIL', reasonLabel?: string) {
   if (status === 'FAIL') return reasonLabel ?? '조정 필요';
   if (status === 'WARN') return reasonLabel ?? '주의';
   if (filled) return '문제없음';
   return '연결 없음';
+}
+
+function SelectedStateBadge({ className = '' }: { className?: string }) {
+  return (
+    <span className={`pointer-events-none inline-flex h-5 items-center rounded-full bg-[#de6c2d] px-2 text-[10px] font-black leading-none text-white shadow-[0_8px_18px_rgba(222,108,45,0.24)] ${className}`}>
+      선택됨
+    </span>
+  );
 }
 
 function relationMapReasonsByCategory(graph?: BuildGraphResolveResponse) {
@@ -1686,17 +1688,15 @@ function IsometricSlotCard({
     ['--sw' as string]: `${layout.w}%`,
     ['--sh' as string]: `${layout.h}%`
   };
-  const borderClass = isSelected
-    ? 'border-2 border-brand-blue ring-2 ring-blue-100 shadow-lg'
-    : slotStatus === 'FAIL'
-      ? 'border-2 border-red-500 ring-2 ring-red-300'
-      : slotStatus === 'WARN'
-        ? 'border-2 border-amber-400 ring-2 ring-amber-300'
-        : filled
-          ? 'border-2 border-emerald-400 ring-2 ring-emerald-300 hover:border-emerald-500'
-          : isNext
-            ? 'border-2 border-brand-blue bg-blue-50/40 hover:border-blue-600'
-            : 'border border-dashed border-slate-300 bg-white/75 hover:border-brand-blue';
+  const borderClass = slotStatus === 'FAIL'
+    ? 'border-2 border-red-500 ring-2 ring-red-300'
+    : slotStatus === 'WARN'
+      ? 'border-2 border-amber-400 ring-2 ring-amber-300'
+      : filled
+        ? 'border-2 border-emerald-400 ring-2 ring-emerald-300 hover:border-emerald-500'
+        : isNext
+          ? 'border-2 border-brand-blue bg-blue-50/40 hover:border-blue-600'
+          : 'border border-dashed border-slate-300 bg-white/75 hover:border-brand-blue';
   const surfaceClass = filled
     ? slotStatus === 'FAIL'
       ? 'bg-red-100'
@@ -1728,7 +1728,7 @@ function IsometricSlotCard({
       className={`group relative z-20 rounded-lg p-2 text-left transition backdrop-blur-[1px] lg:absolute lg:left-[var(--sx)] lg:top-[var(--sy)] lg:h-[var(--sh)] lg:w-[var(--sw)] ${surfaceClass} ${borderClass} ${
         isFlashing ? 'slot-attach-flash' : ''
       } ${isNext && !isSelected ? 'slot-empty-pulse slot-hint-shimmer' : ''} ${
-        filled && !isSelected ? statusPulseClass(slotStatus) : ''
+        filled ? statusPulseClass(slotStatus) : ''
       } ${isHovered ? 'slot-card-hovered' : ''} ${cardsVisible ? '' : 'lg:hidden'}`}
     >
       <button
@@ -1740,6 +1740,7 @@ function IsometricSlotCard({
         onBlur={() => onHoverChange(null)}
         className="absolute inset-0 z-0 h-full w-full rounded-lg focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-blue"
       />
+      {isSelected ? <SelectedStateBadge className="absolute -top-2 left-2 z-30" /> : null}
       {isAiSpotlighted && !filled ? (
         <span
           data-testid={`slot-ai-unmounted-${slot.category}`}
@@ -1966,6 +1967,7 @@ function IsoPart({
       <div className="iso-part-shadow absolute inset-x-[14%] bottom-[4%] h-[14%] rounded-[50%] bg-slate-900/20 blur-[5px]" />
       <img src={iso.src} alt="" className={`iso-part-img relative w-full iso-part-img--${iso.mount}`} />
       <span aria-hidden="true" className={`iso-part-impact iso-part-impact--${iso.mount}`} />
+      {isSelected ? <SelectedStateBadge className="absolute -left-2 -top-3 z-20" /> : null}
       {problemDetail ? (
         <button
           type="button"
@@ -2437,9 +2439,7 @@ function MotherboardSlot({
     ['--plug-dx' as string]: `${(outwardX / outwardLength) * 26}px`,
     ['--plug-dy' as string]: `${(outwardY / outwardLength) * 26}px`
   };
-  const borderClass = isSelected
-    ? 'border-2 border-brand-blue ring-2 ring-blue-100 shadow-lg'
-    : slotStatus === 'FAIL'
+  const borderClass = slotStatus === 'FAIL'
       ? 'border-2 border-red-500 ring-2 ring-red-300'
       : slotStatus === 'WARN'
         ? 'border-2 border-amber-400 ring-2 ring-amber-300'
@@ -2482,7 +2482,7 @@ function MotherboardSlot({
       className={`group relative z-20 rounded-lg p-2 text-left transition backdrop-blur-[1px] lg:absolute lg:left-[var(--sx)] lg:top-[var(--sy)] lg:h-[var(--sh)] lg:w-[var(--sw)] ${surfaceClass} ${borderClass} ${
         isFlashing ? 'slot-attach-flash slot-plug-in' : ''
       } ${isNext && !isSelected ? 'slot-empty-pulse slot-hint-shimmer' : ''} ${
-        filled && !isSelected ? statusPulseClass(slotStatus) : ''
+        filled ? statusPulseClass(slotStatus) : ''
       }`}
     >
       <button
@@ -2492,6 +2492,7 @@ function MotherboardSlot({
         onClick={onSelect}
         className="absolute inset-0 z-0 h-full w-full rounded-lg focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-blue"
       />
+      {isSelected ? <SelectedStateBadge className="absolute -top-2 left-2 z-30" /> : null}
       {isAiSpotlighted && !filled ? (
         <span
           data-testid={`slot-ai-unmounted-${slot.category}`}
