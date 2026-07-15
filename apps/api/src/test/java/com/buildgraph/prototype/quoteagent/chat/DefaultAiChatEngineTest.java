@@ -5,7 +5,7 @@ import com.buildgraph.prototype.opsagent.profile.LlmProvider;
 import com.buildgraph.prototype.opsagent.profile.LLMresponseDto;
 import com.buildgraph.prototype.quoteagent.llm.AiChatClient;
 import com.buildgraph.prototype.quoteagent.query.AiChatSessionState;
-import com.buildgraph.prototype.quoteagent.query.AiChatSessionStore;
+import com.buildgraph.prototype.quoteagent.query.AiChatSessionQuery;
 import com.buildgraph.prototype.quoteagent.tools.PartReplacementRanker;
 import java.util.List;
 import java.util.Map;
@@ -30,14 +30,14 @@ import static org.mockito.Mockito.when;
 class DefaultAiChatEngineTest {
     private JdbcTemplate jdbcTemplate;
     private AiChatClient openAiResponsesClient;
-    private AiChatSessionStore aiChatSessionStore;
+    private AiChatSessionQuery aiChatSessionStore;
     private AiChatEngine engine;
 
     @BeforeEach
     void setUp() {
         jdbcTemplate = mock(JdbcTemplate.class);
         openAiResponsesClient = mock(AiChatClient.class);
-        aiChatSessionStore = mock(AiChatSessionStore.class);
+        aiChatSessionStore = mock(AiChatSessionQuery.class);
         when(aiChatSessionStore.findOrCreate(any())).thenReturn(new AiChatSessionState("session-5090", Map.of()));
         engine = new AiChatEngine(
                 jdbcTemplate,

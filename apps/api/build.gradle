@@ -40,6 +40,10 @@ dependencies {
     /* lombok 추가 */
     compileOnly 'org.projectlombok:lombok'
     annotationProcessor 'org.projectlombok:lombok'
+
+    /* flyway로 DB 내용 및 스키마 삽입 */
+    implementation 'org.flywaydb:flyway-core'
+    runtimeOnly 'org.flywaydb:flyway-database-postgresql'
     
     testImplementation 'org.springframework.boot:spring-boot-starter-test'
 }

@@ -1,7 +1,7 @@
 package com.buildgraph.prototype.quoteagent.chat;
 
 import com.buildgraph.prototype.quoteagent.query.AiChatSessionState;
-import com.buildgraph.prototype.quoteagent.query.AiChatSessionStore;
+import com.buildgraph.prototype.quoteagent.query.AiChatSessionQuery;
 import com.buildgraph.prototype.quoteagent.llm.AiChatClient;
 import com.buildgraph.prototype.quoteagent.tools.*;
 import com.buildgraph.prototype.opsagent.profile.*;
@@ -31,13 +31,14 @@ public class AiChatEngine {
     
     /* 프롬프트 및 카테고리 객체 */
     private static final String BUILD_CHAT_SYSTEM_PROMPT = """
-            당신은 컴퓨터 견적 상담 챗봇입니다.
-            사용자의 대화를 듣고 "대화모드(conversationMode)" 혹은 "행동모드" 중 하나를 결정합니다.
-            대화모드는 지속적으로 대화를 하면서 contextPath을 쌓습니다. 
-            만약 contextPath가 충분하다면, 행동모드로 넘어가서 개시를 합니다.
+            당신은 컴퓨터 견적 상담 챗봇이다.
+            사용자의 대화를 듣고 "대화모드(conversationMode)" 혹은 "행동모드" 중 하나를 결정한다.
+            대화모드는 지속적으로 대화를 하면서 contextPath을 쌓는다. 
+            만약 contextPath가 충분(요소 4개 이상)하다면, 행동모드로 넘어가서 개시를 한다.
 
-            대화모드에서는 action은 null, contextPatch에는 맥락을 쌓습니다.
-            반대로 행동모드에서는 action에는 타입에 맞는 행동을 비롯한 내용을 넣습니다. 여기선 contextPath는 null입니다.
+            대화모드에서는 action은 null, contextPatch에는 맥락을 쌓는다.
+            반대로 행동모드에서는 action에는 타입에 맞는 행동을 비롯한 내용을 넣는다.
+            replyMessage는 33자 이내로 한다.
             """;
     private static final List<String> BUILD_CATEGORIES = List.of(
             "CPU", "MOTHERBOARD", "RAM", "GPU", "STORAGE", "PSU", "CASE", "COOLER"
@@ -47,7 +48,7 @@ public class AiChatEngine {
     private final AiChatClient aiChatClient;
     private final AiProfileConfig aiProfileConfig;
     private final PartReplacementRanker partReplacementRanker;
-    private final AiChatSessionStore aiChatSessionStore;
+    private final AiChatSessionQuery aiChatSessionStore;
 
     /* 오케스트레이션 함수
        사용자 메시지 받음 => 응답 생성 
@@ -75,22 +76,101 @@ public class AiChatEngine {
         boolean conversationMode = Boolean.TRUE.equals(llmResponse.get("conversationMode"));
         String replyMessage = text(llmResponse.get("replyMessage"));
         
-        /* 행동 모드 진입 여부 결정하기 */  
+        /* 행동 모드 진입 여부 결정하기 => 내부는 대화 모드 진행 */  
         if(conversationMode){
-            Map<String, Object> contextPatch = objectMap(llmResponse.get("contextPatch"));
-            return conversationResponse(replyMessage, contextPatch, request);
+            Map<String, Object> newContextPatch = objectMap(llmResponse.get("contextPatch"));
+            return conversationResponse(replyMessage, newContextPatch, request);
         }
         
         /* 요청 분석을 통해 응답 분기를 결정 */
         Map<String, Object> actionMap = objectMap(llmResponse.get("action"));
         AiChatIntent action = AiChatIntent.valueOf(text(actionMap.get("type")));
-        
+        /* 임시 디버깅 */
+        System.out.println("선택된 행동: " + action);
         return switch (action) {
             case FULL_BUILD_RECOMMEND -> fullBuildResponse(replyMessage, actionMap, request.sessionId());
             case PART_RECOMMEND -> partRecommendResponse(replyMessage, text(actionMap.get("selectedCategory")), request.sessionId());
             case BUILD_MODIFY -> buildModifyResponse(replyMessage, text(actionMap.get("selectedCategory")), Map.of(), actionMap, request.sessionId());
             case PRICE_ALERT_HELP -> priceAlertResponse(replyMessage, text(actionMap.get("selectedCategory")), request.sessionId());
         };
+    }
+
+    /* LLM 모델과 접합부: 
+        Dto, 
+        rule 기반 서버가 파싱한 데이터,
+        사용할 LLM 모델 */
+    private Map<String, Object> getLLMResponse(
+            AiChatRequestDto request,
+            AiProfileDefinition buildProfile
+    ) {
+        /* request에서 파싱 => 순수 메시지*/
+        String message = requireText(request.message(), "메시지가 필요합니다.");
+        
+        /* sessionId로 맥락 찾아오기 진행 */
+        AiChatSessionState session = aiChatSessionStore.findOrCreate(request.sessionId());
+        Map<String, Object> context = session.context();
+
+        /* 여기서 실제 LLM을 호출한다(실제 접합부):
+            1. 시스템 지시문
+            2. 입력 문자열(userPrompt)
+            3. 출력 스키마 명
+            4. 출력 스키마 형태
+            5. 사용할 모델
+            6. 이성 수준 설정
+            7. 출력 토큰 제한 */
+        LLMresponseDto result = aiChatClient.generateLLMresponse(
+                BUILD_CHAT_SYSTEM_PROMPT,
+                json(MockData.map(
+                    "rawMessage", message,
+                    "context", context
+                )),
+                BUILD_CHAT_SCHEMA_NAME,
+                llmOutputSchema(),
+                buildProfile.model(),
+                buildProfile.reasoningEffort(),
+                buildProfile.maxOutputTokens()
+        );
+        
+        return parseJsonObject(result.text());
+    }
+
+    /* 출력 스키마 형태 구성 */
+    private static Map<String, Object> llmOutputSchema() {
+        return MockData.map(
+                    "type", "object",
+                    "additionalProperties", false,
+                    "properties", MockData.map(
+                        "conversationMode", MockData.map("type", "boolean"),
+                        "replyMessage", MockData.map("type", "string"),
+                        "action", MockData.map(
+                            "type", List.of("object", "null"), "additionalProperties", false,
+                            "properties", MockData.map(
+                                "type", MockData.map("type", "string", "enum", List.of(
+                                    "FULL_BUILD_RECOMMEND",
+                                    "PART_RECOMMEND",
+                                    "BUILD_MODIFY",
+                                    "PRICE_ALERT_HELP"
+                                )),
+                                "ragQuery", MockData.map(
+                                                "type", "object",
+                                                "additionalProperties", false,
+                                                "properties", MockData.map(),
+                                                "required", List.of()
+                                            )
+                            ),
+                            "required", List.of("type", "ragQuery")
+                        ),
+                        "contextPatch", MockData.map(
+                            "type", "object",
+                            "additionalProperties", false,
+                            "properties", MockData.map(
+                                "budget", MockData.map("type", List.of("integer", "null")),
+                                "usageTags", MockData.map("type", "array","items", MockData.map("type", "string"))
+                            ),
+                            "required", List.of("budget", "usageTags")
+                    )),
+                    "required", List.of("conversationMode", "replyMessage", "action", "contextPatch")
+        );
     }
 
     /* 풀 견적 생성 */
@@ -210,7 +290,7 @@ public class AiChatEngine {
         );
     }
 
-    /* 저장 후 반환 */
+    /* 대화 모드에서의 객체 생성에 관여 */
     private AiChatResponseDto conversationResponse(
             String replyMessage, 
             Map<String, Object> newContextPatch, 
@@ -497,122 +577,6 @@ public class AiChatEngine {
                 : currentName + " 대신 선택할 수 있는 " + directionText + " " + categoryLabel(category) + " 후보를 찾았습니다.";
     }
 
-
-    /* LLM 모델과 접합부: 
-       Dto, 
-       rule 기반 서버가 파싱한 데이터,
-       사용할 LLM 모델 */
-    private Map<String, Object> getLLMResponse(
-            AiChatRequestDto request,
-            AiProfileDefinition buildProfile
-    ) {
-        /* request에서 파싱 => 순수 메시지*/
-        String message = requireText(request.message(), "메시지가 필요합니다.");
-        
-        /* sessionId로 맥락 찾아오기 진행 */
-        AiChatSessionState session = aiChatSessionStore.findOrCreate(request.sessionId());
-        Map<String, Object> context = session.context();
-
-        /* 여기서 실제 LLM을 호출한다(실제 접합부):
-           1. 시스템 지시문
-           2. 입력 문자열(userPrompt)
-           3. 출력 스키마 명
-           4. 출력 스키마 형태
-           5. 사용할 모델
-           6. 이성 수준 설정
-           7. 출력 토큰 제한 */
-        LLMresponseDto result = aiChatClient.generateLLMresponse(
-                BUILD_CHAT_SYSTEM_PROMPT,
-                json(MockData.map(
-                    "rawMessage", message,
-                    "context", context
-                )),
-                BUILD_CHAT_SCHEMA_NAME,
-                llmOutputSchema(),
-                buildProfile.model(),
-                buildProfile.reasoningEffort(),
-                buildProfile.maxOutputTokens()
-        );
-        
-        return parseJsonObject(result.text());
-    }
-
-    /* 출력 스키마 형태 구성 */
-    private static Map<String, Object> llmOutputSchema() {
-        return MockData.map(
-                    "type", "object",
-                    "additionalProperties", false,
-                    "properties", MockData.map(
-                        "conversationMode", MockData.map("type", "boolean"),
-                        "replyMessage", MockData.map("type", "string"),
-                        "action", MockData.map(
-                            "type", List.of("object", "null"), "additionalProperties", false,
-                            "properties", MockData.map(
-                                "type", MockData.map("type", "string", "enum", List.of(
-                                    "FULL_BUILD_RECOMMEND",
-                                    "PART_RECOMMEND",
-                                    "BUILD_MODIFY",
-                                    "PRICE_ALERT_HELP"
-                                )),
-                                "ragQuery", MockData.map(
-                                                "type", "object",
-                                                "additionalProperties", false,
-                                                "properties", MockData.map(),
-                                                "required", List.of()
-                                            )
-                            ),
-                            "required", List.of("type", "ragQuery")
-                        ),
-                        "contextPatch", MockData.map(
-                            "type", "object",
-                            "additionalProperties", false,
-                            "properties", MockData.map(
-                                "budget", MockData.map("type", List.of("integer", "null")),
-                                "usageTags", MockData.map("type", "array","items", MockData.map("type", "string")),
-                                "missingSlots", MockData.map("type", "array","items", MockData.map("type", "string"))
-                            ),
-                            "required", List.of("budget", "usageTags", "missingSlots")
-                    )),
-                    "required", List.of("conversationMode", "replyMessage", "action", "contextPatch")
-        );
-    }
-
-    private static Map<String, Object> deterministicParsedContext(Map<String, Object> body, String message) {
-        Integer budget = numberValue(body.get("budget"));
-        if (budget == null) {
-            budget = null;
-        }
-        List<String> usageTags = usageTags(body.get("usageTags"), message);
-        String resolution = firstText(text(body.get("resolution")), inferResolution(message));
-        List<String> preferredVendors = preferredVendors(body.get("preferredVendors"), message);
-        List<String> mustHave = mustHave(message);
-        List<String> requiredGpuClasses = List.of();
-        String performanceTier = inferPerformanceTier(message, resolution, usageTags, requiredGpuClasses);
-        String budgetPolicy = budget == null
-                ? ("ENTHUSIAST".equals(performanceTier) || !requiredGpuClasses.isEmpty() ? "OPEN_BUDGET" : "UNSPECIFIED")
-                : "USER_BUDGET";
-        return MockData.map(
-                "usageTags", usageTags,
-                "budget", budget,
-                "resolution", resolution,
-                "preferredVendors", preferredVendors,
-                "priority", text(body.get("priority")),
-                "performanceTier", performanceTier,
-                "budgetPolicy", budgetPolicy,
-                "mustHave", mustHave,
-                "requiredGpuClasses", requiredGpuClasses,
-                "requiredPartKeywords", requiredGpuClasses.stream().map(value -> value.replace("_", " ")).toList(),
-                "hardConstraintPolicy", requiredGpuClasses.isEmpty() ? "NONE" : "MUST_INCLUDE",
-                "confidence", MockData.map(
-                        "usageTags", usageTags.isEmpty() ? "LOW" : "HIGH",
-                        "budget", budget == null ? "LOW" : "HIGH",
-                        "resolution", resolution == null ? "LOW" : "MEDIUM",
-                        "preferredVendors", preferredVendors.isEmpty() ? "LOW" : "MEDIUM",
-                        "hardConstraints", requiredGpuClasses.isEmpty() ? "LOW" : "HIGH"
-                )
-        );
-    }
-
     private static Map<String, Object> normalizeDraftEdit(
             Map<String, Object> source,
             String message,
@@ -764,70 +728,6 @@ public class AiChatEngine {
         return objectMaps(currentQuoteDraft.get("items"));
     }
 
-    private static List<String> usageTags(Object value, String message) {
-        List<String> explicit = normalizeUsageTags(stringList(value));
-        if (!explicit.isEmpty()) {
-            return explicit;
-        }
-        String normalized = safe(message).toLowerCase(Locale.ROOT);
-        List<String> result = new ArrayList<>();
-        if (containsAny(normalized, "게임", "배그", "로스트아크", "qhd", "fhd", "4k")) result.add("GAMING");
-        if (containsAny(normalized, "개발", "코딩", "ide", "docker", "컴파일")) result.add("DEVELOPMENT");
-        if (containsAny(normalized, "영상", "편집", "프리미어", "다빈치", "렌더")) result.add("VIDEO_EDIT");
-        if (containsAny(normalized, "ai", "cuda", "llm", "학습")) result.add("AI_DEV");
-        return result.isEmpty() ? List.of("GENERAL") : result.stream().distinct().toList();
-    }
-
-    private static String inferResolution(String message) {
-        String normalized = safe(message).toLowerCase(Locale.ROOT);
-        if (normalized.contains("4k")) return "4K";
-        if (normalized.contains("qhd")) return "QHD";
-        if (normalized.contains("fhd")) return "FHD";
-        return null;
-    }
-
-    private static String inferPerformanceTier(
-            String message,
-            String resolution,
-            List<String> usageTags,
-            List<String> requiredGpuClasses
-    ) {
-        String normalized = safe(message).toLowerCase(Locale.ROOT);
-        if (requiredGpuClasses.contains("RTX_5090")
-                || containsAny(normalized, "끝판왕", "최고급", "최상급", "하이엔드", "플래그십", "제일 좋은", "가장 좋은", "예산 무관", "예산 상관", "돈 상관")) {
-            return "ENTHUSIAST";
-        }
-        if ("4K".equalsIgnoreCase(resolution)
-                || "QHD".equalsIgnoreCase(resolution)
-                || containsAny(normalized, "144hz", "240hz", "144프레임", "240프레임", "고주사율", "울트라", "풀옵", "상옵", "고사양")
-                || usageTags.contains("AI_DEV")
-                || usageTags.contains("VIDEO_EDIT")) {
-            return "PERFORMANCE";
-        }
-        return "STANDARD";
-    }
-
-    private static List<String> preferredVendors(Object value, String message) {
-        List<String> explicit = normalizeVendors(stringList(value));
-        if (!explicit.isEmpty()) {
-            return explicit;
-        }
-        String normalized = safe(message).toLowerCase(Locale.ROOT);
-        List<String> result = new ArrayList<>();
-        if (containsAny(normalized, "nvidia", "엔비디아", "rtx", "지포스")) result.add("NVIDIA");
-        if (containsAny(normalized, "amd", "라데온", "라이젠")) result.add("AMD");
-        if (containsAny(normalized, "intel", "인텔")) result.add("INTEL");
-        return result.stream().distinct().toList();
-    }
-
-    private static List<String> mustHave(String message) {
-        String normalized = safe(message).toLowerCase(Locale.ROOT);
-        List<String> result = new ArrayList<>();
-        if (containsAny(normalized, "와이파이", "wifi", "wi-fi")) result.add("WIFI");
-        if (containsAny(normalized, "저소음", "조용", "소음")) result.add("LOW_NOISE");
-        return result;
-    }
-
     private static String categoryFrom(String value) {
         String normalized = safe(value).toLowerCase(Locale.ROOT);
         String canonical = normalized.toUpperCase(Locale.ROOT).replace("-", "_");
@@ -890,24 +790,6 @@ public class AiChatEngine {
             case "COOLER" -> 0.05;
             default -> 0.04;
         };
-    }
-
-    private static List<String> normalizeUsageTags(List<String> values) {
-        List<String> allowed = List.of("GAMING", "DEVELOPMENT", "VIDEO_EDIT", "AI_DEV", "GENERAL");
-        return values.stream()
-                .map(value -> value.toUpperCase(Locale.ROOT))
-                .filter(allowed::contains)
-                .distinct()
-                .toList();
-    }
-
-    private static List<String> normalizeVendors(List<String> values) {
-        List<String> allowed = List.of("NVIDIA", "AMD", "INTEL");
-        return values.stream()
-                .map(value -> value.toUpperCase(Locale.ROOT))
-                .filter(allowed::contains)
-                .distinct()
-                .toList();
     }
 
     private static List<String> normalizeGpuClasses(List<String> values) {

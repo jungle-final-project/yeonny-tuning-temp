@@ -28,6 +28,11 @@ spring:
   mail:
     host: ${SPRING_MAIL_HOST:localhost}
     port: ${SPRING_MAIL_PORT:1026}
+  flyway:
+    locations:
+      - classpath:db/migration
+      - classpath:seed/dev
+    out-of-order: true
 
 management:
   endpoints:

@@ -51,7 +51,6 @@ public class BenchmarkQueryCached {
 
         /* 순회하면서 캐싱 유무 검사 */
         for(Long partId : partIds){
-            @SuppressWarnings("unchecked")
             Map<String, Object> cached = cache.get(partId, Map.class);
 
             if (cached != null) {

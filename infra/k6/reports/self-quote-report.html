@@ -28,14 +28,14 @@
 </head>
 <body>
   <h1>k6 Cache Comparison Report</h1>
-  <p>각 시나리오 시작을 0초로 정규화 · Bucket: 10s · Source: N+1 baseline test record</p>
+  <p>각 시나리오 시작을 0초로 정규화 · Bucket: 10s · Source: infra/k6/results/self-quote.ndjson</p>
   <div class="summary">
-    <div class="metric none"><span>캐싱 없음 요청</span><strong>16398</strong></div>
-    <div class="metric none"><span>캐싱 없음 Median</span><strong>2793.75 ms</strong></div>
-    <div class="metric none"><span>캐싱 없음 p95</span><strong>6473.27 ms</strong></div>
-    <div class="metric caffeine"><span>캐싱 있음 요청</span><strong>38544</strong></div>
-    <div class="metric caffeine"><span>캐싱 있음 Median</span><strong>203 ms</strong></div>
-    <div class="metric caffeine"><span>캐싱 있음 p95</span><strong>941.6 ms</strong></div>
+    <div class="metric none"><span>캐싱 없음 요청</span><strong>50391</strong></div>
+    <div class="metric none"><span>캐싱 없음 Median</span><strong>267.66 ms</strong></div>
+    <div class="metric none"><span>캐싱 없음 p95</span><strong>1038.99 ms</strong></div>
+    <div class="metric caffeine"><span>캐싱 있음 요청</span><strong>54603</strong></div>
+    <div class="metric caffeine"><span>캐싱 있음 Median</span><strong>84 ms</strong></div>
+    <div class="metric caffeine"><span>캐싱 있음 p95</span><strong>455.58 ms</strong></div>
   </div>
   <div class="chart-grid">
     <section class="chart-card">
@@ -60,25 +60,26 @@
       </tr>
     </thead>
     <tbody>
-      <tr><td>0s</td><td>482</td><td>53.03</td><td>153.97</td><td>540</td><td>8.31</td><td>44</td></tr>
-<tr><td>10s</td><td>1067</td><td>121.23</td><td>678.81</td><td>1810</td><td>7</td><td>44</td></tr>
-<tr><td>20s</td><td>1119</td><td>691.65</td><td>2119.36</td><td>3327</td><td>24.08</td><td>136.41</td></tr>
-<tr><td>30s</td><td>1136</td><td>1324.38</td><td>3915.67</td><td>3600</td><td>112</td><td>529.75</td></tr>
-<tr><td>40s</td><td>1155</td><td>1995.38</td><td>4960.17</td><td>3655</td><td>158.95</td><td>607.42</td></tr>
-<tr><td>50s</td><td>1178</td><td>2784.62</td><td>6426.85</td><td>3730</td><td>203.38</td><td>790.93</td></tr>
-<tr><td>60s</td><td>1168</td><td>3549.86</td><td>6382.53</td><td>3799</td><td>241.51</td><td>850.87</td></tr>
-<tr><td>70s</td><td>1049</td><td>4201.98</td><td>8222.62</td><td>3712</td><td>298.39</td><td>1049.04</td></tr>
-<tr><td>80s</td><td>1081</td><td>4274.73</td><td>7973</td><td>3551</td><td>390.52</td><td>1388.91</td></tr>
-<tr><td>90s</td><td>1171</td><td>3874.18</td><td>10398.98</td><td>3652</td><td>422.54</td><td>1187.15</td></tr>
-<tr><td>100s</td><td>1093</td><td>4011.78</td><td>9943.33</td><td>3739</td><td>376.1</td><td>1184.46</td></tr>
-<tr><td>110s</td><td>1186</td><td>3998.69</td><td>8371.46</td><td>3379</td><td>153.62</td><td>971.35</td></tr>
-<tr><td>120s</td><td>1211</td><td>3720.11</td><td>6134.2</td><td>50</td><td>6</td><td>12.51</td></tr>
+      <tr><td>0s</td><td>429</td><td>11</td><td>37.29</td><td>419</td><td>7.43</td><td>17.69</td></tr>
+<tr><td>10s</td><td>1688</td><td>9.99</td><td>40</td><td>1732</td><td>7</td><td>34</td></tr>
+<tr><td>20s</td><td>3448</td><td>24</td><td>184.55</td><td>3773</td><td>10</td><td>66</td></tr>
+<tr><td>30s</td><td>3974</td><td>81</td><td>391.44</td><td>5026</td><td>16.08</td><td>96.27</td></tr>
+<tr><td>40s</td><td>4521</td><td>136.04</td><td>496.48</td><td>5020</td><td>61.28</td><td>283.66</td></tr>
+<tr><td>50s</td><td>4609</td><td>219.07</td><td>804.84</td><td>5497</td><td>90</td><td>352.5</td></tr>
+<tr><td>60s</td><td>4703</td><td>290.43</td><td>954.71</td><td>5673</td><td>105</td><td>418.28</td></tr>
+<tr><td>70s</td><td>4564</td><td>377.26</td><td>1210.6</td><td>5709</td><td>133.1</td><td>496.38</td></tr>
+<tr><td>80s</td><td>4728</td><td>453.51</td><td>1241.65</td><td>5689</td><td>171</td><td>645.44</td></tr>
+<tr><td>90s</td><td>4776</td><td>524.68</td><td>1318.39</td><td>5677</td><td>191.37</td><td>728.67</td></tr>
+<tr><td>100s</td><td>4657</td><td>545.56</td><td>1364.47</td><td>5608</td><td>142</td><td>553.86</td></tr>
+<tr><td>110s</td><td>4689</td><td>400.01</td><td>1217.22</td><td>4183</td><td>18</td><td>187.45</td></tr>
+<tr><td>120s</td><td>3527</td><td>75</td><td>532.96</td><td>593</td><td>5.4</td><td>13.26</td></tr>
+<tr><td>130s</td><td>78</td><td>9</td><td>18.25</td><td>4</td><td>6.42</td><td>11</td></tr>
     </tbody>
   </table>
   <script>
-    const labels = [0,10,20,30,40,50,60,70,80,90,100,110,120];
-    const noneRows = {"0":{"second":0,"count":482,"median":53.03,"p95":153.97},"10":{"second":10,"count":1067,"median":121.23,"p95":678.81},"20":{"second":20,"count":1119,"median":691.65,"p95":2119.36},"30":{"second":30,"count":1136,"median":1324.38,"p95":3915.67},"40":{"second":40,"count":1155,"median":1995.38,"p95":4960.17},"50":{"second":50,"count":1178,"median":2784.62,"p95":6426.85},"60":{"second":60,"count":1168,"median":3549.86,"p95":6382.53},"70":{"second":70,"count":1049,"median":4201.98,"p95":8222.62},"80":{"second":80,"count":1081,"median":4274.73,"p95":7973},"90":{"second":90,"count":1171,"median":3874.18,"p95":10398.98},"100":{"second":100,"count":1093,"median":4011.78,"p95":9943.33},"110":{"second":110,"count":1186,"median":3998.69,"p95":8371.46},"120":{"second":120,"count":1211,"median":3720.11,"p95":6134.2}};
-    const caffeineRows = {"0":{"second":0,"count":540,"median":8.31,"p95":44},"10":{"second":10,"count":1810,"median":7,"p95":44},"20":{"second":20,"count":3327,"median":24.08,"p95":136.41},"30":{"second":30,"count":3600,"median":112,"p95":529.75},"40":{"second":40,"count":3655,"median":158.95,"p95":607.42},"50":{"second":50,"count":3730,"median":203.38,"p95":790.93},"60":{"second":60,"count":3799,"median":241.51,"p95":850.87},"70":{"second":70,"count":3712,"median":298.39,"p95":1049.04},"80":{"second":80,"count":3551,"median":390.52,"p95":1388.91},"90":{"second":90,"count":3652,"median":422.54,"p95":1187.15},"100":{"second":100,"count":3739,"median":376.1,"p95":1184.46},"110":{"second":110,"count":3379,"median":153.62,"p95":971.35},"120":{"second":120,"count":50,"median":6,"p95":12.51}};
+    const labels = [0,10,20,30,40,50,60,70,80,90,100,110,120,130];
+    const noneRows = {"0":{"second":0,"count":429,"median":11,"p95":37.29},"10":{"second":10,"count":1688,"median":9.99,"p95":40},"20":{"second":20,"count":3448,"median":24,"p95":184.55},"30":{"second":30,"count":3974,"median":81,"p95":391.44},"40":{"second":40,"count":4521,"median":136.04,"p95":496.48},"50":{"second":50,"count":4609,"median":219.07,"p95":804.84},"60":{"second":60,"count":4703,"median":290.43,"p95":954.71},"70":{"second":70,"count":4564,"median":377.26,"p95":1210.6},"80":{"second":80,"count":4728,"median":453.51,"p95":1241.65},"90":{"second":90,"count":4776,"median":524.68,"p95":1318.39},"100":{"second":100,"count":4657,"median":545.56,"p95":1364.47},"110":{"second":110,"count":4689,"median":400.01,"p95":1217.22},"120":{"second":120,"count":3527,"median":75,"p95":532.96},"130":{"second":130,"count":78,"median":9,"p95":18.25}};
+    const caffeineRows = {"0":{"second":0,"count":419,"median":7.43,"p95":17.69},"10":{"second":10,"count":1732,"median":7,"p95":34},"20":{"second":20,"count":3773,"median":10,"p95":66},"30":{"second":30,"count":5026,"median":16.08,"p95":96.27},"40":{"second":40,"count":5020,"median":61.28,"p95":283.66},"50":{"second":50,"count":5497,"median":90,"p95":352.5},"60":{"second":60,"count":5673,"median":105,"p95":418.28},"70":{"second":70,"count":5709,"median":133.1,"p95":496.38},"80":{"second":80,"count":5689,"median":171,"p95":645.44},"90":{"second":90,"count":5677,"median":191.37,"p95":728.67},"100":{"second":100,"count":5608,"median":142,"p95":553.86},"110":{"second":110,"count":4183,"median":18,"p95":187.45},"120":{"second":120,"count":593,"median":5.4,"p95":13.26},"130":{"second":130,"count":4,"median":6.42,"p95":11}};
     const values = (rows, field) => labels.map((second) => rows[second]?.[field] ?? null);
 
     const commonOptions = (title) => ({
