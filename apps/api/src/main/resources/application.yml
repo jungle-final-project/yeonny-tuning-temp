@@ -1,5 +1,9 @@
 server:
   port: 8080
+  tomcat:
+    # tomcat.threads.busy 등 스레드풀 메트릭 노출(부하테스트 포화 지점 판별용).
+    mbeanregistry:
+      enabled: true
 
 spring:
   application:
@@ -46,7 +50,20 @@ management:
   endpoints:
     web:
       exposure:
-        include: health,info
+        # metrics는 무의존성(actuator 내장 micrometer) — nginx가 /actuator를 라우팅하지 않고
+        # api 포트는 미공개라 도커 네트워크 내부(수집기 docker exec)에서만 접근된다.
+        include: health,info,metrics
+  health:
+    mail:
+      # mail 인디케이터가 aggregate에 끼면 mailpit 없는 스택(api-only compose)에서 /actuator/health가
+      # 상시 503이 된다. 메일은 데모 부가 기능 — 헬스 판정에서 제외(운영 판정은 /api/health).
+      enabled: ${MANAGEMENT_HEALTH_MAIL_ENABLED:false}
+  metrics:
+    distribution:
+      percentiles:
+        # /actuator/metrics/http.server.requests에 p50/p95/p99 게이지 노출 — 부하테스트 중
+        # k6 측정치와 서버 내부 관측을 대조한다.
+        "[http.server.requests]": 0.5, 0.95, 0.99
 
 buildgraph:
   cors:

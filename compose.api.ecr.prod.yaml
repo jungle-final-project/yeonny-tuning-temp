@@ -6,6 +6,12 @@ services:
       - "80:80"
     volumes:
       - ./infra/nginx/api.conf:/etc/nginx/conf.d/default.conf:ro
+    # 액세스 로그(요청당 1행)가 soak에서 디스크를 채우지 않게 로테이션.
+    logging: &log-rotation
+      driver: json-file
+      options:
+        max-size: "50m"
+        max-file: "3"
     depends_on:
       api:
         condition: service_started
@@ -98,6 +104,9 @@ services:
       PART_MANUFACTURER_RELEASE_INTAKE_ZONE: ${PART_MANUFACTURER_RELEASE_INTAKE_ZONE:-Asia/Seoul}
       PART_MANUFACTURER_RELEASE_INTAKE_USER_AGENT: ${PART_MANUFACTURER_RELEASE_INTAKE_USER_AGENT:-BuildGraphBot/0.1}
       SCHEDULING_POOL_SIZE: ${SCHEDULING_POOL_SIZE:-4}
+      # 부하테스트 창에서 @Scheduled 잡 일괄 동결용(false로 내리면 전 스케줄러 off).
+      BUILDGRAPH_SCHEDULING_ENABLED: ${BUILDGRAPH_SCHEDULING_ENABLED:-true}
+    logging: *log-rotation
     expose:
       - "8080"
     volumes:

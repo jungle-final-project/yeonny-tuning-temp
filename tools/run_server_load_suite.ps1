@@ -1,12 +1,16 @@
 [CmdletBinding()]
 param(
     [string]$BaseUrl = "http://127.0.0.1:18082",
-    [ValidateSet("load", "stress", "spike", "soak", "capacity")]
-    [string[]]$Profiles = @("load", "stress", "spike", "soak", "capacity"),
+    [ValidateSet("smoke", "load", "stress", "spike", "soak", "breakpoint", "capacity")]
+    [string[]]$Profiles = @("smoke", "load", "stress", "spike", "soak", "breakpoint"),
     [string]$UserEmail = "user@example.com",
     [string]$UserPassword = "passw0rd!",
     [string]$SoakDuration = "1h",
-    [int]$SoakVus = 20,
+    [int]$SoakRate = 30,
+    [int]$SoakWindowMinutes = 5,
+    [double]$LoginRatio = 0.05,
+    [ValidateSet("local", "aws")]
+    [string]$SloProfile = "local",
     [string]$K6Image = "grafana/k6:0.54.0",
     [string]$RunId,
     [string]$ApiLogPath
@@ -18,6 +22,29 @@ $shortCommit = (& git -C $repoRoot rev-parse --short HEAD).Trim()
 if ([string]::IsNullOrWhiteSpace($RunId)) {
     $RunId = "{0}KST-{1}" -f (Get-Date -Format "yyyyMMdd'T'HHmmss"), $shortCommit
 }
+
+# "1h", "90m", "1h30m", "300s" 형식을 분으로 환산한다.
+function ConvertTo-DurationMinutes {
+    param([string]$Duration)
+    $tokenMatches = [regex]::Matches($Duration, '(\d+)\s*(h|m|s)')
+    if ($tokenMatches.Count -eq 0) {
+        throw "Unsupported SoakDuration format: $Duration (use e.g. 1h, 90m, 1h30m)"
+    }
+    $total = 0.0
+    foreach ($token in $tokenMatches) {
+        $value = [double]$token.Groups[1].Value
+        switch ($token.Groups[2].Value) {
+            "h" { $total += $value * 60 }
+            "m" { $total += $value }
+            "s" { $total += $value / 60 }
+        }
+    }
+    return $total
+}
+
+# Soak 구간 수는 하드코딩(12) 대신 지속시간에서 계산한다: ceil(분 / 구간분).
+$soakWindowCount = [int][math]::Max(1, [math]::Ceiling((ConvertTo-DurationMinutes $SoakDuration) / $SoakWindowMinutes))
+$loginRatioText = $LoginRatio.ToString([System.Globalization.CultureInfo]::InvariantCulture)
 
 $runDir = Join-Path $repoRoot "infra\k6\reports\runs\$RunId"
 New-Item -ItemType Directory -Force -Path $runDir | Out-Null
@@ -32,7 +59,11 @@ $manifest = [ordered]@{
     k6Image = $K6Image
     profiles = @($Profiles)
     soakDuration = $SoakDuration
-    soakVus = $SoakVus
+    soakRate = $SoakRate
+    soakWindowMinutes = $SoakWindowMinutes
+    soakWindowCount = $soakWindowCount
+    loginRatio = $LoginRatio
+    sloProfile = $SloProfile
     host = $env:COMPUTERNAME
     results = @()
 }
@@ -92,18 +123,32 @@ foreach ($profile in $Profiles) {
     $consoleLog = Join-Path $runDir "server-$profile.console.log"
     $monitorJob = Start-ResourceMonitor -Profile $profile
 
-    $dockerArgs = @(
-        "run", "--rm",
-        "-e", "TEST_TYPE=$profile",
-        "-e", "BASE_URL=$BaseUrl",
-        "-e", "USER_EMAIL=$UserEmail",
-        "-e", "USER_PASSWORD=$UserPassword",
-        "-e", "THINK_TIME_SECONDS=0.2",
-        "-e", "SUMMARY_PATH=/work/$summaryRelative",
-        "-e", "SOAK_DURATION=$SoakDuration",
-        "-e", "SOAK_VUS=$SoakVus",
-        "-e", "SOAK_WINDOW_MINUTES=5",
-        "-e", "SOAK_WINDOW_COUNT=12",
+    $envPairs = @(
+        "TEST_TYPE=$profile",
+        "BASE_URL=$BaseUrl",
+        "USER_EMAIL=$UserEmail",
+        "USER_PASSWORD=$UserPassword",
+        "LOGIN_RATIO=$loginRatioText",
+        "SLO_PROFILE=$SloProfile",
+        "SUMMARY_PATH=/work/$summaryRelative",
+        "SOAK_DURATION=$SoakDuration",
+        "SOAK_RATE=$SoakRate",
+        "SOAK_WINDOW_MINUTES=$SoakWindowMinutes",
+        "SOAK_WINDOW_COUNT=$soakWindowCount"
+    )
+    # 선택 튜닝 env는 호출 셸에 설정된 경우에만 그대로 전달한다.
+    foreach ($name in @("SHORT", "BREAKPOINT_LEVELS", "BREAKPOINT_RAMP", "BREAKPOINT_HOLD", "BREAKPOINT_MAX_RATE", "STARTUP_JITTER_SECONDS", "THINK_TIME_SECONDS")) {
+        $value = [Environment]::GetEnvironmentVariable($name)
+        if (-not [string]::IsNullOrWhiteSpace($value)) {
+            $envPairs += "$name=$value"
+        }
+    }
+
+    $dockerArgs = @("run", "--rm")
+    foreach ($pair in $envPairs) {
+        $dockerArgs += @("-e", $pair)
+    }
+    $dockerArgs += @(
         "-v", "${repoRoot}:/work",
         "-w", "/work",
         $K6Image,

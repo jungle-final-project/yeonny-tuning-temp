@@ -8,11 +8,13 @@ import csv
 import datetime as dt
 import json
 import re
+import sys
 from pathlib import Path
 from typing import Any
 
 
-PROFILES = ["load", "stress", "spike", "soak", "capacity"]
+# breakpoint는 구 capacity의 개칭이다. 별칭으로 실행된 이전 산출물도 함께 인식한다.
+PROFILES = ["smoke", "load", "stress", "spike", "soak", "breakpoint", "capacity"]
 ENDPOINTS = [
     "auth",
     "auth_refresh",
@@ -73,10 +75,13 @@ def main() -> int:
     args = parse_args()
     rows: list[dict[str, Any]] = []
     raw_by_profile: dict[str, dict[str, Any]] = {}
+    # run-dir에 실제로 존재하는 report만 집계한다. 없는 프로필은 경고 후 건너뛴다
+    # (예: smoke만 실행한 run, breakpoint에서 knee abort로 일부만 실행된 run).
     for profile in PROFILES:
         path = report_path(args, profile)
         if not path.exists():
-            raise SystemExit(f"missing k6 report: {path}")
+            print(f"warn: k6 report 없음, 건너뜀: {path}", file=sys.stderr)
+            continue
         data = json.loads(path.read_text(encoding="utf-8"))
         raw_by_profile[profile] = data
         metrics = data.get("metrics") or {}
@@ -105,7 +110,10 @@ def main() -> int:
             "endpointP95Ms": endpoint_p95,
         })
 
-    soak_data = raw_by_profile["soak"]
+    if not rows:
+        raise SystemExit("no k6 reports found (run-dir/reports-dir에서 server-*.json을 찾지 못함)")
+
+    soak_data = raw_by_profile.get("soak") or {}
     soak_windows: list[dict[str, Any]] = []
     for name in sorted(soak_data.get("metrics") or {}):
         match = re.fullmatch(r"soak_window_(\d+)_duration", name)
@@ -134,6 +142,12 @@ def main() -> int:
         "profiles": rows,
         "soakWindows": soak_windows,
         "soakMemory": memory,
+        # 각 summary의 buildgraph 키(k6 handleSummary가 기록한 실행 구성: offered mix,
+        # SLO 프로필, LOGIN_RATIO 등)를 그대로 보존해 재현성을 남긴다.
+        "profileConfigs": {
+            profile: data.get("buildgraph")
+            for profile, data in raw_by_profile.items()
+        },
     }
 
     lines = [
@@ -206,7 +220,7 @@ def main() -> int:
         "- 전체 오류율 1% 미만, 체크 성공률 99% 초과",
         "- 전체 p95 1,500ms 미만, health p95 300ms 미만",
         "- parts/AI fast p95 800ms 미만",
-        "- Capacity는 threshold 통과 자체보다 오류·누락 iteration이 시작되는 도착률을 한계로 본다.",
+        "- Breakpoint(구 Capacity)는 threshold 통과 자체보다 오류·누락 iteration이 시작되는 도착률(knee)을 한계로 본다.",
         "- 60분 Soak는 로컬 내구 근거이며, 운영 인증에는 동일 사양에서 2시간 이상 재실행을 권장한다.",
     ])
 
