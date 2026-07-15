@@ -38,12 +38,53 @@ validate_image_uri() {
   [[ "$tag" =~ ^[0-9a-f]{40}$ ]]
 }
 
+read_manifest_value() {
+  local key="$1"
+  local file="$2"
+  local count value
+
+  count="$(grep -c "^${key}=" "$file" || true)"
+  [[ "$count" -eq 1 ]] || {
+    die "manifest must contain exactly one ${key}"
+    return 1
+  }
+
+  value="$(sed -n "s/^${key}=//p" "$file")"
+  [[ -n "$value" ]] || {
+    die "manifest value is empty: ${key}"
+    return 1
+  }
+
+  printf '%s' "$value"
+}
+
 compose_with() {
   local runtime_env="$1"
   local image_env="$2"
   shift 2
 
-  docker compose -p "$COMPOSE_PROJECT_NAME" -f "$APP_ROOT/compose.api.ecr.prod.yaml" --env-file "$runtime_env" --env-file "$image_env" "$@"
+  env -u API_IMAGE_URI -u XGB_IMAGE_URI \
+    docker compose \
+      -p "$COMPOSE_PROJECT_NAME" \
+      -f "$APP_ROOT/compose.api.ecr.prod.yaml" \
+      --env-file "$runtime_env" \
+      --env-file "$image_env" \
+      "$@"
+}
+
+verify_running_image() {
+  local runtime_env="$1"
+  local image_env="$2"
+  local service="$3"
+  local expected_image="$4"
+  local container_id running_image
+
+  container_id="$(compose_with "$runtime_env" "$image_env" ps -q "$service")"
+  [[ -n "$container_id" ]] || die "container is missing after deployment: $service"
+
+  running_image="$(docker inspect --format '{{.Config.Image}}' "$container_id")"
+  [[ "$running_image" == "$expected_image" ]] ||
+    die "running image mismatch: expected=$expected_image actual=$running_image"
 }
 
 wait_for_api() {
@@ -172,18 +213,16 @@ trap rollback ERR
 cp "$IMAGE_MANIFEST" "$PREVIOUS_MANIFEST"
 chmod 600 "$PREVIOUS_MANIFEST"
 
-set -a
-# shellcheck disable=SC1090
-source "$IMAGE_MANIFEST"
-set +a
+active_api_image="$(read_manifest_value API_IMAGE_URI "$IMAGE_MANIFEST")"
+active_xgb_image="$(read_manifest_value XGB_IMAGE_URI "$IMAGE_MANIFEST")"
 
-validate_image_uri "${API_IMAGE_URI:-}" "$API_REPOSITORY" ||
+validate_image_uri "$active_api_image" "$API_REPOSITORY" ||
   die "active API image URI is invalid"
-validate_image_uri "${XGB_IMAGE_URI:-}" "$XGB_REPOSITORY" ||
+validate_image_uri "$active_xgb_image" "$XGB_REPOSITORY" ||
   die "active XGB image URI is invalid"
 
-candidate_api_image="$API_IMAGE_URI"
-candidate_xgb_image="$XGB_IMAGE_URI"
+candidate_api_image="$active_api_image"
+candidate_xgb_image="$active_xgb_image"
 if [[ "$TARGET_SERVICE" == "api" ]]; then
   candidate_api_image="$TARGET_IMAGE_URI"
 else
@@ -211,6 +250,7 @@ compose_with "$CANDIDATE_RUNTIME_ENV" "$CANDIDATE_MANIFEST" pull "$TARGET_SERVIC
 deployment_mutated=1
 git checkout --detach "$TARGET_SHA"
 compose_with "$CANDIDATE_RUNTIME_ENV" "$CANDIDATE_MANIFEST" up -d --no-deps --force-recreate --no-build "$TARGET_SERVICE"
+verify_running_image "$CANDIDATE_RUNTIME_ENV" "$CANDIDATE_MANIFEST" "$TARGET_SERVICE" "$TARGET_IMAGE_URI"
 
 if [[ "$TARGET_SERVICE" == "api" ]]; then
   compose_with "$CANDIDATE_RUNTIME_ENV" "$CANDIDATE_MANIFEST" exec -T nginx nginx -t
