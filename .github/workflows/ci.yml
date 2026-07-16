@@ -122,7 +122,8 @@ jobs:
             tools.test_bootstrap_green_asg \
             tools.test_prepare_green_asg_builder \
             tools.test_provision_green_private_app_network \
-            tools.test_migrate_green_web_asg_private
+            tools.test_migrate_green_web_asg_private \
+            tools.test_rollout_green_web_asg_release
 
   compose:
     name: compose

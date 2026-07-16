@@ -1,0 +1,150 @@
+name: Release Green Web ASG
+
+on:
+  workflow_dispatch:
+    inputs:
+      service:
+        description: "Runtime image to release"
+        required: true
+        type: choice
+        options:
+          - api
+          - xgb-reranker
+      git_sha:
+        description: "Exact current main SHA; defaults to the selected branch SHA"
+        required: false
+        type: string
+      image_tag:
+        description: "Immutable ECR SHA tag; defaults to git_sha"
+        required: false
+        type: string
+      traffic_isolated:
+        description: "I confirmed CloudFront /api/* and /ws/* use the manual Green origin"
+        required: true
+        default: false
+        type: boolean
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: deploy-green-web-asg-release
+  cancel-in-progress: false
+
+jobs:
+  release:
+    name: release-green-web-asg
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+
+    steps:
+      - name: Resolve immutable release target
+        id: target
+        shell: bash
+        env:
+          REQUESTED_SHA: ${{ inputs.git_sha }}
+          REQUESTED_IMAGE_TAG: ${{ inputs.image_tag }}
+          DEFAULT_SHA: ${{ github.sha }}
+          SERVICE: ${{ inputs.service }}
+          TRAFFIC_ISOLATED: ${{ inputs.traffic_isolated }}
+        run: |
+          set -euo pipefail
+          target_sha="${REQUESTED_SHA:-$DEFAULT_SHA}"
+          image_tag="${REQUESTED_IMAGE_TAG:-$target_sha}"
+          [[ "$target_sha" =~ ^[0-9a-f]{40}$ ]] || {
+            echo "::error::git_sha must be a 40-character lowercase Git SHA"
+            exit 1
+          }
+          [[ "$image_tag" =~ ^[0-9a-f]{40}$ ]] || {
+            echo "::error::image_tag must be a 40-character lowercase Git SHA"
+            exit 1
+          }
+          [[ "$target_sha" == "$image_tag" ]] || {
+            echo "::error::git_sha and image_tag must match for an immutable release"
+            exit 1
+          }
+          [[ "$TRAFFIC_ISOLATED" == "true" ]] || {
+            echo "::error::CloudFront /api/* and /ws/* must be isolated to the manual Green origin before release"
+            exit 1
+          }
+          echo "service=$SERVICE" >> "$GITHUB_OUTPUT"
+          echo "sha=$target_sha" >> "$GITHUB_OUTPUT"
+          echo "image_tag=$image_tag" >> "$GITHUB_OUTPUT"
+
+      - name: Checkout target commit
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ steps.target.outputs.sha }}
+          fetch-depth: 0
+
+      - name: Verify exact current main release
+        env:
+          RELEASE_SHA: ${{ steps.target.outputs.sha }}
+        run: |
+          set -euo pipefail
+          git fetch --quiet origin main
+          main_sha="$(git rev-parse origin/main)"
+          [[ "$RELEASE_SHA" == "$main_sha" ]] || {
+            echo "::error::Forward ASG releases must use the exact current origin/main SHA: $main_sha"
+            exit 1
+          }
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: tools/requirements.txt
+
+      - name: Validate ASG rollout contracts
+        run: |
+          python -m pip install -r tools/requirements.txt
+          python -m unittest \
+            tools.test_validate_green_deployment \
+            tools.test_bootstrap_green_asg \
+            tools.test_rollout_green_web_asg_release
+
+      - name: Configure AWS credentials with GitHub OIDC
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.AWS_DEPLOY_ROLE_ARN }}
+          aws-region: ${{ vars.AWS_REGION }}
+
+      - name: Read-only rollout preflight
+        shell: bash
+        env:
+          BUILDGRAPH_CLOUDFRONT_MANUAL_GREEN_CONFIRMED: "true"
+        run: |
+          bash tools/rollout_green_web_asg_release.sh \
+            --service "${{ steps.target.outputs.service }}" \
+            --git-sha "${{ steps.target.outputs.sha }}" \
+            --image-tag "${{ steps.target.outputs.image_tag }}" \
+            --bootstrap-manifest infra/asg/green-release.env
+
+      - name: Create Launch Template version and refresh ASG
+        id: rollout
+        shell: bash
+        env:
+          BUILDGRAPH_CLOUDFRONT_MANUAL_GREEN_CONFIRMED: ${{ inputs.traffic_isolated }}
+        run: |
+          bash tools/rollout_green_web_asg_release.sh \
+            --service "${{ steps.target.outputs.service }}" \
+            --git-sha "${{ steps.target.outputs.sha }}" \
+            --image-tag "${{ steps.target.outputs.image_tag }}" \
+            --bootstrap-manifest infra/asg/green-release.env \
+            --apply
+
+      - name: Record release
+        if: success()
+        run: |
+          {
+            echo "### Green Web ASG release succeeded"
+            echo
+            echo "- Service: \`${{ steps.target.outputs.service }}\`"
+            echo "- Commit: \`${{ steps.target.outputs.sha }}\`"
+            echo "- ECR tag: \`${{ steps.target.outputs.image_tag }}\`"
+            echo "- Launch Template version: \`${{ steps.rollout.outputs.launch_template_version || 'see rollout log' }}\`"
+            echo "- Instance Refresh: \`${{ steps.rollout.outputs.instance_refresh_id || 'see rollout log' }}\`"
+            echo "- Next step: restore CloudFront \`/api/*\`, smoke test, then restore \`/ws/*\`"
+          } >> "$GITHUB_STEP_SUMMARY"

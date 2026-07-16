@@ -1,0 +1,103 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "ReadGreenAsgReleaseState",
+      "Effect": "Allow",
+      "Action": [
+        "ec2:DescribeImages",
+        "ec2:DescribeInstances",
+        "ec2:DescribeLaunchTemplates",
+        "ec2:DescribeLaunchTemplateVersions",
+        "ecr:DescribeImages",
+        "ecr:DescribeRepositories",
+        "autoscaling:DescribeAutoScalingGroups",
+        "autoscaling:DescribeInstanceRefreshes",
+        "autoscaling:DescribeScalingActivities",
+        "elasticloadbalancing:DescribeTargetHealth"
+      ],
+      "Resource": "*"
+    },
+    {
+      "Sid": "CreateGreenWebReleaseLaunchTemplateVersion",
+      "Effect": "Allow",
+      "Action": "ec2:CreateLaunchTemplateVersion",
+      "Resource": "arn:aws:ec2:ap-northeast-2:443915990705:launch-template/lt-0024991a1e82e5e6c"
+    },
+    {
+      "Sid": "RefreshOnlyGreenWebAsg",
+      "Effect": "Allow",
+      "Action": [
+        "autoscaling:CancelInstanceRefresh",
+        "autoscaling:RollbackInstanceRefresh",
+        "autoscaling:StartInstanceRefresh"
+      ],
+      "Resource": "arn:aws:autoscaling:ap-northeast-2:443915990705:autoScalingGroup:8f32aec0-e5c6-447f-82a6-05efa16d2a53:autoScalingGroupName/buildgraph-demo-api-green-asg"
+    },
+    {
+      "Sid": "ValidateApprovedGreenWebAmiLaunch",
+      "Effect": "Allow",
+      "Action": "ec2:RunInstances",
+      "Resource": "arn:aws:ec2:ap-northeast-2:443915990705:image/ami-*",
+      "Condition": {
+        "ArnEquals": {
+          "ec2:LaunchTemplate": "arn:aws:ec2:ap-northeast-2:443915990705:launch-template/lt-0024991a1e82e5e6c"
+        },
+        "StringEquals": {
+          "ec2:ResourceTag/Validation": "passed"
+        }
+      }
+    },
+    {
+      "Sid": "ValidateApprovedGreenWebLaunchResources",
+      "Effect": "Allow",
+      "Action": "ec2:RunInstances",
+      "Resource": [
+        "arn:aws:ec2:ap-northeast-2:443915990705:launch-template/lt-0024991a1e82e5e6c",
+        "arn:aws:ec2:ap-northeast-2:443915990705:security-group/sg-0a0a2fe0e54027420",
+        "arn:aws:ec2:ap-northeast-2:443915990705:subnet/subnet-06b224c812227caba",
+        "arn:aws:ec2:ap-northeast-2:443915990705:subnet/subnet-0ec9ec7bb60433a68",
+        "arn:aws:ec2:ap-northeast-2:443915990705:instance/*",
+        "arn:aws:ec2:ap-northeast-2:443915990705:network-interface/*",
+        "arn:aws:ec2:ap-northeast-2:443915990705:volume/*"
+      ],
+      "Condition": {
+        "ArnEquals": {
+          "ec2:LaunchTemplate": "arn:aws:ec2:ap-northeast-2:443915990705:launch-template/lt-0024991a1e82e5e6c"
+        },
+        "StringEquals": {
+          "ec2:InstanceType": "t3.medium",
+          "ec2:MetadataHttpTokens": "required"
+        },
+        "Bool": {
+          "ec2:AssociatePublicIpAddress": "false"
+        }
+      }
+    },
+    {
+      "Sid": "TagOnlyGreenWebReplacementInstancesAndVolumes",
+      "Effect": "Allow",
+      "Action": "ec2:CreateTags",
+      "Resource": [
+        "arn:aws:ec2:ap-northeast-2:443915990705:instance/*",
+        "arn:aws:ec2:ap-northeast-2:443915990705:volume/*"
+      ],
+      "Condition": {
+        "StringEquals": {
+          "ec2:CreateAction": "RunInstances"
+        }
+      }
+    },
+    {
+      "Sid": "PassOnlyGreenWebRuntimeRole",
+      "Effect": "Allow",
+      "Action": "iam:PassRole",
+      "Resource": "arn:aws:iam::443915990705:role/buildgraph-demo-api-green-role",
+      "Condition": {
+        "StringEquals": {
+          "iam:PassedToService": "ec2.amazonaws.com"
+        }
+      }
+    }
+  ]
+}

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import os
 import re
 import subprocess
@@ -15,10 +16,16 @@ import yaml
 ROOT = Path(__file__).resolve().parents[1]
 ECR_COMPOSE = ROOT / "compose.api.ecr.prod.yaml"
 DEPLOY_SCRIPT = ROOT / "tools/deploy_green_ecr.sh"
+ASG_ROLLOUT_SCRIPT = ROOT / "tools/rollout_green_web_asg_release.sh"
+ASG_ROLLOUT_POLICY = (
+    ROOT
+    / "infra/iam/buildgraph-demo-github-actions-green-asg-rollout-policy.json"
+)
 WORKFLOWS = {
     "web": ROOT / ".github/workflows/deploy-web-green.yml",
     "api": ROOT / ".github/workflows/deploy-api-green.yml",
     "xgb": ROOT / ".github/workflows/deploy-xgb-green.yml",
+    "release": ROOT / ".github/workflows/release-green-web-asg.yml",
 }
 
 EXPECTED_SERVICES = {"nginx", "api", "xgb-reranker"}
@@ -65,7 +72,13 @@ class GreenDeploymentContractTest(unittest.TestCase):
     maxDiff = None
 
     def test_required_phase8_files_exist(self) -> None:
-        required = [ECR_COMPOSE, DEPLOY_SCRIPT, *WORKFLOWS.values()]
+        required = [
+            ECR_COMPOSE,
+            DEPLOY_SCRIPT,
+            ASG_ROLLOUT_SCRIPT,
+            ASG_ROLLOUT_POLICY,
+            *WORKFLOWS.values(),
+        ]
         missing = [str(path.relative_to(ROOT)) for path in required if not path.is_file()]
         self.assertEqual([], missing, f"missing Phase 8 files: {missing}")
 
@@ -133,15 +146,68 @@ class GreenDeploymentContractTest(unittest.TestCase):
                 self.assertNotIn("secrets.AWS_", text)
                 self.assertNotRegex(text, r"(?m)^\s*environment:\s*")
 
-    def test_api_and_xgb_workflows_use_sha_images_and_ssm(self) -> None:
+    def test_api_and_xgb_workflows_publish_sha_images_without_instance_mutation(
+        self,
+    ) -> None:
         for name in ("api", "xgb"):
             text = WORKFLOWS[name].read_text(encoding="utf-8")
             with self.subTest(workflow=name):
                 self.assertIn("github.sha", text)
                 self.assertNotRegex(text, r"(?i)(?:imageTag=|:)\s*latest\b")
-                self.assertIn("aws ssm send-command", text)
-                self.assertIn("tools/deploy_green_ecr.sh", text)
+                self.assertNotIn("aws ssm send-command", text)
+                self.assertNotIn("aws ssm get-command-invocation", text)
+                self.assertNotIn("GREEN_EC2_INSTANCE_ID", text)
+                self.assertNotIn("tools/deploy_green_ecr.sh", text)
+                self.assertNotIn("start-instance-refresh", text)
                 self.assertNotRegex(text, r"(?m)^\s*[^#\n]*(ssh|rsync)\b")
+
+    def test_asg_release_workflow_is_manual_and_requires_traffic_isolation(
+        self,
+    ) -> None:
+        path = WORKFLOWS["release"]
+        text = path.read_text(encoding="utf-8")
+        workflow = load_yaml(path)
+
+        triggers = workflow.get(True, workflow.get("on"))
+        self.assertIsInstance(triggers, dict)
+        self.assertEqual({"workflow_dispatch"}, set(triggers))
+        self.assertIn("traffic_isolated", text)
+        self.assertIn(
+            "BUILDGRAPH_CLOUDFRONT_MANUAL_GREEN_CONFIRMED",
+            text,
+        )
+        self.assertIn("tools/rollout_green_web_asg_release.sh", text)
+        self.assertIn("deploy-green-web-asg-release", text)
+        self.assertNotIn("GREEN_EC2_INSTANCE_ID", text)
+        self.assertNotIn("aws ssm send-command", text)
+
+    def test_asg_rollout_policy_is_scoped_and_does_not_grant_ssm(self) -> None:
+        policy = json.loads(ASG_ROLLOUT_POLICY.read_text(encoding="utf-8"))
+        statements = policy.get("Statement", [])
+        actions = {
+            action
+            for statement in statements
+            for action in (
+                statement.get("Action")
+                if isinstance(statement.get("Action"), list)
+                else [statement.get("Action")]
+            )
+            if isinstance(action, str)
+        }
+
+        self.assertIn("ec2:CreateLaunchTemplateVersion", actions)
+        self.assertIn("autoscaling:StartInstanceRefresh", actions)
+        self.assertIn("autoscaling:RollbackInstanceRefresh", actions)
+        self.assertIn("elasticloadbalancing:DescribeTargetHealth", actions)
+        self.assertIn("ec2:RunInstances", actions)
+        self.assertIn("iam:PassRole", actions)
+        self.assertNotIn("autoscaling:UpdateAutoScalingGroup", actions)
+        self.assertFalse(any(action.startswith("ssm:") for action in actions))
+        self.assertFalse(any(action == "*" for action in actions))
+        policy_text = json.dumps(policy, sort_keys=True)
+        self.assertIn("lt-0024991a1e82e5e6c", policy_text)
+        self.assertIn("buildgraph-demo-api-green-asg", policy_text)
+        self.assertIn("buildgraph-demo-api-green-role", policy_text)
 
     def test_web_workflow_targets_only_green_and_keeps_cache_classes_separate(self) -> None:
         text = WORKFLOWS["web"].read_text(encoding="utf-8")
@@ -154,7 +220,8 @@ class GreenDeploymentContractTest(unittest.TestCase):
         self.assertIn("/downloads/pc-agent/latest.json", text)
 
     def test_push_deployments_are_guarded_by_green_cd_variable(self) -> None:
-        for name, path in WORKFLOWS.items():
+        for name in ("web", "api", "xgb"):
+            path = WORKFLOWS[name]
             text = path.read_text(encoding="utf-8")
             with self.subTest(workflow=name):
                 self.assertIn("GREEN_CD_ENABLED", text)
