@@ -166,12 +166,33 @@ class InfrastructureSeparationValidatorTest(unittest.TestCase):
         self.assertIn("api service must not publish ports", errors)
 
     def test_nginx_config_accepts_api_and_websocket_proxy_only(self) -> None:
-        # 정상 설정: API 전용 Nginx는 /api와 /ws만 Spring Boot로 전달한다.
-        # React 정적 파일 제공 설정은 포함하지 않는다.
+        # 정상 설정: API 전용 Nginx는 keepalive upstream을 통해 /api와 /ws를
+        # Spring Boot로 전달한다. React 정적 파일 제공 설정은 포함하지 않는다.
         config = """
+        upstream buildgraph_api {
+            server api:8080;
+            keepalive 64;
+        }
         server {
             listen 80;
             location = /healthz { return 200 "ok\\n"; }
+            location /api/ { proxy_pass http://buildgraph_api; }
+            location /ws/ {
+                proxy_pass http://buildgraph_api;
+                proxy_set_header Upgrade $http_upgrade;
+                proxy_set_header Connection $connection_upgrade;
+            }
+        }
+        """
+
+        self.assertEqual([], validator.validate_nginx_config(config))
+
+    def test_nginx_config_rejects_direct_api_proxy_that_bypasses_upstream(self) -> None:
+        # 비정상 설정: api:8080으로 직접 연결하면 현재 운영 설정의 keepalive
+        # upstream을 우회하므로 인프라 계약 위반으로 탐지해야 한다.
+        config = """
+        server {
+            listen 80;
             location /api/ { proxy_pass http://api:8080; }
             location /ws/ {
                 proxy_pass http://api:8080;
@@ -181,18 +202,25 @@ class InfrastructureSeparationValidatorTest(unittest.TestCase):
         }
         """
 
-        self.assertEqual([], validator.validate_nginx_config(config))
+        errors = "\n".join(validator.validate_nginx_config(config))
+
+        self.assertIn("upstream buildgraph_api", errors)
+        self.assertIn("server api:8080", errors)
+        self.assertIn("proxy_pass http://buildgraph_api", errors)
 
     def test_nginx_config_rejects_react_static_file_hosting(self) -> None:
         # 비정상 설정을 의도적으로 만든다:
         # API 전용 Nginx에 React root/assets/index.html 제공 설정을 넣는다.
         # 목표 구조에서 React 정적 파일은 S3와 CloudFront가 제공해야 한다.
         config = """
+        upstream buildgraph_api {
+            server api:8080;
+        }
         server {
             root /usr/share/nginx/html;
             location /assets/ { try_files $uri =404; }
-            location /api/ { proxy_pass http://api:8080; }
-            location /ws/ { proxy_pass http://api:8080; }
+            location /api/ { proxy_pass http://buildgraph_api; }
+            location /ws/ { proxy_pass http://buildgraph_api; }
             location / { try_files $uri /index.html; }
         }
         """

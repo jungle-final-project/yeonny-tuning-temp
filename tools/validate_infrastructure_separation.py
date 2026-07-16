@@ -149,7 +149,9 @@ def validate_nginx_config(config: str) -> list[str]:
     for marker in [
         "location /api/",
         "location /ws/",
-        "proxy_pass http://api:8080",
+        "upstream buildgraph_api",
+        "server api:8080",
+        "proxy_pass http://buildgraph_api",
         "proxy_set_header Upgrade $http_upgrade",
         "proxy_set_header Connection $connection_upgrade",
     ]:
