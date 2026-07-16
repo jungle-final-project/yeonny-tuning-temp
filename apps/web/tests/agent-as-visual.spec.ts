@@ -117,6 +117,27 @@ const noSampleTicket = {
   }
 };
 
+const diagnosisOnlyTicket = {
+  ...beforeDecisionTicket,
+  id: 'qa-ticket-diagnosis-evidence',
+  logUploadId: null,
+  logSummaryText: null,
+  logSummary: null,
+  diagnosisEvidence: [
+    {
+      taskId: 'gpu-temperature',
+      component: 'gpu',
+      metricType: 'temperature',
+      value: 95,
+      unit: 'C',
+      availability: 'AVAILABLE',
+      status: 'ABNORMAL',
+      source: 'nvidia-smi',
+      sampledAt: '2026-07-02T06:18:20Z'
+    }
+  ]
+};
+
 test('captures Agent AS demo UI evidence and verifies admin decision reflection', async ({ page }) => {
   const consoleErrors: string[] = [];
   const apiCalls: string[] = [];
@@ -124,7 +145,8 @@ test('captures Agent AS demo UI evidence and verifies admin decision reflection'
     [beforeDecisionTicket.id, beforeDecisionTicket],
     [afterDecisionTicket.id, afterDecisionTicket],
     [visitRecommendedTicket.id, visitRecommendedTicket],
-    [noSampleTicket.id, noSampleTicket]
+    [noSampleTicket.id, noSampleTicket],
+    [diagnosisOnlyTicket.id, diagnosisOnlyTicket]
   ]);
   let decisionPatchPayload: Record<string, unknown> | undefined;
   let remoteRequestPayload: Record<string, unknown> | undefined;
@@ -323,12 +345,12 @@ test('captures Agent AS demo UI evidence and verifies admin decision reflection'
     expect(overviewLabels).not.toContain(removedLabel);
   }
 
-  const showAgentLogs = ticketOverview.getByRole('button', { name: '전송 로그 보기 (2건)', exact: true });
+  const showAgentLogs = ticketOverview.getByRole('button', { name: '에이전트 데이터 보기 (2건)', exact: true });
   await expect(showAgentLogs).toHaveAttribute('aria-expanded', 'false');
   await expect(ticketOverview.getByTestId('agent-log-samples-panel')).toHaveCount(0);
   await showAgentLogs.click();
   await expect(ticketOverview.getByTestId('agent-log-samples-panel')).toBeVisible();
-  await expect(ticketOverview).toContainText('개인정보가 마스킹된 핵심 로그 샘플이며 최대 20건까지 표시됩니다.');
+  await expect(ticketOverview).toContainText('개인정보가 마스킹된 핵심 업로드 로그 샘플이며 최대 20건까지 표시됩니다.');
   await expect(ticketOverview).toContainText('SYSTEM_METRIC');
   await expect(ticketOverview).toContainText('#42');
   await expect(ticketOverview).toContainText('gpu temperature reached 95c');
@@ -341,11 +363,19 @@ test('captures Agent AS demo UI evidence and verifies admin decision reflection'
     ))).toBe(true);
   }
 
-  await ticketOverview.getByRole('button', { name: '전송 로그 닫기', exact: true }).click();
+  await ticketOverview.getByRole('button', { name: '에이전트 데이터 닫기', exact: true }).click();
   await expect(ticketOverview.getByTestId('agent-log-samples-panel')).toHaveCount(0);
 
   await page.goto('/admin/as-tickets/qa-ticket-no-samples');
   await expect(page.getByTestId('admin-as-ticket-overview')).toContainText('업로드된 로그가 있으나 표시 가능한 샘플이 없습니다.');
+
+  await page.goto('/admin/as-tickets/qa-ticket-diagnosis-evidence');
+  const diagnosisOverview = page.getByTestId('admin-as-ticket-overview');
+  await diagnosisOverview.getByRole('button', { name: '에이전트 데이터 보기 (1건)', exact: true }).click();
+  await expect(diagnosisOverview.getByTestId('agent-log-samples-panel')).toContainText('실시간 진단 근거');
+  await expect(diagnosisOverview.getByTestId('agent-log-samples-panel')).toContainText('gpu · temperature');
+  await expect(diagnosisOverview.getByTestId('agent-log-samples-panel')).toContainText('nvidia-smi');
+  await expect(page.getByRole('main')).toContainText('PC Agent 실시간 진단 근거 1건 연결됨');
 
   await page.goto('/admin/as-tickets/qa-ticket-before');
   await page.getByLabel('검토 상태').selectOption('APPROVED');

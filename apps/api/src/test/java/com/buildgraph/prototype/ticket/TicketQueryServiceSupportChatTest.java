@@ -1,23 +1,19 @@
 package com.buildgraph.prototype.ticket;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.contains;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
-import com.buildgraph.prototype.common.ApiException;
 import com.buildgraph.prototype.user.CurrentUserService;
 import java.util.List;
 import java.util.Map;
 import org.junit.jupiter.api.Test;
-import org.springframework.http.HttpStatus;
 import org.springframework.jdbc.core.JdbcTemplate;
 
 class TicketQueryServiceSupportChatTest {
@@ -36,7 +32,6 @@ class TicketQueryServiceSupportChatTest {
     @Test
     void createTicketEnsuresSupportChatRoomWithSystemMessage() {
         mockLockedUser();
-        mockNoOpenSupportChat();
         mockTicketInsert("GPU temperature rises quickly.", 6001L, "ticket-public-id");
         mockSupportChatRoomInsert(6001L, 7001L, "room-public-id");
         mockTicketLookup("ticket-public-id", "GPU temperature rises quickly.", "room-public-id");
@@ -46,7 +41,6 @@ class TicketQueryServiceSupportChatTest {
         assertThat(result).containsEntry("id", "ticket-public-id");
         assertThat(result).containsEntry("supportChatRoomId", "room-public-id");
         verify(jdbcTemplate).queryForList(contains("FOR UPDATE"), eq(USER.internalId()));
-        verify(jdbcTemplate).queryForList(contains("t.status NOT IN ('CLOSED', 'CANCELLED')"), eq(USER.internalId()));
         verify(jdbcTemplate).queryForList(
                 contains("INSERT INTO support_chat_rooms"),
                 eq(USER.internalId()),
@@ -62,40 +56,31 @@ class TicketQueryServiceSupportChatTest {
     }
 
     @Test
-    void createTicketRejectsWhenUserAlreadyHasOpenSupportChat() {
+    void createTicketAllowsASeparateRoomWhenUserAlreadyHasOpenSupportChat() {
         mockLockedUser();
-        when(jdbcTemplate.queryForList(contains("t.status NOT IN ('CLOSED', 'CANCELLED')"), eq(USER.internalId())))
-                .thenReturn(List.of(Map.of(
-                        "as_ticket_id", "00000000-0000-4000-8000-000000006001",
-                        "support_chat_room_id", "00000000-0000-4000-8000-000000009001"
-                )));
+        mockTicketInsert("new issue", 6002L, "second-ticket-public-id");
+        mockSupportChatRoomInsert(6002L, 7002L, "second-room-public-id");
+        mockTicketLookup("second-ticket-public-id", "new issue", "second-room-public-id");
 
-        assertThatThrownBy(() -> service.create(Map.of("symptom", "new issue"), USER))
-                .isInstanceOf(ApiException.class)
-                .satisfies(error -> {
-                    ApiException exception = (ApiException) error;
-                    assertThat(exception.status()).isEqualTo(HttpStatus.CONFLICT);
-                    assertThat(exception.code()).isEqualTo("CONFLICT_STATE");
-                    assertThat(exception.details()).containsEntry("asTicketId", "00000000-0000-4000-8000-000000006001");
-                    assertThat(exception.details()).containsEntry("supportChatRoomId", "00000000-0000-4000-8000-000000009001");
-                });
+        Map<String, Object> result = service.create(Map.of("symptom", "new issue"), USER);
 
+        assertThat(result)
+                .containsEntry("id", "second-ticket-public-id")
+                .containsEntry("supportChatRoomId", "second-room-public-id");
         verify(jdbcTemplate).queryForList(contains("FOR UPDATE"), eq(USER.internalId()));
-        verify(jdbcTemplate, never()).queryForMap(
-                contains("INSERT INTO as_tickets"),
-                any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any()
-        );
-        verify(jdbcTemplate, never()).queryForList(
+        verify(jdbcTemplate).queryForList(
                 contains("INSERT INTO support_chat_rooms"),
-                any(), any(), any(), any()
+                eq(USER.internalId()),
+                eq(6002L),
+                anyString(),
+                eq(SupportChatService.SYSTEM_OPEN_MESSAGE)
         );
-        verify(jdbcTemplate, never()).update(contains("INSERT INTO support_chat_messages"), any(), any());
+        verifyTicketInsert("new issue");
     }
 
     @Test
     void createTicketAllowsNewTicketWhenExistingSupportChatTicketIsClosedOrCancelled() {
         mockLockedUser();
-        mockNoOpenSupportChat();
         mockTicketInsert("new issue after closed chat", 6002L, "new-ticket-public-id");
         mockSupportChatRoomInsert(6002L, 7002L, "new-room-public-id");
         mockTicketLookup("new-ticket-public-id", "new issue after closed chat", "new-room-public-id");
@@ -103,19 +88,12 @@ class TicketQueryServiceSupportChatTest {
         Map<String, Object> result = service.create(Map.of("symptom", "new issue after closed chat"), USER);
 
         assertThat(result).containsEntry("id", "new-ticket-public-id");
-        verify(jdbcTemplate).queryForList(contains("r.status = 'ACTIVE'"), eq(USER.internalId()));
-        verify(jdbcTemplate).queryForList(contains("t.status NOT IN ('CLOSED', 'CANCELLED')"), eq(USER.internalId()));
         verifyTicketInsert("new issue after closed chat");
     }
 
     private void mockLockedUser() {
         when(jdbcTemplate.queryForList(contains("FOR UPDATE"), eq(USER.internalId())))
                 .thenReturn(List.of(Map.of("id", USER.internalId())));
-    }
-
-    private void mockNoOpenSupportChat() {
-        when(jdbcTemplate.queryForList(contains("t.status NOT IN ('CLOSED', 'CANCELLED')"), eq(USER.internalId())))
-                .thenReturn(List.of());
     }
 
     private void mockTicketInsert(String symptom, long internalId, String publicId) {

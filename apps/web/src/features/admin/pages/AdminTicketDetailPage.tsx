@@ -395,14 +395,14 @@ function ticketDetailRows(ticket: AdminAsTicket) {
 
 function AgentLogSamplesToggle({ ticket }: { ticket: AdminAsTicket }) {
   const [expanded, setExpanded] = useState(false);
-  const samples = agentLogSamples(ticket);
+  const entries = agentLogEntries(ticket);
 
-  if (samples.length === 0) {
+  if (entries.length === 0) {
     return (
       <span className="text-sm text-slate-500">
         {ticket.logUploadId
           ? '업로드된 로그가 있으나 표시 가능한 샘플이 없습니다.'
-          : '연결된 에이전트 로그가 없습니다.'}
+          : '연결된 에이전트 로그 또는 진단 근거가 없습니다.'}
       </span>
     );
   }
@@ -417,20 +417,20 @@ function AgentLogSamplesToggle({ ticket }: { ticket: AdminAsTicket }) {
         onClick={() => setExpanded((current) => !current)}
         className="inline-flex items-center gap-1.5 rounded border border-brand-blue px-3 py-2 text-xs font-black text-brand-blue transition hover:bg-blue-50 focus:outline-none focus:ring-2 focus:ring-blue-200"
       >
-        {expanded ? '전송 로그 닫기' : `전송 로그 보기 (${samples.length}건)`}
+        {expanded ? '에이전트 데이터 닫기' : `에이전트 데이터 보기 (${entries.length}건)`}
         <ChevronDown aria-hidden="true" className={`h-4 w-4 transition-transform ${expanded ? 'rotate-180' : ''}`} />
       </button>
 
       {expanded ? (
         <div id={panelId} data-testid="agent-log-samples-panel" className="mt-3 max-h-[360px] max-w-full overflow-auto rounded border border-slate-700 bg-slate-950 p-3 text-slate-100">
           <p className="mb-3 text-xs font-semibold leading-5 text-slate-300">
-            개인정보가 마스킹된 핵심 로그 샘플이며 최대 20건까지 표시됩니다.
+            {agentLogEntriesNotice(entries)}
           </p>
           <div className="space-y-3">
-            {samples.map((sample, index) => (
-              <article key={agentLogSampleKey(sample, index)} className="min-w-max rounded border border-slate-700 bg-slate-900 p-3">
-                <div className="text-xs font-black text-blue-200">{agentLogSampleHeader(sample)}</div>
-                <pre className="mt-2 whitespace-pre text-xs leading-5 text-slate-100">{agentLogSampleBody(sample)}</pre>
+            {entries.map((entry, index) => (
+              <article key={agentLogEntryKey(entry, index)} className="min-w-max rounded border border-slate-700 bg-slate-900 p-3">
+                <div className="text-xs font-black text-blue-200">{agentLogEntryHeader(entry)}</div>
+                <pre className="mt-2 whitespace-pre text-xs leading-5 text-slate-100">{agentLogEntryBody(entry)}</pre>
               </article>
             ))}
           </div>
@@ -440,23 +440,51 @@ function AgentLogSamplesToggle({ ticket }: { ticket: AdminAsTicket }) {
   );
 }
 
-function agentLogSamples(ticket: AdminAsTicket) {
+type AgentLogEntry = {
+  source: 'UPLOADED_LOG' | 'LIVE_DIAGNOSIS';
+  data: Record<string, unknown>;
+};
+
+function agentLogEntries(ticket: AdminAsTicket): AgentLogEntry[] {
   const summary = objectValue(ticket.logSummary);
   const rawSamples = summary?.rawSamples;
-  if (!Array.isArray(rawSamples)) {
-    return [];
-  }
-  return rawSamples
+  const uploadedEntries = Array.isArray(rawSamples) ? rawSamples
     .map(objectValue)
     .filter((sample): sample is Record<string, unknown> => sample !== null)
-    .slice(0, 20);
+    .map((data): AgentLogEntry => ({ source: 'UPLOADED_LOG', data })) : [];
+  const diagnosisEntries = Array.isArray(ticket.diagnosisEvidence) ? ticket.diagnosisEvidence
+    .map(objectValue)
+    .filter((sample): sample is Record<string, unknown> => sample !== null)
+    .map((data): AgentLogEntry => ({ source: 'LIVE_DIAGNOSIS', data })) : [];
+  return [...uploadedEntries, ...diagnosisEntries].slice(0, 20);
 }
 
-function agentLogSampleKey(sample: Record<string, unknown>, index: number) {
-  return textValue(sample.refId) ?? textValue(sample.sampleId) ?? `${textValue(sample.sequence) ?? 'sample'}-${index}`;
+function agentLogEntriesNotice(entries: AgentLogEntry[]) {
+  const hasUploadedLog = entries.some((entry) => entry.source === 'UPLOADED_LOG');
+  const hasLiveDiagnosis = entries.some((entry) => entry.source === 'LIVE_DIAGNOSIS');
+  if (hasUploadedLog && hasLiveDiagnosis) {
+    return '개인정보가 마스킹된 업로드 로그 샘플과 서버가 검증한 PC Agent 실시간 진단 근거이며 최대 20건까지 표시됩니다.';
+  }
+  if (hasLiveDiagnosis) {
+    return 'PC Agent 실시간 진단에서 서버가 검증해 티켓에 저장한 측정 근거입니다. 원본 JSONL 업로드와는 별도입니다.';
+  }
+  return '개인정보가 마스킹된 핵심 업로드 로그 샘플이며 최대 20건까지 표시됩니다.';
 }
 
-function agentLogSampleHeader(sample: Record<string, unknown>) {
+function agentLogEntryKey(entry: AgentLogEntry, index: number) {
+  const sample = entry.data;
+  return `${entry.source}-${textValue(sample.refId) ?? textValue(sample.sampleId) ?? textValue(sample.taskId) ?? `${textValue(sample.sequence) ?? 'sample'}-${index}`}`;
+}
+
+function agentLogEntryHeader(entry: AgentLogEntry) {
+  const sample = entry.data;
+  if (entry.source === 'LIVE_DIAGNOSIS') {
+    return [
+      textValue(sample.sampledAt) ? formatDateTime(textValue(sample.sampledAt)!) : '수집 시각 미상',
+      '실시간 진단 근거',
+      [textValue(sample.component), textValue(sample.metricType)].filter(Boolean).join(' · ') || '측정 항목 미상'
+    ].join(' · ');
+  }
   const legacyPayload = parsedAgentLogSampleText(sample);
   const collectedAt = textValue(sample.collectedAt)
     ?? textValue(legacyPayload?.collectedAt)
@@ -469,7 +497,11 @@ function agentLogSampleHeader(sample: Record<string, unknown>) {
   ].join(' · ');
 }
 
-function agentLogSampleBody(sample: Record<string, unknown>) {
+function agentLogEntryBody(entry: AgentLogEntry) {
+  const sample = entry.data;
+  if (entry.source === 'LIVE_DIAGNOSIS') {
+    return prettyJson(sample);
+  }
   if (sample.payload !== undefined) {
     return prettyJson(sample.payload);
   }
@@ -518,6 +550,12 @@ function logSummary(ticket: AdminAsTicket) {
       }
     }
     return compactJson(ticket.logSummary);
+  }
+  const diagnosisEvidenceCount = Array.isArray(ticket.diagnosisEvidence)
+    ? ticket.diagnosisEvidence.length
+    : 0;
+  if (diagnosisEvidenceCount > 0) {
+    return `PC Agent 실시간 진단 근거 ${diagnosisEvidenceCount}건 연결됨`;
   }
   return ticket.logUploadId ? `업로드된 로그 있음: ${shortId(ticket.logUploadId)}` : '연결된 로그 없음';
 }
