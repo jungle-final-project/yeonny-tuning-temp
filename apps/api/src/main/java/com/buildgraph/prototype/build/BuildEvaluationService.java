@@ -1,32 +1,50 @@
 package com.buildgraph.prototype.build;
 
-import com.buildgraph.prototype.common.DbValueMapper;
+import com.buildgraph.prototype.part.query.PartQuery;
+import com.buildgraph.prototype.part.query.PartQueryCachedLoader;
 import com.buildgraph.prototype.part.tool.ToolApplicabilityPolicy;
 import com.buildgraph.prototype.part.tool.ToolBuildPart;
 import com.buildgraph.prototype.part.tool.ToolCheckService;
-import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.cache.support.NoOpCacheManager;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 
 @Service
 public class BuildEvaluationService {
-    private final JdbcTemplate jdbcTemplate;
+    private final PartQuery partQuery;
     private final ToolCheckService toolCheckService;
     private final BuildCompositeScoreService buildCompositeScoreService;
     private final BuildScoreAdviceService buildScoreAdviceService;
 
+    @Autowired
+    public BuildEvaluationService(
+            PartQuery partQuery,
+            ToolCheckService toolCheckService,
+            BuildCompositeScoreService buildCompositeScoreService,
+            BuildScoreAdviceService buildScoreAdviceService
+    ) {
+        this.partQuery = partQuery;
+        this.toolCheckService = toolCheckService;
+        this.buildCompositeScoreService = buildCompositeScoreService;
+        this.buildScoreAdviceService = buildScoreAdviceService;
+    }
+
+    // 기존 테스트/내부 편의 생성자도 동일한 PartQuery 경로를 사용한다. 실제 Bean은 위 생성자에서 Caffeine CacheManager를 주입받는다.
     public BuildEvaluationService(
             JdbcTemplate jdbcTemplate,
             ToolCheckService toolCheckService,
             BuildCompositeScoreService buildCompositeScoreService,
             BuildScoreAdviceService buildScoreAdviceService
     ) {
-        this.jdbcTemplate = jdbcTemplate;
-        this.toolCheckService = toolCheckService;
-        this.buildCompositeScoreService = buildCompositeScoreService;
-        this.buildScoreAdviceService = buildScoreAdviceService;
+        this(
+                new PartQuery(jdbcTemplate, new PartQueryCachedLoader(new NoOpCacheManager(), jdbcTemplate)),
+                toolCheckService,
+                buildCompositeScoreService,
+                buildScoreAdviceService
+        );
     }
 
     public BuildEvaluation evaluate(
@@ -87,78 +105,13 @@ public class BuildEvaluationService {
             String focusCategory,
             String focusTool
     ) {
-        return evaluate(currentDraftParts(userInternalId), requestedBudget, focusCategory, focusTool);
-    }
-
-    private List<ToolBuildPart> currentDraftParts(long userInternalId) {
-        List<Map<String, Object>> drafts = jdbcTemplate.queryForList("""
-                SELECT id AS internal_id
-                FROM quote_drafts
-                WHERE user_id = ?
-                  AND status = 'ACTIVE'
-                  AND deleted_at IS NULL
-                ORDER BY updated_at DESC, id DESC
-                LIMIT 1
-                """, userInternalId);
-        if (drafts.isEmpty()) {
-            return List.of();
-        }
-        Long draftId = longValue(drafts.get(0).get("internal_id"));
-        return jdbcTemplate.queryForList("""
-                        SELECT p.id AS internal_id,
-                               p.public_id::text AS part_id,
-                               p.category,
-                               p.name,
-                               p.manufacturer,
-                               p.price AS current_price,
-                               qdi.quantity,
-                               p.attributes
-                        FROM quote_draft_items qdi
-                        JOIN parts p ON p.id = qdi.part_id
-                        WHERE qdi.quote_draft_id = ?
-                          AND qdi.deleted_at IS NULL
-                          AND p.deleted_at IS NULL
-                        ORDER BY qdi.id
-                        """, draftId)
-                .stream()
-                .map(row -> new ToolBuildPart(
-                        longValue(row.get("internal_id")),
-                        DbValueMapper.string(row, "part_id"),
-                        DbValueMapper.string(row, "category"),
-                        DbValueMapper.string(row, "name"),
-                        DbValueMapper.string(row, "manufacturer"),
-                        numberValue(row.get("current_price")),
-                        objectMap(row.get("attributes")),
-                        numberValue(row.get("quantity"))
-                ))
-                .toList();
+        return evaluate(partQuery.partsByActiveDraftUserId(userInternalId), requestedBudget, focusCategory, focusTool);
     }
 
     private static int total(List<ToolBuildPart> parts) {
         return parts.stream()
                 .mapToInt(part -> Math.max(0, part.price() == null ? 0 : part.price()) * part.effectiveQuantity())
                 .sum();
-    }
-
-    @SuppressWarnings("unchecked")
-    private static Map<String, Object> objectMap(Object value) {
-        if (value instanceof Map<?, ?> map) {
-            Map<String, Object> result = new LinkedHashMap<>();
-            map.forEach((key, item) -> result.put(String.valueOf(key), item));
-            return result;
-        }
-        if (value == null) {
-            return Map.of();
-        }
-        return (Map<String, Object>) DbValueMapper.json(Map.of("json", value), "json", Map.of());
-    }
-
-    private static int numberValue(Object value) {
-        return value instanceof Number number ? number.intValue() : 0;
-    }
-
-    private static Long longValue(Object value) {
-        return value instanceof Number number ? number.longValue() : null;
     }
 
     public record BuildEvaluation(

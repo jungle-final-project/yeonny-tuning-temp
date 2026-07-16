@@ -3,6 +3,8 @@ package com.buildgraph.prototype.part.catalog;
 import com.buildgraph.prototype.common.DbValueMapper;
 import com.buildgraph.prototype.common.MockData;
 import com.buildgraph.prototype.common.ReadThroughTtlCache;
+import com.buildgraph.prototype.part.query.PartDetailCachedLoader;
+import com.buildgraph.prototype.part.query.PartDetailDto;
 import com.buildgraph.prototype.recommendation.PartContextRecommendationService;
 import com.buildgraph.prototype.user.CurrentUserService;
 import java.time.Duration;
@@ -24,6 +26,7 @@ public class PartQueryService {
     private static final Set<String> STATUSES = Set.of("ACTIVE", "INACTIVE", "DISCONTINUED");
     private final JdbcTemplate jdbcTemplate;
     private final PartCompatibleCandidateService compatibilityService;
+    private final PartDetailCachedLoader partDetailCachedLoader;
     private final PartContextRecommendationService recommendationService;
     // 유저 무관 카탈로그 조회(순수 parts 경로)만 짧은 TTL 캐시. draft 기반 compatibility 경로는 캐시하지 않는다.
     private final ReadThroughTtlCache<PartSearch, Map<String, Object>> partsCache;
@@ -33,11 +36,13 @@ public class PartQueryService {
             JdbcTemplate jdbcTemplate,
             PartCompatibleCandidateService compatibilityService,
             PartContextRecommendationService recommendationService,
+            PartDetailCachedLoader partDetailCachedLoader,
             @Value("${part.query-cache.ttl-seconds:30}") long cacheTtlSeconds
     ) {
         this.jdbcTemplate = jdbcTemplate;
         this.compatibilityService = compatibilityService;
         this.recommendationService = recommendationService;
+        this.partDetailCachedLoader = partDetailCachedLoader;
         this.partsCache = new ReadThroughTtlCache<>(Duration.ofSeconds(cacheTtlSeconds), 512);
     }
 
@@ -45,13 +50,10 @@ public class PartQueryService {
     public PartQueryService(
             JdbcTemplate jdbcTemplate,
             PartCompatibleCandidateService compatibilityService,
-            PartContextRecommendationService recommendationService
+            PartContextRecommendationService recommendationService,
+            PartDetailCachedLoader partDetailCachedLoader
     ) {
-        this(jdbcTemplate, compatibilityService, recommendationService, 30L);
-    }
-
-    public PartQueryService(JdbcTemplate jdbcTemplate, PartCompatibleCandidateService compatibilityService) {
-        this(jdbcTemplate, compatibilityService, new PartContextRecommendationService());
+        this(jdbcTemplate, compatibilityService, recommendationService, partDetailCachedLoader, 30L);
     }
 
     public Map<String, Object> parts(
@@ -233,75 +235,9 @@ public class PartQueryService {
     }
 
     private List<Map<String, Object>> partRows(PartSearch search) {
-        SqlWhere where = whereClause(search);
-        List<Object> params = new ArrayList<>(where.params());
-        params.add(search.size());
-        params.add(search.offset());
-        return jdbcTemplate.queryForList("""
-                        SELECT p.id AS internal_id,
-                               p.public_id::text AS id,
-                               p.category,
-                               p.name,
-                               p.manufacturer,
-                               p.price,
-                               p.status,
-                               p.attributes,
-                               bs.summary AS benchmark_summary,
-                               bs.score AS benchmark_score,
-                               CASE
-                                 WHEN peo.low_price IS NOT NULL AND peo.low_price = p.price THEN peo.source
-                                 ELSE ps.source
-                               END AS latest_price_source,
-                               CASE
-                                 WHEN peo.low_price IS NOT NULL AND peo.low_price = p.price THEN peo.refreshed_at
-                                 ELSE ps.collected_at
-                               END AS latest_price_collected_at,
-                               peo.title AS external_offer_title,
-                               peo.image_url AS external_offer_image_url,
-                               peo.supplier_name AS external_offer_supplier_name,
-                               peo.offer_url AS external_offer_url,
-                               peo.low_price AS external_offer_low_price,
-                               peo.source AS external_offer_source,
-                               peo.refreshed_at AS external_offer_refreshed_at
-                        FROM parts p
-                        LEFT JOIN LATERAL (
-                          SELECT b.summary, b.score
-                          FROM benchmark_summaries b
-                          WHERE b.part_id = p.id
-                            AND b.deleted_at IS NULL
-                          ORDER BY b.created_at DESC, b.id DESC
-                          LIMIT 1
-                        ) bs ON true
-                        LEFT JOIN LATERAL (
-                          SELECT snapshot.source, snapshot.collected_at
-                          FROM price_snapshots snapshot
-                          WHERE snapshot.part_id = p.id
-                            AND snapshot.collected_at <= now()
-                          ORDER BY snapshot.collected_at DESC, snapshot.id DESC
-                          LIMIT 1
-                        ) ps ON true
-                        LEFT JOIN LATERAL (
-                          SELECT offer.*
-                          FROM part_external_offers offer
-                          WHERE offer.part_id = p.id
-                            AND offer.deleted_at IS NULL
-                          ORDER BY
-                            CASE offer.source
-                              WHEN 'NAVER_SHOPPING_SEARCH' THEN 1
-                              WHEN 'ADMIN_MANUAL' THEN 2
-                              ELSE 9
-                            END,
-                            offer.refreshed_at DESC,
-                            offer.id DESC
-                          LIMIT 1
-                        ) peo ON true
-                        """ + where.sql() + " ORDER BY " + orderBy(search.sort()) + " LIMIT ? OFFSET ?",
-                        params.toArray())
-                .stream()
-                .map(this::partMap)
-                .toList();
+        List<String> publicIds = partPublicIds(search, orderBy(search.sort()), true);
+        return detailRows(publicIds);
     }
-
     private Map<String, Object> partsWithCompatibility(CurrentUserService.CurrentUser user, PartSearch search, String compatibilitySource, String compatibilityMode, String replaceTargetPartId) {
         if (user == null) {
             throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "로그인이 필요합니다.");
@@ -314,7 +250,7 @@ public class PartQueryService {
                 search.category(),
                 compatibilityMode,
                 replaceTargetPartId,
-                allPartRowsForCompatibility(search)
+                partRowsForCompatibility(search)
         );
         List<Map<String, Object>> rows = recommendationService.annotate(search.category(), evaluatedRows).stream()
                 .sorted(candidateComparator(search.sort()))
@@ -326,59 +262,36 @@ public class PartQueryService {
                 "total", rows.size()
         );
     }
-    private List<Map<String, Object>> allPartRowsForCompatibility(PartSearch search) {
-        SqlWhere where = whereClause(search);
-        return jdbcTemplate.queryForList("""
-                        SELECT p.id AS internal_id,
-                               p.public_id::text AS id,
-                               p.category,
-                               p.name,
-                               p.manufacturer,
-                               p.price,
-                               p.status,
-                               p.attributes,
-                               bs.summary AS benchmark_summary,
-                               bs.score AS benchmark_score,
-                               CASE
-                                 WHEN peo.low_price IS NOT NULL AND peo.low_price = p.price THEN peo.source
-                                 ELSE ps.source
-                               END AS latest_price_source,
-                               CASE
-                                 WHEN peo.low_price IS NOT NULL AND peo.low_price = p.price THEN peo.refreshed_at
-                                 ELSE ps.collected_at
-                               END AS latest_price_collected_at,
-                               peo.title AS external_offer_title,
-                               peo.image_url AS external_offer_image_url,
-                               peo.supplier_name AS external_offer_supplier_name,
-                               peo.offer_url AS external_offer_url,
-                               peo.low_price AS external_offer_low_price,
-                               peo.source AS external_offer_source,
-                               peo.refreshed_at AS external_offer_refreshed_at
-                        FROM parts p
-                        LEFT JOIN LATERAL (
-                          SELECT b.summary, b.score
-                          FROM benchmark_summaries b
-                          WHERE b.part_id = p.id
-                            AND b.deleted_at IS NULL
-                          ORDER BY b.created_at DESC, b.id DESC
-                          LIMIT 1
-                        ) bs ON true
-                        LEFT JOIN LATERAL (
-                          SELECT snapshot.source, snapshot.collected_at
-                          FROM price_snapshots snapshot
-                          WHERE snapshot.part_id = p.id
-                            AND snapshot.collected_at <= now()
-                          ORDER BY snapshot.collected_at DESC, snapshot.id DESC
-                          LIMIT 1
-                        ) ps ON true
-                        LEFT JOIN part_external_offers peo
-                          ON peo.part_id = p.id
-                         AND peo.source = 'NAVER_SHOPPING_SEARCH'
-                         AND peo.deleted_at IS NULL
-                        """ + where.sql() + " ORDER BY p.price ASC, p.id ASC",
-                        where.params().toArray());
+    private List<Map<String, Object>> partRowsForCompatibility(PartSearch search) {
+        List<String> publicIds = partPublicIds(search, "p.price ASC, p.id ASC", false);
+        return detailRows(publicIds);
     }
 
+    /* 검색·정렬은 DB가 담당하고 상세 본문은 public ID 기반 통합 캐시에서 읽는다. */
+    private List<String> partPublicIds(PartSearch search, String order, boolean paginate) {
+        SqlWhere where = whereClause(search);
+        List<Object> params = new ArrayList<>(where.params());
+        String paging = "";
+        if (paginate) {
+            paging = " LIMIT ? OFFSET ?";
+            params.add(search.size());
+            params.add(search.offset());
+        }
+        return jdbcTemplate.queryForList(
+                "SELECT p.public_id::text FROM parts p " + where.sql() + " ORDER BY " + order + paging,
+                String.class,
+                params.toArray()
+        );
+    }
+
+    private List<Map<String, Object>> detailRows(List<String> publicIds) {
+        if (publicIds.isEmpty()) {
+            return List.of();
+        }
+        return partDetailCachedLoader.detailsByPublicIds(publicIds).stream()
+                .map(this::partMap)
+                .toList();
+    }
     private List<Map<String, Object>> paginate(List<Map<String, Object>> rows, PartSearch search) {
         int fromIndex = Math.min(search.offset(), rows.size());
         int toIndex = Math.min(fromIndex + search.size(), rows.size());
@@ -399,6 +312,25 @@ public class PartQueryService {
                 SELECT count(*)
                 FROM parts p
                 """ + where.sql(), Integer.class, where.params().toArray());
+    }
+
+    private Map<String, Object> partMap(PartDetailDto detail) {
+        var part = detail.part();
+        Map<String, Object> latestPrice = detail.latestPrice();
+        return MockData.map(
+                "internal_id", part.internalId(),
+                "id", part.publicId(),
+                "category", part.category(),
+                "name", part.name(),
+                "manufacturer", part.manufacturer(),
+                "price", part.price(),
+                "status", detail.status(),
+                "attributes", part.attributes(),
+                "benchmarkSummary", detail.benchmark(),
+                "latestPriceSource", latestPrice == null ? null : latestPrice.get("source"),
+                "latestPriceCollectedAt", latestPrice == null ? null : latestPrice.get("collectedAt"),
+                "externalOffer", detail.externalOffer()
+        );
     }
 
     private Map<String, Object> partMap(Map<String, Object> row) {

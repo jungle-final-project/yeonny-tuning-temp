@@ -3,15 +3,17 @@ package com.buildgraph.prototype.build;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.anyList;
-import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import com.buildgraph.prototype.common.MockData;
+import com.buildgraph.prototype.part.query.PartQuery;
+import com.buildgraph.prototype.part.tool.ToolBuildPart;
 import com.buildgraph.prototype.part.tool.ToolCheckService;
 import com.buildgraph.prototype.user.CurrentUserService;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import org.junit.jupiter.api.Test;
@@ -27,7 +29,27 @@ class BuildGraphServiceTest {
     private final CurrentUserService currentUserService = mock(CurrentUserService.class);
     private final BuildGraphLayoutService buildGraphLayoutService = mock(BuildGraphLayoutService.class);
     private final BuildCompositeScoreService buildCompositeScoreService = new BuildCompositeScoreService();
-    private final BuildGraphService buildGraphService = new BuildGraphService(jdbcTemplate, toolCheckService, currentUserService, buildGraphLayoutService, buildCompositeScoreService);
+    private final PartQuery partQuery = mock(PartQuery.class);
+    private final Map<String, ToolBuildPart> stubParts = new LinkedHashMap<>();
+    private final BuildGraphService buildGraphService = new BuildGraphService(
+            partQuery,
+            currentUserService,
+            buildGraphLayoutService,
+            new BuildEvaluationService(partQuery, toolCheckService, buildCompositeScoreService, new BuildScoreAdviceService())
+    );
+
+    BuildGraphServiceTest() {
+        when(partQuery.partsByPublicIds(anyList())).thenAnswer(invocation -> {
+            List<String> requestedIds = invocation.getArgument(0);
+            return requestedIds.stream().map(partId -> {
+                ToolBuildPart part = stubParts.get(partId);
+                if (part == null) {
+                    throw new ResponseStatusException(HttpStatus.NOT_FOUND, "활성 부품을 찾을 수 없습니다.");
+                }
+                return part;
+            }).toList();
+        });
+    }
 
     @Test
     void aiBuildGraphShowsCoreDependenciesAndWarnsForPowerHeadroom() {
@@ -312,11 +334,13 @@ class BuildGraphServiceTest {
     @Test
     void quoteDraftGraphReadsCurrentUserDraftWithoutClientItems() {
         when(currentUserService.requireUser(USER_TOKEN)).thenReturn(currentUser());
-        when(jdbcTemplate.queryForList(anyString(), eq(1004L))).thenReturn(List.of(activeDraft()));
-        when(jdbcTemplate.queryForList(anyString(), eq(700L))).thenReturn(List.of(
-                draftItem("part-gpu", "GPU", "RTX 5070", 890000, MockData.map("wattage", 250, "requiredSystemPowerW", 750, "lengthMm", 304)),
-                draftItem("part-psu", "PSU", "750W Gold", 150000, MockData.map("capacityW", 750)),
-                draftItem("part-case", "CASE", "Airflow Case", 160000, MockData.map("maxGpuLengthMm", 360, "maxCpuCoolerHeightMm", 170))
+        when(partQuery.partsByActiveDraftUserId(1004L)).thenReturn(List.of(
+                new ToolBuildPart(100L, "part-gpu", "GPU", "RTX 5070", "BuildGraph", 890000,
+                        MockData.map("wattage", 250, "requiredSystemPowerW", 750, "lengthMm", 304), 1),
+                new ToolBuildPart(101L, "part-psu", "PSU", "750W Gold", "BuildGraph", 150000,
+                        MockData.map("capacityW", 750), 1),
+                new ToolBuildPart(102L, "part-case", "CASE", "Airflow Case", "BuildGraph", 160000,
+                        MockData.map("maxGpuLengthMm", 360, "maxCpuCoolerHeightMm", 170), 1)
         ));
         when(toolCheckService.checkBuild(anyList(), eq(1_200_000))).thenReturn(List.of(tool("price", "PASS", "확인되었습니다.", Map.of())));
 
@@ -370,7 +394,8 @@ class BuildGraphServiceTest {
         stubPart("qty-ram", part("qty-ram", 802L, "RAM", "32GB 2개들이 킷", 180000,
                 MockData.map("memoryType", "DDR5", "moduleCount", 2)));
         BuildGraphService realToolService = new BuildGraphService(
-                jdbcTemplate, new ToolCheckService(jdbcTemplate), currentUserService, buildGraphLayoutService, buildCompositeScoreService);
+                partQuery, currentUserService, buildGraphLayoutService,
+                new BuildEvaluationService(partQuery, new ToolCheckService(jdbcTemplate), buildCompositeScoreService, new BuildScoreAdviceService()));
 
         Map<String, Object> graph = realToolService.resolve(USER_TOKEN, Map.of(
                 "source", "AI_BUILD",
@@ -404,7 +429,8 @@ class BuildGraphServiceTest {
         stubPart("qty-ram", part("qty-ram", 802L, "RAM", "32GB 2개들이 킷", 180000,
                 MockData.map("memoryType", "DDR5", "moduleCount", 2)));
         BuildGraphService realToolService = new BuildGraphService(
-                jdbcTemplate, new ToolCheckService(jdbcTemplate), currentUserService, buildGraphLayoutService, buildCompositeScoreService);
+                partQuery, currentUserService, buildGraphLayoutService,
+                new BuildEvaluationService(partQuery, new ToolCheckService(jdbcTemplate), buildCompositeScoreService, new BuildScoreAdviceService()));
 
         Map<String, Object> graph = realToolService.resolve(USER_TOKEN, Map.of(
                 "source", "AI_BUILD",
@@ -699,7 +725,6 @@ class BuildGraphServiceTest {
 
     @Test
     void aiBuildGraphRejectsUnknownPartIdBeforeToolCheck() {
-        when(jdbcTemplate.queryForList(anyString(), eq("missing-part"))).thenReturn(List.of());
 
         assertThatThrownBy(() -> buildGraphService.resolve(USER_TOKEN, Map.of(
                 "source", "AI_BUILD",
@@ -711,7 +736,16 @@ class BuildGraphServiceTest {
     }
 
     private void stubPart(String publicId, Map<String, Object> row) {
-        when(jdbcTemplate.queryForList(anyString(), eq(publicId))).thenReturn(List.of(row));
+        stubParts.put(publicId, new ToolBuildPart(
+                ((Number) row.get("internal_id")).longValue(),
+                String.valueOf(row.get("id")),
+                String.valueOf(row.get("category")),
+                String.valueOf(row.get("name")),
+                String.valueOf(row.get("manufacturer")),
+                ((Number) row.get("price")).intValue(),
+                castMap(row.get("attributes")),
+                1
+        ));
     }
 
     private static Map<String, Object> requestItem(String partId, String category) {
@@ -726,29 +760,6 @@ class BuildGraphServiceTest {
                 "name", name,
                 "manufacturer", "BuildGraph",
                 "price", price,
-                "attributes", attributes
-        );
-    }
-
-    private static Map<String, Object> activeDraft() {
-        return Map.of(
-                "internal_id", 700L,
-                "id", "draft-public-id",
-                "status", "ACTIVE",
-                "name", "셀프 견적"
-        );
-    }
-
-    private static Map<String, Object> draftItem(String publicId, String category, String name, int price, Map<String, Object> attributes) {
-        return MockData.map(
-                "internal_id", 100L,
-                "part_id", publicId,
-                "id", "draft-item-" + category,
-                "category", category,
-                "name", name,
-                "manufacturer", "BuildGraph",
-                "current_price", price,
-                "quantity", 1,
                 "attributes", attributes
         );
     }

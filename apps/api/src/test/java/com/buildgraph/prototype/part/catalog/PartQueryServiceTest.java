@@ -1,13 +1,19 @@
 package com.buildgraph.prototype.part.catalog;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyList;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import com.buildgraph.prototype.common.MockData;
+import com.buildgraph.prototype.part.query.PartDetailCachedLoader;
+import com.buildgraph.prototype.part.query.PartDetailDto;
+import com.buildgraph.prototype.part.tool.ToolBuildPart;
+import com.buildgraph.prototype.recommendation.PartContextRecommendationService;
 import com.buildgraph.prototype.user.CurrentUserService;
 import java.util.List;
 import java.util.Map;
@@ -17,7 +23,9 @@ import org.springframework.jdbc.core.JdbcTemplate;
 class PartQueryServiceTest {
     private final JdbcTemplate jdbcTemplate = mock(JdbcTemplate.class);
     private final PartCompatibleCandidateService compatibilityService = mock(PartCompatibleCandidateService.class);
-    private final PartQueryService service = new PartQueryService(jdbcTemplate, compatibilityService);
+    private final PartDetailCachedLoader partDetailCachedLoader = mock(PartDetailCachedLoader.class);
+    private final PartQueryService service = new PartQueryService(
+            jdbcTemplate, compatibilityService, new PartContextRecommendationService(), partDetailCachedLoader);
 
     @Test
     void partsWithCompatibilitySortEvaluateAllRowsThenPaginateByStatusPriority() {
@@ -34,8 +42,26 @@ class PartQueryServiceTest {
                 withCompatibility(rawRows.get(3), "PASS", "호환 가능")
         );
         CurrentUserService.CurrentUser user = user();
-        when(jdbcTemplate.queryForList(anyString(), eq("GPU"))).thenReturn(rawRows);
-        when(compatibilityService.partRowsWithCompatibility(eq(user), eq("QUOTE_DRAFT_CURRENT"), eq("GPU"), eq(null), eq(null), anyList()))
+        when(jdbcTemplate.queryForList(anyString(), eq(String.class), any(Object[].class)))
+                .thenReturn(rawRows.stream().map(row -> String.valueOf(row.get("id"))).toList());
+        when(partDetailCachedLoader.detailsByPublicIds(anyList())).thenReturn(rawRows.stream()
+                .map(row -> new PartDetailDto(
+                        new ToolBuildPart(
+                                ((Number) row.get("internal_id")).longValue(),
+                                String.valueOf(row.get("id")),
+                                String.valueOf(row.get("category")),
+                                String.valueOf(row.get("name")),
+                                String.valueOf(row.get("manufacturer")),
+                                ((Number) row.get("price")).intValue(),
+                                Map.of(),
+                                1
+                        ),
+                        "ACTIVE",
+                        Map.of("summary", "GPU benchmark", "score", 91),
+                        null,
+                        null
+                ))
+                .toList());        when(compatibilityService.partRowsWithCompatibility(eq(user), eq("QUOTE_DRAFT_CURRENT"), eq("GPU"), eq(null), eq(null), anyList()))
                 .thenReturn(evaluatedRows);
 
         Map<String, Object> response = service.parts(
@@ -65,6 +91,34 @@ class PartQueryServiceTest {
         assertThat(recommendation(items.get(1)).get("rank")).isEqualTo(2);
         assertThat(items.get(0)).doesNotContainKeys("_candidateToolResults", "_recommendationContext", "internal_id");
         assertThat(response.get("total")).isEqualTo(4);
+        verify(partDetailCachedLoader).detailsByPublicIds(anyList());
+    }
+
+    @Test
+    void plainPartsHydratesCandidateIdsThroughPartDetailCache() {
+        Map<String, Object> rawRow = part("gpu-basic", 201L, "GPU", "RTX 5070", 890_000);
+        when(jdbcTemplate.queryForList(anyString(), eq(String.class), any(Object[].class)))
+                .thenReturn(List.of("gpu-basic"));
+        when(jdbcTemplate.queryForObject(anyString(), eq(Integer.class), any(Object[].class)))
+                .thenReturn(1);
+        when(partDetailCachedLoader.detailsByPublicIds(List.of("gpu-basic")))
+                .thenReturn(List.of(new PartDetailDto(
+                        new ToolBuildPart(201L, "gpu-basic", "GPU", "RTX 5070", "BuildGraph", 890_000, Map.of(), 1),
+                        "ACTIVE",
+                        Map.of("summary", "GPU benchmark", "score", 91),
+                        null,
+                        null
+                )));
+
+        Map<String, Object> response = service.parts(
+                "GPU", null, null, null, null, null, 0, 20, "price_asc");
+
+        assertThat(castList(response.get("items"))).singleElement().satisfies(item -> {
+            assertThat(item).containsEntry("id", rawRow.get("id"));
+            assertThat(item).containsEntry("name", rawRow.get("name"));
+            assertThat(item.get("benchmarkSummary")).isEqualTo(Map.of("summary", "GPU benchmark", "score", 91));
+        });
+        verify(partDetailCachedLoader).detailsByPublicIds(List.of("gpu-basic"));
     }
 
     private static Map<String, Object> part(String publicId, long internalId, String category, String name, int price) {

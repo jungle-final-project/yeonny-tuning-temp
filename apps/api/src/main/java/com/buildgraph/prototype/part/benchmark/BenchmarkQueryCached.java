@@ -26,17 +26,21 @@ public class BenchmarkQueryCached {
         this.jdbcTemplate = jdbcTemplate;
     }
 
+    /* Benchmark 스키마에 접근하는 쿼리 */
     public Map<Long, Map<String, Object>> latestBenchmarkInfos(List<Long> requestedPartIds) {
+        /* 방어코드 */
         if (requestedPartIds == null || requestedPartIds.isEmpty()) {
             return Map.of();
         }
+
+        /* 중복 처리 */
         List<Long> partIds = requestedPartIds.stream().filter(Objects::nonNull).distinct().toList();
         Cache cache = cacheManager.getCache(CACHE_NAME);
         if (cache == null) {
             return findBenchmarksByIds(partIds);
         }
 
-        /* 1. 부품별 캐시 hit와 miss를 분리한다. */
+        /* 순회하면서 캐싱 유무 검사 */
         Map<Long, Map<String, Object>> loaded = new HashMap<>();
         List<Long> missedIds = new ArrayList<>();
         for (Long partId : partIds) {
@@ -49,7 +53,7 @@ public class BenchmarkQueryCached {
             }
         }
 
-        /* 2. 최신 benchmark도 캐시 miss ID 전체를 한 쿼리로 조회한다. */
+        /* missedIds가 있을 경우 */
         if (!missedIds.isEmpty()) {
             findBenchmarksByIds(missedIds).forEach((partId, benchmark) -> {
                 loaded.put(partId, benchmark);
@@ -59,22 +63,24 @@ public class BenchmarkQueryCached {
         return loaded;
     }
 
+    /* 접근하는 Query 문 */
     private Map<Long, Map<String, Object>> findBenchmarksByIds(List<Long> partIds) {
         if (partIds.isEmpty()) {
             return Map.of();
         }
+
         String placeholders = String.join(", ", Collections.nCopies(partIds.size(), "?"));
         Map<Long, Map<String, Object>> result = new LinkedHashMap<>();
         jdbcTemplate.queryForList("""
                         SELECT DISTINCT ON (part_id)
-                               part_id,
-                               summary,
-                               score
+                                part_id,
+                                summary,
+                                score
                         FROM benchmark_summaries
                         WHERE part_id IN (
                         """ + placeholders + """
                         )
-                          AND deleted_at IS NULL
+                            AND deleted_at IS NULL
                         ORDER BY part_id, created_at DESC, id DESC
                         """, partIds.toArray())
                 .forEach(row -> result.put(PartQueryUtil.numberLong(row.get("part_id")), row));

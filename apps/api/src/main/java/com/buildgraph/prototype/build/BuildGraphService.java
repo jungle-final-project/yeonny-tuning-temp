@@ -2,9 +2,9 @@ package com.buildgraph.prototype.build;
 
 import com.buildgraph.prototype.common.DbValueMapper;
 import com.buildgraph.prototype.common.MockData;
+import com.buildgraph.prototype.part.query.PartQuery;
 import com.buildgraph.prototype.part.tool.BuildSizeFitPolicy;
 import com.buildgraph.prototype.part.tool.ToolBuildPart;
-import com.buildgraph.prototype.part.tool.ToolCheckService;
 import com.buildgraph.prototype.user.CurrentUserService;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -16,49 +16,28 @@ import java.util.Set;
 import java.util.stream.Collectors;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
-import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.web.server.ResponseStatusException;
 
 @Service
 public class BuildGraphService {
     private static final Set<String> CATEGORIES = Set.of("CPU", "MOTHERBOARD", "RAM", "GPU", "STORAGE", "PSU", "CASE", "COOLER");
-    private final JdbcTemplate jdbcTemplate;
+    private final PartQuery partQuery;
     private final CurrentUserService currentUserService;
     private final BuildGraphLayoutService buildGraphLayoutService;
     private final BuildEvaluationService buildEvaluationService;
 
     @Autowired
     public BuildGraphService(
-            JdbcTemplate jdbcTemplate,
+            PartQuery partQuery,
             CurrentUserService currentUserService,
             BuildGraphLayoutService buildGraphLayoutService,
             BuildEvaluationService buildEvaluationService
     ) {
-        this.jdbcTemplate = jdbcTemplate;
+        this.partQuery = partQuery;
         this.currentUserService = currentUserService;
         this.buildGraphLayoutService = buildGraphLayoutService;
         this.buildEvaluationService = buildEvaluationService;
-    }
-
-    public BuildGraphService(
-            JdbcTemplate jdbcTemplate,
-            ToolCheckService toolCheckService,
-            CurrentUserService currentUserService,
-            BuildGraphLayoutService buildGraphLayoutService,
-            BuildCompositeScoreService buildCompositeScoreService
-    ) {
-        this(
-                jdbcTemplate,
-                currentUserService,
-                buildGraphLayoutService,
-                new BuildEvaluationService(
-                        jdbcTemplate,
-                        toolCheckService,
-                        buildCompositeScoreService,
-                        new BuildScoreAdviceService()
-                )
-        );
     }
 
     public Map<String, Object> resolve(String authorization, Map<String, Object> request) {
@@ -139,13 +118,20 @@ public class BuildGraphService {
         if (items.isEmpty()) {
             return List.of();
         }
-        List<ToolBuildPart> parts = new ArrayList<>();
-        for (Map<String, Object> item : items) {
+        List<String> partIds = items.stream().map(item -> {
             String partId = text(item.get("partId"));
             if (partId == null || partId.isBlank()) {
                 throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "partId가 필요합니다.");
             }
-            ToolBuildPart part = partByPublicId(partId);
+            return partId;
+        }).toList();
+
+        // 요청 순서를 유지한 채 cache miss ID만 한 번의 IN 쿼리로 조회한다.
+        List<ToolBuildPart> loadedParts = partQuery.partsByPublicIds(partIds);
+        List<ToolBuildPart> parts = new ArrayList<>(loadedParts.size());
+        for (int index = 0; index < loadedParts.size(); index++) {
+            Map<String, Object> item = items.get(index);
+            ToolBuildPart part = loadedParts.get(index);
             String requestedCategory = normalizeCategory(text(item.get("category")));
             if (requestedCategory != null && !requestedCategory.equals(part.category())) {
                 throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "partId와 category가 일치하지 않습니다.");
@@ -171,26 +157,6 @@ public class BuildGraphService {
                 part.attributes(),
                 safeQuantity
         );
-    }
-
-    private ToolBuildPart partByPublicId(String publicId) {
-        return jdbcTemplate.queryForList("""
-                        SELECT id AS internal_id,
-                               public_id::text AS id,
-                               category,
-                               name,
-                               manufacturer,
-                               price,
-                               attributes
-                        FROM parts
-                        WHERE public_id::text = ?
-                          AND status = 'ACTIVE'
-                          AND deleted_at IS NULL
-                        """, publicId)
-                .stream()
-                .findFirst()
-                .map(this::part)
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "활성 부품을 찾을 수 없습니다."));
     }
 
     private GraphDraft buildGraph(
@@ -560,18 +526,6 @@ public class BuildGraphService {
             return "추천 조합에서 확인이 필요한 관계 " + warningCount + "개를 표시했습니다.";
         }
         return "선택한 조합의 핵심 호환성, 전력, 규격 관계를 확인했습니다.";
-    }
-
-    private ToolBuildPart part(Map<String, Object> row) {
-        return new ToolBuildPart(
-                longValue(row.get("internal_id")),
-                firstText(DbValueMapper.string(row, "id"), DbValueMapper.string(row, "part_id")),
-                DbValueMapper.string(row, "category"),
-                DbValueMapper.string(row, "name"),
-                DbValueMapper.string(row, "manufacturer"),
-                firstNumber(row.get("price"), firstNumber(row.get("current_price"), 0)),
-                objectMap(row.get("attributes"))
-        );
     }
 
     private static String nodeDetail(ToolBuildPart part) {
@@ -1302,15 +1256,6 @@ public class BuildGraphService {
         }
     }
 
-    private static Long longValue(Object value) {
-        if (value instanceof Number number) {
-            return number.longValue();
-        }
-        if (value == null) {
-            return null;
-        }
-        return Long.valueOf(value.toString());
-    }
 
     private static String formatWon(int value) {
         return String.format(Locale.KOREA, "%,d원", value);
