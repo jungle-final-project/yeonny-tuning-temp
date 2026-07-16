@@ -846,7 +846,7 @@ function RecommendationSummaryCard({ columnA, columnB }: { columnA: ComparisonCo
 }
 
 function PriceDifferenceCard({ columnA, columnB }: { columnA: ComparisonColumn; columnB: ComparisonColumn }) {
-  const difference = Math.abs(columnA.build.totalPrice - columnB.build.totalPrice);
+  const signedDifference = columnA.build.totalPrice - columnB.build.totalPrice;
   const cheaper = columnA.build.totalPrice === columnB.build.totalPrice ? null : columnA.build.totalPrice < columnB.build.totalPrice ? 'A' : 'B';
   const PriceTrendIcon = columnA.build.totalPrice <= columnB.build.totalPrice ? ArrowDown : ArrowUp;
   return (
@@ -855,7 +855,7 @@ function PriceDifferenceCard({ columnA, columnB }: { columnA: ComparisonColumn; 
       <div className="mt-2 flex flex-1 items-center justify-center gap-3">
         <PriceTrendIcon aria-hidden="true" className="animate-bounce text-slate-500" size={28} strokeWidth={3} />
         <div>
-          <p className="text-xl font-black tracking-tight text-commerce-ink"><span className="text-red-600">{difference.toLocaleString('ko-KR')}</span>원</p>
+          <p title="A 견적 - B 견적" className="text-xl font-black tracking-tight text-commerce-ink"><span className="text-red-600">{formatSignedDifference(signedDifference)}</span>원</p>
           <p data-testid="quote-compare-price-delta" className="mt-1 text-sm font-black text-commerce-ink">{cheaper ? `${cheaper}가 더 저렴` : '가격 동일'}</p>
         </div>
       </div>
@@ -867,14 +867,15 @@ function ScoreDifferenceCard({ columnA, columnB }: { columnA: ComparisonColumn; 
   const score = scoreDifference(columnA, columnB);
   const maxScore = Math.max(columnA.compositeScore?.maxScore ?? 0, columnB.compositeScore?.maxScore ?? 0);
   const differenceRatio = score && maxScore > 0 ? score.difference / maxScore : 0;
+  const gaugeZone = scoreGaugeZone(differenceRatio);
   return (
     <article className="flex min-h-[164px] flex-col rounded-lg border border-slate-200 bg-white px-4 py-4 text-center shadow-sm">
       <h3 className="text-sm font-black text-commerce-ink">종합 성능 차이</h3>
       <div className="mt-2 flex flex-1 items-center justify-center gap-3">
-        <AnimatedScoreGauge differenceRatio={differenceRatio} />
+        <AnimatedScoreGauge differenceRatio={differenceRatio} zone={gaugeZone} />
         {score ? (
           <div>
-            <p className="text-xl font-black tracking-tight text-commerce-ink"><span data-testid="quote-compare-score-value" className="text-red-600">{score.difference.toLocaleString('ko-KR')}</span>점</p>
+            <p title="A 견적 - B 견적" className="text-xl font-black tracking-tight text-commerce-ink"><span data-testid="quote-compare-score-value" className={scoreGaugeValueClass(gaugeZone)}>{formatSignedDifference(score.signedDifference)}</span>점</p>
             <p data-testid="quote-compare-score-delta" className="mt-1 text-sm font-black text-slate-600">{score.similar ? '사실상 유사' : `${score.winner}가 더 높음`}</p>
           </div>
         ) : (
@@ -885,7 +886,9 @@ function ScoreDifferenceCard({ columnA, columnB }: { columnA: ComparisonColumn; 
   );
 }
 
-function AnimatedScoreGauge({ differenceRatio }: { differenceRatio: number }) {
+type ScoreGaugeZone = 'green' | 'yellow' | 'red';
+
+function AnimatedScoreGauge({ differenceRatio, zone }: { differenceRatio: number; zone: ScoreGaugeZone }) {
   const [isAnimated, setIsAnimated] = useState(false);
   const needleRotation = -160 + (140 * Math.min(1, Math.max(0, differenceRatio) / 0.1));
 
@@ -896,19 +899,21 @@ function AnimatedScoreGauge({ differenceRatio }: { differenceRatio: number }) {
   }, [needleRotation]);
 
   return (
-    <span aria-hidden="true" className="relative block h-12 w-14 shrink-0 overflow-hidden rounded-t-full bg-[#3576CA]/5">
-      <span
-        className="absolute inset-x-1 top-1 h-11 rounded-t-full"
-        style={{ background: 'conic-gradient(from 270deg at 50% 100%, #3576CA 0deg, #60A5FA 60deg, #F59E0B 120deg, #DE6C2D 180deg, transparent 180deg)' }}
-      />
-      <span className="absolute inset-x-2.5 top-3 h-9 rounded-t-full bg-white" />
-      <span
+    <svg aria-hidden="true" viewBox="0 0 120 72" className="h-14 w-[76px] shrink-0 overflow-visible drop-shadow-sm">
+      <path d="M 12 60 Q 60 4 108 60" pathLength="100" fill="none" stroke="#079B54" strokeWidth="18" strokeDasharray="30 70" />
+      <path d="M 12 60 Q 60 4 108 60" pathLength="100" fill="none" stroke="#FFB536" strokeWidth="18" strokeDasharray="30 70" strokeDashoffset="-35" />
+      <path d="M 12 60 Q 60 4 108 60" pathLength="100" fill="none" stroke="#F51F28" strokeWidth="18" strokeDasharray="30 70" strokeDashoffset="-70" />
+      <g
         data-testid="quote-compare-score-gauge-needle"
-        className="absolute bottom-1.5 left-1/2 h-0.5 w-5 origin-left rounded-full bg-slate-700 transition-transform duration-1000 ease-out motion-reduce:transition-none"
-        style={{ transform: `rotate(${isAnimated ? needleRotation : -180}deg)` }}
-      />
-      <span className="absolute bottom-1 left-1/2 h-2 w-2 -translate-x-1/2 rounded-full bg-slate-700 ring-2 ring-white" />
-    </span>
+        data-zone={zone}
+        className="transition-transform duration-1000 ease-out motion-reduce:transition-none"
+        style={{ transform: `rotate(${isAnimated ? needleRotation : -180}deg)`, transformOrigin: '60px 60px' }}
+      >
+        <line x1="60" y1="60" x2="98" y2="60" stroke="#111827" strokeWidth="5" strokeLinecap="round" />
+      </g>
+      <circle cx="60" cy="60" r="8" fill="#111827" />
+      <circle cx="60" cy="60" r="3" fill="#475569" />
+    </svg>
   );
 }
 
@@ -1192,8 +1197,10 @@ function scoreDifference(columnA: ComparisonColumn, columnB: ComparisonColumn) {
   const scoreA = columnA.compositeScore?.score;
   const scoreB = columnB.compositeScore?.score;
   if (typeof scoreA !== 'number' || typeof scoreB !== 'number') return null;
+  const signedDifference = scoreA - scoreB;
   return {
-    difference: Math.abs(scoreA - scoreB),
+    difference: Math.abs(signedDifference),
+    signedDifference,
     winner: (scoreA >= scoreB ? 'A' : 'B') as 'A' | 'B',
     similar: relativeDifferencePercent(scoreA, scoreB) <= COMPARE_SCORE_SIMILARITY_PERCENT
   };
@@ -1428,6 +1435,23 @@ function formatCapacity(value: number | null) {
 function formatMetricValue(value: number, unit: string) {
   if (unit === 'GB' && value >= 1000) return formatCapacity(value) ?? '';
   return `${value.toLocaleString('ko-KR', { maximumFractionDigits: 1 })}${unit}`;
+}
+
+function formatSignedDifference(value: number) {
+  if (value === 0) return '0';
+  return `${value > 0 ? '+' : '-'}${Math.abs(value).toLocaleString('ko-KR')}`;
+}
+
+function scoreGaugeZone(differenceRatio: number): ScoreGaugeZone {
+  if (differenceRatio <= 0.03) return 'green';
+  if (differenceRatio < 0.07) return 'yellow';
+  return 'red';
+}
+
+function scoreGaugeValueClass(zone: ScoreGaugeZone) {
+  if (zone === 'green') return 'text-emerald-600';
+  if (zone === 'yellow') return 'text-amber-500';
+  return 'text-red-600';
 }
 
 function PriceAlertRow({ alert }: { alert: PriceAlert }) {
