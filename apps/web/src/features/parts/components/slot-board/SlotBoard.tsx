@@ -2339,7 +2339,6 @@ function SlotProblemPopover({
             <span className={`rounded border px-2 py-0.5 text-[10px] font-black ${toneClass}`}>{detail.title}</span>
             <span className="text-[11px] font-black text-slate-500">{detail.categoryLabel}</span>
           </div>
-          <h3 className="mt-1 text-sm font-black text-commerce-ink">왜 안 맞는지 확인해 보세요</h3>
         </div>
         <button
           type="button"
