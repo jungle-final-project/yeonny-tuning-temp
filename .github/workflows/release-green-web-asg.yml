@@ -18,11 +18,6 @@ on:
         description: "Immutable ECR SHA tag; defaults to git_sha"
         required: false
         type: string
-      traffic_isolated:
-        description: "I confirmed CloudFront /api/* and /ws/* use the manual Green origin"
-        required: true
-        default: false
-        type: boolean
 
 permissions:
   contents: read
@@ -47,7 +42,6 @@ jobs:
           REQUESTED_IMAGE_TAG: ${{ inputs.image_tag }}
           DEFAULT_SHA: ${{ github.sha }}
           SERVICE: ${{ inputs.service }}
-          TRAFFIC_ISOLATED: ${{ inputs.traffic_isolated }}
         run: |
           set -euo pipefail
           target_sha="${REQUESTED_SHA:-$DEFAULT_SHA}"
@@ -62,10 +56,6 @@ jobs:
           }
           [[ "$target_sha" == "$image_tag" ]] || {
             echo "::error::git_sha and image_tag must match for an immutable release"
-            exit 1
-          }
-          [[ "$TRAFFIC_ISOLATED" == "true" ]] || {
-            echo "::error::CloudFront /api/* and /ws/* must be isolated to the manual Green origin before release"
             exit 1
           }
           echo "service=$SERVICE" >> "$GITHUB_OUTPUT"
@@ -113,8 +103,6 @@ jobs:
 
       - name: Read-only rollout preflight
         shell: bash
-        env:
-          BUILDGRAPH_CLOUDFRONT_MANUAL_GREEN_CONFIRMED: "true"
         run: |
           bash tools/rollout_green_web_asg_release.sh \
             --service "${{ steps.target.outputs.service }}" \
@@ -125,8 +113,6 @@ jobs:
       - name: Create Launch Template version and refresh ASG
         id: rollout
         shell: bash
-        env:
-          BUILDGRAPH_CLOUDFRONT_MANUAL_GREEN_CONFIRMED: ${{ inputs.traffic_isolated }}
         run: |
           bash tools/rollout_green_web_asg_release.sh \
             --service "${{ steps.target.outputs.service }}" \
@@ -146,5 +132,6 @@ jobs:
             echo "- ECR tag: \`${{ steps.target.outputs.image_tag }}\`"
             echo "- Launch Template version: \`${{ steps.rollout.outputs.launch_template_version || 'see rollout log' }}\`"
             echo "- Instance Refresh: \`${{ steps.rollout.outputs.instance_refresh_id || 'see rollout log' }}\`"
-            echo "- Next step: restore CloudFront \`/api/*\`, smoke test, then restore \`/ws/*\`"
+            echo "- Deployment mode: 100/200 without CloudFront isolation"
+            echo "- Next step: verify API smoke and WebSocket/PC Agent reconnection"
           } >> "$GITHUB_STEP_SUMMARY"

@@ -57,11 +57,10 @@ The default mode is read-only. It validates the immutable ECR image, current
 numeric Launch Template version, and four-key release manifest without
 changing AWS resources.
 
---apply additionally requires:
-  BUILDGRAPH_CLOUDFRONT_MANUAL_GREEN_CONFIRMED=true
-
-That confirmation means CloudFront /api/* and /ws/* traffic has already been
-isolated to the preserved manual Green origin for the duration of the rollout.
+--apply uses MinHealthyPercentage=100 and MaxHealthyPercentage=200. The old
+and new instances can temporarily receive traffic at the same time. HTTP
+availability is preserved, but WebSocket and PC Agent realtime behavior can
+be intermittently inconsistent during the overlap window.
 USAGE
 }
 
@@ -554,6 +553,69 @@ rollback_failed_refresh() {
   log "rollback verified the previous numeric LT version $old_version"
 }
 
+reverse_completed_refresh() {
+  local old_version="$1"
+  local reverse_refresh_id reverse_wait_status
+
+  ROLLBACK_STARTED=true
+  log "starting reverse Instance Refresh to LT version $old_version"
+
+  jq -n \
+    --arg launch_template_id "$SOURCE_LT_ID" \
+    --arg version "$old_version" \
+    '{
+      LaunchTemplate: {
+        LaunchTemplateId: $launch_template_id,
+        Version: $version
+      }
+    }' >"$REVERSE_DESIRED_CONFIGURATION_FILE"
+  jq -n \
+    --argjson warmup "$INSTANCE_WARMUP" \
+    '{
+      MinHealthyPercentage: 100,
+      MaxHealthyPercentage: 200,
+      InstanceWarmup: $warmup,
+      SkipMatching: true,
+      AutoRollback: false
+    }' >"$REVERSE_REFRESH_PREFERENCES_FILE"
+
+  if ! reverse_refresh_id="$(
+    aws_cli autoscaling start-instance-refresh \
+      --auto-scaling-group-name "$ASG_NAME" \
+      --strategy Rolling \
+      --desired-configuration \
+        "file://${REVERSE_DESIRED_CONFIGURATION_FILE}" \
+      --preferences "file://${REVERSE_REFRESH_PREFERENCES_FILE}" \
+      --query 'InstanceRefreshId' \
+      --output text
+  )"; then
+    die "failed to start reverse Instance Refresh"
+    return 1
+  fi
+  if [[ -z "$reverse_refresh_id" || "$reverse_refresh_id" == "None" ]]; then
+    die "reverse Instance Refresh returned an empty refresh ID"
+    return 1
+  fi
+
+  if wait_for_instance_refresh "$reverse_refresh_id" "reverse"; then
+    :
+  else
+    reverse_wait_status=$?
+    die "reverse Instance Refresh did not succeed (status=$reverse_wait_status)"
+    return 1
+  fi
+
+  if ! verify_asg_version "$old_version"; then
+    return 1
+  fi
+  if ! wait_for_all_targets_healthy; then
+    return 1
+  fi
+  ROLLBACK_COMPLETED=true
+  ROLLBACK_ARMED=false
+  log "reverse refresh verified the previous numeric LT version $old_version"
+}
+
 handle_unexpected_error() {
   local status=$?
 
@@ -671,6 +733,8 @@ readonly USER_DATA_FILE="$TEMP_DIR/user-data.sh"
 readonly LT_OVERRIDE_FILE="$TEMP_DIR/launch-template-data.json"
 readonly DESIRED_CONFIGURATION_FILE="$TEMP_DIR/desired-configuration.json"
 readonly REFRESH_PREFERENCES_FILE="$TEMP_DIR/refresh-preferences.json"
+readonly REVERSE_DESIRED_CONFIGURATION_FILE="$TEMP_DIR/reverse-desired-configuration.json"
+readonly REVERSE_REFRESH_PREFERENCES_FILE="$TEMP_DIR/reverse-refresh-preferences.json"
 
 readonly CALLER_ACCOUNT="$(
   aws_cli sts get-caller-identity \
@@ -781,9 +845,6 @@ if [[ "$APPLY" != "true" ]]; then
   exit 0
 fi
 
-[[ "${BUILDGRAPH_CLOUDFRONT_MANUAL_GREEN_CONFIRMED:-false}" == "true" ]] ||
-  die "CloudFront /api/* and /ws/* must be isolated to the manual Green origin before --apply"
-
 verify_asg_version "$SOURCE_LT_VERSION"
 reject_active_instance_refresh
 
@@ -865,7 +926,7 @@ if wait_for_instance_refresh "$REFRESH_ID" "forward"; then
 
   if [[ -n "$POST_REFRESH_FAILURE" ]]; then
     log "$POST_REFRESH_FAILURE; starting rollback"
-    if ! rollback_failed_refresh "$SOURCE_LT_VERSION"; then
+    if ! reverse_completed_refresh "$SOURCE_LT_VERSION"; then
       die "post-refresh validation failed and rollback also failed; manual recovery is required"
     fi
     die "post-refresh validation failed; rollback restored LT version $SOURCE_LT_VERSION"

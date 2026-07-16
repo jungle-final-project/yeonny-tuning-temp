@@ -90,7 +90,6 @@ class GreenWebAsgReleaseRolloutTest(unittest.TestCase):
                 "AWS_ACCOUNT_ID": AWS_ACCOUNT_ID,
                 "AWS_REGION": AWS_REGION,
                 "AWS_DEFAULT_REGION": AWS_REGION,
-                "BUILDGRAPH_CLOUDFRONT_MANUAL_GREEN_CONFIRMED": "true",
                 "BUILDGRAPH_ASG_REFRESH_MAX_ATTEMPTS": "3",
                 "BUILDGRAPH_ASG_REFRESH_POLL_SECONDS": "0",
                 "BUILDGRAPH_TARGET_HEALTH_MAX_ATTEMPTS": "3",
@@ -378,6 +377,9 @@ class GreenWebAsgReleaseRolloutTest(unittest.TestCase):
                     desired_configuration="$(
                       argument_value --desired-configuration "$@"
                     )"
+                    preferences="$(
+                      argument_value --preferences "$@"
+                    )"
                     case "$desired_configuration" in
                       file://*)
                         version="$(
@@ -396,6 +398,9 @@ class GreenWebAsgReleaseRolloutTest(unittest.TestCase):
                     }
                     printf 'desired-configuration:%s\n' \
                       "$(jq -c . "${desired_configuration#file://}")" \
+                      >>"$FAKE_TRACE_FILE"
+                    printf 'refresh-preferences:%s\n' \
+                      "$(jq -c . "${preferences#file://}")" \
                       >>"$FAKE_TRACE_FILE"
                     count=0
                     [[ ! -f "$FAKE_REFRESH_COUNT_FILE" ]] ||
@@ -512,18 +517,26 @@ class GreenWebAsgReleaseRolloutTest(unittest.TestCase):
         self.assertEqual([], self._mutation_lines(), result.stdout)
         self.assertIn("read-only", result.stdout.lower())
 
-    def test_apply_requires_explicit_manual_green_traffic_isolation(
+    def test_apply_uses_100_200_without_cloudfront_isolation(
         self,
     ) -> None:
-        result = self._run(
-            apply=True,
-            BUILDGRAPH_CLOUDFRONT_MANUAL_GREEN_CONFIRMED="false",
-        )
+        result = self._run(apply=True)
 
-        self.assertNotEqual(0, result.returncode)
-        self.assertIn("CloudFront", result.stdout)
-        self.assertIn("manual Green", result.stdout)
-        self.assertEqual([], self._mutation_lines(), result.stdout)
+        self.assertEqual(0, result.returncode, result.stdout)
+        preferences = next(
+            json.loads(line.removeprefix("refresh-preferences:"))
+            for line in self._trace_lines()
+            if line.startswith("refresh-preferences:")
+        )
+        self.assertEqual(100, preferences["MinHealthyPercentage"])
+        self.assertEqual(200, preferences["MaxHealthyPercentage"])
+        self.assertTrue(preferences["SkipMatching"])
+        self.assertTrue(preferences["AutoRollback"])
+        script = SCRIPT.read_text(encoding="utf-8")
+        self.assertNotIn(
+            "BUILDGRAPH_CLOUDFRONT_MANUAL_GREEN_CONFIRMED",
+            script,
+        )
 
     def test_active_instance_refresh_rejects_before_any_mutation(self) -> None:
         result = self._run(
@@ -639,7 +652,7 @@ class GreenWebAsgReleaseRolloutTest(unittest.TestCase):
             self._trace_lines(),
         )
 
-    def test_post_refresh_unhealthy_target_rolls_back_old_version(
+    def test_post_success_unhealthy_target_starts_reverse_refresh(
         self,
     ) -> None:
         result = self._run(
@@ -659,14 +672,31 @@ class GreenWebAsgReleaseRolloutTest(unittest.TestCase):
             for index, line in enumerate(lines)
             if "aws:elbv2 describe-target-health" in line
         )
-        rollback_index = next(
+        reverse_refresh_index = max(
             index
             for index, line in enumerate(lines)
-            if "aws:autoscaling rollback-instance-refresh" in line
+            if "aws:autoscaling start-instance-refresh" in line
         )
 
         self.assertLess(refresh_index, target_index)
-        self.assertLess(target_index, rollback_index)
+        self.assertLess(target_index, reverse_refresh_index)
+        desired_configurations = [
+            json.loads(line.removeprefix("desired-configuration:"))
+            for line in lines
+            if line.startswith("desired-configuration:")
+        ]
+        self.assertEqual(2, len(desired_configurations), lines)
+        self.assertEqual(
+            "7",
+            desired_configurations[1]["LaunchTemplate"]["Version"],
+        )
+        self.assertFalse(
+            any(
+                "aws:autoscaling rollback-instance-refresh" in line
+                for line in lines
+            ),
+            lines,
+        )
         self.assertIn("rollback", result.stdout.lower())
 
     def test_failed_refresh_restores_old_numeric_lt_version(self) -> None:

@@ -161,7 +161,7 @@ class GreenDeploymentContractTest(unittest.TestCase):
                 self.assertNotIn("start-instance-refresh", text)
                 self.assertNotRegex(text, r"(?m)^\s*[^#\n]*(ssh|rsync)\b")
 
-    def test_asg_release_workflow_is_manual_and_requires_traffic_isolation(
+    def test_asg_release_workflow_is_manual_without_cloudfront_isolation(
         self,
     ) -> None:
         path = WORKFLOWS["release"]
@@ -171,13 +171,13 @@ class GreenDeploymentContractTest(unittest.TestCase):
         triggers = workflow.get(True, workflow.get("on"))
         self.assertIsInstance(triggers, dict)
         self.assertEqual({"workflow_dispatch"}, set(triggers))
-        self.assertIn("traffic_isolated", text)
-        self.assertIn(
+        self.assertIn("tools/rollout_green_web_asg_release.sh", text)
+        self.assertIn("deploy-green-web-asg-release", text)
+        self.assertNotIn("traffic_isolated", text)
+        self.assertNotIn(
             "BUILDGRAPH_CLOUDFRONT_MANUAL_GREEN_CONFIRMED",
             text,
         )
-        self.assertIn("tools/rollout_green_web_asg_release.sh", text)
-        self.assertIn("deploy-green-web-asg-release", text)
         self.assertNotIn("GREEN_EC2_INSTANCE_ID", text)
         self.assertNotIn("aws ssm send-command", text)
 

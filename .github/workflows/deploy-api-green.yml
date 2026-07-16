@@ -125,5 +125,5 @@ jobs:
             echo "- Commit: \`${{ steps.target.outputs.sha }}\`"
             echo "- Image: \`${{ steps.image.outputs.uri }}\`"
             echo "- Runtime deployment: not performed"
-            echo "- Next step: run \`Release Green Web ASG\` after CloudFront traffic isolation"
+            echo "- Next step: run \`Release Green Web ASG\`; realtime functions may be briefly unstable during overlap"
           } >> "$GITHUB_STEP_SUMMARY"
