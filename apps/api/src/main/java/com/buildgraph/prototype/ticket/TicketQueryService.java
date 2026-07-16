@@ -1,6 +1,5 @@
 package com.buildgraph.prototype.ticket;
 
-import com.buildgraph.prototype.common.ApiException;
 import com.buildgraph.prototype.common.DbValueMapper;
 import com.buildgraph.prototype.common.MockData;
 import com.buildgraph.prototype.support.AsLogRagAnalysisService;
@@ -113,7 +112,6 @@ public class TicketQueryService {
             return create(request);
         }
         lockUserForTicketCreate(user.internalId());
-        rejectWhenOpenSupportChatExists(user.internalId());
         String symptom = request == null
                 ? "게임 중 프레임 급락"
                 : String.valueOf(request.getOrDefault("symptom", "게임 중 프레임 급락"));
@@ -189,35 +187,6 @@ public class TicketQueryService {
         if (locked.isEmpty()) {
             throw new ResponseStatusException(HttpStatus.NOT_FOUND, "사용자를 찾을 수 없습니다.");
         }
-    }
-
-    private void rejectWhenOpenSupportChatExists(Long userInternalId) {
-        jdbcTemplate.queryForList("""
-                        SELECT t.public_id::text AS as_ticket_id,
-                               r.public_id::text AS support_chat_room_id
-                        FROM support_chat_rooms r
-                        JOIN as_tickets t ON t.id = r.as_ticket_id
-                        WHERE r.user_id = ?
-                          AND r.status = 'ACTIVE'
-                          AND r.deleted_at IS NULL
-                          AND t.deleted_at IS NULL
-                          AND t.status NOT IN ('CLOSED', 'CANCELLED')
-                        ORDER BY COALESCE(r.last_message_at, r.updated_at, r.created_at) DESC, r.id DESC
-                        LIMIT 1
-                        """, userInternalId)
-                .stream()
-                .findFirst()
-                .ifPresent(row -> {
-                    throw new ApiException(
-                            HttpStatus.CONFLICT,
-                            "CONFLICT_STATE",
-                            "진행 중인 AS 상담이 있습니다.",
-                            MockData.map(
-                                    "asTicketId", DbValueMapper.string(row, "as_ticket_id"),
-                                    "supportChatRoomId", DbValueMapper.string(row, "support_chat_room_id")
-                            )
-                    );
-                });
     }
 
     public Map<String, Object> ticket(String id) {

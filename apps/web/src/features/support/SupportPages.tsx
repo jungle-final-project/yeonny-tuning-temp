@@ -17,7 +17,7 @@ type AgentDownloadState = 'idle' | 'issuing' | 'done' | 'error';
 type AgentDiagnosisRequestState = 'idle' | 'requesting' | 'accepted' | 'rejected' | 'error';
 type AsRagPreviewState = 'idle' | 'loading' | 'ready' | 'error';
 type SupportRequestKind = 'DIAGNOSIS_ONLY' | 'REMOTE_REQUESTED' | 'VISIT_REQUESTED';
-type BlockingSupportChat = {
+type ExistingSupportChat = {
   asTicketId: string;
   supportChatRoomId?: string | null;
 };
@@ -324,14 +324,13 @@ export function SupportNewPage() {
   const [agentDiagnosisState, setAgentDiagnosisState] = useState<AgentDiagnosisRequestState>('idle');
   const [agentDiagnosisMessage, setAgentDiagnosisMessage] = useState('');
   const [error, setError] = useState('');
-  const [conflictChat, setConflictChat] = useState<BlockingSupportChat | null>(null);
   const authScope = authScopeKey(getCachedAuthUser());
   const currentChatQuery = useQuery({
     queryKey: ['support-chat', authScope, 'intake-current'],
     queryFn: () => getCurrentSupportChat(),
     retry: false
   });
-  const blockingChat = conflictChat ?? blockingChatFromContact(currentChatQuery.data?.contact ?? null);
+  const existingChat = existingChatFromContact(currentChatQuery.data?.contact ?? null);
 
   const draftQuery = useQuery({
     queryKey: ['as-ticket-draft', draftId],
@@ -484,11 +483,6 @@ export function SupportNewPage() {
   async function submit(event: FormEvent) {
     event.preventDefault();
     setError('');
-    if (blockingChat) {
-      setSubmitState('ticket_error');
-      setError('진행 중인 AS 상담이 있습니다.');
-      return;
-    }
 
     const title = symptomTitle.trim();
     const detail = symptomDetail.trim();
@@ -522,13 +516,6 @@ export function SupportNewPage() {
       setSubmitState('uploading');
       await uploadAndCreateTicket(title, detail, selectedFile);
     } catch (cause) {
-      if (cause instanceof ApiError && cause.status === 409 && cause.code === 'CONFLICT_STATE') {
-        const refetched = await currentChatQuery.refetch();
-        setConflictChat(blockingChatFromError(cause) ?? blockingChatFromContact(refetched.data?.contact ?? null));
-        setSubmitState('ticket_error');
-        setError('진행 중인 AS 상담이 있습니다.');
-        return;
-      }
       if (cause instanceof TicketCreateError) {
         setSubmitState('ticket_error');
         setError('AS 티켓 생성에 실패했습니다. 로그인 상태를 확인한 뒤 다시 시도해 주세요.');
@@ -566,23 +553,20 @@ export function SupportNewPage() {
       const ticket = await createSupportTicket(symptom, logUploadId);
       setSubmitState('ticket_created');
       navigate(`/support/${ticket.id}`);
-    } catch (cause) {
-      if (cause instanceof ApiError && cause.status === 409 && cause.code === 'CONFLICT_STATE') {
-        throw cause;
-      }
+    } catch {
       throw new TicketCreateError();
     }
   }
 
   const isUploading = submitState === 'uploading';
-  const isSubmitDisabled = isUploading || Boolean(blockingChat);
+  const isSubmitDisabled = isUploading;
 
   return (
     <Screen>
       <form onSubmit={submit} className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_360px]">
-        {blockingChat ? (
+        {existingChat ? (
           <div className="lg:col-span-2">
-            <ActiveSupportChatNotice chat={blockingChat} />
+            <ExistingSupportChatNotice chat={existingChat} />
           </div>
         ) : null}
         <Panel title="AS 접수" subtitle="증상과 PCAgent 로그를 함께 보내면 담당자가 더 정확히 확인할 수 있습니다.">
@@ -784,43 +768,31 @@ export function SupportNewPage() {
 
 class TicketCreateError extends Error {}
 
-function ActiveSupportChatNotice({ chat }: { chat: BlockingSupportChat }) {
+function ExistingSupportChatNotice({ chat }: { chat: ExistingSupportChat }) {
   return (
     <div className="space-y-3">
       <StateMessage
         type="info"
         title="진행 중인 AS 상담이 있습니다."
-        body="관리자가 상담을 닫기 전까지 새 AS 접수를 만들 수 없습니다."
+        body="기존 상담은 그대로 유지됩니다. 다른 증상이라면 별도의 새 AS 접수를 계속 진행할 수 있습니다."
       />
       <Link
         to={`/support/${chat.asTicketId}?chat=1`}
         className="inline-flex rounded bg-[#de6c2d] px-4 py-3 text-sm font-bold text-white hover:bg-[#c45c22]"
       >
-        진행 중인 상담방으로 이동
+        기존 상담방 보기
       </Link>
     </div>
   );
 }
 
-function blockingChatFromContact(contact: SupportChatContact | null): BlockingSupportChat | null {
+function existingChatFromContact(contact: SupportChatContact | null): ExistingSupportChat | null {
   if (!contact || contact.canSendMessage === false) {
     return null;
   }
   return {
     asTicketId: contact.asTicketId,
     supportChatRoomId: contact.id
-  };
-}
-
-function blockingChatFromError(error: ApiError): BlockingSupportChat | null {
-  const asTicketId = error.details?.asTicketId;
-  if (typeof asTicketId !== 'string' || !asTicketId) {
-    return null;
-  }
-  const supportChatRoomId = error.details?.supportChatRoomId;
-  return {
-    asTicketId,
-    supportChatRoomId: typeof supportChatRoomId === 'string' ? supportChatRoomId : null
   };
 }
 

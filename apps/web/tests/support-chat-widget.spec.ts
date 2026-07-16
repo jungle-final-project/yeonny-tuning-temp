@@ -378,31 +378,74 @@ test('global support chat stays hidden on support intake', async ({ page }) => {
   await expect(page.getByRole('button', { name: '상담방 열기' })).toHaveCount(0);
 });
 
-test('support intake blocks creating a new ticket when an active support chat exists', async ({ page }) => {
+test('support intake allows a separate ticket when an active support chat exists', async ({ page }) => {
   let uploadCalls = 0;
   let createTicketCalls = 0;
   await mockLoggedInUser(page);
   await mockActiveChat(page, () => null, () => {});
   await page.route('**/api/agent-logs/upload', async (route) => {
     uploadCalls += 1;
-    await route.fulfill({ status: 500, contentType: 'application/json', body: '{}' });
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        id: '00000000-0000-4000-8000-000000005003',
+        status: 'UPLOADED',
+        fileName: 'recent.jsonl',
+        rangeMinutes: 30,
+        deleteAfter: '2026-08-05T00:00:00Z'
+      })
+    });
   });
   await page.route('**/api/as-tickets', async (route) => {
     if (route.request().method() === 'POST') {
       createTicketCalls += 1;
-      await route.fulfill({ status: 500, contentType: 'application/json', body: '{}' });
+      await route.fulfill({
+        status: 201,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          id: '00000000-0000-4000-8000-000000006101',
+          status: 'OPEN',
+          symptom: '별도 증상 접수',
+          logUploadId: '00000000-0000-4000-8000-000000005003',
+          supportChatRoomId: '00000000-0000-4000-8000-000000009101',
+          causeCandidates: [],
+          upgradeCandidates: []
+        })
+      });
       return;
     }
     await route.fallback();
+  });
+  await page.route('**/api/as-tickets/00000000-0000-4000-8000-000000006101', async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        id: '00000000-0000-4000-8000-000000006101',
+        status: 'OPEN',
+        symptom: '별도 증상 접수',
+        supportChatRoomId: '00000000-0000-4000-8000-000000009101',
+        causeCandidates: [],
+        upgradeCandidates: []
+      })
+    });
   });
 
   await page.goto('/support/new');
 
   await expect(page.getByText('진행 중인 AS 상담이 있습니다.')).toBeVisible();
-  await expect(page.getByRole('link', { name: '진행 중인 상담방으로 이동' })).toHaveAttribute('href', '/support/00000000-0000-4000-8000-000000006001?chat=1');
-  await expect(page.getByRole('button', { name: 'AS 접수하기' })).toBeDisabled();
-  await expect.poll(() => uploadCalls).toBe(0);
-  await expect.poll(() => createTicketCalls).toBe(0);
+  await expect(page.getByText('다른 증상이라면 별도의 새 AS 접수를 계속 진행할 수 있습니다.')).toBeVisible();
+  await expect(page.getByRole('link', { name: '기존 상담방 보기' })).toHaveAttribute('href', '/support/00000000-0000-4000-8000-000000006001?chat=1');
+  await expect(page.getByRole('button', { name: 'AS 접수하기' })).toBeEnabled();
+  await page.getByLabel('증상 제목').fill('별도 증상 접수');
+  await page.getByLabel('증상 상세').fill('기존 상담과 다른 증상입니다.');
+  await selectAgentLogFile(page);
+  await page.getByLabel('선택한 구간의 로그 업로드와 30일 보관 후 삭제 정책에 동의합니다.').check();
+  await page.getByRole('button', { name: 'AS 접수하기' }).click();
+
+  await expect.poll(() => uploadCalls).toBe(1);
+  await expect.poll(() => createTicketCalls).toBe(1);
 });
 
 test('support intake allows a new ticket when deleted chat is absent from current session', async ({ page }) => {
@@ -580,7 +623,7 @@ test('support intake extracts the latest 30 minutes from cumulative PCAgent logs
   expect(uploadBody).not.toContain('old-marker');
 });
 
-test('support intake shows the existing chat CTA when stale submit receives a conflict', async ({ page }) => {
+test('support intake keeps the form available when ticket creation returns an unrelated conflict', async ({ page }) => {
   let createTicketCalls = 0;
   await mockLoggedInUser(page);
   await mockEmptyChat(page);
@@ -625,8 +668,9 @@ test('support intake shows the existing chat CTA when stale submit receives a co
   await page.getByRole('button', { name: 'AS 접수하기' }).click();
 
   await expect.poll(() => createTicketCalls).toBe(1);
-  await expect(page.getByText('진행 중인 AS 상담이 있습니다.').first()).toBeVisible();
-  await expect(page.getByRole('link', { name: '진행 중인 상담방으로 이동' })).toHaveAttribute('href', '/support/00000000-0000-4000-8000-000000006001?chat=1');
+  await expect(page.getByText('AS 티켓 생성에 실패했습니다. 로그인 상태를 확인한 뒤 다시 시도해 주세요.').first()).toBeVisible();
+  await expect(page.getByRole('link', { name: '기존 상담방 보기' })).toHaveCount(0);
+  await expect(page.getByRole('button', { name: 'AS 접수하기' })).toBeEnabled();
 });
 
 test('mobile support chat and AI assistant are mutually exclusive', async ({ page }) => {

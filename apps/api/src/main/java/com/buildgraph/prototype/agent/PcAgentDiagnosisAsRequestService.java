@@ -79,7 +79,6 @@ public class PcAgentDiagnosisAsRequestService {
         if (existing != null) {
             return existingResponse(existing, principal.userInternalId());
         }
-        rejectWhenOpenSupportChatExists(principal.userInternalId());
         requireStoredConsent(principal);
 
         Map<String, Object> row = jdbcTemplate.queryForMap("""
@@ -338,35 +337,6 @@ public class PcAgentDiagnosisAsRequestService {
                         """, principal.userInternalId()).isEmpty()) {
             throw new ApiException(HttpStatus.NOT_FOUND, "USER_NOT_FOUND", "Authenticated Agent user was not found.");
         }
-    }
-
-    private void rejectWhenOpenSupportChatExists(Long userInternalId) {
-        jdbcTemplate.queryForList("""
-                        SELECT t.public_id::text AS as_ticket_id,
-                               r.public_id::text AS support_chat_room_id
-                        FROM support_chat_rooms r
-                        JOIN as_tickets t ON t.id = r.as_ticket_id
-                        WHERE r.user_id = ?
-                          AND r.status = 'ACTIVE'
-                          AND r.deleted_at IS NULL
-                          AND t.deleted_at IS NULL
-                          AND t.status NOT IN ('CLOSED', 'CANCELLED')
-                        ORDER BY COALESCE(r.last_message_at, r.updated_at, r.created_at) DESC, r.id DESC
-                        LIMIT 1
-                        """, userInternalId)
-                .stream()
-                .findFirst()
-                .ifPresent(row -> {
-                    throw new ApiException(
-                            HttpStatus.CONFLICT,
-                            "CONFLICT_STATE",
-                            "진행 중인 AS 상담이 있습니다.",
-                            MockData.map(
-                                    "asTicketId", DbValueMapper.string(row, "as_ticket_id"),
-                                    "supportChatRoomId", DbValueMapper.string(row, "support_chat_room_id")
-                            )
-                    );
-                });
     }
 
     private static List<Map<String, Object>> validatedEvidenceSummary(

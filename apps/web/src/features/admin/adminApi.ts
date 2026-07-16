@@ -339,6 +339,11 @@ export type AdminAsTicket = {
   title?: string | null;
   description?: string | null;
   detailDescription?: string | null;
+  diagnosisTitle?: string | null;
+  diagnosisSummary?: string | null;
+  diagnosisEvidence?: Record<string, unknown>[] | null;
+  diagnosedAt?: string | null;
+  diagnosisMode?: string | null;
   logUploadId?: string | null;
   incidentWindow?: Record<string, unknown> | null;
   logSummary?: string | Record<string, unknown> | null;

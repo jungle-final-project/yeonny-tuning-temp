@@ -3231,17 +3231,11 @@ paths:
               $ref: "#/components/schemas/AsTicketCreateRequest"
       responses:
         "201":
-          description: 생성된 AS 티켓
+          description: 생성된 AS 티켓. 기존 진행 중 상담방이 있어도 별도 티켓과 상담방을 생성한다.
           content:
             application/json:
               schema:
                 $ref: "#/components/schemas/AsTicketDto"
-        "409":
-          description: 진행 중인 AS 상담방이 있어 새 티켓 생성 불가
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ErrorResponse"
   /api/as-tickets/{id}:
     get:
       summary: AS 티켓 상세
@@ -8327,9 +8321,30 @@ components:
           type: boolean
         symptom:
           type: string
+        diagnosisTitle:
+          type: string
+          nullable: true
+        diagnosisSummary:
+          type: string
+          nullable: true
+        diagnosisEvidence:
+          type: array
+          nullable: true
+          description: PC Agent 실시간 진단에서 서버가 검증해 티켓에 저장한 측정 근거. 원본 JSONL 업로드 샘플과는 별도다.
+          items:
+            type: object
+            additionalProperties: true
+        diagnosedAt:
+          type: string
+          format: date-time
+          nullable: true
+        diagnosisMode:
+          type: string
+          nullable: true
         logUploadId:
           type: string
           format: uuid
+          nullable: true
         logSummaryId:
           type: string
           format: uuid

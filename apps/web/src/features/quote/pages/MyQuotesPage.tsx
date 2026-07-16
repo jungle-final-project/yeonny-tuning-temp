@@ -30,7 +30,7 @@ export function MyQuotesPage() {
   const [selectedAlertBuildId, setSelectedAlertBuildId] = useState('');
   const [selectedSavedPartId, setSelectedSavedPartId] = useState('');
   const [graphBuild, setGraphBuild] = useState<BuildSummary | null>(null);
-  const [recommendedBuildId, setRecommendedBuildId] = useState<string | null>(null);
+  const [recommendedBuild, setRecommendedBuild] = useState<{ buildId: string; label: 'A' | 'B' } | null>(null);
   const [targetPrice, setTargetPrice] = useState('850000');
   const [alertInputError, setAlertInputError] = useState('');
   const alertFormRef = useRef<HTMLDivElement | null>(null);
@@ -156,7 +156,7 @@ export function MyQuotesPage() {
     <Screen>
       <div className="space-y-5">
         {!buildsQuery.isLoading && !buildsQuery.isError && builds.length ? (
-          <SavedBuildsComparison builds={builds} onRecommendedBuildChange={setRecommendedBuildId} />
+          <SavedBuildsComparison builds={builds} onRecommendedBuildChange={setRecommendedBuild} />
         ) : null}
 
         <div className="grid gap-5">
@@ -192,7 +192,7 @@ export function MyQuotesPage() {
                   <SavedBuildCard
                     key={build.id}
                     build={build}
-                    isRecommended={recommendedBuildId === build.id}
+                    recommendationLabel={recommendedBuild?.buildId === build.id ? recommendedBuild.label : null}
                     isPreparingCheckout={isApplyingBuild(applyBuildMutation.variables, build, 'checkout', applyBuildMutation.isPending)}
                     isPreparingSelfQuote={isApplyingBuild(applyBuildMutation.variables, build, 'self-quote', applyBuildMutation.isPending)}
                     onAlertSelect={selectBuildPartForAlert}
@@ -345,7 +345,7 @@ function AlertStatusPill({ alert }: { alert: PriceAlert }) {
 
 function SavedBuildCard({
   build,
-  isRecommended,
+  recommendationLabel,
   isPreparingCheckout,
   isPreparingSelfQuote,
   onAlertSelect,
@@ -360,7 +360,7 @@ function SavedBuildCard({
   isDeleting
 }: {
   build: BuildSummary;
-  isRecommended: boolean;
+  recommendationLabel: 'A' | 'B' | null;
   isPreparingCheckout: boolean;
   isPreparingSelfQuote: boolean;
   onAlertSelect: (build: BuildSummary) => void;
@@ -374,6 +374,7 @@ function SavedBuildCard({
   isDuplicating: boolean;
   isDeleting: boolean;
 }) {
+  const isRecommended = recommendationLabel !== null;
   const mainItems = (build.items ?? []).slice(0, 4);
   const hasAlertablePart = Boolean(resolvePartId(build.items?.[0]));
   const hasCheckoutItems = quoteDraftItemsForBuild(build).length > 0;
@@ -400,12 +401,17 @@ function SavedBuildCard({
     <article
       data-testid={`saved-build-card-${build.id}`}
       data-recommended={isRecommended ? 'true' : 'false'}
-      className={`relative rounded-md border p-4 transition ${isRecommended
+      data-recommendation-label={recommendationLabel ?? undefined}
+      className={`relative rounded-md border p-4 transition ${recommendationLabel === 'A'
         ? 'border-[#DE6C2D] bg-[#fffaf7] shadow-[0_0_0_1px_rgba(222,108,45,0.16),0_14px_32px_rgba(222,108,45,0.14)]'
-        : 'border-slate-200 bg-white hover:border-[#f4c8b2] hover:shadow-product'
+        : recommendationLabel === 'B'
+          ? 'border-[#3576CA] bg-[#f7faff] shadow-[0_0_0_1px_rgba(53,118,202,0.18),0_14px_32px_rgba(53,118,202,0.16)]'
+          : 'border-slate-200 bg-white hover:border-[#f4c8b2] hover:shadow-product'
       }`}
     >
-      {isRecommended ? <span aria-hidden="true" className="pointer-events-none absolute inset-0 rounded-md ring-2 ring-[#DE6C2D]/20 motion-safe:animate-pulse" /> : null}
+      {isRecommended ? (
+        <span aria-hidden="true" className={`pointer-events-none absolute inset-0 rounded-md ring-2 motion-safe:animate-pulse ${recommendationLabel === 'A' ? 'ring-[#DE6C2D]/20' : 'ring-[#3576CA]/25'}`} />
+      ) : null}
       <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center justify-between gap-2">
@@ -590,7 +596,7 @@ function SavedBuildsComparison({
   onRecommendedBuildChange
 }: {
   builds: BuildSummary[];
-  onRecommendedBuildChange: (buildId: string | null) => void;
+  onRecommendedBuildChange: (recommendation: { buildId: string; label: 'A' | 'B' } | null) => void;
 }) {
   const [selectedIds, setSelectedIds] = useState<string[]>(() => builds.slice(0, 2).map((build) => build.id));
 
@@ -674,11 +680,12 @@ function SavedBuildsComparison({
   const recommendedBuildId = recommendation
     ? columns[recommendation.winner === 'A' ? 0 : 1].build.id
     : null;
+  const recommendedLabel = recommendation?.winner ?? null;
 
   useEffect(() => {
-    onRecommendedBuildChange(recommendedBuildId);
+    onRecommendedBuildChange(recommendedBuildId && recommendedLabel ? { buildId: recommendedBuildId, label: recommendedLabel } : null);
     return () => onRecommendedBuildChange(null);
-  }, [onRecommendedBuildChange, recommendedBuildId]);
+  }, [onRecommendedBuildChange, recommendedBuildId, recommendedLabel]);
 
   if (builds.length === 0) {
     return null;
@@ -846,16 +853,18 @@ function RecommendationSummaryCard({ columnA, columnB }: { columnA: ComparisonCo
 }
 
 function PriceDifferenceCard({ columnA, columnB }: { columnA: ComparisonColumn; columnB: ComparisonColumn }) {
-  const signedDifference = columnA.build.totalPrice - columnB.build.totalPrice;
+  const recommendation = comparisonRecommendation(columnA, columnB);
+  const aToBPriceDifference = columnA.build.totalPrice - columnB.build.totalPrice;
+  const signedDifference = recommendation.winner === 'A' ? aToBPriceDifference : -aToBPriceDifference;
   const cheaper = columnA.build.totalPrice === columnB.build.totalPrice ? null : columnA.build.totalPrice < columnB.build.totalPrice ? 'A' : 'B';
-  const PriceTrendIcon = columnA.build.totalPrice <= columnB.build.totalPrice ? ArrowDown : ArrowUp;
+  const PriceTrendIcon = signedDifference <= 0 ? ArrowDown : ArrowUp;
   return (
     <article className="flex min-h-[164px] flex-col rounded-lg border border-slate-200 bg-white px-4 py-4 text-center shadow-sm">
       <h3 className="text-sm font-black text-commerce-ink">가격 차이</h3>
       <div className="mt-2 flex flex-1 items-center justify-center gap-3">
         <PriceTrendIcon aria-hidden="true" className="animate-bounce text-slate-500" size={28} strokeWidth={3} />
         <div>
-          <p title="A 견적 - B 견적" className="text-xl font-black tracking-tight text-commerce-ink"><span className="text-red-600">{formatSignedDifference(signedDifference)}</span>원</p>
+          <p title={`${recommendation.winner} 추천 견적 - 상대 견적`} className="text-xl font-black tracking-tight text-commerce-ink"><span className="text-red-600">{formatSignedDifference(signedDifference)}</span>원</p>
           <p data-testid="quote-compare-price-delta" className="mt-1 text-sm font-black text-commerce-ink">{cheaper ? `${cheaper}가 더 저렴` : '가격 동일'}</p>
         </div>
       </div>
@@ -865,6 +874,10 @@ function PriceDifferenceCard({ columnA, columnB }: { columnA: ComparisonColumn; 
 
 function ScoreDifferenceCard({ columnA, columnB }: { columnA: ComparisonColumn; columnB: ComparisonColumn }) {
   const score = scoreDifference(columnA, columnB);
+  const recommendation = comparisonRecommendation(columnA, columnB);
+  const recommendedScoreDifference = score
+    ? recommendation.winner === 'A' ? score.signedDifference : -score.signedDifference
+    : 0;
   const maxScore = Math.max(columnA.compositeScore?.maxScore ?? 0, columnB.compositeScore?.maxScore ?? 0);
   const differenceRatio = score && maxScore > 0 ? score.difference / maxScore : 0;
   const gaugeZone = scoreGaugeZone(differenceRatio);
@@ -875,7 +888,7 @@ function ScoreDifferenceCard({ columnA, columnB }: { columnA: ComparisonColumn; 
         <AnimatedScoreGauge differenceRatio={differenceRatio} zone={gaugeZone} />
         {score ? (
           <div>
-            <p title="A 견적 - B 견적" className="text-xl font-black tracking-tight text-commerce-ink"><span data-testid="quote-compare-score-value" className={scoreGaugeValueClass(gaugeZone)}>{formatSignedDifference(score.signedDifference)}</span>점</p>
+            <p title={`${recommendation.winner} 추천 견적 - 상대 견적`} className="text-xl font-black tracking-tight text-commerce-ink"><span data-testid="quote-compare-score-value" className={scoreGaugeValueClass(gaugeZone)}>{formatSignedDifference(recommendedScoreDifference)}</span>점</p>
             <p data-testid="quote-compare-score-delta" className="mt-1 text-sm font-black text-slate-600">{score.similar ? '사실상 유사' : `${score.winner}가 더 높음`}</p>
           </div>
         ) : (
