@@ -1,7 +1,7 @@
 import { FormEvent, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useMutation, useQueries, useQuery, useQueryClient } from '@tanstack/react-query';
-import { ArrowDown, ArrowUp, Check, ClipboardList, Copy, FileText, Gauge, GitBranch, Pencil, PencilLine, Save, ShoppingBag, Target, Trash2, Trophy, X } from 'lucide-react';
+import { ArrowDown, ArrowUp, Check, ClipboardList, Copy, FileText, GitBranch, Pencil, PencilLine, Save, ShoppingBag, Target, Trash2, Trophy, X } from 'lucide-react';
 import { Panel, Screen, StateMessage } from '../../../components/ui';
 import { applyAiBuildToQuoteDraft } from '../../parts/partsApi';
 import { listAssemblyRequests } from '../../parts/assemblyApi';
@@ -30,6 +30,7 @@ export function MyQuotesPage() {
   const [selectedAlertBuildId, setSelectedAlertBuildId] = useState('');
   const [selectedSavedPartId, setSelectedSavedPartId] = useState('');
   const [graphBuild, setGraphBuild] = useState<BuildSummary | null>(null);
+  const [recommendedBuildId, setRecommendedBuildId] = useState<string | null>(null);
   const [targetPrice, setTargetPrice] = useState('850000');
   const [alertInputError, setAlertInputError] = useState('');
   const alertFormRef = useRef<HTMLDivElement | null>(null);
@@ -155,14 +156,14 @@ export function MyQuotesPage() {
     <Screen>
       <div className="space-y-5">
         {!buildsQuery.isLoading && !buildsQuery.isError && builds.length ? (
-          <SavedBuildsComparison builds={builds} />
+          <SavedBuildsComparison builds={builds} onRecommendedBuildChange={setRecommendedBuildId} />
         ) : null}
 
         <div className="grid gap-5">
           <Panel
             title="저장 견적"
             subtitle="상세 확인, 부품 변경, 목표가 알림 등록까지 바로 이어집니다."
-            className="order-2"
+            className="order-1"
             action={(
               <div className="flex flex-wrap items-center gap-2">
                 <Link
@@ -191,6 +192,7 @@ export function MyQuotesPage() {
                   <SavedBuildCard
                     key={build.id}
                     build={build}
+                    isRecommended={recommendedBuildId === build.id}
                     isPreparingCheckout={isApplyingBuild(applyBuildMutation.variables, build, 'checkout', applyBuildMutation.isPending)}
                     isPreparingSelfQuote={isApplyingBuild(applyBuildMutation.variables, build, 'self-quote', applyBuildMutation.isPending)}
                     onAlertSelect={selectBuildPartForAlert}
@@ -220,7 +222,7 @@ export function MyQuotesPage() {
             )}
           </Panel>
 
-          <div ref={alertFormRef} data-testid="quote-alert-registration" className="order-1">
+          <div ref={alertFormRef} data-testid="quote-alert-registration" className="order-2">
             <Panel title="목표가 알림 등록">
               <form onSubmit={submitAlert} className="grid gap-4 lg:grid-cols-[minmax(320px,1.4fr)_minmax(180px,0.7fr)_160px_minmax(220px,0.9fr)] lg:items-end">
                 <div>
@@ -343,6 +345,7 @@ function AlertStatusPill({ alert }: { alert: PriceAlert }) {
 
 function SavedBuildCard({
   build,
+  isRecommended,
   isPreparingCheckout,
   isPreparingSelfQuote,
   onAlertSelect,
@@ -357,6 +360,7 @@ function SavedBuildCard({
   isDeleting
 }: {
   build: BuildSummary;
+  isRecommended: boolean;
   isPreparingCheckout: boolean;
   isPreparingSelfQuote: boolean;
   onAlertSelect: (build: BuildSummary) => void;
@@ -393,7 +397,15 @@ function SavedBuildCard({
   }
 
   return (
-    <article data-testid={`saved-build-card-${build.id}`} className="rounded-md border border-slate-200 bg-white p-4 transition hover:border-[#f4c8b2] hover:shadow-product">
+    <article
+      data-testid={`saved-build-card-${build.id}`}
+      data-recommended={isRecommended ? 'true' : 'false'}
+      className={`relative rounded-md border p-4 transition ${isRecommended
+        ? 'border-[#DE6C2D] bg-[#fffaf7] shadow-[0_0_0_1px_rgba(222,108,45,0.16),0_14px_32px_rgba(222,108,45,0.14)]'
+        : 'border-slate-200 bg-white hover:border-[#f4c8b2] hover:shadow-product'
+      }`}
+    >
+      {isRecommended ? <span aria-hidden="true" className="pointer-events-none absolute inset-0 rounded-md ring-2 ring-[#DE6C2D]/20 motion-safe:animate-pulse" /> : null}
       <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center justify-between gap-2">
@@ -573,7 +585,13 @@ function itemsForCategory(build: BuildSummary, category: string): BuildItem[] {
   return (build.items ?? []).filter((item) => item.category === category);
 }
 
-function SavedBuildsComparison({ builds }: { builds: BuildSummary[] }) {
+function SavedBuildsComparison({
+  builds,
+  onRecommendedBuildChange
+}: {
+  builds: BuildSummary[];
+  onRecommendedBuildChange: (buildId: string | null) => void;
+}) {
   const [selectedIds, setSelectedIds] = useState<string[]>(() => builds.slice(0, 2).map((build) => build.id));
 
   // 견적 목록이 갱신되면 삭제된 선택만 제거한다. 사용자가 비운 선택은 자동 복원하지 않는다.
@@ -627,10 +645,6 @@ function SavedBuildsComparison({ builds }: { builds: BuildSummary[] }) {
     })
   });
 
-  if (builds.length === 0) {
-    return null;
-  }
-
   function toggleBuild(id: string) {
     setSelectedIds((prev) => {
       if (prev.includes(id)) {
@@ -656,6 +670,19 @@ function SavedBuildsComparison({ builds }: { builds: BuildSummary[] }) {
       isError: result?.isError ?? false
     } satisfies ComparisonColumn;
   });
+  const recommendation = columns.length === 2 ? comparisonRecommendation(columns[0], columns[1]) : null;
+  const recommendedBuildId = recommendation
+    ? columns[recommendation.winner === 'A' ? 0 : 1].build.id
+    : null;
+
+  useEffect(() => {
+    onRecommendedBuildChange(recommendedBuildId);
+    return () => onRecommendedBuildChange(null);
+  }, [onRecommendedBuildChange, recommendedBuildId]);
+
+  if (builds.length === 0) {
+    return null;
+  }
 
   return (
     <section data-testid="saved-builds-comparison" className="rounded-md border border-commerce-line bg-white p-5 shadow-product">
@@ -838,16 +865,16 @@ function PriceDifferenceCard({ columnA, columnB }: { columnA: ComparisonColumn; 
 
 function ScoreDifferenceCard({ columnA, columnB }: { columnA: ComparisonColumn; columnB: ComparisonColumn }) {
   const score = scoreDifference(columnA, columnB);
+  const maxScore = Math.max(columnA.compositeScore?.maxScore ?? 0, columnB.compositeScore?.maxScore ?? 0);
+  const differenceRatio = score && maxScore > 0 ? score.difference / maxScore : 0;
   return (
     <article className="flex min-h-[164px] flex-col rounded-lg border border-slate-200 bg-white px-4 py-4 text-center shadow-sm">
       <h3 className="text-sm font-black text-commerce-ink">종합 성능 차이</h3>
       <div className="mt-2 flex flex-1 items-center justify-center gap-3">
-        <span aria-hidden="true" className="flex h-12 w-12 items-center justify-center rounded-full bg-[#3576CA]/10 text-[#3576CA]">
-          <Gauge size={28} strokeWidth={2.2} />
-        </span>
+        <AnimatedScoreGauge differenceRatio={differenceRatio} />
         {score ? (
           <div>
-            <p className="text-xl font-black tracking-tight text-commerce-ink">{score.difference.toLocaleString('ko-KR')}점</p>
+            <p className="text-xl font-black tracking-tight text-commerce-ink"><span data-testid="quote-compare-score-value" className="text-red-600">{score.difference.toLocaleString('ko-KR')}</span>점</p>
             <p data-testid="quote-compare-score-delta" className="mt-1 text-sm font-black text-slate-600">{score.similar ? '사실상 유사' : `${score.winner}가 더 높음`}</p>
           </div>
         ) : (
@@ -855,6 +882,33 @@ function ScoreDifferenceCard({ columnA, columnB }: { columnA: ComparisonColumn; 
         )}
       </div>
     </article>
+  );
+}
+
+function AnimatedScoreGauge({ differenceRatio }: { differenceRatio: number }) {
+  const [isAnimated, setIsAnimated] = useState(false);
+  const needleRotation = -160 + (140 * Math.min(1, Math.max(0, differenceRatio) / 0.1));
+
+  useEffect(() => {
+    setIsAnimated(false);
+    const frame = requestAnimationFrame(() => setIsAnimated(true));
+    return () => cancelAnimationFrame(frame);
+  }, [needleRotation]);
+
+  return (
+    <span aria-hidden="true" className="relative block h-12 w-14 shrink-0 overflow-hidden rounded-t-full bg-[#3576CA]/5">
+      <span
+        className="absolute inset-x-1 top-1 h-11 rounded-t-full"
+        style={{ background: 'conic-gradient(from 270deg at 50% 100%, #3576CA 0deg, #60A5FA 60deg, #F59E0B 120deg, #DE6C2D 180deg, transparent 180deg)' }}
+      />
+      <span className="absolute inset-x-2.5 top-3 h-9 rounded-t-full bg-white" />
+      <span
+        data-testid="quote-compare-score-gauge-needle"
+        className="absolute bottom-1.5 left-1/2 h-0.5 w-5 origin-left rounded-full bg-slate-700 transition-transform duration-1000 ease-out motion-reduce:transition-none"
+        style={{ transform: `rotate(${isAnimated ? needleRotation : -180}deg)` }}
+      />
+      <span className="absolute bottom-1 left-1/2 h-2 w-2 -translate-x-1/2 rounded-full bg-slate-700 ring-2 ring-white" />
+    </span>
   );
 }
 
@@ -894,11 +948,24 @@ function GamePerformanceDifferenceCard({ columnA, columnB }: { columnA: Comparis
 
 function FpsBar({ label, value, scale }: { label: 'A' | 'B'; value: number; scale: number }) {
   const height = Math.max(8, Math.min(100, (value / scale) * 100));
+  const [isRaised, setIsRaised] = useState(false);
+
+  useEffect(() => {
+    setIsRaised(false);
+    const frame = requestAnimationFrame(() => setIsRaised(true));
+    return () => cancelAnimationFrame(frame);
+  }, [height]);
+
   return (
     <div className="flex h-24 w-9 flex-col items-center justify-end">
       <span className="mb-1 text-[10px] font-black text-slate-600">{Math.round(value)}</span>
       <div className="flex h-16 w-7 items-end border-b border-slate-300">
-        <div aria-hidden="true" className={`w-full rounded-t-sm ${label === 'A' ? 'bg-[#DE6C2D]' : 'bg-[#3576CA]'}`} style={{ height: `${height}%` }} />
+        <div
+          aria-hidden="true"
+          data-testid={`quote-compare-fps-bar-${label}`}
+          className={`w-full rounded-t-sm transition-[height] duration-1000 ease-out motion-reduce:transition-none ${label === 'A' ? 'bg-[#DE6C2D]' : 'bg-[#3576CA]'}`}
+          style={{ height: isRaised ? `${height}%` : '0%' }}
+        />
       </div>
       <span className={`mt-1 text-[10px] font-black ${label === 'A' ? 'text-[#DE6C2D]' : 'text-[#3576CA]'}`}>{label}</span>
     </div>
@@ -999,7 +1066,11 @@ function MetricBar({ category, metric, side, hasPart, samePart }: { category: st
         <span className="text-xs font-bold text-slate-400">{metric.label}</span>
       </div>
       <div className={`flex h-2 overflow-hidden rounded-full bg-slate-100 ${side === 'A' ? 'justify-end' : 'justify-start'}`}>
-        <div className="h-full rounded-full bg-[#FDBA74] transition-[width] duration-700 ease-out" style={{ width: isFilled ? `${index}%` : '0%' }} />
+        <div
+          data-testid={`quote-compare-bar-fill-${category}-${side}`}
+          className={`h-full rounded-full transition-[width] duration-700 ease-out ${side === 'A' ? 'bg-[#DE6C2D]' : 'bg-[#3576CA]'}`}
+          style={{ width: isFilled ? `${index}%` : '0%' }}
+        />
       </div>
     </div>
   );

@@ -328,10 +328,13 @@ test('shows saved quotes, actionable price alert setup, and alert progress', asy
   await expect(page.getByRole('heading', { name: '내 견적함 / 목표가 알림' })).toHaveCount(0);
 
   const firstBuild = page.getByTestId('saved-build-card-build-qhd-balanced');
+  const lastBuild = page.getByTestId('saved-build-card-build-office');
   await expect(firstBuild).toContainText('QHD 균형 저장 견적');
   const alertRegistration = page.getByTestId('quote-alert-registration');
   await expect(alertRegistration).toBeVisible();
-  expect((await alertRegistration.boundingBox())?.y).toBeLessThan((await firstBuild.boundingBox())?.y ?? 0);
+  const alertRegistrationBox = await alertRegistration.boundingBox();
+  const lastBuildBox = await lastBuild.boundingBox();
+  expect(alertRegistrationBox?.y).toBeGreaterThanOrEqual((lastBuildBox?.y ?? 0) + (lastBuildBox?.height ?? 0));
   await expect(firstBuild.getByRole('link', { name: '견적 상세' })).toHaveAttribute('href', '/builds/build-qhd-balanced');
   await expect(firstBuild.getByRole('button', { name: '부품 변경' })).toBeVisible();
   // 저장 견적 비교 — 비교할 견적을 고르면 전 카테고리 부품 + 성능을 좌우로 나열.
@@ -353,16 +356,23 @@ test('shows saved quotes, actionable price alert setup, and alert progress', asy
   await expect(perfMatrix.getByTestId('quote-summary-B')).toContainText('924점');
   await expect(perfMatrix.getByTestId('quote-compare-recommendation')).toContainText('B 견적이 내 조건에 더 적합합니다');
   await expect(perfMatrix.getByTestId('quote-compare-recommendation')).toContainText('B가 종합 점수 70점 더 높아 성능 우위가 분명합니다.');
+  await expect(page.getByTestId('saved-build-card-build-workstation')).toHaveAttribute('data-recommended', 'true');
+  await expect(firstBuild).toHaveAttribute('data-recommended', 'false');
   await expect(perfMatrix.getByTestId('quote-compare-price-delta')).toContainText('A가 더 저렴');
   await expect(perfMatrix.getByTestId('quote-compare-score-delta')).toContainText('B가 더 높음');
+  await expect(perfMatrix.getByTestId('quote-compare-score-value')).toHaveClass(/text-red-600/);
+  await expect(perfMatrix.getByTestId('quote-compare-score-gauge-needle')).toHaveClass(/transition-transform/);
   await expect(perfMatrix.getByTestId('quote-compare-fps-A')).toContainText('142 FPS');
   await expect(perfMatrix.getByTestId('quote-compare-fps-B')).toContainText('156 FPS');
   await expect(perfMatrix.getByTestId('quote-compare-fps-delta')).toContainText('B가 14 FPS 더 높음');
+  await expect(perfMatrix.getByTestId('quote-compare-fps-bar-A')).toHaveClass(/transition-\[height\]/);
+  await expect(perfMatrix.getByTestId('quote-compare-fps-bar-B')).toHaveCSS('background-color', 'rgb(53, 118, 202)');
   await expect(perfMatrix.getByTestId('quote-score-policy')).toContainText('성능 43%');
   await expect(perfMatrix.getByTestId('quote-score-policy')).toContainText('근거 신뢰도 8%');
   // 수치가 있는 부품만 동일 색상 상대 막대를 사용한다.
   await expect(perfMatrix.getByTestId('quote-compare-bar-CPU-A')).toContainText('72점');
   await expect(perfMatrix.getByTestId('quote-compare-bar-GPU-B')).toContainText('92점');
+  await expect(perfMatrix.getByTestId('quote-compare-bar-fill-GPU-B')).toHaveCSS('background-color', 'rgb(53, 118, 202)');
   await expect(perfMatrix.getByTestId('quote-compare-description-CPU')).toContainText('CPU 성능 유사 · B +1%');
   await expect(perfMatrix.getByTestId('quote-compare-description-GPU')).toContainText('B GPU 성능 +18%');
   await expect(perfMatrix.getByTestId('quote-compare-description-RAM')).toContainText('B RAM 용량 +32GB');
