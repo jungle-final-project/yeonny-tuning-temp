@@ -981,7 +981,7 @@ public class ToolCheckService {
                                  resolution_rank,
                                  CASE confidence WHEN 'HIGH' THEN 0 WHEN 'MEDIUM' THEN 1 ELSE 2 END,
                                  source_checked_at DESC,
-                                 id DESC
+                                 game_fps_benchmarks.id DESC
                         LIMIT 3
                         """, fpsParams(params, gpu.internalId(), gpuClass, gameKey).toArray())
                 .stream()

@@ -268,15 +268,16 @@ function PerfPanelBody({
   const ghostScore = activeComparison ? ghostQuery.data?.compositeScore?.score : undefined;
   const hasGhostScore = typeof ghostScore === 'number' && Number.isFinite(ghostScore);
 
-  // 가장 근접한 근거(정렬 1순위)를 대표값으로 쓴다 — 서버가 exactness 순으로 정렬해 내려준다.
-  const evidence: GameFpsEvidence | undefined = data?.details?.gameFpsEvidence?.[0];
+  // 근거 행 선택 — 서버 정렬(정확도순)을 신뢰하되, 요청한 게임·해상도와 실제로 일치하는 행이 있으면
+  // 그 행을 우선한다([0]이 다른 해상도 폴백인데 뒤에 정합 행이 남아 있는 데이터 어긋남 방어). 없으면 [0] 유지.
+  const evidence: GameFpsEvidence | undefined = pickEvidenceRow(data?.details?.gameFpsEvidence);
   const avg = Number(evidence?.avgFps);
   const hasAvg = Number.isFinite(avg) && avg > 0;
   const low = Number(evidence?.onePercentLowFps);
   const hasLow = Number.isFinite(low) && low > 0;
 
   const compareEvidence: GameFpsEvidence | undefined = activeComparison
-    ? compareQuery.data?.details?.gameFpsEvidence?.[0]
+    ? pickEvidenceRow(compareQuery.data?.details?.gameFpsEvidence)
     : undefined;
   const compareAvg = Number(compareEvidence?.avgFps);
   const hasCompareAvg = Number.isFinite(compareAvg) && compareAvg > 0;
@@ -285,6 +286,20 @@ function PerfPanelBody({
   // 비교가 켜져 있는데 자료가 아직 안 왔으면 로딩, 끝내 없으면 사유를 알리고 비교를 강제하지 않는다.
   const isCompareReady = Boolean(activeComparison) && hasAvg && hasCompareAvg;
   const isCompareLoading = Boolean(activeComparison) && !isCompareReady && (isFetching || compareQuery.isFetching);
+  // 비교 가드 — 두 근거 행의 측정 조건(해상도·그래픽 옵션·출처)이 다르거나, 어느 쪽이든 요청 해상도와
+  // 다른 폴백 행이면 ±% 하락/상승을 확정 표기하지 않는다(상위 부품이 조건 차이 탓에 낮아 보이는 사고 방어).
+  // 두 값 자체는 숨기지 않는다 — 각자의 조건과 함께 참고치로 보여주고 중립 고지로 대체한다.
+  const isCompareConditionMismatch = isCompareReady && Boolean(
+    evidence && compareEvidence && (
+      evidence.resolution !== compareEvidence.resolution
+      || (evidence.graphicsPreset ?? null) !== (compareEvidence.graphicsPreset ?? null)
+      || (evidence.sourceName ?? null) !== (compareEvidence.sourceName ?? null)
+      || evidence.match?.resolutionMatched === false
+      || compareEvidence.match?.resolutionMatched === false
+    )
+  );
+  // 확정 델타(배지·성능 ±% 막대)는 같은 조건에서 잰 두 값일 때만 내린다.
+  const isCompareComparable = isCompareReady && !isCompareConditionMismatch;
 
   // 큰 FPS 숫자 카운트업(단일 표시) — 값이 바뀌면 이전 값→새 값으로 rAF easeOut 스윕.
   const animatedAvg = useAnimatedNumber(hasAvg ? avg : 0);
@@ -507,6 +522,7 @@ function PerfPanelBody({
                           targetPrice={activeComparison.price}
                           baseAvg={avg}
                           compareAvg={compareAvg}
+                          perfComparable={isCompareComparable}
                         />
                       </div>
                       <div className="perf-block-in mt-1 flex min-w-0 flex-wrap items-baseline gap-x-2 gap-y-0.5">
@@ -550,25 +566,32 @@ function PerfPanelBody({
                     </div>
                   </div>
                   {isCompareReady ? (
-                    <div className="mt-1.5 grid grid-cols-[auto_1fr] items-center gap-x-2 gap-y-1">
-                      <span className="text-xs font-black text-slate-500">FPS</span>
-                      <div className="flex items-baseline gap-1 font-black leading-none">
-                        <span data-testid="fps-avg" className="text-base text-slate-400">{Math.round(avg)}</span>
-                        <span className="text-xs text-slate-400">→</span>
-                        <span data-testid="fps-compare-avg" className="text-lg text-brand-blue">{Math.round(compareAvg)}</span>
-                        <span data-testid="fps-compare-delta" className={`rounded-full border px-1 py-0.5 text-[10px] ${deltaBadgeTone(percentDelta(avg, compareAvg))}`}>
-                          {formatSignedPercent(percentDelta(avg, compareAvg))}
-                        </span>
+                    <>
+                      <div className="mt-1.5 grid grid-cols-[auto_1fr] items-center gap-x-2 gap-y-1">
+                        <span className="text-xs font-black text-slate-500">FPS</span>
+                        <div className="flex items-baseline gap-1 font-black leading-none">
+                          <span data-testid="fps-avg" className="text-base text-slate-400">{Math.round(avg)}</span>
+                          <span className="text-xs text-slate-400">→</span>
+                          <span data-testid="fps-compare-avg" className="text-lg text-brand-blue">{Math.round(compareAvg)}</span>
+                          {isCompareComparable ? (
+                            <span data-testid="fps-compare-delta" className={`rounded-full border px-1 py-0.5 text-[10px] ${deltaBadgeTone(percentDelta(avg, compareAvg))}`}>
+                              {formatSignedPercent(percentDelta(avg, compareAvg))}
+                            </span>
+                          ) : null}
+                        </div>
+                        <span className="text-[10px] font-bold text-slate-400">기존</span>
+                        <div className="h-1.5 overflow-hidden rounded-full bg-slate-100">
+                          <div className="h-full rounded-full bg-slate-400" style={{ width: `${Math.max(3, fpsPercent(avg))}%` }} />
+                        </div>
+                        <span className="text-[10px] font-black text-brand-blue">변경</span>
+                        <div className="h-1.5 overflow-hidden rounded-full bg-slate-100">
+                          <div className="perf-bar-grow h-full rounded-full bg-brand-blue" style={{ width: `${Math.max(3, fpsPercent(compareAvg))}%` }} />
+                        </div>
                       </div>
-                      <span className="text-[10px] font-bold text-slate-400">기존</span>
-                      <div className="h-1.5 overflow-hidden rounded-full bg-slate-100">
-                        <div className="h-full rounded-full bg-slate-400" style={{ width: `${Math.max(3, fpsPercent(avg))}%` }} />
-                      </div>
-                      <span className="text-[10px] font-black text-brand-blue">변경</span>
-                      <div className="h-1.5 overflow-hidden rounded-full bg-slate-100">
-                        <div className="perf-bar-grow h-full rounded-full bg-brand-blue" style={{ width: `${Math.max(3, fpsPercent(compareAvg))}%` }} />
-                      </div>
-                    </div>
+                      {isCompareConditionMismatch ? (
+                        <CompareConditionNotice baseEvidence={evidence} compareEvidence={compareEvidence} />
+                      ) : null}
+                    </>
                   ) : (
                     <div className="mt-1.5 text-xs font-bold text-slate-400">
                       {isCompareLoading ? '비교 성능을 계산하고 있어요' : '변경 조합의 참고 자료가 없습니다'}
@@ -723,7 +746,7 @@ function PerfPanelBody({
             </span>
             <span className="text-[10px] font-black">
               <span className={feelTone(avg).text}>{feelLabel(avg)}</span>
-              {isCompareReady && feelLabel(avg) !== feelLabel(compareAvg) ? (
+              {isCompareComparable && feelLabel(avg) !== feelLabel(compareAvg) ? (
                 <span className={feelTone(compareAvg).text}> → {feelLabel(compareAvg)}</span>
               ) : null}
             </span>
@@ -731,18 +754,20 @@ function PerfPanelBody({
 
           {isCompareReady && activeComparison ? (
             <>
-              {/* 기존 → 변경 숫자 + 델타 배지(팝인 모션 유지). */}
+              {/* 기존 → 변경 숫자 + 델타 배지(팝인 모션 유지) — 배지는 같은 측정 조건일 때만 확정 표기한다. */}
               <div className="mt-1.5 flex flex-wrap items-baseline gap-1.5">
                 <span data-testid="fps-avg" className="text-xl font-black text-slate-500">{Math.round(avg)}</span>
                 <span className="text-sm font-black text-slate-400">→</span>
                 <span data-testid="fps-compare-avg" className="text-2xl font-black text-brand-blue">{Math.round(compareAvg)}</span>
-                <span
-                  key={activeComparison.partId}
-                  data-testid="fps-compare-delta"
-                  className={`perf-pop-in rounded-full border px-1.5 py-0.5 text-[10px] font-black ${deltaBadgeTone(percentDelta(avg, compareAvg))}`}
-                >
-                  {formatSignedPercent(percentDelta(avg, compareAvg))}
-                </span>
+                {isCompareComparable ? (
+                  <span
+                    key={activeComparison.partId}
+                    data-testid="fps-compare-delta"
+                    className={`perf-pop-in rounded-full border px-1.5 py-0.5 text-[10px] font-black ${deltaBadgeTone(percentDelta(avg, compareAvg))}`}
+                  >
+                    {formatSignedPercent(percentDelta(avg, compareAvg))}
+                  </span>
+                ) : null}
                 <span className="text-[11px] font-bold text-slate-500">FPS 평균 (참고)</span>
               </div>
               {/* 기존/변경 평균 FPS 게이지 바 2줄 — 단일 모드처럼 0→값 채움, 1% 최저는 채움 위 눈금. */}
@@ -750,6 +775,9 @@ function PerfPanelBody({
                 <FpsCompareGaugeBar label="기존" avg={avg} low={hasLow ? low : undefined} tone="base" />
                 <FpsCompareGaugeBar label="변경" avg={compareAvg} low={hasCompareLow ? compareLow : undefined} tone="changed" />
               </div>
+              {isCompareConditionMismatch ? (
+                <CompareConditionNotice baseEvidence={evidence} compareEvidence={compareEvidence} />
+              ) : null}
             </>
           ) : (
             <>
@@ -820,6 +848,7 @@ function PerfPanelBody({
                           targetPrice={activeComparison.price}
                           baseAvg={avg}
                           compareAvg={compareAvg}
+                          perfComparable={isCompareComparable}
                         />
                       </div>
                       {/* 추가 비용이 이 블록의 결론 — 막대 아래 가장 큰 숫자로 강조하고, 예상 FPS는 보조 텍스트로 받친다. */}
@@ -1441,21 +1470,24 @@ const EFFECT_SCALE_CAP = 100;
 
 // 가격·성능 향상: 가격 변화 %와 성능(FPS 평균) 변화 %를 나란히 — "돈을 더 내면 얼마나 좋아지나"를 한눈에.
 // 비교는 음수(절감·성능 하락)일 수 있어 기준점 0을 트랙 가운데 둔 분기형 막대로 그린다.
+// perfComparable=false(두 근거의 측정 조건이 다름)면 성능 ±%를 확정하지 않고 빈 값(—)으로 둔다.
 function CostEffectBars({
   currentPrice,
   targetPrice,
   baseAvg,
-  compareAvg
+  compareAvg,
+  perfComparable = true
 }: {
   currentPrice?: number;
   targetPrice: number;
   baseAvg: number;
   compareAvg: number;
+  perfComparable?: boolean;
 }) {
   const hasPrice = typeof currentPrice === 'number' && currentPrice > 0 && targetPrice > 0;
   const pricePercent = hasPrice ? percentDelta(currentPrice as number, targetPrice) : null;
-  const perfPercent = percentDelta(baseAvg, compareAvg);
-  const scale = Math.min(EFFECT_SCALE_CAP, Math.max(EFFECT_SCALE_MIN, Math.abs(pricePercent ?? 0), Math.abs(perfPercent)));
+  const perfPercent = perfComparable ? percentDelta(baseAvg, compareAvg) : null;
+  const scale = Math.min(EFFECT_SCALE_CAP, Math.max(EFFECT_SCALE_MIN, Math.abs(pricePercent ?? 0), Math.abs(perfPercent ?? 0)));
 
   return (
     <div className="space-y-1.5">
@@ -1472,8 +1504,8 @@ function CostEffectBars({
         label="성능"
         percent={perfPercent}
         scale={scale}
-        barClass={perfPercent > 0 ? 'bg-emerald-500' : perfPercent < 0 ? 'bg-red-500' : 'bg-slate-300'}
-        textClass={perfPercent > 0 ? 'text-emerald-600' : perfPercent < 0 ? 'text-red-600' : 'text-slate-500'}
+        barClass={perfPercent !== null && perfPercent > 0 ? 'bg-emerald-500' : perfPercent !== null && perfPercent < 0 ? 'bg-red-500' : 'bg-slate-300'}
+        textClass={perfPercent !== null && perfPercent > 0 ? 'text-emerald-600' : perfPercent !== null && perfPercent < 0 ? 'text-red-600' : 'text-slate-500'}
         stagger
       />
     </div>
@@ -1592,6 +1624,7 @@ function presetLabel(preset?: string | null): string {
 }
 
 // evidenceExactness → 사용자 언어(원어 노출 금지). 근거가 얼마나 이 견적에 가까운지.
+// 해상도 폴백(요청과 다른 해상도의 자료)은 동급 기준과 구분해 참고치임을 드러낸다.
 function exactnessLabel(exactness?: string): string {
   switch (exactness) {
     case 'EXACT_PART_AND_RESOLUTION':
@@ -1599,11 +1632,53 @@ function exactnessLabel(exactness?: string): string {
     case 'SAME_CLASS_AND_RESOLUTION':
       return '동급 부품 기준';
     case 'GPU_CLASS_REFERENCE':
-    case 'GPU_CLASS_RESOLUTION_FALLBACK':
       return '동급 그래픽카드 기준';
+    case 'GPU_CLASS_RESOLUTION_FALLBACK':
+      return '다른 해상도 참고치';
     default:
       return '공개 참고 자료';
   }
+}
+
+// 근거 행 선택 — [0] 고정 대신, 요청한 게임·해상도와 실제 일치(match.gameMatched && match.resolutionMatched)하는
+// 첫 행을 우선한다. 일치 행이 없으면 서버 정렬 1순위([0])를 그대로 쓴다(기존·변경 조합 동일 규칙).
+function pickEvidenceRow(rows?: GameFpsEvidence[]): GameFpsEvidence | undefined {
+  if (!rows || rows.length === 0) return undefined;
+  return rows.find((row) => row.match?.gameMatched === true && row.match?.resolutionMatched === true) ?? rows[0];
+}
+
+// 근거 행의 측정 조건을 사용자 언어 한 줄로 — 해상도 · 그래픽 옵션 · 출처.
+function evidenceConditionText(row?: GameFpsEvidence): string {
+  if (!row) return '조건 정보 없음';
+  const parts: string[] = [];
+  if (row.resolution) parts.push(row.resolution);
+  const preset = presetLabel(row.graphicsPreset);
+  if (preset) parts.push(preset);
+  if (row.sourceName) parts.push(row.sourceName);
+  return parts.length > 0 ? parts.join(' · ') : '조건 정보 없음';
+}
+
+// 측정 조건이 다른 두 근거를 확정 비교하지 않는다는 중립 고지 — 두 값은 그대로 두고,
+// 각 조합이 어떤 조건에서 잰 참고치인지 양쪽 조건을 함께 보여준다.
+function CompareConditionNotice({
+  baseEvidence,
+  compareEvidence
+}: {
+  baseEvidence?: GameFpsEvidence;
+  compareEvidence?: GameFpsEvidence;
+}) {
+  return (
+    <div
+      data-testid="fps-compare-mismatch"
+      className="mt-2 rounded-md border border-slate-200 bg-slate-50/70 px-2.5 py-1.5 text-[10px] font-bold text-slate-500"
+    >
+      <div className="font-black text-slate-600">측정 조건이 달라 직접 비교가 어려워요 — 각각의 참고치로만 봐 주세요.</div>
+      <div className="mt-1 flex flex-col gap-0.5">
+        <span data-testid="fps-compare-mismatch-base">기존 · {evidenceConditionText(baseEvidence)}</span>
+        <span data-testid="fps-compare-mismatch-changed">변경 · {evidenceConditionText(compareEvidence)}</span>
+      </div>
+    </div>
+  );
 }
 
 function scoreBadgeTone(score: number) {

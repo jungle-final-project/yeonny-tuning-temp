@@ -2984,6 +2984,180 @@ test('drives the candidate popover: open, dismiss without picking, pick WARN, an
   await expect(page.getByTestId('fps-avg')).toHaveText('130 FPS');
 });
 
+test('suppresses the confirmed FPS delta when the two evidence rows come from different measurement conditions', async ({ page }) => {
+  await loginAsUser(page);
+  const draft = {
+    ...emptyDraft,
+    items: [
+      draftItem('part-perf-cpu', 'CPU', '라이젠 9600X', 300000),
+      draftItem('part-perf-gpu', 'GPU', 'RTX 5060', 500000)
+    ],
+    totalPrice: 800000,
+    itemCount: 2
+  };
+  await page.route('**/api/quote-drafts/current**', async (route) => {
+    await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(draft) });
+  });
+  await page.route('**/api/build-graphs/resolve', async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({ ...buildGraphResponse(), compositeScore: compositeScoreFixture() })
+    });
+  });
+  await page.route('**/api/parts**', async (route) => {
+    const url = new URL(route.request().url());
+    const items = url.searchParams.get('category') === 'GPU'
+      ? [candidatePart('cand-gpu-ti', 'GPU', 'RTX 5060 Ti', { price: 600000 })]
+      : [];
+    await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ items, page: 0, size: 20, total: items.length }) });
+  });
+  // 데이터 어긋남 재현: 기존 조합은 중간 옵션·PC-Builds 근거, 상위 후보(5060 Ti) 조합은 최고 옵션·다른 출처 근거라
+  // 숫자만 보면 하락처럼 보인다 — 프론트는 이때 ±% 확정 델타를 내리면 안 된다.
+  await page.route('**/api/tools/performance/check', async (route) => {
+    const body = JSON.parse(route.request().postData() ?? '{}');
+    const partIds: string[] = Array.isArray(body?.partIds) ? body.partIds : [];
+    const isChangedBuild = partIds.includes('cand-gpu-ti');
+    const evidence = isChangedBuild
+      ? {
+          gameTitle: '배틀그라운드',
+          gameKey: 'pubg',
+          resolution: 'QHD',
+          graphicsPreset: 'TECHBENCH_ULTRA',
+          avgFps: 118,
+          onePercentLowFps: 90,
+          sourceName: 'TechBench Lab',
+          confidence: 'MEDIUM',
+          match: { evidenceExactness: 'GPU_CLASS_REFERENCE', gameMatched: true, resolutionMatched: true }
+        }
+      : {
+          gameTitle: '배틀그라운드',
+          gameKey: 'pubg',
+          resolution: 'QHD',
+          graphicsPreset: 'PC_BUILDS_MEDIUM',
+          avgFps: 130,
+          onePercentLowFps: 96,
+          sourceName: 'PC-Builds FPS calculator',
+          confidence: 'MEDIUM',
+          match: { evidenceExactness: 'GPU_CLASS_REFERENCE', gameMatched: true, resolutionMatched: true }
+        };
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({ tool: 'performance', status: 'PASS', confidence: 'HIGH', summary: '', details: { gameFpsEvidence: [evidence] } })
+    });
+  });
+
+  await page.goto('/self-quote');
+
+  const panel = page.getByTestId('quote-performance-panel');
+  await expect(panel.getByTestId('fps-avg')).toHaveText('130 FPS');
+
+  // 상위 후보를 골라 비교를 켠다 — 근거 조건(프리셋·출처)이 달라 확정 비교가 불가한 조합.
+  await panel.getByTestId('perf-candidate-select').click();
+  await panel.getByTestId('perf-candidate-popover').getByTestId('perf-candidate-option-0').click();
+
+  // 두 값은 숨기지 않고 그대로 보여준다.
+  await expect(panel.getByTestId('fps-avg')).toHaveText('130');
+  await expect(panel.getByTestId('fps-compare-avg')).toHaveText('118');
+  // 확정 하락(-9%) 배지는 내리지 않는다 — 조건이 다른 두 참고치라서.
+  await expect(panel.getByTestId('fps-compare-delta')).toHaveCount(0);
+  // 대신 중립 고지 + 양쪽 측정 조건(해상도·그래픽 옵션·출처)을 함께 보여준다.
+  const mismatch = panel.getByTestId('fps-compare-mismatch');
+  await expect(mismatch).toBeVisible();
+  await expect(mismatch).toContainText('측정 조건이 달라 직접 비교가 어려워요');
+  await expect(mismatch.getByTestId('fps-compare-mismatch-base')).toContainText('QHD · 중간 옵션 · PC-Builds FPS calculator');
+  await expect(mismatch.getByTestId('fps-compare-mismatch-changed')).toContainText('QHD · 최고 옵션 · TechBench Lab');
+  // 가격·성능 향상 블록도 성능 ±%를 확정하지 않는다(빈 값) — 가격 변화는 실측이라 그대로 표시.
+  await expect(panel.getByTestId('effect-bar-perf')).toHaveAttribute('data-effect-direction', 'empty');
+  await expect(panel.getByTestId('effect-bar-perf')).toContainText('—');
+  await expect(panel.getByTestId('effect-bar-price')).toHaveAttribute('data-effect-direction', 'up');
+  await expect(panel.getByTestId('effect-bar-price')).toContainText('+20%');
+});
+
+test('prefers the evidence row matching the requested resolution over an unmatched fallback first row', async ({ page }) => {
+  await loginAsUser(page);
+  const draft = {
+    ...emptyDraft,
+    items: [
+      draftItem('part-perf-cpu', 'CPU', '라이젠 9600X', 300000),
+      draftItem('part-perf-gpu', 'GPU', 'RTX 5060', 500000)
+    ],
+    totalPrice: 800000,
+    itemCount: 2
+  };
+  await page.route('**/api/quote-drafts/current**', async (route) => {
+    await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(draft) });
+  });
+  await page.route('**/api/build-graphs/resolve', async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({ ...buildGraphResponse(), compositeScore: compositeScoreFixture() })
+    });
+  });
+  await page.route('**/api/parts**', async (route) => {
+    const url = new URL(route.request().url());
+    const items = url.searchParams.get('category') === 'GPU'
+      ? [candidatePart('cand-gpu-strong', 'GPU', 'RTX 5070', { price: 700000 })]
+      : [];
+    await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ items, page: 0, size: 20, total: items.length }) });
+  });
+  // 기존 조합의 [0]은 요청 해상도(QHD)와 다른 4K 폴백 행 — [0] 고정이면 88이 나오지만,
+  // 요청 조건과 일치하는 2번째 행(QHD 130)을 우선 선택해야 한다. 변경 조합은 일치 행 하나만 내려준다.
+  await page.route('**/api/tools/performance/check', async (route) => {
+    const body = JSON.parse(route.request().postData() ?? '{}');
+    const partIds: string[] = Array.isArray(body?.partIds) ? body.partIds : [];
+    const isChangedBuild = partIds.includes('cand-gpu-strong');
+    const matchedRow = (avgFps: number, onePercentLowFps: number) => ({
+      gameTitle: '배틀그라운드',
+      gameKey: 'pubg',
+      resolution: 'QHD',
+      graphicsPreset: 'PC_BUILDS_MEDIUM',
+      avgFps,
+      onePercentLowFps,
+      sourceName: 'PC-Builds FPS calculator',
+      confidence: 'MEDIUM',
+      match: { evidenceExactness: 'GPU_CLASS_REFERENCE', gameMatched: true, resolutionMatched: true }
+    });
+    const gameFpsEvidence = isChangedBuild
+      ? [matchedRow(152, 118)]
+      : [
+          {
+            gameTitle: '배틀그라운드',
+            gameKey: 'pubg',
+            resolution: '4K',
+            graphicsPreset: 'PC_BUILDS_MEDIUM',
+            avgFps: 88,
+            onePercentLowFps: 64,
+            sourceName: 'PC-Builds FPS calculator',
+            confidence: 'LOW',
+            match: { evidenceExactness: 'GPU_CLASS_RESOLUTION_FALLBACK', gameMatched: true, resolutionMatched: false }
+          },
+          matchedRow(130, 96)
+        ];
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({ tool: 'performance', status: 'PASS', confidence: 'HIGH', summary: '', details: { gameFpsEvidence } })
+    });
+  });
+
+  await page.goto('/self-quote');
+
+  // 단일 표시부터 폴백 행(88)이 아니라 요청 조건 일치 행(130)을 쓴다.
+  const panel = page.getByTestId('quote-performance-panel');
+  await expect(panel.getByTestId('fps-avg')).toHaveText('130 FPS');
+
+  // 상위 후보 비교 — 양쪽 모두 일치 행(QHD·같은 프리셋·같은 출처)이라 확정 델타가 그대로 나온다.
+  await panel.getByTestId('perf-candidate-select').click();
+  await panel.getByTestId('perf-candidate-popover').getByTestId('perf-candidate-option-0').click();
+  await expect(panel.getByTestId('fps-avg')).toHaveText('130');
+  await expect(panel.getByTestId('fps-compare-avg')).toHaveText('152');
+  await expect(panel.getByTestId('fps-compare-delta')).toHaveText('+17%');
+  await expect(panel.getByTestId('fps-compare-mismatch')).toHaveCount(0);
+});
+
 test('highlights WARN and FAIL slots with edges and blocks purchase on FAIL', async ({ page }) => {
   await loginAsUser(page);
   const saveRequests: unknown[] = [];
