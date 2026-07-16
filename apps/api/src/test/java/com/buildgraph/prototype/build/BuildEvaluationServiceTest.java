@@ -9,19 +9,20 @@ import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 import com.buildgraph.prototype.common.MockData;
+import com.buildgraph.prototype.part.query.PartQuery;
+import com.buildgraph.prototype.part.tool.ToolBuildPart;
 import com.buildgraph.prototype.part.tool.ToolCheckService;
 import java.util.List;
 import java.util.Map;
 import org.junit.jupiter.api.Test;
-import org.springframework.jdbc.core.JdbcTemplate;
 
 class BuildEvaluationServiceTest {
     @Test
     void evaluatesRecommendationSnapshotWithoutRepeatingToolCheck() {
-        JdbcTemplate jdbcTemplate = mock(JdbcTemplate.class);
+        PartQuery partQuery = mock(PartQuery.class);
         ToolCheckService toolCheckService = mock(ToolCheckService.class);
         BuildEvaluationService service = new BuildEvaluationService(
-                jdbcTemplate,
+                partQuery,
                 toolCheckService,
                 new BuildCompositeScoreService(),
                 new BuildScoreAdviceService()
@@ -51,22 +52,19 @@ class BuildEvaluationServiceTest {
     }
 
     @Test
-    void currentDraftParsesPostgresJsonAttributesBeforeRunningTools() {
-        JdbcTemplate jdbcTemplate = mock(JdbcTemplate.class);
+    void currentDraftUsesPartQueryBeforeRunningTools() {
+        PartQuery partQuery = mock(PartQuery.class);
         ToolCheckService toolCheckService = mock(ToolCheckService.class);
-        when(jdbcTemplate.queryForList(org.mockito.ArgumentMatchers.anyString(), eq(42L)))
-                .thenReturn(List.of(Map.of("internal_id", 7L)));
-        when(jdbcTemplate.queryForList(org.mockito.ArgumentMatchers.anyString(), eq(7L)))
-                .thenReturn(List.of(Map.of(
-                        "internal_id", 31L,
-                        "part_id", "psu-1500",
-                        "category", "PSU",
-                        "name", "Corsair HX1500i",
-                        "manufacturer", "Corsair",
-                        "current_price", 700_000,
-                        "quantity", 1,
-                        "attributes", "{\"capacityW\":1500,\"wattage\":1500,\"toolReady\":true}"
-                )));
+        when(partQuery.partsByActiveDraftUserId(42L)).thenReturn(List.of(new ToolBuildPart(
+                31L,
+                "psu-1500",
+                "PSU",
+                "Corsair HX1500i",
+                "Corsair",
+                700_000,
+                Map.of("capacityW", 1500, "wattage", 1500, "toolReady", true),
+                1
+        )));
         when(toolCheckService.checkBuild(anyList(), anyInt())).thenAnswer(invocation -> {
             List<?> parts = invocation.getArgument(0);
             com.buildgraph.prototype.part.tool.ToolBuildPart psu =
@@ -83,7 +81,7 @@ class BuildEvaluationServiceTest {
             ));
         });
         BuildEvaluationService service = new BuildEvaluationService(
-                jdbcTemplate,
+                partQuery,
                 toolCheckService,
                 new BuildCompositeScoreService(),
                 new BuildScoreAdviceService()

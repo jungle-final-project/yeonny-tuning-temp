@@ -21,6 +21,7 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Component;
 
 @Component
+/* 캐싱 정책?에 관여하는 컴포넌트 입니다 */
 public class PartQueryCachedLoader {
 
     public static final String CACHE_NAME = "tool-part";
@@ -85,23 +86,26 @@ public class PartQueryCachedLoader {
         return normalizedRequestIds.stream().map(loadedParts::get).toList();
     }
 
+    /* 한꺼번에 batch로 가져오는 query 문 */
     private List<ToolBuildPart> findAllByPublicIds(List<String> partIds) {
         dbQueryCount.incrementAndGet();
         String placeholders = String.join(", ", Collections.nCopies(partIds.size(), "?::uuid"));
         String sql = """
                 SELECT id AS internal_id,
-                       public_id::text AS id,
-                       category,
-                       name,
-                       manufacturer,
-                       price,
-                       attributes,
-                       1 AS quantity
+                        public_id::text AS id,
+                        category,
+                        name,
+                        manufacturer,
+                        price,
+                        attributes,
+                        1 AS quantity
                 FROM parts
                 WHERE public_id IN (%s)
-                  AND status = 'ACTIVE'
-                  AND deleted_at IS NULL
+                    AND status = 'ACTIVE'
+                    AND deleted_at IS NULL
                 """.formatted(placeholders);
+
+                /* sql 본문을 삽입해 실제 조회 수행 */
         return jdbcTemplate.queryForList(Objects.requireNonNull(sql), partIds.toArray()).stream()
                 .map(PartQueryUtil::toolPart)
                 .toList();
@@ -127,10 +131,12 @@ public class PartQueryCachedLoader {
         );
     }
 
+    /* db 접근 카운트 불러오기 */
     public long dbQueryCount() {
         return dbQueryCount.get();
     }
 
+    /* db 접근 카운트 초기화하기 */
     public void resetDbQueryCount() {
         dbQueryCount.set(0);
     }

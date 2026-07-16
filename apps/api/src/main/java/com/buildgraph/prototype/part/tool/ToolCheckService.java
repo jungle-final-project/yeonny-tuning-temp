@@ -6,7 +6,6 @@ import com.buildgraph.prototype.part.benchmark.BenchmarkQueryCached;
 import com.buildgraph.prototype.part.query.PartQuery;
 import com.buildgraph.prototype.part.query.PartQueryCachedLoader;
 import java.util.ArrayList;
-import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;

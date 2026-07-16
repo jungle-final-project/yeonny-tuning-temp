@@ -1,2 +1,4 @@
 reports/
 results/
+.env.*
+!.env.example
