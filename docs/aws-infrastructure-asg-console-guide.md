@@ -1103,8 +1103,9 @@ CPU target 숫자를 근거 없이 고정하지 않는다. CPU가 낮아도 DB c
 ## 17. Instance Refresh 배포
 
 현재 BuildGraph는 WebSocket·PC Agent cross-instance 공유를 구현하지 않는다.
-따라서 Web ASG는 계속 `Min 1 / Desired 1 / Max 1`로 유지하고, 사용자
-트래픽이 구·신 ASG 인스턴스에 동시에 분산되는 배포를 허용하지 않는다.
+Web ASG는 계속 `Min 1 / Desired 1 / Max 1`로 유지한다. 다만 배포 중
+`100/200` Instance Refresh로 구·신 인스턴스가 잠시 동시에 요청을 받는
+상태는 개발·데모 환경의 승인된 예외로 허용한다.
 
 ### 17.1 Workflow 역할 분리
 
@@ -1128,26 +1129,22 @@ CPU target 숫자를 근거 없이 고정하지 않는다. CPU가 낮아도 DB c
 | `service` | `api` 또는 `xgb-reranker` |
 | `git_sha` | 현재 `origin/main`의 정확한 40자리 SHA |
 | `image_tag` | `git_sha`와 동일한 immutable ECR tag |
-| `traffic_isolated` | CloudFront API·WS가 수동 Green origin으로 격리됐다는 확인 |
-
-`traffic_isolated=false`이면 AWS resource를 변경하기 전에 중단한다.
 
 ### 17.2 Release 순서
 
-1. CloudFront `/api/*`, `/ws/*`를 기존 수동 Green origin으로 전환한다.
-2. Distribution이 `Deployed`가 될 때까지 기다린다.
-3. 수동 Green에서 API와 WebSocket smoke test를 통과시킨다.
-4. `Release Green Web ASG`를 실행한다.
-5. 선택한 ECR SHA tag를 immutable digest URI로 변환한다.
-6. 기존 release manifest에서 반대편 API/XGB image와 Nginx digest를 보존한다.
-7. Secret이 없는 release manifest를 User data에 포함한 숫자형 Launch
+1. 현재 `/api/health`, WebSocket, PC Agent 상태를 기록한다.
+2. CloudFront `/api/*`, `/ws/*`는 ALB origin을 계속 사용한다.
+3. `Release Green Web ASG`를 실행한다.
+4. 선택한 ECR SHA tag를 immutable digest URI로 변환한다.
+5. 기존 release manifest에서 반대편 API/XGB image와 Nginx digest를 보존한다.
+6. Secret이 없는 release manifest를 User data에 포함한 숫자형 Launch
    Template version을 생성한다.
-8. 새 숫자 version을 `DesiredConfiguration`으로 지정해 Instance Refresh를
+7. 새 숫자 version을 `DesiredConfiguration`으로 지정해 Instance Refresh를
    시작한다.
-9. Refresh와 Target health가 모두 정상인지 확인한다.
-10. CloudFront `/api/*`를 ALB origin으로 복귀하고 API smoke test를 수행한다.
-11. `/ws/*`를 ALB origin으로 복귀하고 WebSocket `101`, AUTH, push,
-    재연결을 확인한다.
+8. 기존 Target과 신규 Target이 잠시 함께 등록되는 것을 관찰한다.
+9. Refresh 완료 후 신규 Target 한 대만 Healthy인지 확인한다.
+10. API smoke test를 수행한다.
+11. WebSocket과 PC Agent의 재연결·실시간 기능을 확인한다.
 
 Release helper는 다음 파일이다.
 
@@ -1155,16 +1152,12 @@ Release helper는 다음 파일이다.
 tools/rollout_green_web_asg_release.sh
 ```
 
-기본 실행은 읽기 전용이다. 실제 변경에는 `--apply`와 다음 환경변수가
-동시에 필요하다.
-
-```text
-BUILDGRAPH_CLOUDFRONT_MANUAL_GREEN_CONFIRMED=true
-```
+기본 실행은 읽기 전용이다. `--apply`를 지정한 경우에만 Launch Template과
+Instance Refresh를 변경한다.
 
 ### 17.3 Instance Refresh 정책
 
-CloudFront가 수동 Green으로 격리된 상태에서만 다음 값을 사용한다.
+CloudFront 격리 없이 다음 값을 사용한다.
 
 ```text
 Minimum healthy percentage: 100
@@ -1175,8 +1168,15 @@ Launch Template: DesiredConfiguration의 특정 숫자 version
 ```
 
 Minimum healthy 100%는 새 인스턴스를 먼저 시작한 뒤 이전 인스턴스를
-종료한다. Desired가 1이어도 잠시 두 대가 실행될 수 있으므로 CloudFront
-격리 확인 없이 실행하지 않는다.
+종료한다. Desired가 1이어도 잠시 두 대가 실행되며 ALB가 두 Target에
+요청을 분산할 수 있다.
+
+이 시간의 HTTP 가용성은 유지하지만 다음 위험을 승인된 예외로 수용한다.
+
+- WebSocket 연결과 push가 서로 다른 인스턴스에 위치할 수 있음
+- PC Agent 연결과 진단 요청이 다른 인스턴스로 분리될 수 있음
+- 배포 전·후 API image가 짧은 시간 동시에 요청을 처리함
+- 클라이언트 재연결 또는 REST polling fallback이 필요할 수 있음
 
 Refresh 중 다음을 확인한다.
 
@@ -1188,9 +1188,10 @@ Refresh 중 다음을 확인한다.
 - RDS connection
 - ASG Activity와 Refresh percentage
 
-Refresh 실패 시 이전 숫자 Launch Template version으로 rollback한다. Refresh가
-성공했더라도 Target health 검증이 실패하면 rollback을 수행한다. 기존 AMI와
-이전 Launch Template version을 삭제하지 않는다.
+진행 중인 Refresh가 실패하면 이전 숫자 Launch Template version으로
+rollback한다. Refresh가 이미 성공했지만 Target health 검증이 실패하면 이전
+version을 `DesiredConfiguration`으로 지정한 reverse Refresh를 새로 시작한다.
+기존 AMI와 이전 Launch Template version을 삭제하지 않는다.
 
 ### 17.4 GitHub OIDC Role 권한
 
