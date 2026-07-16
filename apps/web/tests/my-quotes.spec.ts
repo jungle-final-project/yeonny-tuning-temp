@@ -112,7 +112,9 @@ function compositeScoreFixture(score: number, label: string) {
     components: [
       { key: 'performance', label: '성능', score: Math.round(score * 0.43), maxScore: 430, percent: 80, summary: '성능 참고' },
       { key: 'compatibility', label: '호환·장착 안전성', score: 220, maxScore: 220, percent: 100, summary: '호환 통과' },
-      { key: 'balance', label: '병목·여유 균형', score: 130, maxScore: 160, percent: 81, summary: '균형 참고' }
+      { key: 'balance', label: '병목·여유 균형', score: 130, maxScore: 160, percent: 81, summary: '균형 참고' },
+      { key: 'upgrade', label: '확장·운영 여유', score: 90, maxScore: 110, percent: 82, summary: '확장 참고' },
+      { key: 'evidence', label: '근거 신뢰도', score: 70, maxScore: 80, percent: 88, summary: '근거 참고' }
     ],
     caps: [],
     requestFit: {
@@ -241,14 +243,32 @@ async function openMyQuotesAsUser(page: Page, assemblyItems: unknown[] = []) {
       body: JSON.stringify({ items: priceAlerts, page: 0, size: 20, total: priceAlerts.length })
     });
   });
-  // 이전 CPU/GPU 개별 점수 endpoint는 더 이상 비교 대표점수에 쓰지 않는다.
+  // CPU/GPU 개별 점수는 대표점수에 쓰지 않고, 기존 게임 FPS 근거만 상단 비교에 재사용한다.
   await page.route('**/api/tools/performance/check', async (route) => {
+    const body = JSON.parse(route.request().postData() ?? '{}');
+    const partIds = (body.partIds ?? []).join('|');
+    const isWorkstation = partIds.includes('part-gpu-5080');
+    const avgFps = isWorkstation ? 156 : 142;
     await route.fulfill({
       status: 200,
       contentType: 'application/json',
       body: JSON.stringify({
         tool: 'performance', status: 'PASS', confidence: 'HIGH', summary: '',
-        details: { cpuBenchmarkScore: 72, gpuBenchmarkScore: 78, benchmarkSource: 'benchmark_summaries', gameFpsEvidence: [] }
+        details: {
+          cpuBenchmarkScore: isWorkstation ? 73 : 72,
+          gpuBenchmarkScore: isWorkstation ? 92 : 78,
+          benchmarkSource: 'benchmark_summaries',
+          gameFpsEvidence: [{
+            gameTitle: '배틀그라운드',
+            gameKey: 'pubg',
+            resolution: 'QHD',
+            graphicsPreset: 'HIGH',
+            avgFps,
+            onePercentLowFps: avgFps - 30,
+            sourceName: 'fixture',
+            confidence: 'HIGH'
+          }]
+        }
       })
     });
   });
@@ -331,8 +351,15 @@ test('shows saved quotes, actionable price alert setup, and alert progress', asy
   await expect(perfMatrix.getByTestId('quote-summary-A')).toContainText('854점');
   await expect(perfMatrix.getByTestId('quote-summary-B')).toContainText('3,140,000원');
   await expect(perfMatrix.getByTestId('quote-summary-B')).toContainText('924점');
-  await expect(perfMatrix.getByTestId('quote-compare-price-delta')).toContainText('A가 960,000원 저렴');
-  await expect(perfMatrix.getByTestId('quote-compare-score-delta')).toContainText('B가 70점 높음');
+  await expect(perfMatrix.getByTestId('quote-compare-recommendation')).toContainText('B 견적이 내 조건에 더 적합합니다');
+  await expect(perfMatrix.getByTestId('quote-compare-recommendation')).toContainText('B가 종합 점수 70점 더 높아 성능 우위가 분명합니다.');
+  await expect(perfMatrix.getByTestId('quote-compare-price-delta')).toContainText('A가 더 저렴');
+  await expect(perfMatrix.getByTestId('quote-compare-score-delta')).toContainText('B가 더 높음');
+  await expect(perfMatrix.getByTestId('quote-compare-fps-A')).toContainText('142 FPS');
+  await expect(perfMatrix.getByTestId('quote-compare-fps-B')).toContainText('156 FPS');
+  await expect(perfMatrix.getByTestId('quote-compare-fps-delta')).toContainText('B가 14 FPS 더 높음');
+  await expect(perfMatrix.getByTestId('quote-score-policy')).toContainText('성능 43%');
+  await expect(perfMatrix.getByTestId('quote-score-policy')).toContainText('근거 신뢰도 8%');
   // 수치가 있는 부품만 동일 색상 상대 막대를 사용한다.
   await expect(perfMatrix.getByTestId('quote-compare-bar-CPU-A')).toContainText('72점');
   await expect(perfMatrix.getByTestId('quote-compare-bar-GPU-B')).toContainText('92점');

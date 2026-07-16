@@ -1,14 +1,14 @@
 import { FormEvent, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useMutation, useQueries, useQuery, useQueryClient } from '@tanstack/react-query';
-import { ArrowDown, ArrowUp, Check, ClipboardList, Copy, FileText, GitBranch, Pencil, PencilLine, Save, ShoppingBag, Target, Trash2, X } from 'lucide-react';
+import { ArrowDown, ArrowUp, Check, ClipboardList, Copy, FileText, Gauge, GitBranch, Pencil, PencilLine, Save, ShoppingBag, Target, Trash2, Trophy, X } from 'lucide-react';
 import { Panel, Screen, StateMessage } from '../../../components/ui';
 import { applyAiBuildToQuoteDraft } from '../../parts/partsApi';
 import { listAssemblyRequests } from '../../parts/assemblyApi';
 import { QuotePerformancePanel } from '../../parts/components/slot-board/QuotePerformancePanel';
 import type { BuildCompositeScore, PartCategory } from '../aiSelection';
 import { BuildDependencyGraph } from '../components/BuildDependencyGraph';
-import { createQuotePriceAlert, deleteBuild, getBuildHistory, getPriceAlerts, renameBuild, resolveBuildGraph, type PriceAlert } from '../quoteApi';
+import { checkBuildPerformance, createQuotePriceAlert, deleteBuild, getBuildHistory, getPriceAlerts, renameBuild, resolveBuildGraph, type GameFpsEvidence, type PriceAlert } from '../quoteApi';
 import type { BuildItem, BuildSummary } from '../types';
 
 type SavedPartOption = {
@@ -538,11 +538,18 @@ function SavedBuildCard({
 
 // 저장 견적 비교: 선택 순서대로 A/B를 고정하고 기존 견적·그래프 응답만으로 대칭 비교한다.
 const COMPARE_CATEGORY_ORDER = ['CPU', 'MOTHERBOARD', 'RAM', 'GPU', 'STORAGE', 'PSU', 'CASE', 'COOLER'];
+const COMPARE_SCORE_SIMILARITY_PERCENT = 3;
+const COMPARE_FPS_GAME = { label: '배그', query: 'pubg' };
+const COMPARE_FPS_RESOLUTION = { label: 'QHD', query: 'qhd' };
+const COMPARE_FPS_SCALE_BASE = 165;
 
 type ComparisonColumn = {
   build: BuildSummary;
   compositeScore: BuildCompositeScore | null;
   performanceDetails: Record<string, unknown>;
+  fpsEvidence: GameFpsEvidence | null;
+  isFpsLoading: boolean;
+  isFpsError: boolean;
   isLoading: boolean;
   isError: boolean;
 };
@@ -560,12 +567,6 @@ type CategoryComparison = {
   metaA: string[];
   metaB: string[];
   samePart: boolean;
-};
-
-type ComparisonOutcome = {
-  prefix: string;
-  emphasis?: string;
-  tone: 'positive' | 'neutral' | 'muted';
 };
 
 function itemsForCategory(build: BuildSummary, category: string): BuildItem[] {
@@ -608,6 +609,23 @@ function SavedBuildsComparison({ builds }: { builds: BuildSummary[] }) {
       };
     })
   });
+  const fpsResults = useQueries({
+    queries: selectedBuilds.map((build) => {
+      const performancePartIds = quoteDraftItemsForBuild(build)
+        .filter((item) => item.category === 'CPU' || item.category === 'GPU')
+        .map((item) => item.partId);
+      return {
+        queryKey: ['saved-build-fps', build.id, [...performancePartIds].sort().join(','), COMPARE_FPS_GAME.query, COMPARE_FPS_RESOLUTION.query],
+        queryFn: () => checkBuildPerformance({
+          partIds: performancePartIds,
+          game: COMPARE_FPS_GAME.query,
+          resolution: COMPARE_FPS_RESOLUTION.query
+        }),
+        enabled: performancePartIds.length > 0,
+        staleTime: 5 * 60 * 1000
+      };
+    })
+  });
 
   if (builds.length === 0) {
     return null;
@@ -625,11 +643,15 @@ function SavedBuildsComparison({ builds }: { builds: BuildSummary[] }) {
 
   const columns = selectedBuilds.map((build, index) => {
     const result = perfResults[index];
+    const fpsResult = fpsResults[index];
     const compositeScore = result?.data?.compositeScore ?? null;
     return {
       build,
       compositeScore,
       performanceDetails: performanceDetails(result?.data),
+      fpsEvidence: validFpsEvidence(fpsResult?.data?.details?.gameFpsEvidence),
+      isFpsLoading: fpsResult?.isLoading ?? false,
+      isFpsError: fpsResult?.isError ?? false,
       isLoading: result?.isLoading ?? false,
       isError: result?.isError ?? false
     } satisfies ComparisonColumn;
@@ -694,17 +716,28 @@ function SavedBuildComparisonResult({ columnA, columnB }: { columnA: ComparisonC
   const categories = COMPARE_CATEGORY_ORDER.filter((category) =>
     itemsForCategory(columnA.build, category).length > 0 || itemsForCategory(columnB.build, category).length > 0
   );
-  const scoreA = columnA.compositeScore?.score;
-  const scoreB = columnB.compositeScore?.score;
-  const scoreComparison = typeof scoreA === 'number' && typeof scoreB === 'number' ? scoreA - scoreB : 0;
 
   return (
     <div className="mt-4 space-y-4">
-      <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_minmax(260px,0.9fr)_minmax(0,1fr)]">
-        <QuoteSummaryCard label="A" column={columnA} isHigherScore={scoreComparison > 0} />
-        <ComparisonDeltaCard columnA={columnA} columnB={columnB} />
-        <QuoteSummaryCard label="B" column={columnB} isHigherScore={scoreComparison < 0} />
+      <div className="grid grid-cols-2 gap-3 lg:grid-cols-[minmax(0,1fr)_minmax(0,2fr)_minmax(0,1fr)]">
+        <div className="order-2 min-w-0 lg:order-1">
+          <QuoteSummaryCard label="A" column={columnA} />
+        </div>
+        <div className="order-1 col-span-2 min-w-0 lg:order-2 lg:col-span-1">
+          <RecommendationSummaryCard columnA={columnA} columnB={columnB} />
+        </div>
+        <div className="order-3 min-w-0">
+          <QuoteSummaryCard label="B" column={columnB} />
+        </div>
       </div>
+
+      <div className="grid gap-3 md:grid-cols-3">
+        <PriceDifferenceCard columnA={columnA} columnB={columnB} />
+        <ScoreDifferenceCard columnA={columnA} columnB={columnB} />
+        <GamePerformanceDifferenceCard columnA={columnA} columnB={columnB} />
+      </div>
+
+      <ScorePolicyNote columnA={columnA} columnB={columnB} />
 
       <div className="overflow-hidden rounded-lg border border-slate-200 bg-white">
         <div className="hidden grid-cols-[minmax(0,1fr)_132px_76px_132px_minmax(0,1fr)] items-center border-b border-slate-200 bg-slate-50 px-4 py-2 text-center text-[11px] font-black text-slate-500 md:grid">
@@ -735,71 +768,150 @@ function SavedBuildComparisonResult({ columnA, columnB }: { columnA: ComparisonC
   );
 }
 
-function QuoteSummaryCard({ label, column, isHigherScore }: { label: 'A' | 'B'; column: ComparisonColumn; isHigherScore: boolean }) {
-  const score = column.compositeScore;
+function QuoteSummaryCard({ label, column }: { label: 'A' | 'B'; column: ComparisonColumn }) {
+  const isA = label === 'A';
   return (
-    <article data-testid={`quote-summary-${label}`} className={`relative isolate rounded-lg border border-[#DE6C2D]/35 bg-white px-4 py-3 shadow-sm ${isHigherScore ? 'shadow-[0_0_18px_rgba(222,108,45,0.16)]' : ''}`}>
-      {isHigherScore ? <span aria-hidden="true" className="pointer-events-none absolute -inset-1 -z-10 rounded-xl bg-[#DE6C2D]/10 blur-md animate-pulse" /> : null}
-      <div className="grid h-full grid-cols-[auto_minmax(0,1fr)_minmax(0,1fr)] items-center gap-3">
-        <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[#DE6C2D] text-base font-black text-white">{label}</span>
-        <div className="min-w-0 self-center">
-          <div className="text-[10px] font-bold text-slate-400">총 견적 금액</div>
-          <div className="mt-1 text-lg font-black tracking-tight text-commerce-ink">{column.build.totalPrice.toLocaleString('ko-KR')}원</div>
-        </div>
-        <div className="min-w-0 self-center border-l border-slate-200 pl-3">
-          <div className="text-[10px] font-bold text-slate-400">종합 점수</div>
-          <ScoreValue column={column} isHigherScore={isHigherScore} />
+    <article data-testid={`quote-summary-${label}`} className={`h-full rounded-lg border bg-white px-3 py-4 shadow-sm sm:px-4 ${isA ? 'border-[#DE6C2D]/35' : 'border-[#3576CA]/35'}`}>
+      <div className="flex min-w-0 items-center gap-2.5">
+        <span className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-base font-black text-white ${isA ? 'bg-[#DE6C2D]' : 'bg-[#3576CA]'}`}>{label}</span>
+        <div className="min-w-0">
+          <div className="truncate text-sm font-black text-commerce-ink" title={displayBuildName(column.build)}>{displayBuildName(column.build)}</div>
+          <div className="mt-0.5 text-[10px] font-bold text-slate-400">총 견적 금액</div>
         </div>
       </div>
+      <div className="mt-3 break-all text-lg font-black tracking-tight text-commerce-ink sm:text-xl">{column.build.totalPrice.toLocaleString('ko-KR')}원</div>
+      <div className="my-3 border-t border-slate-200" />
+      <div className="text-[11px] font-bold text-slate-500">종합 점수</div>
+      <ScoreValue column={column} label={label} />
     </article>
   );
 }
 
-function ScoreValue({ column, isHigherScore }: { column: ComparisonColumn; isHigherScore: boolean }) {
+function ScoreValue({ column, label }: { column: ComparisonColumn; label: 'A' | 'B' }) {
   if (column.isLoading) return <div className="mt-1 h-6 w-20 animate-pulse rounded bg-slate-200" />;
   if (column.isError) return <div className="mt-1 text-xs font-black text-slate-500">조회 실패</div>;
   if (!column.compositeScore) return <div className="mt-1 text-xs font-black text-slate-500">자료 없음</div>;
   return (
-    <div className={`mt-1 text-lg font-black tracking-tight ${isHigherScore ? 'text-red-600' : 'text-commerce-ink'}`}>
-      {column.compositeScore.score.toLocaleString('ko-KR')}점
-      <span className="ml-1 text-[10px] font-bold text-slate-400">/ {column.compositeScore.maxScore.toLocaleString('ko-KR')}</span>
+    <div className="mt-1 break-words text-xl font-black tracking-tight text-commerce-ink sm:text-2xl">
+      <span className={label === 'A' ? 'text-[#DE6C2D]' : 'text-[#3576CA]'}>{column.compositeScore.score.toLocaleString('ko-KR')}</span>점
+      <span className="ml-1 whitespace-nowrap text-[10px] font-bold text-slate-400">/ {column.compositeScore.maxScore.toLocaleString('ko-KR')}</span>
     </div>
   );
 }
 
-function ComparisonDeltaCard({ columnA, columnB }: { columnA: ComparisonColumn; columnB: ComparisonColumn }) {
-  const price = priceDeltaOutcome(columnA.build.totalPrice, columnB.build.totalPrice);
-  const score = scoreDeltaOutcome(columnA, columnB);
+function RecommendationSummaryCard({ columnA, columnB }: { columnA: ComparisonColumn; columnB: ComparisonColumn }) {
+  const recommendation = comparisonRecommendation(columnA, columnB);
+  const winnerClass = recommendation.winner === 'A' ? 'text-[#DE6C2D]' : 'text-[#3576CA]';
   return (
-    <article className="flex min-h-[116px] items-center justify-center rounded-lg border border-slate-200 bg-slate-50/70 px-4 py-3 shadow-sm">
-      <div className="w-full max-w-[260px] space-y-3">
-        <ComparisonResultLine kind="price" testId="quote-compare-price-delta" outcome={price} />
-        <ComparisonResultLine kind="score" testId="quote-compare-score-delta" outcome={score} />
-        <p className="pt-0.5 text-center text-[10px] font-bold text-slate-400">가격·성능은 독립 비교</p>
+    <article data-testid="quote-compare-recommendation" className="flex h-full min-h-[190px] items-center rounded-lg border border-slate-200 bg-white px-4 py-5 text-center shadow-sm sm:px-6">
+      <div className="mx-auto min-w-0 max-w-2xl">
+        <div className="inline-flex items-center gap-1.5 rounded-full bg-slate-900 px-3 py-1.5 text-xs font-black text-white">
+          <Trophy aria-hidden="true" size={15} strokeWidth={2.5} />
+          추천 결과
+        </div>
+        <h3 className="mt-3 break-keep text-xl font-black leading-tight text-commerce-ink sm:text-2xl">
+          <span className={winnerClass}>{recommendation.winner} 견적</span>이 내 조건에 더 적합합니다
+        </h3>
+        <p title={recommendation.description} className="mt-4 line-clamp-1 break-keep text-xs font-semibold leading-5 text-slate-600 sm:text-sm">{recommendation.description}</p>
       </div>
     </article>
   );
 }
 
-function ComparisonResultLine({ kind, testId, outcome }: { kind: 'price' | 'score'; testId: string; outcome: ComparisonOutcome }) {
-  const Icon = kind === 'price' ? ArrowDown : ArrowUp;
-  const iconLabel = kind === 'price' ? '가격 낮음' : '성능 높음';
-  const emphasisClass = outcome.tone === 'positive' ? 'text-red-600' : outcome.tone === 'muted' ? 'text-slate-500' : 'text-slate-600';
-  const unitPattern = kind === 'price' ? /^(.+?원)(.*)$/ : /^(.+?점)(.*)$/;
-  const [, emphasisValue = outcome.emphasis ?? '', emphasisSuffix = ''] = outcome.emphasis?.match(unitPattern) ?? [];
+function PriceDifferenceCard({ columnA, columnB }: { columnA: ComparisonColumn; columnB: ComparisonColumn }) {
+  const difference = Math.abs(columnA.build.totalPrice - columnB.build.totalPrice);
+  const cheaper = columnA.build.totalPrice === columnB.build.totalPrice ? null : columnA.build.totalPrice < columnB.build.totalPrice ? 'A' : 'B';
+  const PriceTrendIcon = columnA.build.totalPrice <= columnB.build.totalPrice ? ArrowDown : ArrowUp;
   return (
-    <div className="flex items-baseline justify-center gap-2.5 text-lg">
-      <span aria-label={iconLabel} className="animate-bounce text-slate-400"><Icon aria-hidden="true" size={18} strokeWidth={2.5} /></span>
-      <p data-testid={testId} className="min-w-0 text-center font-black text-commerce-ink">
-        <span>{outcome.prefix}</span>
-        {outcome.emphasis ? (
-          <>
-            <span className={`font-black ${emphasisClass}`}>{emphasisValue}</span>
-            <span>{emphasisSuffix}</span>
-          </>
-        ) : null}
-      </p>
+    <article className="flex min-h-[164px] flex-col rounded-lg border border-slate-200 bg-white px-4 py-4 text-center shadow-sm">
+      <h3 className="text-sm font-black text-commerce-ink">가격 차이</h3>
+      <div className="mt-2 flex flex-1 items-center justify-center gap-3">
+        <PriceTrendIcon aria-hidden="true" className="animate-bounce text-slate-500" size={28} strokeWidth={3} />
+        <div>
+          <p className="text-xl font-black tracking-tight text-commerce-ink"><span className="text-red-600">{difference.toLocaleString('ko-KR')}</span>원</p>
+          <p data-testid="quote-compare-price-delta" className="mt-1 text-sm font-black text-commerce-ink">{cheaper ? `${cheaper}가 더 저렴` : '가격 동일'}</p>
+        </div>
+      </div>
+    </article>
+  );
+}
+
+function ScoreDifferenceCard({ columnA, columnB }: { columnA: ComparisonColumn; columnB: ComparisonColumn }) {
+  const score = scoreDifference(columnA, columnB);
+  return (
+    <article className="flex min-h-[164px] flex-col rounded-lg border border-slate-200 bg-white px-4 py-4 text-center shadow-sm">
+      <h3 className="text-sm font-black text-commerce-ink">종합 성능 차이</h3>
+      <div className="mt-2 flex flex-1 items-center justify-center gap-3">
+        <span aria-hidden="true" className="flex h-12 w-12 items-center justify-center rounded-full bg-[#3576CA]/10 text-[#3576CA]">
+          <Gauge size={28} strokeWidth={2.2} />
+        </span>
+        {score ? (
+          <div>
+            <p className="text-xl font-black tracking-tight text-commerce-ink">{score.difference.toLocaleString('ko-KR')}점</p>
+            <p data-testid="quote-compare-score-delta" className="mt-1 text-sm font-black text-slate-600">{score.similar ? '사실상 유사' : `${score.winner}가 더 높음`}</p>
+          </div>
+        ) : (
+          <p data-testid="quote-compare-score-delta" className="text-sm font-black text-slate-500">{columnA.isLoading || columnB.isLoading ? '계산 중' : '자료 없음'}</p>
+        )}
+      </div>
+    </article>
+  );
+}
+
+function GamePerformanceDifferenceCard({ columnA, columnB }: { columnA: ComparisonColumn; columnB: ComparisonColumn }) {
+  const fpsA = fpsValue(columnA.fpsEvidence);
+  const fpsB = fpsValue(columnB.fpsEvidence);
+  const isLoading = columnA.isFpsLoading || columnB.isFpsLoading;
+  const hasComparableFps = fpsA !== null && fpsB !== null;
+  const scale = hasComparableFps ? Math.max(COMPARE_FPS_SCALE_BASE, Math.ceil(Math.max(fpsA, fpsB) / 10) * 10) : COMPARE_FPS_SCALE_BASE;
+  const condition = fpsCondition(columnA.fpsEvidence, columnB.fpsEvidence);
+  const difference = hasComparableFps ? Math.abs(fpsA - fpsB) : null;
+  const winner = hasComparableFps && fpsA !== fpsB ? (fpsA > fpsB ? 'A' : 'B') : null;
+  return (
+    <article className="rounded-lg border border-slate-200 bg-white px-4 py-4 text-center shadow-sm">
+      <h3 className="text-sm font-black text-commerce-ink">게임 성능 차이</h3>
+      <p className="mt-0.5 text-[10px] font-bold text-slate-400">{condition}</p>
+      {isLoading ? (
+        <div className="mx-auto mt-3 h-20 max-w-[220px] animate-pulse rounded bg-slate-100" />
+      ) : hasComparableFps ? (
+        <div className="mt-3 flex items-end justify-center gap-5">
+          <FpsBar label="A" value={fpsA} scale={scale} />
+          <FpsBar label="B" value={fpsB} scale={scale} />
+          <div className="pb-4 text-left">
+            <p data-testid="quote-compare-fps-A" className="text-sm font-black text-[#DE6C2D]">A · {Math.round(fpsA)} FPS</p>
+            <p data-testid="quote-compare-fps-B" className="mt-1 text-sm font-black text-[#3576CA]">B · {Math.round(fpsB)} FPS</p>
+            <p data-testid="quote-compare-fps-delta" className="mt-2 text-xs font-bold text-slate-500">{winner ? `${winner}가 ${Math.round(difference ?? 0)} FPS 더 높음` : '동일한 FPS'}</p>
+          </div>
+        </div>
+      ) : (
+        <div data-testid="quote-compare-fps-empty" className="mt-3 rounded-md border border-dashed border-slate-300 bg-slate-50 px-3 py-5 text-xs font-bold text-slate-500">
+          {columnA.isFpsError || columnB.isFpsError ? 'FPS 조회 실패' : '비교 가능한 FPS 자료 없음'}
+        </div>
+      )}
+    </article>
+  );
+}
+
+function FpsBar({ label, value, scale }: { label: 'A' | 'B'; value: number; scale: number }) {
+  const height = Math.max(8, Math.min(100, (value / scale) * 100));
+  return (
+    <div className="flex h-24 w-9 flex-col items-center justify-end">
+      <span className="mb-1 text-[10px] font-black text-slate-600">{Math.round(value)}</span>
+      <div className="flex h-16 w-7 items-end border-b border-slate-300">
+        <div aria-hidden="true" className={`w-full rounded-t-sm ${label === 'A' ? 'bg-[#DE6C2D]' : 'bg-[#3576CA]'}`} style={{ height: `${height}%` }} />
+      </div>
+      <span className={`mt-1 text-[10px] font-black ${label === 'A' ? 'text-[#DE6C2D]' : 'text-[#3576CA]'}`}>{label}</span>
     </div>
+  );
+}
+
+function ScorePolicyNote({ columnA, columnB }: { columnA: ComparisonColumn; columnB: ComparisonColumn }) {
+  const score = columnA.compositeScore ?? columnB.compositeScore;
+  const policyText = scorePolicyText(score);
+  return (
+    <p data-testid="quote-score-policy" className="rounded-md border border-slate-200 bg-slate-50 px-4 py-2.5 text-center text-[11px] font-semibold leading-5 text-slate-500">
+      {policyText}
+    </p>
   );
 }
 
@@ -988,6 +1100,75 @@ function performanceDetails(result?: { toolResults?: Array<{ tool: string; detai
   return result?.toolResults?.find((tool) => tool.tool === 'performance')?.details ?? {};
 }
 
+function validFpsEvidence(items?: GameFpsEvidence[]) {
+  return items?.find((item) => fpsValue(item) !== null) ?? null;
+}
+
+function fpsValue(evidence: GameFpsEvidence | null) {
+  const value = evidence?.avgFps;
+  return typeof value === 'number' && Number.isFinite(value) && value > 0 ? value : null;
+}
+
+function fpsCondition(evidenceA: GameFpsEvidence | null, evidenceB: GameFpsEvidence | null) {
+  const evidence = evidenceA ?? evidenceB;
+  const resolution = evidence?.resolution?.trim() || COMPARE_FPS_RESOLUTION.label;
+  const game = evidence?.gameTitle?.trim() || COMPARE_FPS_GAME.label;
+  return `${resolution} · ${game} 기준`;
+}
+
+function scoreDifference(columnA: ComparisonColumn, columnB: ComparisonColumn) {
+  if (columnA.isLoading || columnB.isLoading || columnA.isError || columnB.isError) return null;
+  const scoreA = columnA.compositeScore?.score;
+  const scoreB = columnB.compositeScore?.score;
+  if (typeof scoreA !== 'number' || typeof scoreB !== 'number') return null;
+  return {
+    difference: Math.abs(scoreA - scoreB),
+    winner: (scoreA >= scoreB ? 'A' : 'B') as 'A' | 'B',
+    similar: relativeDifferencePercent(scoreA, scoreB) <= COMPARE_SCORE_SIMILARITY_PERCENT
+  };
+}
+
+function comparisonRecommendation(columnA: ComparisonColumn, columnB: ComparisonColumn) {
+  const score = scoreDifference(columnA, columnB);
+  const priceDifference = Math.abs(columnA.build.totalPrice - columnB.build.totalPrice);
+  const cheaper = columnA.build.totalPrice === columnB.build.totalPrice
+    ? null
+    : (columnA.build.totalPrice < columnB.build.totalPrice ? 'A' : 'B') as 'A' | 'B';
+  // 기존 비교의 3% 유사 판정 안에서는 저렴한 견적을, 그 밖에서는 기존 종합 점수가 높은 견적을 그대로 추천한다.
+  const winner = score
+    ? (score.similar ? cheaper ?? score.winner : score.winner)
+    : cheaper ?? 'A';
+  let description: string;
+  if (score?.similar) {
+    description = cheaper
+      ? `종합 성능은 사실상 유사하지만 ${cheaper}가 ${priceDifference.toLocaleString('ko-KR')}원 더 저렴해 가격 효율이 높습니다.`
+      : '가격과 종합 성능이 사실상 같아 두 견적의 추천 우선순위가 동일합니다.';
+  } else if (score) {
+    description = `${score.winner}가 종합 점수 ${score.difference.toLocaleString('ko-KR')}점 더 높아 성능 우위가 분명합니다.`;
+  } else {
+    description = cheaper
+      ? `${cheaper}가 ${priceDifference.toLocaleString('ko-KR')}원 더 저렴해 가격 부담이 낮습니다.`
+      : '두 견적의 가격이 같아 종합 점수 확인 후 선택할 수 있습니다.';
+  }
+  return { winner, description };
+}
+
+function scorePolicyText(score: BuildCompositeScore | null) {
+  if (!score || !Array.isArray(score.components) || score.components.length === 0 || score.maxScore <= 0) {
+    return '종합 점수는 현재 부품 데이터와 호환성·성능 Tool 결과를 기준으로 산정됩니다.';
+  }
+  const components = score.components
+    .filter((component) => component.maxScore > 0)
+    .map((component) => `${component.label} ${Math.round((component.maxScore / score.maxScore) * 100)}%`);
+  return `종합 점수는 ${components.join(' · ')}를 반영하여 산정됩니다.`;
+}
+
+function relativeDifferencePercent(valueA: number, valueB: number) {
+  if (valueA === valueB) return 0;
+  const lower = Math.min(valueA, valueB);
+  return lower > 0 ? (Math.abs(valueA - valueB) / lower) * 100 : Number.POSITIVE_INFINITY;
+}
+
 function positiveMetric(label: string, valueA: number | null, valueB: number | null, unit: string): CompareMetric | null {
   if (!isPositive(valueA) || !isPositive(valueB)) return null;
   return { label, valueA, valueB, unit };
@@ -1067,9 +1248,8 @@ function partIdentity(item: BuildItem) {
 function percentageDescription(label: string, valueA: number, valueB: number) {
   if (valueA === valueB) return '동일 수준';
   const winner = valueA > valueB ? 'A' : 'B';
-  const lower = Math.min(valueA, valueB);
-  const percent = lower > 0 ? Math.round((Math.abs(valueA - valueB) / lower) * 100) : 0;
-  return percent <= 3 ? `${label} 유사 · ${winner} +${percent}%` : `${winner} ${label} +${percent}%`;
+  const percent = Math.round(relativeDifferencePercent(valueA, valueB));
+  return percent <= COMPARE_SCORE_SIMILARITY_PERCENT ? `${label} 유사 · ${winner} +${percent}%` : `${winner} ${label} +${percent}%`;
 }
 
 function numericDifferenceDescription(
@@ -1177,31 +1357,6 @@ function formatCapacity(value: number | null) {
 function formatMetricValue(value: number, unit: string) {
   if (unit === 'GB' && value >= 1000) return formatCapacity(value) ?? '';
   return `${value.toLocaleString('ko-KR', { maximumFractionDigits: 1 })}${unit}`;
-}
-
-function priceDeltaOutcome(priceA: number, priceB: number): ComparisonOutcome {
-  if (priceA === priceB) return { prefix: '동일', tone: 'neutral' };
-  const winner = priceA < priceB ? 'A' : 'B';
-  return {
-    prefix: `${winner}가 `,
-    emphasis: `${Math.abs(priceA - priceB).toLocaleString('ko-KR')}원 저렴`,
-    tone: 'positive'
-  };
-}
-
-function scoreDeltaOutcome(columnA: ComparisonColumn, columnB: ComparisonColumn): ComparisonOutcome {
-  if (columnA.isLoading || columnB.isLoading) return { prefix: '계산 중', tone: 'muted' };
-  if (columnA.isError || columnB.isError) return { prefix: '조회 실패', tone: 'muted' };
-  const scoreA = columnA.compositeScore?.score;
-  const scoreB = columnB.compositeScore?.score;
-  if (scoreA === undefined || scoreB === undefined) return { prefix: '자료 없음', tone: 'muted' };
-  if (scoreA === scoreB) return { prefix: '동일 수준', tone: 'neutral' };
-  const winner = scoreA > scoreB ? 'A' : 'B';
-  return {
-    prefix: `${winner}가 `,
-    emphasis: `${Math.abs(scoreA - scoreB).toLocaleString('ko-KR')}점 높음`,
-    tone: 'positive'
-  };
 }
 
 function PriceAlertRow({ alert }: { alert: PriceAlert }) {
