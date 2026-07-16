@@ -708,6 +708,95 @@ class AgentGoal1112Test(unittest.TestCase):
             ),
         )
 
+    def test_initial_metrics_auto_start_is_requested_only_without_an_active_session(self) -> None:
+        request = DiagnosisRequest(
+            diagnosis_id="diagnosis-existing",
+            device_id="device-1",
+            symptom="",
+            requested_checks=("cpu", "gpu", "memory", "disk"),
+            requested_at="2026-07-13T00:00:00Z",
+            expires_at="2026-07-13T00:02:00Z",
+            mode="LIVE",
+        )
+
+        self.assertTrue(agent.should_auto_start_initial_metrics(None, False))
+        self.assertFalse(agent.should_auto_start_initial_metrics(None, True))
+        self.assertFalse(agent.should_auto_start_initial_metrics(DiagnosisSession(request), False))
+
+    def test_metric_wave_uses_latest_real_usage_as_target_and_smooths_changes(self) -> None:
+        self.assertEqual(0.0, agent.usage_wave_target_amplitude(None))
+        self.assertEqual(0.0, agent.usage_wave_target_amplitude(0.0))
+        self.assertEqual(agent.METRIC_WAVE_MAX_AMPLITUDE, agent.usage_wave_target_amplitude(100.0))
+        self.assertEqual(agent.METRIC_WAVE_MAX_AMPLITUDE, agent.usage_wave_target_amplitude(140.0))
+
+        target = agent.usage_wave_target_amplitude(80.0)
+        first = agent.smooth_wave_amplitude(0.0, target)
+        second = agent.smooth_wave_amplitude(first, target)
+        self.assertGreater(first, 0.0)
+        self.assertGreater(second, first)
+        self.assertLess(second, target)
+
+        coordinates = agent.metric_wave_coordinates(10, 40, 100, second, 0.5, point_count=6)
+        self.assertEqual(12, len(coordinates))
+        self.assertEqual(10.0, coordinates[0])
+        self.assertEqual(110.0, coordinates[-2])
+
+    def test_pretendard_is_the_first_ui_font_candidate(self) -> None:
+        self.assertEqual("Pretendard", agent.UI_FONT_CANDIDATES[0])
+
+    def test_diagnosis_presentations_use_actual_task_and_evidence_status(self) -> None:
+        running = agent.DiagnosisTask("display_devices", "gpu", 20, status="RUNNING")
+        warning = agent.DiagnosisTask(
+            "display_drivers",
+            "gpu",
+            10,
+            status="COMPLETED",
+            evidence=({"status": "WARNING"},),
+        )
+        completed = agent.DiagnosisTask("current_system_status", "system", 15, status="COMPLETED")
+        completed_without_evidence = agent.DiagnosisTask(
+            "display_devices",
+            "gpu",
+            20,
+            status="COMPLETED",
+        )
+        completed_with_evidence = agent.DiagnosisTask(
+            "display_devices",
+            "gpu",
+            20,
+            status="COMPLETED",
+            evidence=({"status": "OK", "deviceCount": 1},),
+        )
+
+        self.assertEqual(
+            ("검사 중", "running"),
+            agent.diagnosis_component_presentation(agent.DiagnosisRunSnapshot(tasks=(running,)), "gpu"),
+        )
+        self.assertEqual(
+            ("주의", "warning"),
+            agent.diagnosis_component_presentation(agent.DiagnosisRunSnapshot(tasks=(warning,)), "gpu"),
+        )
+        self.assertEqual(
+            ("초기 상태 확인", "neutral"),
+            agent.diagnosis_component_presentation(agent.DiagnosisRunSnapshot(tasks=(completed,)), "cpu"),
+        )
+        self.assertEqual(
+            ("근거 없음", "neutral"),
+            agent.diagnosis_component_presentation(
+                agent.DiagnosisRunSnapshot(tasks=(completed_without_evidence,)),
+                "gpu",
+            ),
+        )
+        self.assertEqual(
+            ("정상", "success"),
+            agent.diagnosis_component_presentation(
+                agent.DiagnosisRunSnapshot(tasks=(completed_with_evidence,)),
+                "gpu",
+            ),
+        )
+        self.assertEqual(("시간 초과", "error"), agent.diagnosis_task_presentation("TIMED_OUT"))
+        self.assertEqual(("오류", "error"), agent.diagnosis_event_presentation("TASK_FAILED"))
+
     def test_symptom_display_preserves_web_input_and_uses_standalone_summary(self) -> None:
         web_symptoms = ("게임 A에서만 화면이 멈춥니다.", "영상 편집 중 GPU 부하가 증가합니다.")
         for symptom in web_symptoms:
@@ -2911,16 +3000,14 @@ class SmoothedProgressTest(unittest.TestCase):
         self.assertEqual(smoother.update(90, 1.0), 55)
         self.assertEqual(smoother.update(90, 2.0), 90)
 
-    def test_stall_creeps_but_never_exceeds_headroom_or_ceiling(self) -> None:
+    def test_stall_never_moves_without_new_actual_progress(self) -> None:
         smoother = agent.SmoothedProgress()
         smoother.update(15, 0.0)
-        # 정체 60초: 크리핑은 실제+12(=27)에서 멈춘다.
-        self.assertEqual(smoother.update(15, 60.0), 27)
-        self.assertEqual(smoother.update(15, 120.0), 27)
-        # 실제 90 정체 장기화: 상한 96에서 멈춘다(거짓 100% 없음).
+        self.assertEqual(smoother.update(15, 60.0), 15)
+        self.assertEqual(smoother.update(15, 120.0), 15)
         smoother2 = agent.SmoothedProgress()
         smoother2.update(90, 0.0)
-        self.assertEqual(smoother2.update(90, 600.0), 96)
+        self.assertEqual(smoother2.update(90, 600.0), 90)
 
     def test_completion_sweeps_to_exactly_100(self) -> None:
         smoother = agent.SmoothedProgress()

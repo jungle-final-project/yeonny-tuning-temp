@@ -172,6 +172,11 @@ class InitialMetricsNormalizerTest(unittest.TestCase):
 
 
 class InitialMetricsCoordinatorTest(unittest.TestCase):
+    def test_default_steady_collection_interval_is_five_seconds(self) -> None:
+        settings = InitialCollectionSettings()
+        self.assertEqual(0.25, settings.interval_seconds(False))
+        self.assertEqual(5.0, settings.interval_seconds(True))
+
     def test_live_mode_uses_only_live_provider_and_completes_with_real_history(self) -> None:
         store = MetricsStore()
         live = StaticProvider((20.0, 80.0, 95.0))
@@ -310,7 +315,7 @@ class InitialMetricsCoordinatorTest(unittest.TestCase):
             store,
             live_provider_factory=lambda: provider,
             demo_provider_factory=DemoSensorProvider,
-            settings=InitialCollectionSettings(3, 0.01, 0.5),
+            settings=InitialCollectionSettings(3, 0.01, 0.5, steady_interval_seconds=0.01),
             on_update=updates.append,
             on_complete=completed.append,
         )
