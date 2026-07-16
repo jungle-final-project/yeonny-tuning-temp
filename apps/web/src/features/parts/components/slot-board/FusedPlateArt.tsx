@@ -20,6 +20,8 @@ type FusedPlateArtProps = {
   statusByCategory: Map<string, 'PASS' | 'WARN' | 'FAIL'>;
   flashingCategories: Set<PartCategory>;
   onSlotSelect: (category: PartCategory) => void;
+  // 장착된 부품 클릭 = 관계/문제 설명(부모 팝오버). 빈 슬롯 클릭만 onSlotSelect(후보 패널)로 간다.
+  onPartOpen: (category: PartCategory) => void;
   onRemoveItem: (partId: string) => void;
   onUpdateQuantity: (partId: string, quantity: number) => void;
   isRemovePending: boolean;
@@ -33,6 +35,7 @@ export function FusedPlateArt({
   statusByCategory,
   flashingCategories,
   onSlotSelect,
+  onPartOpen,
   onRemoveItem,
   onUpdateQuantity,
   isRemovePending,
@@ -207,7 +210,7 @@ export function FusedPlateArt({
                 data-testid={`slot-fused-area-${area.category}`}
                 aria-label={`${area.label} select`}
                 aria-pressed={selectedCategory === area.category}
-                onClick={() => onSlotSelect(area.category)}
+                onClick={() => (filled ? onPartOpen(area.category) : onSlotSelect(area.category))}
                 className="fused-part-select-button absolute inset-0 cursor-pointer rounded focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-blue"
               />
               {selected ? <span className="fused-part-selected-badge">선택됨</span> : null}

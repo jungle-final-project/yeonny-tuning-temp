@@ -395,9 +395,13 @@ public class BuildGraphService {
 
     private List<Map<String, Object>> insights(Map<String, Map<String, Object>> toolByName, Map<String, ToolBuildPart> byCategory, int budget, int total) {
         List<Map<String, Object>> items = new ArrayList<>();
-        addToolInsight(items, toolByName, "compatibility", "호환성 확인", List.of("part-CPU", "part-MOTHERBOARD", "part-RAM", "part-COOLER"));
+        // compatibility/size는 검사 결과의 issueCategories(실제 걸린 부품쌍)를 우선 사용한다 —
+        // 고정 목록은 쿨러 높이 문제에 GPU까지 노랗게 칠하는 식의 오귀속을 만든다.
+        addToolInsight(items, toolByName, "compatibility", "호환성 확인",
+                toolIssueNodeIds(toolByName, "compatibility", List.of("part-CPU", "part-MOTHERBOARD", "part-RAM", "part-COOLER")));
         addToolInsight(items, toolByName, "power", "파워 여유 확인", List.of("part-GPU", "part-PSU"));
-        addToolInsight(items, toolByName, "size", "장착 규격 확인", List.of("part-GPU", "part-CASE", "part-COOLER"));
+        addToolInsight(items, toolByName, "size", "장착 규격 확인",
+                toolIssueNodeIds(toolByName, "size", List.of("part-GPU", "part-CASE", "part-COOLER")));
         addToolInsight(items, toolByName, "performance", "성능 균형 확인", List.of("part-CPU", "part-GPU"));
         addToolInsight(items, toolByName, "price", budget > 0 && total > budget ? "예산 초과 확인" : "예산 범위 확인", List.of("constraint-budget", "constraint-total-price"));
         if (items.isEmpty() && !byCategory.isEmpty()) {
@@ -410,6 +414,16 @@ public class BuildGraphService {
             ));
         }
         return items;
+    }
+
+    /** 검사 details의 issueCategories(실제 연루 부품)가 있으면 그 노드만, 없으면(정상 등) 기본 목록. */
+    private static List<String> toolIssueNodeIds(Map<String, Map<String, Object>> toolByName, String tool, List<String> fallback) {
+        Map<String, Object> details = objectMap(toolByName.getOrDefault(tool, Map.of()).get("details"));
+        List<String> categories = stringList(details.get("issueCategories"));
+        if (categories.isEmpty()) {
+            return fallback;
+        }
+        return categories.stream().map(category -> "part-" + category).toList();
     }
 
     private static void addToolInsight(List<Map<String, Object>> insights, Map<String, Map<String, Object>> toolByName, String tool, String title, List<String> nodeIds) {

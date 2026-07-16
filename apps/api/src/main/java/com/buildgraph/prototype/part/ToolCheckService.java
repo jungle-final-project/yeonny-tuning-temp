@@ -5,6 +5,7 @@ import com.buildgraph.prototype.common.MockData;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -156,6 +157,24 @@ public class ToolCheckService {
         boolean m2SlotsMatched = !m2SlotsChecked || m2StorageTotal <= m2Slots;
         boolean pass = socketMatched && memoryMatched && coolerMatched && coolerTdpMatched
                 && ramFormFactorMatched && ramSlotsMatched && m2SlotsMatched;
+        // 실제 걸린 부품쌍 — 인사이트/보드가 문제와 무관한 부품(예: 소켓 문제인데 RAM)까지 칠하지 않게 details로 내린다.
+        LinkedHashSet<String> issueCategories = new LinkedHashSet<>();
+        if (!socketMatched) {
+            issueCategories.add("CPU");
+            issueCategories.add("MOTHERBOARD");
+        }
+        if (!memoryMatched || !ramFormFactorMatched || !ramSlotsMatched) {
+            issueCategories.add("RAM");
+            issueCategories.add("MOTHERBOARD");
+        }
+        if (!coolerMatched || !coolerTdpMatched) {
+            issueCategories.add("COOLER");
+            issueCategories.add("CPU");
+        }
+        if (!m2SlotsMatched) {
+            issueCategories.add("STORAGE");
+            issueCategories.add("MOTHERBOARD");
+        }
         String summary = pass
                 ? coolerTdpMarginLow
                         ? "쿨러 TDP 여유가 20% 미만이라 고부하 시 냉각 여유가 빠듯합니다."
@@ -168,7 +187,11 @@ public class ToolCheckService {
                                         ? "RAM 스틱 수(" + ramSticksTotal + "개)가 메인보드 슬롯(" + memorySlots + "개)을 초과합니다"
                                         : !m2SlotsMatched
                                                 ? "M.2 SSD 수(" + m2StorageTotal + "개)가 메인보드 M.2 슬롯(" + m2Slots + "개)을 초과합니다"
-                                                : "소켓 또는 메모리 호환성 확인이 필요합니다";
+                                                : !socketMatched
+                                                        ? "CPU 소켓(" + stringAttr(cpu, "socket") + ")과 메인보드 소켓(" + stringAttr(motherboard, "socket") + ")이 달라 장착할 수 없습니다"
+                                                        : !memoryMatched
+                                                                ? "RAM 규격(" + firstText(stringAttr(ram, "memoryType"), "DDR5") + ")과 메인보드 지원 메모리(" + firstText(stringAttr(motherboard, "memoryType"), "DDR5") + ")가 다릅니다"
+                                                                : "쿨러가 CPU 소켓(" + stringAttr(cpu, "socket") + ")을 지원하지 않습니다";
         // status는 PASS/FAIL 2-상태를 유지한다 — TDP 마진 WARN을 툴 status로 올리면 compatibility를
         // 구독하는 RAM/메인보드 후보 전체가 후보와 무관한 쿨러 마진으로 '간섭 주의'가 된다.
         // 마진 경고는 details(coolerTdpMarginLow)와 summary로 내리고, CPU-쿨러 엣지가 WARN을 그린다.
@@ -196,7 +219,9 @@ public class ToolCheckService {
                         "m2StorageTotal", m2StorageTotal,
                         "m2Slots", m2Slots > 0 ? m2Slots : null,
                         "m2SlotsChecked", m2SlotsChecked,
-                        "m2SlotsMatched", m2SlotsMatched));
+                        "m2SlotsMatched", m2SlotsMatched,
+                        // 문제에 실제로 연루된 부품쌍 — 그래프 인사이트가 무관 부품을 칠하지 않게 쓴다.
+                        "issueCategories", issueCategories.isEmpty() ? null : List.copyOf(issueCategories)));
     }
 
     /** 저장장치가 M.2 슬롯을 차지하는지 — 인터페이스/폼팩터가 M.2·NVMe면 M.2, SATA 2.5인치는 아니다. */
@@ -237,7 +262,7 @@ public class ToolCheckService {
                 pass
                         ? "PSU 정격 출력이 예상 지속 부하와 GPU 권장 정격 파워를 충족합니다."
                         : warn
-                                ? "PSU 정격 출력이 권장 파워는 충족하나, 여유가 고려해 상위 용량을 검토하면 좋습니다"
+                                ? "PSU 정격 " + psuCapacity + "W가 예상 부하 " + estimatedWattage + "W 대비 여유 " + headroom + "W로 빠듯합니다"
                                 : "PSU 정격 출력이 예상 부하와 권장 파워에 못 미쳐 상위 용량이 필요합니다",
                 MockData.map(
                         "estimatedContinuousLoadW", estimatedWattage,
@@ -295,18 +320,80 @@ public class ToolCheckService {
         int psuHeadroom = psuKnown ? maxPsuLength - psuDepth : 0;
         // '근거 부족' WARN은 해당 부품 쌍이 실제로 담겨 있을 때만 낸다 — GPU나 케이스를 아직 안 담은
         // 견적이 WARN이 되면, size를 구독하는 쿨러/파워 후보 패널 전체가 무관한 사유로 '간섭 주의'가 된다.
-        boolean warn = !fail && (
-                (gpu != null && pcCase != null && !gpuKnown)
-                        || (cooler != null && pcCase != null && !aioCooler && !coolerKnown)
-                        || (aioCooler && pcCase != null && (!radiatorChecked || !radiatorSupportKnown))
-                        || (psu != null && pcCase != null && !psuKnown)
-                        || (motherboard != null && pcCase != null && !boardFormFactorChecked)
-                        || (gpuKnown && BuildSizeFitPolicy.hasLowHeadroom(gpuHeadroom, BuildSizeFitPolicy.GPU_WARN_HEADROOM_MM))
-                        // known 게이트 필수 — 수랭(AIO)은 coolerKnown=false라 headroom이 0으로 남는데,
-                        // 게이트 없이 0<5를 평가하면 라디에이터가 정확히 맞아도 영구 WARN이 된다.
-                        || (coolerKnown && BuildSizeFitPolicy.hasLowHeadroom(coolerHeadroom, BuildSizeFitPolicy.COOLER_WARN_HEADROOM_MM))
-                        || (psuKnown && BuildSizeFitPolicy.hasLowHeadroom(psuHeadroom, BuildSizeFitPolicy.PSU_WARN_HEADROOM_MM))
-        );
+        // 사유는 걸린 조건을 그대로 단정문으로 말한다 — "~하거나 ~해서 추가 확인 필요" 같은 뭉뚱그림은
+        // 보드 팝오버(왜 문제인지)의 목적과 어긋난다(부연 설명은 'AI에게 설명' 몫).
+        List<String> warnReasons = new ArrayList<>();
+        // 실제 걸린 부품쌍 — 인사이트/보드가 문제와 무관한 부품까지 노랗게 칠하지 않도록 details로 내린다.
+        LinkedHashSet<String> issueCategories = new LinkedHashSet<>();
+        if (gpuExceeded) {
+            issueCategories.add("GPU");
+            issueCategories.add("CASE");
+        }
+        if (coolerExceeded || radiatorExceeded) {
+            issueCategories.add("COOLER");
+            issueCategories.add("CASE");
+        }
+        if (psuExceeded) {
+            issueCategories.add("PSU");
+            issueCategories.add("CASE");
+        }
+        if (boardFormFactorExceeded) {
+            issueCategories.add("MOTHERBOARD");
+            issueCategories.add("CASE");
+        }
+        if (gpu != null && pcCase != null && !gpuKnown) {
+            warnReasons.add(gpuLength <= 0
+                    ? "GPU 길이 정보가 없어 케이스 장착 검사를 못 했습니다"
+                    : "케이스의 GPU 허용 길이 정보가 없어 장착 검사를 못 했습니다");
+            issueCategories.add("GPU");
+            issueCategories.add("CASE");
+        }
+        if (cooler != null && pcCase != null && !aioCooler && !coolerKnown) {
+            warnReasons.add(coolerHeight <= 0
+                    ? "쿨러 높이 정보가 없어 케이스 장착 검사를 못 했습니다"
+                    : "케이스의 쿨러 허용 높이 정보가 없어 장착 검사를 못 했습니다");
+            issueCategories.add("COOLER");
+            issueCategories.add("CASE");
+        }
+        if (aioCooler && pcCase != null && (!radiatorChecked || !radiatorSupportKnown)) {
+            warnReasons.add(!radiatorChecked
+                    ? "수랭 라디에이터 크기 정보가 없어 케이스 장착 검사를 못 했습니다"
+                    : "케이스의 라디에이터 지원 정보가 없어 장착 검사를 못 했습니다");
+            issueCategories.add("COOLER");
+            issueCategories.add("CASE");
+        }
+        if (psu != null && pcCase != null && !psuKnown) {
+            warnReasons.add(psuDepth <= 0
+                    ? "파워 깊이 정보가 없어 케이스 장착 검사를 못 했습니다"
+                    : "케이스의 파워 허용 깊이 정보가 없어 장착 검사를 못 했습니다");
+            issueCategories.add("PSU");
+            issueCategories.add("CASE");
+        }
+        if (motherboard != null && pcCase != null && !boardFormFactorChecked) {
+            warnReasons.add(boardFormFactorRank < 0
+                    ? "메인보드 규격 정보가 없어 케이스 장착 검사를 못 했습니다"
+                    : "케이스의 지원 보드 규격 정보가 없어 장착 검사를 못 했습니다");
+            issueCategories.add("MOTHERBOARD");
+            issueCategories.add("CASE");
+        }
+        if (gpuKnown && BuildSizeFitPolicy.hasLowHeadroom(gpuHeadroom, BuildSizeFitPolicy.GPU_WARN_HEADROOM_MM)) {
+            warnReasons.add("케이스의 GPU 길이 여유가 " + gpuHeadroom + "mm뿐입니다");
+            issueCategories.add("GPU");
+            issueCategories.add("CASE");
+        }
+        // known 게이트 필수 — 수랭(AIO)은 coolerKnown=false라 headroom이 0으로 남는데,
+        // 게이트 없이 0<5를 평가하면 라디에이터가 정확히 맞아도 영구 WARN이 된다.
+        if (coolerKnown && BuildSizeFitPolicy.hasLowHeadroom(coolerHeadroom, BuildSizeFitPolicy.COOLER_WARN_HEADROOM_MM)) {
+            warnReasons.add("케이스의 쿨러 높이 여유가 " + coolerHeadroom + "mm뿐입니다");
+            issueCategories.add("COOLER");
+            issueCategories.add("CASE");
+        }
+        if (psuKnown && BuildSizeFitPolicy.hasLowHeadroom(psuHeadroom, BuildSizeFitPolicy.PSU_WARN_HEADROOM_MM)) {
+            warnReasons.add("케이스의 파워 깊이 여유가 " + psuHeadroom + "mm뿐입니다");
+            issueCategories.add("PSU");
+            issueCategories.add("CASE");
+        }
+        boolean warn = !fail && !warnReasons.isEmpty();
         return tool("size",
                 fail ? "FAIL" : warn ? "WARN" : "PASS",
                 fail ? "HIGH" : "MEDIUM",
@@ -317,7 +404,7 @@ public class ToolCheckService {
                                 : psuExceeded
                                         ? "파워 깊이(" + psuDepth + "mm)가 케이스 허용(" + maxPsuLength + "mm)을 초과합니다"
                                         : "케이스 장착 한계를 초과해 해당 조합은 장착할 수 없습니다."
-                        : warn ? "케이스 장착 여유가 낮거나 일부 치수 근거가 부족해 추가 확인이 필요합니다"
+                        : warn ? String.join(" · ", warnReasons)
                         : "GPU 길이, 쿨러 장착, 파워 깊이, 보드 규격이 케이스 제약 안에 있습니다.",
                 // 결측(0)은 null로 내린다 — 0을 그대로 실으면 엣지가 'max-0' 여유로 초록을 그려
                 // "근거 없는 통과"처럼 보인다(190 기본값 제거와 같은 원칙).
@@ -339,7 +426,9 @@ public class ToolCheckService {
                         "boardFormFactor", boardFormFactorRank >= 0 ? formFactorLabel(boardFormFactorRank) : null,
                         "caseMaxFormFactor", caseMaxFormFactorRank >= 0 ? formFactorLabel(caseMaxFormFactorRank) : null,
                         "boardFormFactorChecked", boardFormFactorChecked,
-                        "boardFormFactorMatched", boardFormFactorMatched
+                        "boardFormFactorMatched", boardFormFactorMatched,
+                        // 문제에 실제로 연루된 부품쌍 — 그래프 인사이트가 무관 부품을 칠하지 않게 쓴다.
+                        "issueCategories", issueCategories.isEmpty() ? null : List.copyOf(issueCategories)
                 ));
     }
 

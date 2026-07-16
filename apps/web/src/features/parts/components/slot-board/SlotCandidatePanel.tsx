@@ -1,6 +1,7 @@
 import { useInfiniteQuery } from '@tanstack/react-query';
 import { Eye, Heart, Search, X } from 'lucide-react';
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { Link } from 'react-router-dom';
 import { handlePartImageError, partImageUrl, specRows } from '../../partDisplay';
 import { listParts } from '../../partsApi';
@@ -8,11 +9,33 @@ import type { PartRow, PartSearchParams, QuoteDraftItem } from '../../types';
 import { openAiAssistant } from '../../../../lib/events';
 import { DraftQuantityStepper } from './DraftQuantityStepper';
 import { isMultiItemCategory, type SlotConfig } from './slotBoardConfig';
+import { useBoardDrag, useIsDesktop } from './useBoardDrag';
 
 // CPU·GPU만 벤치마크 점수가 있어 교체 성능 비교가 의미 있다 — 그 외 카테고리는 버튼을 숨긴다.
 const PERF_COMPARABLE = new Set(['CPU', 'GPU']);
 
 const CANDIDATE_PAGE_SIZE = 20;
+
+// 데스크톱 패널 초기 위치·크기: 보드 스테이지 좌측에 12px 여백으로 떠 있던 기존 배치를 그대로 재현한다.
+// 포탈(document.body) + position:fixed라 보드 밖으로도 드래그할 수 있다.
+function panelInitialRect() {
+  const fallback = { left: 24, top: 96, width: 420, height: 560 };
+  if (typeof document === 'undefined') {
+    return fallback;
+  }
+  const stage = document.querySelector('[data-testid="slot-board-body-stage"]')
+    ?? document.querySelector('[data-testid="slot-board"]');
+  const rect = stage?.getBoundingClientRect();
+  if (!rect || rect.width === 0) {
+    return fallback;
+  }
+  return {
+    left: rect.left + 12,
+    top: rect.top + 12,
+    width: Math.min(Math.min(520, Math.max(360, rect.width * 0.52)), rect.width) - 24,
+    height: Math.max(320, rect.height - 24)
+  };
+}
 
 type SlotCandidatePanelProps = {
   slot: SlotConfig;
@@ -46,6 +69,38 @@ export function SlotCandidatePanel({
   const [maxPrice, setMaxPrice] = useState<number | undefined>(undefined);
   const [hideFail, setHideFail] = useState(false);
   const [onlyWishlist, setOnlyWishlist] = useState(false);
+  // 데스크톱 패널: 포탈+fixed로 띄워 헤더 드래그(보드 밖 허용, 화면 이탈만 방지)·꼭지점 리사이즈.
+  // 모바일 바텀시트는 고정. 더블클릭·슬롯 전환 시 초기 위치·크기로 복귀.
+  const isDesktop = useIsDesktop();
+  const {
+    targetRef: panelRef,
+    dragStyle,
+    isDragging,
+    startDrag: startPanelDrag,
+    resetDrag
+  } = useBoardDrag<HTMLElement>({ resetKey: slot.category });
+  const [initialRect, setInitialRect] = useState(() => panelInitialRect());
+  // URL로 페이지와 함께 마운트되면 첫 렌더 시점엔 보드가 아직 DOM에 없다 —
+  // 커밋 직후(페인트 전) 실제 스테이지 위치로 다시 잰다.
+  useLayoutEffect(() => {
+    setInitialRect(panelInitialRect());
+  }, []);
+  const applyInitialSize = () => {
+    const el = panelRef.current;
+    if (el && typeof window !== 'undefined' && window.matchMedia('(min-width: 1024px)').matches) {
+      el.style.width = `${initialRect.width}px`;
+      el.style.height = `${initialRect.height}px`;
+    }
+  };
+  const resetPanelPlacement = () => {
+    resetDrag();
+    applyInitialSize();
+  };
+  // 슬롯 전환 시 훅의 resetDrag가 인라인 크기를 지우므로, 초기 크기를 다시 입힌다.
+  useEffect(() => {
+    applyInitialSize();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [slot.category]);
   const [wishlist, setWishlist] = useState<Set<string>>(() => readWishlist());
   const [quickViewPart, setQuickViewPart] = useState<PartRow | null>(null);
   const [commitError, setCommitError] = useState<string | null>(null);
@@ -192,17 +247,27 @@ export function SlotCandidatePanel({
     }
   };
 
-  return (
+  const panelContent = (
     <>
       <div aria-hidden="true" onClick={onClose} className="fixed inset-0 z-30 bg-slate-900/40 lg:hidden" />
       <section
+        ref={panelRef}
         data-testid="slot-candidate-panel"
         data-placement={placement}
         role="dialog"
         aria-label={`${slot.label} 부품 목록`}
-        className="panel slot-panel-in fixed inset-x-0 bottom-0 z-40 flex max-h-[72vh] flex-col overflow-hidden rounded-t-xl border-t border-commerce-line shadow-2xl lg:static lg:z-auto lg:h-full lg:max-h-none lg:min-h-0 lg:w-full lg:rounded-none lg:border-0 lg:border-r lg:border-commerce-line lg:shadow-xl"
+        style={isDesktop
+          ? { left: initialRect.left, top: initialRect.top, width: initialRect.width, height: initialRect.height, ...dragStyle }
+          : dragStyle}
+        className="panel slot-panel-in fixed inset-x-0 bottom-0 z-40 flex max-h-[72vh] flex-col overflow-hidden rounded-t-xl border-t border-commerce-line shadow-2xl lg:inset-auto lg:z-[55] lg:max-h-[92vh] lg:min-h-[280px] lg:w-auto lg:min-w-[320px] lg:max-w-[92vw] lg:rounded-xl lg:border lg:border-commerce-line lg:shadow-xl lg:[resize:both]"
       >
-      <div className="flex items-start justify-between gap-3 border-b border-commerce-line px-4 py-3">
+      <div
+        data-testid="slot-candidate-panel-handle"
+        title="드래그해서 옮기고, 더블클릭하면 원래 자리로 돌아옵니다"
+        onPointerDown={startPanelDrag}
+        onDoubleClick={resetPanelPlacement}
+        className={`flex items-start justify-between gap-3 border-b border-commerce-line px-4 py-3 ${isDragging ? 'lg:cursor-grabbing' : 'lg:cursor-grab'} select-none lg:touch-none`}
+      >
         <div className="min-w-0">
           <h2 className="text-base font-black text-commerce-ink">{slot.label} 부품 목록</h2>
           <p className="mt-0.5 text-[11px] font-bold text-slate-500">현재 견적 기준 호환 검사 · 장착 불가 후보도 담아서 사유를 확인할 수 있어요</p>
@@ -531,6 +596,9 @@ export function SlotCandidatePanel({
       ) : null}
     </>
   );
+
+  // 데스크톱은 body 포탈 — overflow-hidden인 보드 스테이지를 벗어나 화면 어디로든 옮길 수 있다.
+  return isDesktop ? createPortal(panelContent, document.body) : panelContent;
 }
 
 const WISHLIST_KEY = 'buildgraph.wishlist';
