@@ -11,6 +11,7 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.context.request.async.DeferredResult;
 
 @RestController
 @RequestMapping("/api")
@@ -18,11 +19,18 @@ public class BuildController {
     private final BuildQueryService buildQueryService;
     private final BuildChatService buildChatService;
     private final CurrentUserService currentUserService;
+    private final AiChatAsyncExecutor aiChatAsyncExecutor;
 
-    public BuildController(BuildQueryService buildQueryService, BuildChatService buildChatService, CurrentUserService currentUserService) {
+    public BuildController(
+            BuildQueryService buildQueryService,
+            BuildChatService buildChatService,
+            CurrentUserService currentUserService,
+            AiChatAsyncExecutor aiChatAsyncExecutor
+    ) {
         this.buildQueryService = buildQueryService;
         this.buildChatService = buildChatService;
         this.currentUserService = currentUserService;
+        this.aiChatAsyncExecutor = aiChatAsyncExecutor;
     }
 
     @PostMapping("/requirements/parse")
@@ -107,17 +115,18 @@ public class BuildController {
     }
 
     @PostMapping("/ai/build-chat")
-    Map<String, Object> buildChat(
+    DeferredResult<Object> buildChat(
             @RequestBody(required = false) Map<String, Object> request,
             @RequestHeader(value = "Authorization", required = false) String authorization,
             @RequestHeader(value = "X-BuildGraph-AI-Profile", required = false) String aiProfile
     ) {
+        // 인증은 요청(Tomcat) 스레드에서 동기로 처리한다 — 401은 빠르게 반환하고 채팅 풀을 낭비하지 않는다.
         CurrentUserService.CurrentUser user = currentUserService.requireUser(authorization);
         Map<String, Object> body = request == null ? Map.of() : request;
-        if (aiProfile == null || aiProfile.isBlank()) {
-            return buildChatService.chat(body, user);
-        }
-        return buildChatService.chat(body, aiProfile, user);
+        boolean withProfile = aiProfile != null && !aiProfile.isBlank();
+        // 채팅 처리는 전용 풀에서 비동기로 — Tomcat 스레드는 즉시 반납돼 로그인 등 빠른 요청과 분리된다.
+        return aiChatAsyncExecutor.submit(() ->
+                withProfile ? buildChatService.chat(body, aiProfile, user) : buildChatService.chat(body, user));
     }
 
     @GetMapping("/recommendations/home-builds")

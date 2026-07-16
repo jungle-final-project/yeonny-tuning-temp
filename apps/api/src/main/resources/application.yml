@@ -139,6 +139,18 @@ openai:
   reasoning-effort: ${OPENAI_REASONING_EFFORT:medium}
   embedding-model: ${OPENAI_EMBEDDING_MODEL:text-embedding-3-small}
   embedding-dimensions: ${OPENAI_EMBEDDING_DIMENSIONS:1536}
+  # LLM HTTP 타임아웃 — OpenAI가 느리거나 먹통이어도 요청 스레드가 무한정 묶이지 않게 한다.
+  connect-timeout-ms: ${OPENAI_CONNECT_TIMEOUT_MS:3000}
+  read-timeout-ms: ${OPENAI_READ_TIMEOUT_MS:20000}
+
+# LLM 호출 격벽(2단): OpenAI 호출을 별도 스레드풀에서 실행하고 동시 실행 수를 상한으로 묶는다.
+# 위 채팅 풀 안에서도 LLM 세부 호출이 상한(pool+queue)을 넘으면 대기 없이 거절돼 결정론 폴백으로
+# 강등된다 — LLM 폭주가 빠른 채팅 경로(FAST_*)까지 굶기지 않게 하는 채팅 풀 내부 방어다.
+llm:
+  bulkhead:
+    max-concurrency: ${LLM_BULKHEAD_MAX_CONCURRENCY:8}
+    queue-capacity: ${LLM_BULKHEAD_QUEUE_CAPACITY:8}
+    call-timeout-ms: ${LLM_BULKHEAD_CALL_TIMEOUT_MS:22000}
 
 rag:
   vector:
@@ -151,6 +163,14 @@ rag:
     backfill-on-startup: ${RAG_EMBEDDING_BACKFILL_ON_STARTUP:false}
 
 ai:
+  # AI 채팅 완전 분리(1단 격벽): build-chat 처리를 전용 스레드풀에서 비동기(DeferredResult)로 실행한다.
+  # 컨트롤러는 요청 스레드(Tomcat)에서 인증만 하고 즉시 반환 → Tomcat 스레드는 곧바로 반납된다.
+  # 로그인/기타 API(Tomcat 풀 max 150)와 AI 채팅(이 풀)이 스레드를 물리적으로 공유하지 않는다.
+  chat:
+    executor:
+      pool-size: ${AI_CHAT_EXECUTOR_POOL_SIZE:64}
+      queue-capacity: ${AI_CHAT_EXECUTOR_QUEUE_CAPACITY:256}
+      result-timeout-ms: ${AI_CHAT_EXECUTOR_RESULT_TIMEOUT_MS:30000}
   as-chat:
     default-profile: ${AS_CHAT_DEFAULT_PROFILE:AS_CHAT_54_MINI_FAST}
     fast:
