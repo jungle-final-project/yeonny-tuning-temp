@@ -5930,6 +5930,7 @@ def show_log_viewer(
     progress_ring_photo_cache = RetainedAssetCache()
     spinner_photo_cache: dict[tuple[int, str], list[Any]] = {}
     callback_state: dict[str, Any] = {
+        "initialMetricsAfterId": None,
         "metricsAfterId": None,
         "renderAfterId": None,
         "diagnosisProgressAfterId": None,
@@ -6774,6 +6775,17 @@ def show_log_viewer(
             ui["status"] = "하드웨어 상태 수집을 시작하지 못했습니다."
             render()
 
+    def run_scheduled_initial_metrics_start() -> None:
+        callback_state["initialMetricsAfterId"] = None
+        if callback_state["closed"]:
+            return
+        auto_start_initial_metrics()
+
+    def schedule_initial_metrics_start() -> None:
+        if callback_state["closed"] or callback_state["initialMetricsAfterId"] is not None:
+            return
+        callback_state["initialMetricsAfterId"] = root.after(0, run_scheduled_initial_metrics_start)
+
     def show_diagnosis_result() -> None:
         cancel_diagnosis_progress_tick()
         ui["resultRequested"] = True
@@ -6915,7 +6927,10 @@ def show_log_viewer(
             ui["status"] = "진단 세션 종료에 실패했습니다."
             render()
             return False
+        cancel_diagnosis_progress_tick()
+        ui["initialMetricsRequested"] = False
         apply_diagnosis_session(None)
+        schedule_initial_metrics_start()
         return True
 
     def connect_as() -> None:
@@ -7131,7 +7146,13 @@ def show_log_viewer(
                 animation_controller.close()
             except tk.TclError:
                 pass
-        for callback_key in ("metricsAfterId", "renderAfterId", "diagnosisProgressAfterId", "visibilityAfterId"):
+        for callback_key in (
+            "initialMetricsAfterId",
+            "metricsAfterId",
+            "renderAfterId",
+            "diagnosisProgressAfterId",
+            "visibilityAfterId",
+        ):
             after_id = callback_state.get(callback_key)
             if after_id is not None:
                 try:
@@ -7359,7 +7380,7 @@ def show_log_viewer(
             request_initial_metrics_complete,
             request_destroy,
         )
-    root.after(0, auto_start_initial_metrics)
+    schedule_initial_metrics_start()
     resume_ui_animation("initial_start")
     try:
         root.mainloop()

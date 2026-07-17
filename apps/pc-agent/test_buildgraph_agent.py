@@ -862,6 +862,19 @@ class AgentGoal1112Test(unittest.TestCase):
         self.assertFalse(agent.should_auto_start_initial_metrics(None, True))
         self.assertFalse(agent.should_auto_start_initial_metrics(DiagnosisSession(request), False))
 
+    def test_go_home_resets_and_reschedules_initial_metrics_without_stale_callbacks(self) -> None:
+        source = inspect.getsource(agent.show_log_viewer)
+        go_home_source = source[source.index("def go_home"):source.index("def connect_as")]
+        cleanup_source = source[source.index("def cleanup_ui_resources"):source.index("def close_window")]
+
+        self.assertIn('callback_state["initialMetricsAfterId"] = None', source)
+        self.assertIn('callback_state["initialMetricsAfterId"] is not None', source)
+        self.assertIn("cancel_diagnosis_progress_tick()", go_home_source)
+        self.assertIn('ui["initialMetricsRequested"] = False', go_home_source)
+        self.assertIn("schedule_initial_metrics_start()", go_home_source)
+        self.assertIn('"initialMetricsAfterId",', cleanup_source)
+        self.assertNotIn("root.after(0, auto_start_initial_metrics)", source)
+
     def test_metric_wave_uses_latest_real_usage_as_target_and_smooths_changes(self) -> None:
         self.assertEqual(0.0, agent.usage_wave_target_amplitude(None))
         self.assertEqual(0.65, agent.usage_wave_target_amplitude(0.0))
