@@ -40,8 +40,10 @@ public class AdminQueryService {
                 "priceJobsRunning", priceJobsRunning == null ? 0 : priceJobsRunning,
                 "todayRevenue", longValue(revenue, "today_revenue"),
                 "weekRevenue", longValue(revenue, "week_revenue"),
+                "previousWeekRevenue", longValue(revenue, "previous_week_revenue"),
                 "revenueTrend", revenueTrend(),
                 "orderStatus", orderStatus(),
+                "asStatus", asStatus(),
                 "degraded", false,
                 "generatedAt", MockData.now()
         );
@@ -63,7 +65,15 @@ public class AdminQueryService {
                             THEN CASE WHEN paid_amount > 0 THEN paid_amount ELSE amount END
                             ELSE 0
                         END
-                    ), 0)::bigint AS week_revenue
+                    ), 0)::bigint AS week_revenue,
+                    COALESCE(SUM(
+                        CASE
+                            WHEN paid_at >= (date_trunc('week', now() AT TIME ZONE 'Asia/Seoul') - interval '1 week') AT TIME ZONE 'Asia/Seoul'
+                             AND paid_at < date_trunc('week', now() AT TIME ZONE 'Asia/Seoul') AT TIME ZONE 'Asia/Seoul'
+                            THEN CASE WHEN paid_amount > 0 THEN paid_amount ELSE amount END
+                            ELSE 0
+                        END
+                    ), 0)::bigint AS previous_week_revenue
                 FROM assembly_payments
                 WHERE status = 'PAID'
                 """);
@@ -110,6 +120,24 @@ public class AdminQueryService {
                 MockData.map("status", "PENDING", "label", "처리대기", "count", longValue(counts, "pending")),
                 MockData.map("status", "IN_PROGRESS", "label", "진행중", "count", longValue(counts, "in_progress")),
                 MockData.map("status", "COMPLETED", "label", "완료", "count", longValue(counts, "completed")),
+                MockData.map("status", "CANCELLED", "label", "취소", "count", longValue(counts, "cancelled"))
+        );
+    }
+
+    private List<Map<String, Object>> asStatus() {
+        Map<String, Object> counts = jdbcTemplate.queryForMap("""
+                SELECT
+                    count(*) FILTER (WHERE status = 'OPEN')::int AS pending,
+                    count(*) FILTER (WHERE status IN ('ASSIGNED', 'IN_PROGRESS'))::int AS in_progress,
+                    count(*) FILTER (WHERE status IN ('RESOLVED', 'CLOSED'))::int AS completed,
+                    count(*) FILTER (WHERE status = 'CANCELLED')::int AS cancelled
+                FROM as_tickets
+                WHERE deleted_at IS NULL
+                """);
+        return List.of(
+                MockData.map("status", "PENDING", "label", "접수 대기", "count", longValue(counts, "pending")),
+                MockData.map("status", "IN_PROGRESS", "label", "처리 중", "count", longValue(counts, "in_progress")),
+                MockData.map("status", "COMPLETED", "label", "해결 완료", "count", longValue(counts, "completed")),
                 MockData.map("status", "CANCELLED", "label", "취소", "count", longValue(counts, "cancelled"))
         );
     }

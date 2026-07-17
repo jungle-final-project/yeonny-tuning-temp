@@ -6,12 +6,18 @@ export type AdminDashboard = {
   priceJobsRunning: number;
   todayRevenue: number;
   weekRevenue: number;
+  previousWeekRevenue: number;
   revenueTrend: Array<{
     date: string;
     label: string;
     revenue: number;
   }>;
   orderStatus: Array<{
+    status: string;
+    label: string;
+    count: number;
+  }>;
+  asStatus: Array<{
     status: string;
     label: string;
     count: number;

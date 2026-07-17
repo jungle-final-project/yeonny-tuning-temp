@@ -114,25 +114,32 @@ class AdminControllerTest {
 
     @Test
     void dashboardReturnsAdminDashboardDtoForAdminToken() throws Exception {
-        when(adminQueryService.dashboard()).thenReturn(Map.of(
-                "agentRunning", 1,
-                "openTickets", 3,
-                "priceJobsRunning", 0,
-                "todayRevenue", 27800L,
-                "weekRevenue", 230100L,
-                "revenueTrend", List.of(
+        when(adminQueryService.dashboard()).thenReturn(Map.<String, Object>ofEntries(
+                Map.entry("agentRunning", 1),
+                Map.entry("openTickets", 3),
+                Map.entry("priceJobsRunning", 0),
+                Map.entry("todayRevenue", 27800L),
+                Map.entry("weekRevenue", 230100L),
+                Map.entry("previousWeekRevenue", 208000L),
+                Map.entry("revenueTrend", List.of(
                         Map.of("date", "2026-07-14", "label", "07/14", "revenue", 230100L),
                         Map.of("date", "2026-07-15", "label", "07/15", "revenue", 0L),
                         Map.of("date", "2026-07-16", "label", "07/16", "revenue", 27800L)
-                ),
-                "orderStatus", List.of(
+                )),
+                Map.entry("orderStatus", List.of(
                         Map.of("status", "PENDING", "label", "처리대기", "count", 1L),
                         Map.of("status", "IN_PROGRESS", "label", "진행중", "count", 2L),
                         Map.of("status", "COMPLETED", "label", "완료", "count", 8L),
                         Map.of("status", "CANCELLED", "label", "취소", "count", 0L)
-                ),
-                "degraded", false,
-                "generatedAt", "2026-06-29T10:50:00Z"
+                )),
+                Map.entry("asStatus", List.of(
+                        Map.of("status", "PENDING", "label", "접수 대기", "count", 1L),
+                        Map.of("status", "IN_PROGRESS", "label", "처리 중", "count", 2L),
+                        Map.of("status", "COMPLETED", "label", "해결 완료", "count", 5L),
+                        Map.of("status", "CANCELLED", "label", "취소", "count", 0L)
+                )),
+                Map.entry("degraded", false),
+                Map.entry("generatedAt", "2026-06-29T10:50:00Z")
         ));
 
         mockMvc.perform(get("/api/admin/dashboard")
@@ -143,10 +150,13 @@ class AdminControllerTest {
                 .andExpect(jsonPath("$.priceJobsRunning").value(0))
                 .andExpect(jsonPath("$.todayRevenue").value(27800))
                 .andExpect(jsonPath("$.weekRevenue").value(230100))
+                .andExpect(jsonPath("$.previousWeekRevenue").value(208000))
                 .andExpect(jsonPath("$.revenueTrend[0].label").value("07/14"))
                 .andExpect(jsonPath("$.revenueTrend[0].revenue").value(230100))
                 .andExpect(jsonPath("$.orderStatus[0].label").value("처리대기"))
                 .andExpect(jsonPath("$.orderStatus[0].count").value(1))
+                .andExpect(jsonPath("$.asStatus[0].label").value("접수 대기"))
+                .andExpect(jsonPath("$.asStatus[0].count").value(1))
                 .andExpect(jsonPath("$.degraded").value(false))
                 .andExpect(jsonPath("$.generatedAt").value("2026-06-29T10:50:00Z"));
 

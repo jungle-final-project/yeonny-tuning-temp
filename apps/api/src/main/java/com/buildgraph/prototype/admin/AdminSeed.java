@@ -16,6 +16,7 @@ public final class AdminSeed {
                 "priceJobsRunning", 0,
                 "todayRevenue", 27800L,
                 "weekRevenue", 230100L,
+                "previousWeekRevenue", 208000L,
                 "revenueTrend", List.of(
                         MockData.map("date", "2026-07-10", "label", "07/10", "revenue", 18000L),
                         MockData.map("date", "2026-07-11", "label", "07/11", "revenue", 0L),
@@ -29,6 +30,12 @@ public final class AdminSeed {
                         MockData.map("status", "PENDING", "label", "처리대기", "count", 1L),
                         MockData.map("status", "IN_PROGRESS", "label", "진행중", "count", 2L),
                         MockData.map("status", "COMPLETED", "label", "완료", "count", 8L),
+                        MockData.map("status", "CANCELLED", "label", "취소", "count", 0L)
+                ),
+                "asStatus", List.of(
+                        MockData.map("status", "PENDING", "label", "접수 대기", "count", 1L),
+                        MockData.map("status", "IN_PROGRESS", "label", "처리 중", "count", 2L),
+                        MockData.map("status", "COMPLETED", "label", "해결 완료", "count", 5L),
                         MockData.map("status", "CANCELLED", "label", "취소", "count", 0L)
                 ),
                 "degraded", false,

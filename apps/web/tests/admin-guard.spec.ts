@@ -24,6 +24,7 @@ function adminDashboardResponse(overrides: Record<string, unknown> = {}) {
     priceJobsRunning: 0,
     todayRevenue: 4_814_790,
     weekRevenue: 12_530_200,
+    previousWeekRevenue: 10_000_000,
     revenueTrend: [
       { date: '2026-07-12', label: '07/12', revenue: 180_000 },
       { date: '2026-07-13', label: '07/13', revenue: 0 },
@@ -33,6 +34,12 @@ function adminDashboardResponse(overrides: Record<string, unknown> = {}) {
       { status: 'PENDING', label: '처리 대기', count: 2 },
       { status: 'IN_PROGRESS', label: '진행 중', count: 1 },
       { status: 'COMPLETED', label: '완료', count: 4 },
+      { status: 'CANCELLED', label: '취소', count: 0 }
+    ],
+    asStatus: [
+      { status: 'PENDING', label: '접수 대기', count: 1 },
+      { status: 'IN_PROGRESS', label: '처리 중', count: 2 },
+      { status: 'COMPLETED', label: '해결 완료', count: 5 },
       { status: 'CANCELLED', label: '취소', count: 0 }
     ],
     degraded: false,
@@ -1166,6 +1173,7 @@ test('renders admin dashboard with ADMIN role and dashboard API response', async
   await expect(page.locator('main')).toContainText('이번 주 매출');
   await expect(page.locator('main')).toContainText('₩4,814,790');
   await expect(page.locator('main')).toContainText('₩12,530,200');
+  await expect(page.locator('main')).toContainText('+25% vs 지난 주');
   await expect(page.locator('main')).toContainText('1건');
   await expect(page.locator('main')).toContainText('3건');
   await expect(page.locator('main')).toContainText('매출 추이');
@@ -1173,6 +1181,8 @@ test('renders admin dashboard with ADMIN role and dashboard API response', async
   await expect(page.locator('main')).toContainText('주문 현황');
   await expect(page.locator('main')).toContainText('처리 대기');
   await expect(page.locator('main')).toContainText('완료');
+  await expect(page.locator('main')).toContainText('AS 현황');
+  await expect(page.locator('main')).toContainText('해결 완료');
   await expect(page.locator('main')).toContainText('빠른 작업');
   await expect(page.locator('main')).toContainText('조립 요청 관리');
   await expect(page.locator('main')).toContainText('기사/제안 운영');

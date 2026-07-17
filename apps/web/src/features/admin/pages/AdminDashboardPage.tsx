@@ -1,4 +1,5 @@
 import { useQuery } from '@tanstack/react-query';
+import { TrendingUp } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { AdminShell, DataTable, MetricCard, Panel, StateMessage, StatusBadge } from '../../../components/ui';
 import { listAdminAssemblyRequests } from '../../parts/assemblyApi';
@@ -79,6 +80,7 @@ export function AdminDashboardPage() {
     { metric: 'openTickets', value: dashboard.openTickets, generatedAt },
     { metric: 'todayRevenue', value: dashboard.todayRevenue, generatedAt },
     { metric: 'weekRevenue', value: dashboard.weekRevenue, generatedAt },
+    { metric: 'previousWeekRevenue', value: dashboard.previousWeekRevenue, generatedAt },
     { metric: 'degraded', value: dashboard.degraded, generatedAt },
     ...(dashboard.revenueTrend ?? []).map((item) => ({
       metric: `revenue:${item.date}`,
@@ -87,6 +89,11 @@ export function AdminDashboardPage() {
     })),
     ...(dashboard.orderStatus ?? []).map((item) => ({
       metric: `order:${item.status}`,
+      value: item.count,
+      generatedAt
+    })),
+    ...(dashboard.asStatus ?? []).map((item) => ({
+      metric: `as:${item.status}`,
       value: item.count,
       generatedAt
     }))
@@ -142,15 +149,28 @@ export function AdminDashboardPage() {
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <MetricCard label="진행 중 Agent" value={countLabel(dashboard.agentRunning)} tone="orange" />
         <MetricCard label="미해결 AS" value={countLabel(dashboard.openTickets)} tone="orange" />
-        <MetricCard label="오늘 매출" value={wonLabel(dashboard.todayRevenue)} tone="point" />
-        <MetricCard label="이번 주 매출" value={wonLabel(dashboard.weekRevenue)} tone="point" />
+        <RevenueMetricCard
+          label="오늘 매출"
+          value={dashboard.todayRevenue}
+          comparisonValue={dashboard.revenueTrend?.[dashboard.revenueTrend.length - 2]?.revenue ?? 0}
+          comparisonLabel="vs 어제"
+        />
+        <RevenueMetricCard
+          label="이번 주 매출"
+          value={dashboard.weekRevenue}
+          comparisonValue={dashboard.previousWeekRevenue}
+          comparisonLabel="vs 지난 주"
+        />
       </div>
-      <div className="mt-5 grid grid-cols-1 gap-5 xl:grid-cols-[minmax(0,1fr)_360px]">
+      <div className="mt-5 grid grid-cols-1 gap-5 md:grid-cols-2 min-[1100px]:grid-cols-3">
         <Panel title="매출 추이" subtitle="최근 7일 결제 완료 금액">
           <RevenueTrendChart items={dashboard.revenueTrend ?? []} />
         </Panel>
         <Panel title="주문 현황" subtitle="조립 요청 상태 기준">
-          <OrderStatusChart items={dashboard.orderStatus ?? []} />
+          <StatusDonutChart items={dashboard.orderStatus ?? []} totalLabel="전체 주문" />
+        </Panel>
+        <Panel title="AS 현황" subtitle="AS 티켓 처리 상태 기준">
+          <StatusDonutChart items={dashboard.asStatus ?? []} totalLabel="전체 AS" />
         </Panel>
       </div>
       <div className="mt-5 grid grid-cols-1 gap-5 xl:grid-cols-[600px_minmax(0,1fr)]">
@@ -195,94 +215,172 @@ export function AdminDashboardPage() {
   );
 }
 
+function RevenueMetricCard({
+  label,
+  value,
+  comparisonValue,
+  comparisonLabel
+}: {
+  label: string;
+  value: number;
+  comparisonValue: number;
+  comparisonLabel: string;
+}) {
+  const changePercent = comparisonValue > 0
+    ? Math.round(((value - comparisonValue) / comparisonValue) * 100)
+    : value > 0 ? 100 : 0;
+  const changeLabel = `${changePercent >= 0 ? '+' : ''}${changePercent}% ${comparisonLabel}`;
+
+  return (
+    <div className="rounded-md border border-commerce-line bg-white p-4 shadow-sm">
+      <div className="text-xs font-bold text-slate-500">{label}</div>
+      <div className="mt-2 flex items-center justify-between gap-3">
+        <div className="min-w-0 break-words text-2xl font-black tracking-tight text-commerce-ink">{wonLabel(value)}</div>
+        <span className="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-violet-100 text-violet-600">
+          <TrendingUp aria-hidden="true" className="h-5 w-5 motion-safe:animate-pulse" strokeWidth={2.5} />
+        </span>
+      </div>
+      <div className="mt-2 text-[11px] font-semibold text-slate-400">{changeLabel}</div>
+    </div>
+  );
+}
+
 function RevenueTrendChart({ items }: { items: Array<{ date: string; label: string; revenue: number }> }) {
   const maxRevenue = Math.max(...items.map((item) => item.revenue), 0);
   if (items.length === 0) {
     return <StateMessage type="info" title="매출 데이터 없음" body="결제 완료 이력이 쌓이면 최근 7일 매출 추이가 표시됩니다." />;
   }
 
+  const axisValues = [maxRevenue, Math.round(maxRevenue * 0.67), Math.round(maxRevenue * 0.33), 0];
+
   return (
-    <div>
-      <div className="mb-3 flex items-center justify-between text-xs font-bold text-slate-500">
-        <span>0원</span>
-        <span>{compactWonLabel(maxRevenue)}</span>
-      </div>
-      <div className="flex h-64 items-end gap-2 rounded-md border border-slate-100 bg-slate-50/60 px-3 pb-3 pt-6 sm:gap-4 sm:px-5">
-        {items.map((item) => {
-          const height = maxRevenue > 0 ? Math.max((item.revenue / maxRevenue) * 100, item.revenue > 0 ? 8 : 2) : 2;
-          return (
-            <div key={item.date} className="flex h-full min-w-0 flex-1 flex-col justify-end">
-              <div className="group relative flex min-h-0 flex-1 items-end justify-center">
-                <div
-                  className="w-full max-w-14 rounded-t-md bg-[#de6c2d] shadow-sm transition duration-200 ease-out group-hover:bg-[#c45c22]"
-                  style={{ height: `${height}%` }}
-                  aria-label={`${item.label} 매출 ${wonLabel(item.revenue)}`}
-                  title={`${item.label} · ${wonLabel(item.revenue)}`}
-                />
-                <span className="pointer-events-none absolute -top-5 hidden whitespace-nowrap rounded bg-slate-900 px-2 py-1 text-[11px] font-bold text-white shadow-sm group-hover:block">
-                  {compactWonLabel(item.revenue)}
-                </span>
-              </div>
-              <div className="mt-2 truncate text-center text-[11px] font-bold text-slate-500">{item.label}</div>
+    <div className="rounded-md border border-slate-100 bg-slate-50/60 px-2 py-4">
+      <div className="grid grid-cols-[52px_minmax(0,1fr)] gap-2">
+        <div className="flex h-48 flex-col justify-between text-right text-[10px] font-bold text-slate-500">
+          {axisValues.map((value, index) => <span key={`${value}-${index}`}>{compactWonLabel(value)}</span>)}
+        </div>
+        <div className="min-w-0">
+          <div className="relative h-48 border-b border-l border-slate-300">
+            {[0, 33, 67].map((position) => (
+              <span
+                key={position}
+                aria-hidden="true"
+                className="absolute left-0 right-0 border-t border-dashed border-slate-200"
+                style={{ top: `${position}%` }}
+              />
+            ))}
+            <div className="absolute inset-0 grid grid-cols-7 items-end gap-1 px-1.5">
+              {items.map((item) => {
+                const height = maxRevenue > 0 ? Math.max((item.revenue / maxRevenue) * 100, item.revenue > 0 ? 5 : 1) : 1;
+                return (
+                  <div key={item.date} className="group relative flex h-full min-w-0 items-end justify-center">
+                    <div
+                      className="w-full max-w-8 rounded-t bg-[#de6c2d] shadow-sm transition-[height,background-color] duration-300 ease-out group-hover:bg-[#c45c22]"
+                      style={{ height: `${height}%` }}
+                      aria-label={`${item.label} 매출 ${wonLabel(item.revenue)}`}
+                      title={`${item.label} · ${wonLabel(item.revenue)}`}
+                    />
+                    <span className="pointer-events-none absolute top-2 z-10 hidden -translate-y-full whitespace-nowrap rounded bg-slate-900 px-2 py-1 text-[10px] font-bold text-white shadow-sm group-hover:block">
+                      {compactWonLabel(item.revenue)}
+                    </span>
+                  </div>
+                );
+              })}
             </div>
-          );
-        })}
+          </div>
+          <div className="mt-2 grid grid-cols-7 gap-0">
+            {items.map((item) => (
+              <div key={item.date} className="whitespace-nowrap text-center text-[8px] font-bold leading-none text-slate-500">{item.label}</div>
+            ))}
+          </div>
+        </div>
       </div>
     </div>
   );
 }
 
-function OrderStatusChart({ items }: { items: Array<{ status: string; label: string; count: number }> }) {
+type StatusChartItem = { status: string; label: string; count: number };
+
+function polarPoint(cx: number, cy: number, radius: number, angle: number) {
+  const radians = (angle * Math.PI) / 180;
+  return { x: cx + radius * Math.cos(radians), y: cy + radius * Math.sin(radians) };
+}
+
+function donutSegmentPath(cx: number, cy: number, outerRadius: number, innerRadius: number, startAngle: number, endAngle: number) {
+  const outerStart = polarPoint(cx, cy, outerRadius, startAngle);
+  const outerEnd = polarPoint(cx, cy, outerRadius, endAngle);
+  const innerEnd = polarPoint(cx, cy, innerRadius, endAngle);
+  const innerStart = polarPoint(cx, cy, innerRadius, startAngle);
+  const largeArc = endAngle - startAngle > 180 ? 1 : 0;
+  return [
+    `M ${outerStart.x} ${outerStart.y}`,
+    `A ${outerRadius} ${outerRadius} 0 ${largeArc} 1 ${outerEnd.x} ${outerEnd.y}`,
+    `L ${innerEnd.x} ${innerEnd.y}`,
+    `A ${innerRadius} ${innerRadius} 0 ${largeArc} 0 ${innerStart.x} ${innerStart.y}`,
+    'Z'
+  ].join(' ');
+}
+
+function StatusDonutChart({ items, totalLabel }: { items: StatusChartItem[]; totalLabel: string }) {
   const total = items.reduce((sum, item) => sum + item.count, 0);
-  const radius = 42;
-  const circumference = 2 * Math.PI * radius;
-  let offset = 0;
+  const largestCount = Math.max(...items.map((item) => item.count), 0);
+  let angle = -90;
+  const segments = items
+    .filter((item) => item.count > 0)
+    .map((item) => {
+      const portion = item.count / total;
+      const startAngle = angle;
+      const endAngle = angle + Math.min(portion * 360, 359.999);
+      angle += portion * 360;
+      return { ...item, portion, startAngle, endAngle, midAngle: (startAngle + endAngle) / 2 };
+    });
 
   return (
-    <div className="grid gap-4 sm:grid-cols-[150px_minmax(0,1fr)] xl:grid-cols-1">
-      <div className="relative mx-auto h-40 w-40">
-        <svg viewBox="0 0 120 120" className="h-40 w-40 -rotate-90" role="img" aria-label={`주문 현황 총 ${total}건`}>
-          <circle cx="60" cy="60" r={radius} fill="none" stroke="#e4e7ec" strokeWidth="16" />
-          {total > 0
-            ? items.map((item) => {
-              const length = (item.count / total) * circumference;
-              const dashOffset = -offset;
-              offset += length;
-              return (
-                <circle
-                  key={item.status}
-                  cx="60"
-                  cy="60"
-                  r={radius}
-                  fill="none"
-                  stroke={ORDER_STATUS_COLORS[item.status] ?? '#64748b'}
-                  strokeWidth="16"
-                  strokeDasharray={`${length} ${circumference - length}`}
-                  strokeDashoffset={dashOffset}
-                  strokeLinecap="round"
-                />
-              );
-            })
-            : null}
-        </svg>
-        <div className="absolute inset-0 grid place-items-center text-center">
-          <div>
-            <div className="text-2xl font-black text-commerce-ink">{countLabel(total)}</div>
-            <div className="mt-1 text-[11px] font-bold text-slate-500">전체 주문</div>
-          </div>
-        </div>
-      </div>
-      <div className="space-y-2">
-        {items.map((item) => (
-          <div key={item.status} className="flex items-center justify-between gap-3 rounded-md border border-slate-100 bg-slate-50 px-3 py-2">
-            <div className="flex min-w-0 items-center gap-2">
-              <span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: ORDER_STATUS_COLORS[item.status] ?? '#64748b' }} />
-              <span className="truncate text-xs font-bold text-slate-600">{item.label}</span>
-            </div>
-            <span className="text-xs font-black text-commerce-ink">{countLabel(item.count)}</span>
-          </div>
-        ))}
-      </div>
+    <div className="mx-auto w-full max-w-[320px]">
+      <svg viewBox="0 0 240 220" className="h-auto w-full overflow-visible" role="img" aria-label={`${totalLabel} 총 ${total}건`}>
+        <circle cx="120" cy="104" r="61" fill="none" stroke="#e4e7ec" strokeWidth="30" />
+        {segments.map((segment) => {
+          const color = ORDER_STATUS_COLORS[segment.status] ?? '#64748b';
+          const isLargest = segment.count === largestCount;
+          const direction = polarPoint(0, 0, isLargest ? 4 : 0, segment.midAngle);
+          const valuePoint = polarPoint(120 + direction.x, 104 + direction.y, 61, segment.midAngle);
+          const lineStart = polarPoint(120 + direction.x, 104 + direction.y, 78, segment.midAngle);
+          const lineElbow = polarPoint(120 + direction.x, 104 + direction.y, 91, segment.midAngle);
+          const isRight = Math.cos((segment.midAngle * Math.PI) / 180) >= 0;
+          const labelY = Math.max(18, Math.min(196, lineElbow.y));
+          const lineEndX = isRight ? 213 : 27;
+          const labelX = isRight ? 218 : 22;
+          const percentage = Math.round(segment.portion * 100);
+          return (
+            <g key={segment.status}>
+              <path
+                d={donutSegmentPath(120 + direction.x, 104 + direction.y, 76, 46, segment.startAngle, segment.endAngle)}
+                fill={color}
+                className="transition-transform duration-200 ease-out hover:scale-[1.02]"
+                style={{ filter: isLargest ? 'drop-shadow(0 4px 5px rgb(15 23 42 / 0.22))' : undefined, transformOrigin: '120px 104px' }}
+              />
+              <text x={valuePoint.x} y={valuePoint.y + 3} textAnchor="middle" className="fill-white text-[9px] font-black">
+                {segment.count}건
+              </text>
+              <polyline
+                points={`${lineStart.x},${lineStart.y} ${lineElbow.x},${labelY} ${lineEndX},${labelY}`}
+                fill="none"
+                stroke={color}
+                strokeWidth="1.5"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              />
+              <text x={labelX} y={labelY - 3} textAnchor={isRight ? 'start' : 'end'} fill={color} className="text-[9px] font-black">
+                {segment.label}
+                <tspan x={labelX} dy="12" className="font-bold">{segment.count}건 · {percentage}%</tspan>
+              </text>
+            </g>
+          );
+        })}
+        <text x="120" y="101" textAnchor="middle" className="fill-commerce-ink text-[17px] font-black">{countLabel(total)}</text>
+        <text x="120" y="118" textAnchor="middle" className="fill-slate-500 text-[9px] font-bold">{totalLabel}</text>
+      </svg>
+      {total === 0 ? <p className="-mt-3 text-center text-xs font-bold text-slate-500">표시할 상태 데이터가 없습니다.</p> : null}
     </div>
   );
 }
