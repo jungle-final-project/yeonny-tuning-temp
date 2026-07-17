@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import argparse
-import base64
 import calendar
 import gzip
 import hashlib
@@ -23,7 +22,7 @@ import uuid
 import webbrowser
 from dataclasses import dataclass, replace as dataclass_replace
 from datetime import datetime, timedelta, timezone
-from io import BytesIO, TextIOWrapper
+from io import TextIOWrapper
 from pathlib import Path
 from typing import Any, Callable, Sequence
 from urllib.parse import quote, urljoin
@@ -101,10 +100,11 @@ from pc_agent_ui_rendering import (
     WindowVisibilityState,
     fluid_wave_amplitude,
     home_hardware_icon_cache_key,
+    render_finding_icon,
     render_fluid_wave_frame,
-    render_hardware_icon as render_pillow_hardware_icon,
     render_home_hardware_icon as render_pillow_home_hardware_icon,
     render_progress_ring as render_pillow_progress_ring,
+    render_result_icon as render_pillow_result_icon,
     render_rounded_surface,
     render_status_dot,
     render_status_icon as render_pillow_status_icon,
@@ -185,6 +185,7 @@ UPDATE_MANIFEST_PATH = "/downloads/pc-agent/latest.json"
 REGISTERED_STATUS = "REGISTERED"
 UNREGISTERED_STATUS = "UNREGISTERED"
 DISPLAY_APP_NAME = "PCAgent"
+WINDOW_TITLE = "PC Agent"
 DATA_APP_NAME = "BuildGraphAgent"
 LEGACY_DISPLAY_APP_NAMES = ("BuildGraphAgent", "PC Agent", "BuildGraph PC Agent")
 DOWNLOAD_FILE_PREFIX = DISPLAY_APP_NAME
@@ -243,6 +244,7 @@ PC_AGENT_UI_FLOW = (
 PC_AGENT_DIAGNOSIS_STEPS = ("증상 확인", "하드웨어 진단", "결과 및 조치")
 PC_AGENT_WINDOW_WIDTH = 1000
 PC_AGENT_WINDOW_HEIGHT = 740
+PC_AGENT_REMOVED_HEADER_HEIGHT = 56
 STANDALONE_INITIAL_DESCRIPTION = (
     "CPU, GPU, 메모리, 저장장치의 현재 상태를 자동으로 확인하고 있습니다.\n"
     "준비가 끝나면 아래 버튼으로 정밀 진단을 시작할 수 있습니다."
@@ -1052,6 +1054,61 @@ def tk_ui_font(family: str, size_px: int, weight: str = "regular", underline: bo
     if underline:
         styles.append("underline")
     return (family, -size_px, *styles)
+
+
+def fit_measured_text(
+    value: str,
+    max_width: int,
+    max_lines: int,
+    measure: Callable[[str], int],
+) -> str:
+    """Wrap text to a fixed number of measured lines and add an ellipsis when needed."""
+
+    normalized = " ".join(str(value).split())
+    if not normalized or max_width <= 0 or max_lines <= 0:
+        return ""
+    lines: list[str] = []
+    remaining = normalized
+    while remaining and len(lines) < max_lines:
+        if measure(remaining) <= max_width:
+            lines.append(remaining)
+            remaining = ""
+            break
+        last_fit = 0
+        word_break = 0
+        for index in range(1, len(remaining) + 1):
+            candidate = remaining[:index].rstrip()
+            if measure(candidate) <= max_width:
+                last_fit = index
+                if index == len(remaining) or remaining[index:index + 1].isspace():
+                    word_break = index
+            else:
+                break
+        best_break = max(1, word_break or last_fit)
+        lines.append(remaining[:best_break].rstrip())
+        remaining = remaining[best_break:].lstrip()
+    if remaining and lines:
+        ellipsis = "…"
+        last = lines[-1]
+        while last and measure(f"{last}{ellipsis}") > max_width:
+            last = last[:-1].rstrip()
+        lines[-1] = f"{last}{ellipsis}" if last else ellipsis
+    return "\n".join(lines)
+
+
+def result_action_columns(
+    action_count: int,
+    left: int = 145,
+    right: int = 855,
+) -> tuple[tuple[int, int], ...]:
+    """Return evenly divided action columns within the result card."""
+
+    count = max(1, min(3, int(action_count)))
+    width = (right - left) / count
+    return tuple(
+        (round(left + index * width), round(left + (index + 1) * width))
+        for index in range(count)
+    )
 EVENT_PANEL_SIGNAL_CODES = {
     "REMOTE_DRIVER_OS",
     "REMOTE_APP_LAUNCHER",
@@ -5746,13 +5803,12 @@ def show_log_viewer(
     config = load_config(config_path)
     config.log_dir.mkdir(parents=True, exist_ok=True)
     root = tk.Tk()
-    root.title(DISPLAY_APP_NAME)
+    root.title(WINDOW_TITLE)
     apply_agent_window_icon(root)
     root.geometry(f"{PC_AGENT_WINDOW_WIDTH}x{PC_AGENT_WINDOW_HEIGHT}")
     root.minsize(PC_AGENT_WINDOW_WIDTH, PC_AGENT_WINDOW_HEIGHT)
-    root.maxsize(PC_AGENT_WINDOW_WIDTH, PC_AGENT_WINDOW_HEIGHT)
-    root.resizable(False, False)
-    root.overrideredirect(os.environ.get("PC_AGENT_CAPTURE_NATIVE") != "1")
+    root.resizable(True, True)
+    root.overrideredirect(False)
     root.configure(background="#ffffff")
     root.attributes("-topmost", True)
     root.after(15000, lambda: root.attributes("-topmost", False))
@@ -5767,6 +5823,18 @@ def show_log_viewer(
 
     def font(size: int, weight: str = "regular") -> tuple[Any, ...]:
         return tk_ui_font(ui_font_family, size, weight)
+
+    measurement_fonts: dict[tuple[int, str], Any] = {}
+
+    def fitted_text(value: str, size: int, width: int, max_lines: int, weight: str = "regular") -> str:
+        key = (size, weight)
+        measurement_font = measurement_fonts.get(key)
+        if measurement_font is None and tkfont is not None:
+            measurement_font = tkfont.Font(root=root, font=font(size, weight))
+            measurement_fonts[key] = measurement_font
+        if measurement_font is None:
+            return fit_measured_text(value, width, max_lines, lambda text_value: len(text_value) * size)
+        return fit_measured_text(value, width, max_lines, measurement_font.measure)
 
     canvas = tk.Canvas(
         root,
@@ -5840,13 +5908,13 @@ def show_log_viewer(
         "asRequestPayload": None,
         "ticketUrl": None,
     }
-    image_refs: list[Any] = []
     static_photo_cache = RetainedAssetCache()
     progress_ring_photo_cache = RetainedAssetCache()
     spinner_photo_cache: dict[tuple[int, str], list[Any]] = {}
     callback_state: dict[str, Any] = {
         "metricsAfterId": None,
         "renderAfterId": None,
+        "diagnosisProgressAfterId": None,
         "visibilityAfterId": None,
         "renderPending": False,
         "uiActive": True,
@@ -5854,7 +5922,6 @@ def show_log_viewer(
     }
     window_visibility = WindowVisibilityState()
     button_counter = {"value": 0}
-    drag_origin = {"x": 0, "y": 0}
     wave_animation: dict[str, Any] = {
         "frame": 0,
         "items": {},
@@ -6026,8 +6093,8 @@ def show_log_viewer(
 
     def draw_hardware_icon(x: int, y: int, component: str, color: str = "#555555") -> None:
         photo = cached_photo(
-            ("hardware", component, color, 30),
-            lambda: render_pillow_hardware_icon(component, 30, color),
+            home_hardware_icon_cache_key(component, color, 30),
+            lambda: render_pillow_home_hardware_icon(component, 30, color),
         )
         canvas.create_image(x, y, image=photo)
 
@@ -6038,36 +6105,7 @@ def show_log_viewer(
         )
         canvas.create_image(x, y, image=photo)
 
-    def draw_header() -> None:
-        canvas.create_rectangle(0, 0, PC_AGENT_WINDOW_WIDTH, 56, fill="#ffffff", outline="")
-        line(0, 55, PC_AGENT_WINDOW_WIDTH, 55, "#e0e0e0")
-        try:
-            if Image is not None:
-                original = Image.open(runtime_asset_path(AGENT_ICON_PNG)).convert("RGBA")
-                resampling = getattr(getattr(Image, "Resampling", Image), "LANCZOS", Image.LANCZOS)
-                original.thumbnail((24, 24), resampling)
-                buffer = BytesIO()
-                original.save(buffer, format="PNG")
-                photo = tk.PhotoImage(data=base64.b64encode(buffer.getvalue()).decode("ascii"))
-                image_refs.append(photo)
-                canvas.create_image(28, 28, image=photo)
-            else:
-                canvas.create_rectangle(16, 16, 40, 40, fill="#111111", outline="")
-        except Exception:
-            canvas.create_rectangle(16, 16, 40, 40, fill="#111111", outline="")
-        canvas.create_polygon(22, 21, 33, 21, 33, 32, 29, 32, 29, 26, 22, 26, fill="#ffffff", outline="")
-        canvas.create_polygon(22, 26, 26, 30, 26, 35, 22, 31, fill="#ffffff", outline="")
-        text(52, 28, "PC Agent", 16, colors["text"], "regular", "w")
-        text(909, 28, "—", 18, colors["text"], "regular", "center", tags="window-min")
-        canvas.create_rectangle(941, 21, 953, 35, fill="", outline="#111111", width=2, tags="window-max")
-        canvas.create_line(974, 21, 986, 35, fill="#111111", width=2, tags="window-close")
-        canvas.create_line(986, 21, 974, 35, fill="#111111", width=2, tags="window-close")
-        bind_click("window-min", root.iconify)
-        bind_click("window-close", close_window)
-        canvas.tag_bind("window-max", "<Button-1>", lambda event: None)
-        canvas.tag_bind("window-max", "<Enter>", lambda event: canvas.configure(cursor="hand2"))
-        canvas.tag_bind("window-max", "<Leave>", lambda event: canvas.configure(cursor=""))
-
+    def draw_status_controls() -> None:
         connection_state = connection_state_provider() if callable(connection_state_provider) else "IDLE"
         connected = connection_state in {"IDLE", "REQUEST_RECEIVED", "RUNNING", "COMPLETED"}
         round_rect(778, 68, 866, 102, 8, "#ffffff", "#d8d8d8")
@@ -6280,15 +6318,86 @@ def show_log_viewer(
         if ui["status"]:
             text(500, 724, str(ui["status"]), 13, colors["red"], "regular", "center", width=760)
 
-    def draw_progress_ring(x: int, y: int, progress: int) -> None:
-        canvas.create_image(x, y, image=progress_ring_photo(progress))
+    def draw_progress_ring(x: int, y: int, progress: int) -> int:
+        return canvas.create_image(x, y, image=progress_ring_photo(progress))
 
-    def draw_demo_scenario_badge(y: int) -> None:
-        scenario_id = ui.get("scenarioId")
-        if not ui.get("demo") or not isinstance(scenario_id, str) or not scenario_id:
+    def diagnosis_display_progress(
+        snapshot: DiagnosisRunSnapshot,
+        result: Any,
+    ) -> tuple[int, bool]:
+        active_session = ui.get("diagnosisSession")
+        result_available = diagnosis_result_available(active_session, snapshot, result)
+        smoother = ui.get("progressSmoother")
+        if not isinstance(smoother, SmoothedProgress) or ui.get("progressSmootherId") != snapshot.diagnosis_id:
+            smoother = SmoothedProgress()
+            ui["progressSmoother"] = smoother
+            ui["progressSmootherId"] = snapshot.diagnosis_id
+        display_progress = smoother.update(100 if result_available else snapshot.progress, time.monotonic())
+        if result_available and display_progress >= 100 and not ui.get("autoAdvanceAt"):
+            ui["autoAdvanceAt"] = time.monotonic() + 1.0
+        return display_progress, result_available
+
+    def cancel_diagnosis_progress_tick() -> None:
+        after_id = callback_state.get("diagnosisProgressAfterId")
+        if after_id is None:
             return
-        round_rect(574, y, 912, y + 24, 12, "#fff8eb", "#f0b24a", 1)
-        text(743, y + 12, f"DEMO · {scenario_id}", 10, "#9a5c00", "semibold", "center", width=324)
+        try:
+            root.after_cancel(after_id)
+        except tk.TclError:
+            pass
+        callback_state["diagnosisProgressAfterId"] = None
+
+    def schedule_diagnosis_progress_tick() -> None:
+        if (
+            callback_state["closed"]
+            or not callback_state["uiActive"]
+            or str(ui.get("state")) != "DIAGNOSING"
+            or callback_state.get("diagnosisProgressAfterId") is not None
+        ):
+            return
+        callback_state["diagnosisProgressAfterId"] = root.after(120, diagnosis_progress_tick)
+
+    def diagnosis_progress_tick() -> None:
+        callback_state["diagnosisProgressAfterId"] = None
+        if callback_state["closed"] or not root_ui_active() or str(ui.get("state")) != "DIAGNOSING":
+            return
+        snapshot = diagnosis_snapshot_provider() if callable(diagnosis_snapshot_provider) else ui.get("diagnosisSnapshot")
+        if not isinstance(snapshot, DiagnosisRunSnapshot):
+            snapshot = DiagnosisRunSnapshot()
+        result = diagnosis_result_provider() if callable(diagnosis_result_provider) else ui.get("diagnosisResult")
+        ui["diagnosisSnapshot"] = snapshot
+        if isinstance(result, DiagnosisResult):
+            ui["diagnosisResult"] = result
+        display_progress, result_available = diagnosis_display_progress(snapshot, result)
+        advance_at = ui.get("autoAdvanceAt")
+        if advance_at and time.monotonic() >= advance_at:
+            ui["autoAdvanceAt"] = None
+            show_diagnosis_result()
+            return
+        items = ui.get("diagnosisProgressItems")
+        if isinstance(items, dict):
+            try:
+                canvas.itemconfigure(items["ring"], image=progress_ring_photo(display_progress))
+                canvas.itemconfigure(items["percent"], text=f"{display_progress}%")
+                canvas.itemconfigure(
+                    items["title"],
+                    text="진단 완료" if result_available else "하드웨어 진단 진행 중",
+                )
+                canvas.itemconfigure(
+                    items["detail"],
+                    text="진단 작업이 완료되었습니다."
+                    if result_available
+                    else str(ui["status"] or diagnosis_current_task_label(snapshot)),
+                )
+                terminal_statuses = {"COMPLETED", "UNSUPPORTED", "FAILED", "TIMED_OUT", "CANCELLED"}
+                completed_count = sum(task.status in terminal_statuses for task in snapshot.tasks)
+                canvas.itemconfigure(
+                    items["summary"],
+                    text=f"전체 {len(snapshot.tasks)}개 · 완료 {completed_count}개",
+                )
+            except (KeyError, tk.TclError):
+                return
+        schedule_diagnosis_progress_tick()
 
     def draw_diagnosing() -> None:
         active_session = ui["diagnosisSession"]
@@ -6312,56 +6421,33 @@ def show_log_viewer(
         }
         scope = " · ".join(dict.fromkeys(check_labels.get(item, item.upper()) for item in requested_checks))
         scope_text = f"점검 범위: {scope}" if scope else "요청된 점검 범위를 확인하고 있습니다."
-        progress = snapshot.progress if snapshot.diagnosis_id else 0
         current_label = diagnosis_current_task_label(snapshot)
         result = ui.get("diagnosisResult")
-        result_available = diagnosis_result_available(active_session, snapshot, result)
+        display_progress, result_available = diagnosis_display_progress(snapshot, result)
 
-        # 실제 진행률은 태스크 종료 시에만 계단식으로 뛰므로 표시용 스무딩을 거친다.
-        smoother = ui.get("progressSmoother")
-        if not isinstance(smoother, SmoothedProgress) or ui.get("progressSmootherId") != snapshot.diagnosis_id:
-            smoother = SmoothedProgress()
-            ui["progressSmoother"] = smoother
-            ui["progressSmootherId"] = snapshot.diagnosis_id
-        display_progress = smoother.update(100 if result_available else progress, time.monotonic())
-        if result_available and display_progress >= 100 and not ui.get("autoAdvanceAt"):
-            # 100%를 1초간 보여준 뒤 결과 단계로 자동 전환한다(스텝 원 이동 애니메이션 동반).
-            ui["autoAdvanceAt"] = time.monotonic() + 1.0
-        if (display_progress < 100 or ui.get("autoAdvanceAt")) and not ui.get("ringTickScheduled"):
-            # 링이 이벤트 없이도 계속 움직이도록 진단 화면이 떠 있는 동안 120ms 재렌더한다.
-            ui["ringTickScheduled"] = True
-
-            def ring_tick() -> None:
-                ui["ringTickScheduled"] = False
-                if animation_controller is not None and not animation_controller.visible:
-                    return
-                advance_at = ui.get("autoAdvanceAt")
-                if advance_at and time.monotonic() >= advance_at:
-                    ui["autoAdvanceAt"] = None
-                    if str(ui.get("state")) == "DIAGNOSING":
-                        show_diagnosis_result()
-                        return
-                if isinstance(ui.get("diagnosisSession"), DiagnosisSession):
-                    render()
-
-            root.after(120, ring_tick)
-
-        round_rect(70, 180, 930, 250, UI_CARD_RADIUS, "#ffffff", "#d7dce0", UI_CARD_BORDER_WIDTH)
-        draw_chat_icon(109, 215, 42)
-        text(148, 196, "전달받은 증상", 15, colors["text"], "semibold", width=735)
-        draw_demo_scenario_badge(188)
-        text(148, 219, symptom, 14, "#777777", "regular", width=735)
-        text(148, 239, scope_text, 13, "#888888", "regular", width=735)
+        round_rect(70, 180, 930, 288, UI_CARD_RADIUS, "#ffffff", "#d7dce0", UI_CARD_BORDER_WIDTH)
+        draw_chat_icon(109, 234, 42)
+        text(148, 198, "전달받은 증상", 15, colors["text"], "semibold", width=735)
+        text(148, 224, fitted_text(symptom, 14, 735, 2), 14, "#777777", "regular", width=735)
+        text(148, 271, fitted_text(scope_text, 13, 735, 1), 13, "#888888", "regular", width=735)
 
         terminal_statuses = {"COMPLETED", "UNSUPPORTED", "FAILED", "TIMED_OUT", "CANCELLED"}
         completed_count = sum(task.status in terminal_statuses for task in snapshot.tasks)
-        round_rect(70, 264, 930, 354, UI_CARD_RADIUS, "#ffffff", "#d7dce0", UI_CARD_BORDER_WIDTH)
-        draw_progress_ring(124, 309, display_progress)
-        text(124, 309, f"{display_progress}%", 15, colors["text"], "semibold", "center")
-        text(190, 283, "진단 완료" if result_available else "하드웨어 진단 진행 중", 16, colors["text"], "semibold")
+        round_rect(70, 300, 930, 392, UI_CARD_RADIUS, "#ffffff", "#d7dce0", UI_CARD_BORDER_WIDTH)
+        ring_item = draw_progress_ring(124, 346, display_progress)
+        percent_item = text(124, 346, f"{display_progress}%", 15, colors["text"], "semibold", "center")
+        title_item = text(190, 320, "진단 완료" if result_available else "하드웨어 진단 진행 중", 16, colors["text"], "semibold")
         detail = "진단 작업이 완료되었습니다." if result_available else ui["status"] or current_label
-        text(190, 309, str(detail), 14, "#777777", "regular", width=600)
-        text(190, 335, f"전체 {len(snapshot.tasks)}개 · 완료 {completed_count}개", 13, "#888888", "regular")
+        detail_item = text(190, 346, str(detail), 14, "#777777", "regular", width=600)
+        summary_item = text(190, 372, f"전체 {len(snapshot.tasks)}개 · 완료 {completed_count}개", 13, "#888888", "regular")
+        ui["diagnosisProgressItems"] = {
+            "ring": ring_item,
+            "percent": percent_item,
+            "title": title_item,
+            "detail": detail_item,
+            "summary": summary_item,
+        }
+        schedule_diagnosis_progress_tick()
 
         component_cards = (
             (70, "cpu", "CPU"),
@@ -6373,14 +6459,14 @@ def show_log_viewer(
             status_label, tone = diagnosis_component_presentation(snapshot, component)
             color = tone_color(tone)
             fill = {"running": "#f5f9ff", "warning": "#fff9ee", "error": "#fff5f5"}.get(tone, "#ffffff")
-            round_rect(x, 370, x + 206, 448, UI_CARD_RADIUS, fill, "#d7dce0", UI_CARD_BORDER_WIDTH)
-            draw_hardware_icon(x + 26, 397, component, color if tone != "neutral" else "#666666")
-            text(x + 48, 390, label, 15, colors["text"], "semibold", width=90)
-            draw_status_icon(x + 28, 426, tone, 14)
-            text(x + 48, 426, status_label, 13, color, "semibold", width=130)
+            round_rect(x, 404, x + 206, 478, UI_CARD_RADIUS, fill, "#d7dce0", UI_CARD_BORDER_WIDTH)
+            draw_hardware_icon(x + 27, 430, component, color if tone != "neutral" else "#666666")
+            text(x + 50, 423, label, 15, colors["text"], "semibold", width=90)
+            draw_status_icon(x + 28, 454, tone, 14)
+            text(x + 50, 454, status_label, 13, color, "semibold", "w", width=130)
 
-        round_rect(70, 464, 492, 650, UI_CARD_RADIUS, "#ffffff", "#d7dce0", UI_CARD_BORDER_WIDTH)
-        text(88, 486, "검사 작업", 15, colors["text"], "semibold")
+        round_rect(70, 490, 492, 662, UI_CARD_RADIUS, "#ffffff", "#d7dce0", UI_CARD_BORDER_WIDTH)
+        text(88, 510, "검사 작업", 15, colors["text"], "semibold")
         current_index = next(
             (index for index, task in enumerate(snapshot.tasks) if task.task_id == snapshot.current_task_id),
             max(0, len([task for task in snapshot.tasks if task.status not in {"PENDING", "RUNNING"}]) - 1),
@@ -6388,75 +6474,69 @@ def show_log_viewer(
         start_index = max(0, min(current_index - 1, max(0, len(snapshot.tasks) - 4)))
         checklist = snapshot.tasks[start_index:start_index + 4]
         for idx, task in enumerate(checklist):
-            cy = 520 + idx * 30
+            cy = 550 + idx * 32
             status_label, tone = diagnosis_task_presentation(task.status)
             draw_status_icon(96, cy, tone, 14)
             label = DiagnosisOrchestrator.TASK_LABELS.get(task.task_id, task.task_id)
-            text(114, cy - 7, label, 13, colors["text"], "semibold", "w", width=250)
-            text(114, cy + 9, f"{task.component.upper()} · {status_label}", 12, tone_color(tone), "regular", "w", width=250)
+            text(114, cy - 8, label, 13, colors["text"], "semibold", "w", width=250)
+            text(114, cy + 10, f"{task.component.upper()} · {status_label}", 12, tone_color(tone), "regular", "w", width=250)
 
-        round_rect(508, 464, 930, 650, UI_CARD_RADIUS, "#ffffff", "#d7dce0", UI_CARD_BORDER_WIDTH)
-        text(526, 486, "실시간 진단 로그", 15, colors["text"], "semibold")
+        round_rect(508, 490, 930, 662, UI_CARD_RADIUS, "#ffffff", "#d7dce0", UI_CARD_BORDER_WIDTH)
+        text(526, 510, "실시간 진단 로그", 15, colors["text"], "semibold")
         visible_events = snapshot.events[-4:]
         for idx, event in enumerate(visible_events):
-            cy = 516 + idx * 31
+            cy = 550 + idx * 32
             try:
                 stamp = datetime.fromisoformat(event.timestamp.replace("Z", "+00:00")).astimezone(KST).strftime("%H:%M:%S")
             except ValueError:
                 stamp = "--:--:--"
             event_label, tone = diagnosis_event_presentation(event.event_type)
             draw_status_icon(532, cy, tone, 12)
-            text(545, cy - 7, stamp, 11, "#888888", "regular", "w")
-            text(602, cy - 7, event_label, 11, tone_color(tone), "semibold", "w", width=70)
+            text(548, cy - 8, stamp, 11, "#888888", "regular", "w")
+            text(606, cy - 8, event_label, 11, tone_color(tone), "semibold", "w", width=70)
             source_label = event.component or event.task_id or "진단"
-            text(545, cy + 8, f"{source_label} · {event.message}", 11, colors["text"], "regular", "w", width=360)
+            text(548, cy + 10, fitted_text(f"{source_label} · {event.message}", 11, 350, 1), 11, colors["text"], "regular", "w", width=350)
         if result_available:
-            button(390, 674, 610, 728, "진단 결과 보기", show_diagnosis_result, True, size=15)
+            button(390, 678, 610, 730, "진단 결과 보기", show_diagnosis_result, True, size=15)
         elif snapshot.state in {"FAILED", "TIMED_OUT"}:
-            button(390, 674, 610, 728, "진단 재시도", request_diagnosis_retry, False, size=15)
+            button(390, 678, 610, 730, "진단 재시도", request_diagnosis_retry, False, size=15)
         elif snapshot.state == "CANCELLED":
-            text(500, 701, "진단이 취소되었습니다.", 13, colors["muted"], "regular", "center")
+            text(500, 704, "진단이 취소되었습니다.", 13, colors["muted"], "regular", "center")
         else:
-            button(390, 674, 610, 728, "진단 취소", request_diagnosis_cancel, False, size=15)
+            button(390, 678, 610, 730, "진단 취소", request_diagnosis_cancel, False, size=15)
 
     def draw_result_icon(x: int, y: int) -> None:
-        canvas.create_oval(x - 20, y - 20, x + 20, y + 20, fill="#f4f4f4", outline="")
-        canvas.create_line(x - 6, y + 8, x - 6, y - 9, x + 6, y - 9, fill="#111111", width=2)
-        canvas.create_line(x + 6, y - 9, x + 6, y + 2, fill="#111111", width=2)
-        canvas.create_line(x - 6, y + 1, x + 2, y + 1, fill="#111111", width=2)
+        photo = cached_photo(
+            ("result-header-icon", 42, "#333333"),
+            lambda: render_pillow_result_icon(42, "#333333"),
+        )
+        canvas.create_image(x, y, image=photo)
 
     def draw_result() -> None:
         result = ui.get("diagnosisResult")
         diagnosis = ui.get("diagnosisSnapshot")
         session = ui.get("diagnosisSession")
-        round_rect(70, 180, 930, 670, 12, "#ffffff", "#d7dce0")
+        round_rect(70, 180, 930, 710, UI_CARD_RADIUS, "#ffffff", "#d7dce0", UI_CARD_BORDER_WIDTH)
         draw_result_icon(112, 222)
         text(145, 214, "진단 결과", 17, colors["text"], "semibold")
-        draw_demo_scenario_badge(194)
         if not isinstance(result, DiagnosisResult):
-            text(145, 258, "진단 결과를 불러올 수 없습니다.", 23, colors["text"], "semibold")
-            text(145, 307, "저장된 측정 근거를 확인한 뒤 다시 시도하세요.", 14, "#5f6368")
-            button(390, 585, 610, 635, "진단 상세", show_diagnosis_detail, False, disabled=True, size=15)
+            text(145, 264, "진단 결과를 불러올 수 없습니다.", 22, colors["text"], "semibold")
+            text(145, 318, "저장된 측정 근거를 확인한 뒤 다시 시도하세요.", 14, "#5f6368")
+            button(390, 652, 610, 694, "진단 상세", show_diagnosis_detail, False, disabled=True, size=15)
             return
-        text(145, 258, result.title, 22, colors["text"], "semibold", "nw", width=710)
-        text(145, 307, result.summary, 14, "#5f6368", "regular", "nw", width=710)
+        text(145, 258, fitted_text(result.title, 22, 710, 2, "semibold"), 22, colors["text"], "semibold", "nw", width=710)
+        text(145, 318, fitted_text(result.summary, 14, 710, 3), 14, "#5f6368", "regular", "nw", width=710)
         is_device_configuration = result.diagnosis_type == "DEVICE_DRIVER_CONFIGURATION_ISSUE"
         if is_device_configuration:
-            text(145, 352, "문제: 그래픽 장치 구성 이상", 12, colors["text"], "semibold")
-            text(145, 373, "로컬 처리: Agent가 안전하게 로컬 자동 복구할 수 없음", 12, colors["muted"])
-            text(145, 394, "다음 조치: 원격 AS 기사 점검 필요", 12, colors["muted"])
-            result_divider_y, core_title_y, chip_y1, chip_y2 = 412, 430, 454, 490
-            action_divider_y, action_title_y, action_center_y = 510, 530, 565
-            button_y1, button_y2, status_y = 610, 650, 668
+            text(145, 382, "문제: 그래픽 장치 구성 이상", 12, colors["text"], "semibold")
+            text(145, 402, "로컬 처리: Agent가 안전하게 로컬 자동 복구할 수 없음", 12, colors["muted"])
+            text(145, 422, "다음 조치: 원격 AS 기사 점검 필요", 12, colors["muted"])
         else:
             recovery_label = "가능" if result.can_auto_recover else "불가"
             remote_label = "필요" if result.remote_as_recommended else "자동 판정 없음"
-            text(145, 365, f"로컬 자동 복구: {recovery_label} · 원격 기사 점검: {remote_label}", 12, colors["muted"])
-            result_divider_y, core_title_y, chip_y1, chip_y2 = 385, 404, 434, 470
-            action_divider_y, action_title_y, action_center_y = 489, 509, 548
-            button_y1, button_y2, status_y = 585, 635, 652
-        line(145, result_divider_y, 855, result_divider_y)
-        text(145, core_title_y, "핵심 결과", 16, colors["text"], "semibold")
+            text(145, 402, f"로컬 자동 복구: {recovery_label} · 원격 기사 점검: {remote_label}", 12, colors["muted"])
+        line(145, 444, 855, 444)
+        text(145, 460, "핵심 결과", 16, colors["text"], "semibold")
         visible_findings = [(finding.code, finding.title) for finding in result.findings[:3]]
         if not visible_findings:
             visible_findings = [
@@ -6472,43 +6552,50 @@ def show_log_viewer(
         for index, (finding_code, label) in enumerate(visible_findings):
             x1 = 145 + index * (chip_width + chip_gap)
             x2 = x1 + chip_width
-            y1 = chip_y1
+            y1, y2 = 484, 518
             kind = "temp" if "TEMPERATURE" in finding_code else "fan" if "FAN" in finding_code else "warn"
-            round_rect(x1, y1, x2, chip_y2, 18, chip_fill, "")
-            if kind == "temp":
-                canvas.create_oval(x1 + 17, y1 + 13, x1 + 25, y1 + 29, fill="#ffffff", outline=chip_color, width=2)
-                canvas.create_line(x1 + 21, y1 + 7, x1 + 21, y1 + 21, fill=chip_color, width=2)
-            elif kind == "fan":
-                for angle in (0, 120, 240):
-                    canvas.create_arc(x1 + 14, y1 + 7, x1 + 33, y1 + 29, start=angle, extent=65, style="arc", outline=chip_color, width=2)
-                canvas.create_oval(x1 + 22, y1 + 16, x1 + 26, y1 + 20, fill=chip_color, outline="")
-            else:
-                canvas.create_polygon(x1 + 22, y1 + 7, x1 + 13, y1 + 29, x1 + 31, y1 + 29, fill="#ffffff", outline=chip_color, width=2)
-                text(x1 + 22, y1 + 23, "!", 10, chip_color, "semibold", "center")
-            text(x1 + 42, y1 + 18, label, 12, colors["text"], "regular", "w", width=chip_width - 50)
-        line(145, action_divider_y, 855, action_divider_y)
-        text(145, action_title_y, "권장 조치", 16, colors["text"], "semibold")
-        action_slots = (162, 420, 690)
-        for index, label in enumerate(result.recommended_actions[:3], start=1):
-            x = action_slots[index - 1]
-            canvas.create_oval(x - 13, action_center_y - 13, x + 13, action_center_y + 13, fill="#fff0ef", outline="")
-            text(x, action_center_y, str(index), 11, colors["red"], "semibold", "center")
-            text(x + 31, action_center_y, label, 12, "#333333", "regular", "w", width=195)
-            if index < len(result.recommended_actions[:3]):
-                line(x + 213, action_center_y - 13, x + 213, action_center_y + 13)
+            round_rect(x1, y1, x2, y2, 17, chip_fill, "")
+            finding_photo = cached_photo(
+                ("result-finding", kind, 24, chip_color),
+                lambda kind=kind: render_finding_icon(kind, 24, chip_color),
+            )
+            canvas.create_image(x1 + 22, 501, image=finding_photo)
+            text(x1 + 42, 501, fitted_text(label, 12, chip_width - 50, 1), 12, colors["text"], "regular", "w", width=chip_width - 50)
+        line(145, 530, 855, 530)
+        text(145, 546, "권장 조치", 16, colors["text"], "semibold")
+        actions = tuple(result.recommended_actions[:3])
+        columns = result_action_columns(len(actions))
+        for index, (label, (column_left, column_right)) in enumerate(zip(actions, columns, strict=False), start=1):
+            badge_x = column_left + 18
+            canvas.create_oval(badge_x - 13, 575, badge_x + 13, 601, fill="#fff0ef", outline="")
+            text(badge_x, 588, str(index), 11, colors["red"], "semibold", "center")
+            text_width = max(80, column_right - column_left - 58)
+            text(
+                column_left + 48,
+                570,
+                fitted_text(label, 12, text_width, 2),
+                12,
+                "#333333",
+                "regular",
+                "nw",
+                width=text_width,
+            )
+            if index < len(actions):
+                line(column_right, 566, column_right, 610)
+        if ui["status"]:
+            round_rect(145, 618, 855, 642, 8, "#fff6f6", "")
+            text(500, 630, fitted_text(str(ui["status"]), 12, 680, 1), 12, colors["red"], "regular", "center", width=680)
         if can_offer_as(
             result,
             diagnosis if isinstance(diagnosis, DiagnosisRunSnapshot) else None,
             session,
         ):
-            button(145, button_y1, 340, button_y2, "처음으로", go_home, False, size=14)
-            button(365, button_y1, 560, button_y2, "진단 상세", show_diagnosis_detail, False, size=14)
-            button(585, button_y1, 855, button_y2, "원격 AS 기사 연결", connect_as, True, disabled=bool(ui["busy"]), size=14)
+            button(145, 652, 340, 694, "처음으로", go_home, False, size=14)
+            button(365, 652, 560, 694, "진단 상세", show_diagnosis_detail, False, size=14)
+            button(585, 652, 855, 694, "원격 AS 기사 연결", connect_as, True, disabled=bool(ui["busy"]), size=14)
         else:
-            button(270, button_y1, 485, button_y2, "처음으로", go_home, False, size=15)
-            button(515, button_y1, 730, button_y2, "진단 상세", show_diagnosis_detail, False, size=15)
-        if ui["status"]:
-            text(500, status_y, str(ui["status"]), 11, colors["red"], "regular", "center")
+            button(270, 652, 485, 694, "처음으로", go_home, False, size=15)
+            button(515, 652, 730, 694, "진단 상세", show_diagnosis_detail, False, size=15)
 
     def draw_success() -> None:
         response = ui.get("asRequest")
@@ -6583,23 +6670,15 @@ def show_log_viewer(
                 ui["stepAnim"] = {"from": previous_index, "to": stepper_index, "start": time.monotonic()}
             ui["stepperIndex"] = stepper_index
 
-        state_title = {
-            "SYMPTOM_CONFIRM": "1단계 초기 상태 확인",
-            "DIAGNOSING": "2단계 하드웨어 진단 진행 중",
-            "DIAGNOSIS_RESULT": "3단계 진단 결과",
-        }.get(str(ui["state"]), "PC 진단")
-        if ui["state"] == "DIAGNOSING":
-            active_snapshot = ui.get("diagnosisSnapshot")
-            progress_label = active_snapshot.progress if isinstance(active_snapshot, DiagnosisRunSnapshot) else 0
-            root.title(f"{DISPLAY_APP_NAME} · {state_title} · {progress_label}%")
-        else:
-            root.title(f"{DISPLAY_APP_NAME} · {state_title}")
+        if ui["state"] != "DIAGNOSING":
+            cancel_diagnosis_progress_tick()
+            ui.pop("diagnosisProgressItems", None)
 
         wave_animation["items"].clear()
         wave_animation["spinnerItems"].clear()
         canvas.delete("all")
         button_counter["value"] = 0
-        draw_header()
+        draw_status_controls()
         draw_stepper()
         if ui["state"] == "SYMPTOM_CONFIRM":
             draw_symptom()
@@ -6612,6 +6691,7 @@ def show_log_viewer(
                 draw_result()
         else:
             draw_symptom()
+        canvas.move("all", 0, -PC_AGENT_REMOVED_HEADER_HEIGHT)
 
     def handle_symptom_action() -> None:
         if ui["busy"]:
@@ -6665,6 +6745,7 @@ def show_log_viewer(
             render()
 
     def show_diagnosis_result() -> None:
+        cancel_diagnosis_progress_tick()
         ui["resultRequested"] = True
         render()
 
@@ -6988,13 +7069,6 @@ def show_log_viewer(
             return
         go_home()
 
-    def start_drag(event: tk.Event) -> None:
-        drag_origin["x"] = event.x_root - root.winfo_x()
-        drag_origin["y"] = event.y_root - root.winfo_y()
-
-    def drag_window(event: tk.Event) -> None:
-        root.geometry(f"+{event.x_root - drag_origin['x']}+{event.y_root - drag_origin['y']}")
-
     def root_ui_active() -> bool:
         try:
             return window_visibility.ui_active(
@@ -7027,7 +7101,7 @@ def show_log_viewer(
                 animation_controller.close()
             except tk.TclError:
                 pass
-        for callback_key in ("metricsAfterId", "renderAfterId", "visibilityAfterId"):
+        for callback_key in ("metricsAfterId", "renderAfterId", "diagnosisProgressAfterId", "visibilityAfterId"):
             after_id = callback_state.get(callback_key)
             if after_id is not None:
                 try:
@@ -7041,7 +7115,6 @@ def show_log_viewer(
         progress_ring_photo_cache.clear()
         spinner_photo_cache.clear()
         static_photo_cache.clear()
-        image_refs.clear()
 
     def destroy_window() -> None:
         cleanup_ui_resources()
@@ -7138,9 +7211,6 @@ def show_log_viewer(
     def request_destroy() -> None:
         root.after(0, destroy_window)
 
-    canvas.bind("<ButtonPress-1>", lambda event: start_drag(event) if event.y <= 68 else None)
-    canvas.bind("<B1-Motion>", lambda event: drag_window(event) if event.y <= 68 else None)
-
     def refresh_symptom_metrics() -> None:
         callback_state["metricsAfterId"] = None
         try:
@@ -7204,12 +7274,14 @@ def show_log_viewer(
         fluid_wave_cache.resume()
         schedule_metrics_refresh()
         queue_ui_render()
+        if str(ui.get("state")) == "DIAGNOSING":
+            schedule_diagnosis_progress_tick()
 
     def pause_ui_animation(reason: str = "window_hidden") -> None:
         callback_state["uiActive"] = False
         animation_controller.pause()
         fluid_wave_cache.pause()
-        for callback_key in ("metricsAfterId", "renderAfterId"):
+        for callback_key in ("metricsAfterId", "renderAfterId", "diagnosisProgressAfterId"):
             after_id = callback_state.get(callback_key)
             if after_id is not None:
                 try:

@@ -21,10 +21,12 @@ from pc_agent_ui_rendering import (
     fluid_wave_color,
     home_hardware_icon_cache_key,
     quantize_usage,
+    render_finding_icon,
     render_fluid_wave_frame,
     render_hardware_icon,
     render_home_hardware_icon,
     render_progress_ring,
+    render_result_icon,
     render_rounded_surface,
     render_status_icon,
     render_step_node,
@@ -159,6 +161,17 @@ class PcAgentUiRenderingTest(unittest.TestCase):
         )
         self.assertNotEqual(render_progress_ring(4).tobytes(), render_progress_ring(50).tobytes())
         self.assertNotEqual(render_progress_ring(50).tobytes(), render_progress_ring(92).tobytes())
+
+    def test_result_page_icons_are_supersampled_at_their_display_sizes(self) -> None:
+        header = render_result_icon(42)
+        warning = render_finding_icon("warn", 24)
+
+        self.assertEqual((42, 42), header.size)
+        self.assertEqual((24, 24), warning.size)
+        self.assertIsNotNone(header.getbbox())
+        self.assertIsNotNone(warning.getbbox())
+        self.assertTrue(any(0 < alpha < 255 for alpha in header.getchannel("A").getdata()))
+        self.assertTrue(any(0 < alpha < 255 for alpha in warning.getchannel("A").getdata()))
 
     def test_home_hardware_icons_share_centered_monoline_bounds(self) -> None:
         icons = {

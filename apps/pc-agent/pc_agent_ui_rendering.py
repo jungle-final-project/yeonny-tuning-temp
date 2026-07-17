@@ -614,6 +614,80 @@ def render_summary_icon(size: int = 42, color: str = "#333333") -> Image.Image:
     return _downsample(image, (size, size))
 
 
+def render_result_icon(size: int = 42, color: str = "#333333") -> Image.Image:
+    """Render the result-page marker with the same supersampled line treatment."""
+
+    image = _canvas((size, size))
+    draw = ImageDraw.Draw(image, "RGBA")
+    draw.ellipse((0, 0, image.width - 1, image.height - 1), fill=_rgba("#f4f4f4"))
+    stroke = _scaled(1.6)
+    left = _scaled(size * 0.34)
+    top = _scaled(size * 0.26)
+    right = _scaled(size * 0.67)
+    bottom = _scaled(size * 0.70)
+    draw.rounded_rectangle((left, top, right, bottom), radius=_scaled(1.8), outline=_rgba(color), width=stroke)
+    draw.line((left + _scaled(3), top + _scaled(6), right - _scaled(3), top + _scaled(6)), fill=_rgba(color), width=stroke)
+    draw.line((left + _scaled(3), top + _scaled(11), right - _scaled(6), top + _scaled(11)), fill=_rgba(color), width=stroke)
+    draw.line((left + _scaled(3), top + _scaled(16), right - _scaled(8), top + _scaled(16)), fill=_rgba(color), width=stroke)
+    return _downsample(image, (size, size))
+
+
+def render_finding_icon(kind: str, size: int = 24, color: str = "#ef5350") -> Image.Image:
+    """Render compact result-finding icons without Canvas pixel stair-stepping."""
+
+    image = _canvas((size, size))
+    draw = ImageDraw.Draw(image, "RGBA")
+    ink = _rgba(color)
+    stroke = _scaled(1.6)
+    if kind == "temp":
+        center_x = image.width / 2
+        draw.rounded_rectangle(
+            (center_x - _scaled(2.6), _scaled(4), center_x + _scaled(2.6), image.height - _scaled(7)),
+            radius=_scaled(2.6),
+            outline=ink,
+            width=stroke,
+        )
+        draw.ellipse(
+            (center_x - _scaled(5), image.height - _scaled(10), center_x + _scaled(5), image.height - _scaled(1.5)),
+            fill=_rgba("#ffffff"),
+            outline=ink,
+            width=stroke,
+        )
+        draw.line((center_x, _scaled(8), center_x, image.height - _scaled(6)), fill=ink, width=stroke)
+    elif kind == "fan":
+        center = image.width / 2
+        for angle in (0, 120, 240):
+            radians = math.radians(angle)
+            blade_x = center + math.cos(radians) * _scaled(4.5)
+            blade_y = center + math.sin(radians) * _scaled(4.5)
+            draw.ellipse(
+                (
+                    blade_x - _scaled(3.2),
+                    blade_y - _scaled(5.2),
+                    blade_x + _scaled(3.2),
+                    blade_y + _scaled(1.8),
+                ),
+                outline=ink,
+                width=stroke,
+            )
+        draw.ellipse((center - _scaled(1.8), center - _scaled(1.8), center + _scaled(1.8), center + _scaled(1.8)), fill=ink)
+    else:
+        margin = _scaled(2)
+        points = (
+            (image.width / 2, margin),
+            (image.width - margin, image.height - margin),
+            (margin, image.height - margin),
+        )
+        draw.polygon(points, fill=_rgba("#ffffff"))
+        draw.line((*points, points[0]), fill=ink, width=stroke, joint="curve")
+        draw.line((image.width / 2, _scaled(7), image.width / 2, image.height - _scaled(7)), fill=ink, width=stroke)
+        draw.ellipse(
+            (image.width / 2 - _scaled(1), image.height - _scaled(5), image.width / 2 + _scaled(1), image.height - _scaled(3)),
+            fill=ink,
+        )
+    return _downsample(image, (size, size))
+
+
 def render_progress_ring(progress: int, size: int = 88, ring_width: int = 6) -> Image.Image:
     value = max(0, min(100, int(progress)))
     image = _canvas((size, size))

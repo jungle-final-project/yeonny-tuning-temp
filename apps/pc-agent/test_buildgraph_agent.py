@@ -901,7 +901,7 @@ class AgentGoal1112Test(unittest.TestCase):
         self.assertIn('root.bind("<Unmap>", handle_root_unmap', source)
         self.assertIn("WindowVisibilityState.is_root_event", source)
         self.assertIn('pause_ui_animation("user_close")', source)
-        self.assertIn('(\"metricsAfterId\", \"renderAfterId\")', source)
+        self.assertIn('(\"metricsAfterId\", \"renderAfterId\", \"diagnosisProgressAfterId\")', source)
         self.assertIn("queue_ui_render()", source)
 
     def test_pretendard_is_the_first_ui_font_candidate(self) -> None:
@@ -984,12 +984,45 @@ class AgentGoal1112Test(unittest.TestCase):
                         self.assertEqual(request.diagnosis_id, diagnosis_store.session.request.diagnosis_id)
                         self.assertEqual(request.diagnosis_id, metrics_store.snapshot.diagnosis_id)
 
-    def test_demo_scenario_badge_is_bound_only_to_diagnosing_and_result_pages(self) -> None:
+    def test_demo_scenario_metadata_remains_internal_without_large_page_badge(self) -> None:
         source = inspect.getsource(agent.show_log_viewer)
 
-        self.assertIn("draw_demo_scenario_badge(188)", source)
-        self.assertIn("draw_demo_scenario_badge(194)", source)
-        self.assertEqual(2, source.count("draw_demo_scenario_badge(") - 1)
+        self.assertNotIn("draw_demo_scenario_badge", source)
+        self.assertNotIn('f"DEMO · {scenario_id}"', source)
+        self.assertIn('measurement_label = "시연 데이터" if ui["demo"] else "실시간 측정"', source)
+
+    def test_log_viewer_uses_single_native_window_title_bar(self) -> None:
+        source = inspect.getsource(agent.show_log_viewer)
+
+        self.assertEqual("PC Agent", agent.WINDOW_TITLE)
+        self.assertIn("root.title(WINDOW_TITLE)", source)
+        self.assertIn("root.overrideredirect(False)", source)
+        self.assertIn('root.protocol("WM_DELETE_WINDOW", close_window)', source)
+        self.assertIn('canvas.move("all", 0, -PC_AGENT_REMOVED_HEADER_HEIGHT)', source)
+        self.assertNotIn("def draw_header", source)
+        self.assertNotIn('tags="window-min"', source)
+        self.assertNotIn('tags="window-max"', source)
+        self.assertNotIn('tags="window-close"', source)
+        self.assertNotIn("def start_drag", source)
+        self.assertNotIn("def drag_window", source)
+
+    def test_page_two_uses_shared_icons_and_updates_progress_without_full_rerender(self) -> None:
+        source = inspect.getsource(agent.show_log_viewer)
+        tick_source = source[source.index("def diagnosis_progress_tick"):source.index("def draw_diagnosing")]
+
+        self.assertIn("render_pillow_home_hardware_icon", source)
+        self.assertIn('canvas.itemconfigure(items["ring"]', tick_source)
+        self.assertIn('canvas.itemconfigure(items["percent"]', tick_source)
+        self.assertNotIn("render()", tick_source)
+        self.assertTrue(tick_source.rstrip().endswith("schedule_diagnosis_progress_tick()"))
+        self.assertIn('callback_state["diagnosisProgressAfterId"]', source)
+
+    def test_page_text_is_measured_and_action_columns_are_even(self) -> None:
+        measure = lambda value: len(value) * 10
+
+        self.assertEqual("12345\n6789…", agent.fit_measured_text("123456789012", 50, 2, measure))
+        self.assertEqual(((145, 382), (382, 618), (618, 855)), agent.result_action_columns(3))
+        self.assertEqual(((145, 500), (500, 855)), agent.result_action_columns(2))
 
     def test_diagnosis_presentations_use_actual_task_and_evidence_status(self) -> None:
         running = agent.DiagnosisTask("display_devices", "gpu", 20, status="RUNNING")
