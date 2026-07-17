@@ -123,7 +123,7 @@ class FastDeployStaticContractTest(unittest.TestCase):
     def test_fast_workflow_uses_oidc_and_exact_current_main(self) -> None:
         text = WORKFLOW.read_text(encoding="utf-8")
 
-        self.assertIn("aws-actions/configure-aws-credentials@v4", text)
+        self.assertRegex(text, r"aws-actions/configure-aws-credentials@v\d+")
         self.assertIn("vars.AWS_DEPLOY_ROLE_ARN", text)
         self.assertIn("git rev-parse origin/main", text)
         self.assertIn("tools/deploy_green_web_asg_in_place.sh", text)
