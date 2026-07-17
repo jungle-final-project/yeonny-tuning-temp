@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { useEffect, useMemo, useRef, useState, type ReactNode, type MutableRefObject } from 'react';
 import { keepPreviousData, useQuery, useQueryClient } from '@tanstack/react-query';
 import { ChevronDown, Sparkles } from 'lucide-react';
 import {
@@ -236,6 +236,10 @@ function PerfPanelBody({
   const [resKey, setResKey] = useState<string>(DEFAULT_FPS_RESOLUTION.key);
   const game = FPS_GAMES.find((g) => g.key === gameKey) ?? DEFAULT_FPS_GAME;
   const resolution = FPS_RESOLUTIONS.find((r) => r.key === resKey) ?? DEFAULT_FPS_RESOLUTION;
+
+  // 비교 헤더에서 토글(구분선 왼쪽)과 후보 선택(오른쪽)을 떨어뜨려 놓기 위해 카테고리를 여기서 소유한다.
+  const [compareCategory, setCompareCategory] = useState<PerfCompareTarget['category']>(comparison?.category ?? 'GPU');
+  const compareToggleRef = useRef<HTMLDivElement | null>(null);
 
   const partIds = perfItems.map((item) => item.partId).filter(Boolean);
   const partKey = useMemo(() => [...partIds].sort().join(','), [partIds]);
@@ -512,40 +516,9 @@ function PerfPanelBody({
           </div>
 
           <div data-testid="quote-fps-section" className="min-w-0 py-1">
-            <div className={`flex items-start justify-between gap-2 ${activeComparison ? 'flex-wrap' : 'flex-nowrap'}`}>
-              <div className="flex min-w-0 flex-wrap items-baseline gap-x-2 gap-y-0.5">
-                <span className="shrink-0 text-sm font-black text-slate-600">
-                  {activeComparison ? '가격·성능 향상' : '게임 예상 성능'}
-                </span>
-                {!activeComparison && hasGpu ? (
-                  resultAvg !== null ? (
-                    <span className="truncate text-xs font-bold text-slate-500">
-                      {game.label} · {resolution.label} · {resultLabel}
-                      <strong data-testid="fps-avg" className="ml-1 text-xl font-black text-commerce-ink">
-                        {Math.round(resultAvg)} FPS
-                      </strong>
-                    </span>
-                  ) : (
-                    <span className="truncate text-xs font-bold text-slate-400">
-                      {isFetching ? '성능을 계산하고 있어요' : '참고 자료 없음'}
-                    </span>
-                  )
-                ) : !activeComparison ? (
-                  <span className="truncate text-xs font-bold text-slate-400">GPU를 담으면 표시됩니다</span>
-                ) : null}
-              </div>
-
-              <div className="flex shrink-0 flex-nowrap items-center justify-end gap-2">
-                {hasWorkspace && onStartComparison ? (
-                  <CandidateCombo
-                    perfItems={perfItems}
-                    activeComparison={activeComparison}
-                    onStartComparison={onStartComparison}
-                    onClearComparison={onClearComparison}
-                    compact
-                  />
-                ) : null}
-                <div className="flex gap-0.5 rounded-md border border-commerce-line bg-slate-50 p-0.5" role="group" aria-label="해상도 선택">
+            {(() => {
+              const resolutionPicker = (
+                <div className="flex shrink-0 gap-0.5 rounded-md border border-commerce-line bg-slate-50 p-0.5" role="group" aria-label="해상도 선택">
                   {FPS_RESOLUTIONS.map((res) => (
                     <button
                       key={res.key}
@@ -561,8 +534,86 @@ function PerfPanelBody({
                     </button>
                   ))}
                 </div>
-              </div>
-            </div>
+              );
+
+              // 비교 모드: 헤더를 본문과 같은 두 칼럼 그리드로 정렬한다 —
+              // CPU|GPU 토글은 구분선 왼쪽(가격·성능 칼럼) 끝, 교체 후보 선택은 구분선 오른쪽(게임 칼럼) 시작에 온다.
+              if (activeComparison && hasWorkspace && onStartComparison) {
+                return (
+                  <div className="grid min-w-0 gap-2 xl:grid-cols-[minmax(230px,0.9fr)_minmax(260px,1.1fr)] xl:items-center">
+                    <div className="flex min-w-0 items-center justify-between gap-2">
+                      <span className="shrink-0 text-sm font-black text-slate-600">가격·성능 향상</span>
+                      <PerfCategoryToggle
+                        innerRef={compareToggleRef}
+                        category={compareCategory}
+                        compact
+                        onSelect={(pickerCategory) => {
+                          setCompareCategory(pickerCategory);
+                          if (activeComparison.category !== pickerCategory) {
+                            onClearComparison?.();
+                          }
+                        }}
+                      />
+                    </div>
+                    <div className="flex min-w-0 items-center justify-between gap-2 xl:pl-2">
+                      <CandidateCombo
+                        perfItems={perfItems}
+                        activeComparison={activeComparison}
+                        onStartComparison={onStartComparison}
+                        onClearComparison={onClearComparison}
+                        compact
+                        hideToggle
+                        category={compareCategory}
+                        onCategoryChange={setCompareCategory}
+                        keepOpenRef={compareToggleRef}
+                      />
+                      {resolutionPicker}
+                    </div>
+                  </div>
+                );
+              }
+
+              return (
+                <div className={`flex items-start justify-between gap-2 ${activeComparison ? 'flex-wrap' : 'flex-nowrap'}`}>
+                  <div className="flex min-w-0 flex-wrap items-baseline gap-x-2 gap-y-0.5">
+                    <span className="shrink-0 text-sm font-black text-slate-600">
+                      {activeComparison ? '가격·성능 향상' : '게임 예상 성능'}
+                    </span>
+                    {!activeComparison && hasGpu ? (
+                      resultAvg !== null ? (
+                        <span className="truncate text-xs font-bold text-slate-500">
+                          {game.label} · {resolution.label} · {resultLabel}
+                          <strong data-testid="fps-avg" className="ml-1 text-xl font-black text-commerce-ink">
+                            {Math.round(resultAvg)} FPS
+                          </strong>
+                        </span>
+                      ) : (
+                        <span className="truncate text-xs font-bold text-slate-400">
+                          {isFetching ? '성능을 계산하고 있어요' : '참고 자료 없음'}
+                        </span>
+                      )
+                    ) : !activeComparison ? (
+                      <span className="truncate text-xs font-bold text-slate-400">GPU를 담으면 표시됩니다</span>
+                    ) : null}
+                  </div>
+
+                  <div className="flex shrink-0 flex-nowrap items-center justify-end gap-2">
+                    {hasWorkspace && onStartComparison ? (
+                      <CandidateCombo
+                        perfItems={perfItems}
+                        activeComparison={activeComparison}
+                        onStartComparison={onStartComparison}
+                        onClearComparison={onClearComparison}
+                        compact
+                        category={compareCategory}
+                        onCategoryChange={setCompareCategory}
+                      />
+                    ) : null}
+                    {resolutionPicker}
+                  </div>
+                </div>
+              );
+            })()}
 
             {activeComparison ? (
               <div className="mt-1.5 grid min-w-0 gap-2 xl:grid-cols-[minmax(230px,0.9fr)_minmax(260px,1.1fr)]">
@@ -1000,20 +1051,70 @@ const PERF_PICKER_CATEGORIES: Array<PerfCompareTarget['category']> = ['CPU', 'GP
 
 // 카드 헤더 줄의 한 줄 콤보: [CPU|GPU 토글] + [교체 후보 선택 ▾ 버튼] — 클릭하면 팝오버로 호환 후보 리스트를 겹쳐 띄운다.
 // PASS/WARN은 선택 즉시 비교가 켜지고, FAIL은 숨기지 않고 회색 비활성 + 선택 불가 사유를 보여준다.
+// CPU|GPU 카테고리 토글 — CandidateCombo 내부와 분리 배치(비교 헤더의 구분선 왼쪽) 양쪽에서 쓴다.
+function PerfCategoryToggle({
+  category,
+  onSelect,
+  compact = false,
+  innerRef
+}: {
+  category: PerfCompareTarget['category'];
+  onSelect: (category: PerfCompareTarget['category']) => void;
+  compact?: boolean;
+  innerRef?: MutableRefObject<HTMLDivElement | null>;
+}) {
+  return (
+    <div ref={innerRef} className="flex shrink-0 gap-0.5 rounded-md border border-commerce-line bg-white p-0.5" role="group" aria-label="비교할 부품 종류 선택">
+      {PERF_PICKER_CATEGORIES.map((pickerCategory) => (
+        <button
+          key={pickerCategory}
+          type="button"
+          data-testid={`perf-candidate-category-${pickerCategory}`}
+          aria-pressed={category === pickerCategory}
+          onClick={() => onSelect(pickerCategory)}
+          className={`rounded font-black transition ${compact ? 'px-2.5 py-1 text-xs' : 'px-2.5 py-1 text-[10px]'} ${
+            category === pickerCategory ? 'bg-[#de6c2d] text-white shadow-sm' : 'text-slate-400 hover:text-slate-600'
+          }`}
+        >
+          {PART_CATEGORY_LABELS[pickerCategory]}
+        </button>
+      ))}
+    </div>
+  );
+}
+
 function CandidateCombo({
   perfItems,
   activeComparison,
   onStartComparison,
   onClearComparison,
-  compact = false
+  compact = false,
+  category: controlledCategory,
+  onCategoryChange,
+  hideToggle = false,
+  keepOpenRef
 }: {
   perfItems: PerfItem[];
   activeComparison: PerfCompareTarget | null;
   onStartComparison: (target: PerfCompareTarget) => void;
   onClearComparison?: () => void;
   compact?: boolean;
+  // 토글을 밖(비교 헤더의 구분선 왼쪽)에 두는 분리 배치용 — 카테고리를 부모가 소유한다.
+  category?: PerfCompareTarget['category'];
+  onCategoryChange?: (category: PerfCompareTarget['category']) => void;
+  hideToggle?: boolean;
+  // 분리 배치된 토글 영역 — 여기 클릭은 팝오버를 닫지 않는다(한 몸이던 때와 같은 동작 유지).
+  keepOpenRef?: MutableRefObject<HTMLDivElement | null>;
 }) {
-  const [category, setCategory] = useState<PerfCompareTarget['category']>(activeComparison?.category ?? 'GPU');
+  const [internalCategory, setInternalCategory] = useState<PerfCompareTarget['category']>(activeComparison?.category ?? 'GPU');
+  const category = controlledCategory ?? internalCategory;
+  const setCategory = (next: PerfCompareTarget['category']) => {
+    if (onCategoryChange) {
+      onCategoryChange(next);
+    } else {
+      setInternalCategory(next);
+    }
+  };
   const [isPickerOpen, setIsPickerOpen] = useState(false);
   // 콤보 한 줄(토글+선택 버튼+팝오버)을 한 단위로 본다 — 팝오버가 열린 채 카테고리를 토글해도 닫히지 않는다.
   const comboRef = useRef<HTMLDivElement | null>(null);
@@ -1024,13 +1125,15 @@ function CandidateCombo({
     if (comparisonCategory) {
       setCategory(comparisonCategory);
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [comparisonCategory]);
 
   // 팝오버는 바깥 클릭·Escape로 닫힌다 — 후보를 고르면 즉시 닫히고 아래 예상 성능으로 시선이 이어진다.
   useEffect(() => {
     if (!isPickerOpen) return;
     const onPointerDown = (event: MouseEvent) => {
-      if (comboRef.current && !comboRef.current.contains(event.target as Node)) {
+      const target = event.target as Node;
+      if (comboRef.current && !comboRef.current.contains(target) && !keepOpenRef?.current?.contains(target)) {
         setIsPickerOpen(false);
       }
     };
@@ -1043,7 +1146,7 @@ function CandidateCombo({
       document.removeEventListener('mousedown', onPointerDown);
       document.removeEventListener('keydown', onKeyDown);
     };
-  }, [isPickerOpen]);
+  }, [isPickerOpen, keepOpenRef]);
 
   const categoryCurrentPart = perfItems.find((item) => item.category === category);
   // 아코디언과 같은 GET /api/parts(QUOTE_DRAFT_CURRENT, 호환 정렬)를 재사용한다 — 팝오버가 열릴 때만 조회.
@@ -1068,27 +1171,18 @@ function CandidateCombo({
   return (
     // 헤더 오른쪽 끝에 붙는다 — 좁은 화면에서 줄바꿈되면 자기 줄에서 오른쪽 정렬을 유지한다.
     <div ref={comboRef} className="flex min-w-0 grow items-center justify-end gap-1.5 sm:grow-0">
-      <div className="flex shrink-0 gap-0.5 rounded-md border border-commerce-line bg-white p-0.5" role="group" aria-label="비교할 부품 종류 선택">
-        {PERF_PICKER_CATEGORIES.map((pickerCategory) => (
-          <button
-            key={pickerCategory}
-            type="button"
-            data-testid={`perf-candidate-category-${pickerCategory}`}
-            aria-pressed={category === pickerCategory}
-            onClick={() => {
-              setCategory(pickerCategory);
-              if (activeComparison && activeComparison.category !== pickerCategory) {
-                onClearComparison?.();
-              }
-            }}
-            className={`rounded font-black transition ${compact ? 'px-2.5 py-1 text-xs' : 'px-2.5 py-1 text-[10px]'} ${
-              category === pickerCategory ? 'bg-[#de6c2d] text-white shadow-sm' : 'text-slate-400 hover:text-slate-600'
-            }`}
-          >
-            {PART_CATEGORY_LABELS[pickerCategory]}
-          </button>
-        ))}
-      </div>
+      {hideToggle ? null : (
+        <PerfCategoryToggle
+          category={category}
+          compact={compact}
+          onSelect={(pickerCategory) => {
+            setCategory(pickerCategory);
+            if (activeComparison && activeComparison.category !== pickerCategory) {
+              onClearComparison?.();
+            }
+          }}
+        />
+      )}
       <div className={`relative ${compact ? 'w-44 sm:w-52' : 'w-44 sm:w-56'}`}>
         <button
           type="button"
