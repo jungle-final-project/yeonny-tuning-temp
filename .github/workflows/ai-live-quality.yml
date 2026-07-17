@@ -31,10 +31,10 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Set up Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v6
         with:
           python-version: "3.11"
 
@@ -43,8 +43,9 @@ jobs:
         run: |
           set -euo pipefail
           if [ -z "${OPENAI_API_KEY}" ]; then
-            echo "OPENAI_API_KEY secret is not configured; skipping live AI benchmark."
-            exit 0
+            # 수동 실행 전용 워크플로 — 키가 없는데 녹색으로 끝나면 "벤치마크가 돌았다"고 오독된다. 명시적으로 실패시킨다.
+            echo "::error::OPENAI_API_KEY secret is not configured — live AI benchmark cannot run."
+            exit 1
           fi
 
           mkdir -p "$RUNNER_TEMP/ai-live-quality"
@@ -75,7 +76,7 @@ jobs:
 
       - name: Upload AS Chat benchmark report
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: as-chat-profile-benchmark
           path: |
