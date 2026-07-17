@@ -63,7 +63,7 @@ jobs:
           echo "image_tag=$image_tag" >> "$GITHUB_OUTPUT"
 
       - name: Checkout target commit
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           ref: ${{ steps.target.outputs.sha }}
           fetch-depth: 0
@@ -81,7 +81,7 @@ jobs:
           }
 
       - name: Set up Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v6
         with:
           python-version: "3.11"
           cache: pip
@@ -96,7 +96,7 @@ jobs:
             tools.test_rollout_green_web_asg_release
 
       - name: Configure AWS credentials with GitHub OIDC
-        uses: aws-actions/configure-aws-credentials@v4
+        uses: aws-actions/configure-aws-credentials@v6
         with:
           role-to-assume: ${{ vars.AWS_DEPLOY_ROLE_ARN }}
           aws-region: ${{ vars.AWS_REGION }}

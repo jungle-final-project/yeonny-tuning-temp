@@ -50,7 +50,7 @@ jobs:
           echo "sha=$target_sha" >> "$GITHUB_OUTPUT"
 
       - name: Checkout target commit
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           ref: ${{ steps.target.outputs.sha }}
           fetch-depth: 0
@@ -63,7 +63,7 @@ jobs:
           git merge-base --is-ancestor "$DEPLOY_SHA" origin/main
 
       - name: Set up Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v6
         with:
           python-version: "3.11"
           cache: pip
@@ -76,7 +76,7 @@ jobs:
           python -m unittest tools.test_validate_green_deployment tools.test_bootstrap_green_asg tools.test_prepare_green_asg_builder tools.test_provision_green_private_app_network tools.test_migrate_green_web_asg_private tools.test_rollout_green_web_asg_release
 
       - name: Configure AWS credentials with GitHub OIDC
-        uses: aws-actions/configure-aws-credentials@v4
+        uses: aws-actions/configure-aws-credentials@v6
         with:
           role-to-assume: ${{ vars.AWS_DEPLOY_ROLE_ARN }}
           aws-region: ${{ vars.AWS_REGION }}

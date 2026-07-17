@@ -117,7 +117,7 @@ jobs:
 
     steps:
       - name: Checkout target commit
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           ref: ${{ needs.resolve.outputs.sha }}
           fetch-depth: 0
@@ -130,7 +130,7 @@ jobs:
           git merge-base --is-ancestor "$DEPLOY_SHA" origin/main
 
       - name: Set up Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v7
         with:
           node-version: 22
           cache: npm
@@ -147,7 +147,7 @@ jobs:
         run: npm run build
 
       - name: Configure AWS credentials with GitHub OIDC
-        uses: aws-actions/configure-aws-credentials@v4
+        uses: aws-actions/configure-aws-credentials@v6
         with:
           role-to-assume: ${{ vars.AWS_DEPLOY_ROLE_ARN }}
           aws-region: ${{ vars.AWS_REGION }}

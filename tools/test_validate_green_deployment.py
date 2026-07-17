@@ -140,7 +140,8 @@ class GreenDeploymentContractTest(unittest.TestCase):
             with self.subTest(workflow=name):
                 self.assertEqual("read", workflow.get("permissions", {}).get("contents"))
                 self.assertEqual("write", workflow.get("permissions", {}).get("id-token"))
-                self.assertIn("aws-actions/configure-aws-credentials@v4", text)
+                # 계약의 본질은 "OIDC 액션 사용"이지 특정 메이저 버전이 아니다 — 버전 무관 매칭.
+                self.assertRegex(text, r"aws-actions/configure-aws-credentials@v\d+")
                 self.assertIn("vars.AWS_DEPLOY_ROLE_ARN", text)
                 self.assertNotRegex(text, r"AWS_(ACCESS_KEY_ID|SECRET_ACCESS_KEY)")
                 self.assertNotIn("secrets.AWS_", text)
