@@ -186,26 +186,6 @@
     0 2px 8px rgba(0, 0, 0, 0.72);
 }
 
-.fused-part-selected-badge {
-  pointer-events: none;
-  position: absolute;
-  left: calc(var(--fused-badge-left) - 10px);
-  top: calc(var(--fused-badge-top) - 20px);
-  z-index: 5;
-  display: inline-flex;
-  height: 21px;
-  align-items: center;
-  border-radius: 999px;
-  background: #de6c2d;
-  color: #ffffff;
-  padding: 0 8px;
-  font-size: 10px;
-  font-weight: 900;
-  line-height: 1;
-  box-shadow: 0 8px 18px rgba(222, 108, 45, 0.24);
-  transform: translate(-50%, -50%);
-}
-
 .fused-part-action-button:disabled,
 .fused-ram-quantity-controls button:disabled,
 .fused-ram-remove-button:disabled {

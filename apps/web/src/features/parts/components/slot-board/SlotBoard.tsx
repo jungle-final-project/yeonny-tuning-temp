@@ -1805,7 +1805,6 @@ function IsometricSlotCard({
         onBlur={() => onHoverChange(null)}
         className="absolute inset-0 z-0 h-full w-full rounded-lg focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-blue"
       />
-      {isSelected ? <SelectedStateBadge className="absolute -top-2 left-2 z-30" /> : null}
       {isAiSpotlighted && !filled ? (
         <span
           data-testid={`slot-ai-unmounted-${slot.category}`}
@@ -2032,7 +2031,6 @@ function IsoPart({
       <div className="iso-part-shadow absolute inset-x-[14%] bottom-[4%] h-[14%] rounded-[50%] bg-slate-900/20 blur-[5px]" />
       <img src={iso.src} alt="" className={`iso-part-img relative w-full iso-part-img--${iso.mount}`} />
       <span aria-hidden="true" className={`iso-part-impact iso-part-impact--${iso.mount}`} />
-      {isSelected ? <SelectedStateBadge className="absolute -left-2 -top-3 z-20" /> : null}
       {problemDetail ? (
         <button
           type="button"
@@ -2922,7 +2920,6 @@ function MotherboardSlot({
         onClick={onSelect}
         className="absolute inset-0 z-0 h-full w-full rounded-lg focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-blue"
       />
-      {isSelected ? <SelectedStateBadge className="absolute -top-2 left-2 z-30" /> : null}
       {isAiSpotlighted && !filled ? (
         <span
           data-testid={`slot-ai-unmounted-${slot.category}`}

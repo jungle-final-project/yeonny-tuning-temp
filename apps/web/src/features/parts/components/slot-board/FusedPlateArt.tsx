@@ -213,7 +213,6 @@ export function FusedPlateArt({
                 onClick={() => (filled ? onPartOpen(area.category) : onSlotSelect(area.category))}
                 className="fused-part-select-button absolute inset-0 cursor-pointer rounded focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-blue"
               />
-              {selected ? <span className="fused-part-selected-badge">선택됨</span> : null}
               {aiSpotlighted && !filled ? (
                 <span
                   data-testid={`slot-fused-ai-unmounted-${area.category}`}

@@ -780,6 +780,52 @@ test('toggles the slot board across 배치도/실장도/3D views and persists th
   await expect(page.getByRole('radio', { name: '배치도' })).toHaveAttribute('aria-checked', 'true');
 });
 
+test('keeps the 선택됨 badge exclusive to the 영향 지도 view', async ({ page }) => {
+  await loginAsUser(page);
+  await page.route('**/api/build-graphs/resolve', async (route) => {
+    await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(buildGraphResponse()) });
+  });
+  await page.route('**/api/quote-drafts/current**', async (route) => {
+    await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(fullDraft) });
+  });
+  await page.route('**/api/parts**', async (route) => {
+    await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ items: [], page: 0, size: 20, total: 0 }) });
+  });
+
+  await page.goto('/self-quote');
+
+  const board = page.getByTestId('slot-board');
+  const boardBadges = board.getByText('선택됨');
+
+  // 배치도(기본): 체크리스트로 부품을 선택해도 보드에는 선택됨 배지가 뜨지 않는다.
+  await page.getByTestId('checklist-CPU').click();
+  await expect(board).toHaveAttribute('data-visual-mode', 'fused');
+  await expect(board.getByTestId('slot-fused-area-wrap-CPU')).toHaveAttribute('data-selected', 'true');
+  await expect(boardBadges).toHaveCount(0);
+
+  // 실장도: 선택 상태(?category=)는 유지되지만 배지는 없다.
+  await page.getByRole('button', { name: '실장도 보기' }).click();
+  await expect(board).toHaveAttribute('data-visual-mode', 'motherboard');
+  await expect(boardBadges).toHaveCount(0);
+
+  // 3D: 마찬가지로 배지 없음.
+  await page.getByRole('radio', { name: '3D' }).click();
+  await expect(board).toHaveAttribute('data-visual-mode', 'isometric');
+  await expect(boardBadges).toHaveCount(0);
+
+  // 영향 지도: 선택된 노드에만 선택됨 배지가 보인다.
+  // 후보 패널이 영향 지도 버튼을 가리므로 선택을 토글로 해제해 패널을 닫은 뒤 지도를 열고 다시 선택한다.
+  await page.getByRole('radio', { name: '배치도' }).click();
+  await page.getByTestId('checklist-CPU').click();
+  await expect(page.getByTestId('slot-candidate-panel')).toHaveCount(0);
+  await page.getByTestId('relation-map-open').click();
+  await expect(board).toHaveAttribute('data-visual-mode', 'relation-map');
+  await expect(boardBadges).toHaveCount(0);
+  await page.getByTestId('checklist-CPU').click();
+  await expect(page.getByTestId('relation-map-node-CPU').getByText('선택됨')).toBeVisible();
+  await expect(boardBadges).toHaveCount(1);
+});
+
 test('aligns 3D slot cards into two equal rows', async ({ page }) => {
   await loginAsUser(page);
   await page.route('**/api/quote-drafts/current**', async (route) => {
