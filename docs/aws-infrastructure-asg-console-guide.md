@@ -286,9 +286,19 @@ BUILDGRAPH_SCHEDULING_ENABLED=true
 
 ### 4.4 재현 가능한 bootstrap과 배포
 
-현재 API workflow는 Repository Variable `GREEN_EC2_INSTANCE_ID` 한 개에 SSM command를 보낸다. ASG의 인스턴스 ID는 교체될 때마다 바뀌므로 이 방식은 그대로 사용할 수 없다.
+ASG의 인스턴스 ID는 교체될 때마다 바뀐다. 따라서 Repository Variable이나
+workflow 입력에 저장한 `GREEN_EC2_INSTANCE_ID`로 SSM command를 보내는 고정
+인스턴스 배포는 사용하지 않는다.
 
-2단계 전 배포 흐름을 다음처럼 바꾼다.
+승인된 배포 방식은 다음 두 가지다.
+
+1. `Fast Deploy Green Web ASG`: `1/1/1` ASG에서 현재의 단일 Healthy
+   인스턴스를 매번 동적으로 찾아 선택한 컨테이너만 제자리에서 교체한다. 짧은
+   중단을 허용하며 Instance Refresh와 CloudFront 전환은 수행하지 않는다.
+2. `Release Green Web ASG`: 새 숫자형 Launch Template version과 `100/200`
+   Instance Refresh로 인스턴스를 교체하는 immutable release다.
+
+재현 가능한 immutable release 흐름은 다음과 같다.
 
 ```text
 Git SHA 검증
@@ -303,7 +313,11 @@ Git SHA 검증
 
 주의:
 
-- SSM tag targeting으로 모든 인스턴스에서 `docker compose up`만 실행하면 새로 교체된 인스턴스가 이전 AMI 버전으로 돌아갈 수 있다.
+- Fast Deploy는 ASG가 정확히 `1/1/1`이고 단일 Target이 Healthy일 때만 허용한다.
+  여러 인스턴스를 대상으로 SSM `docker compose up`을 실행하지 않는다.
+- Fast Deploy도 성공한 release manifest를 새 숫자형 Launch Template version에
+  기록하고 ASG 포인터를 전진시켜, 이후 교체 인스턴스가 이전 버전으로 돌아가지
+  않게 한다.
 - Launch Template의 `$Latest`를 자동으로 따라가지 말고 검증된 특정 version을 사용한다.
 - `nginx:1.27-alpine`은 mutable tag다. ASG 재현성을 위해 digest로 고정하거나 전용 ECR에 mirror한다.
 - User data에 Secret value, GitHub token, DB password를 넣지 않는다.
@@ -313,6 +327,8 @@ Git SHA 검증
 - [ ] 임의의 새 EC2가 사람의 SSH 작업 없이 Healthy가 된다.
 - [ ] 새 EC2의 Git SHA와 API/XGB image URI·digest가 release manifest와 일치한다.
 - [ ] workflow가 고정 Instance ID를 요구하지 않는다.
+- [ ] Fast Deploy 후 기존 EC2 ID는 그대로이고 ASG의 숫자형 Launch Template
+      포인터만 새 release version으로 전진한다.
 - [ ] 이전 Launch Template version으로 교체하는 rollback drill을 완료한다.
 
 ### 4.5 Liveness와 readiness 분리
@@ -1100,12 +1116,20 @@ CPU target 숫자를 근거 없이 고정하지 않는다. CPU가 낮아도 DB c
 
 ---
 
-## 17. Instance Refresh 배포
+## 17. Green Web ASG 배포 모드
 
-현재 BuildGraph는 WebSocket·PC Agent cross-instance 공유를 구현하지 않는다.
-Web ASG는 계속 `Min 1 / Desired 1 / Max 1`로 유지한다. 다만 배포 중
-`100/200` Instance Refresh로 구·신 인스턴스가 잠시 동시에 요청을 받는
-상태는 개발·데모 환경의 승인된 예외로 허용한다.
+현재 BuildGraph는 WebSocket·PC Agent cross-instance 공유를 구현하지 않으므로
+Web ASG를 계속 `Min 1 / Desired 1 / Max 1`로 유지한다. 배포 목적에 따라 다음
+두 모드 중 하나를 명시적으로 선택한다.
+
+| 모드 | 실행 방식 | 사용자 영향 | 사용 기준 |
+| --- | --- | --- | --- |
+| Fast Deploy | 현재 단일 ASG EC2에서 선택한 컨테이너를 SSM으로 제자리 교체 | API 또는 WebSocket의 짧은 중단 허용 | API/XGB image와 애플리케이션 코드만 빠르게 반영 |
+| Immutable Release | 새 숫자형 Launch Template version으로 `100/200` Instance Refresh | HTTP 가용성 유지, 구·신 Target 잠시 공존 | bootstrap·AMI·Nginx·런타임 기반 변경 또는 완전한 replacement 검증 |
+
+두 모드 모두 정확한 현재 `origin/main` 40자리 SHA, 동일 SHA의 immutable ECR
+tag와 digest, 숫자형 Launch Template version을 사용한다. 두 workflow는 같은
+concurrency group을 사용해 동시에 실행하지 않는다.
 
 ### 17.1 Workflow 역할 분리
 
@@ -1121,8 +1145,12 @@ Web ASG는 계속 `Min 1 / Desired 1 / Max 1`로 유지한다. 다만 배포 중
 - 실행 중인 컨테이너 직접 교체
 - Launch Template 또는 ASG 변경
 
-실제 서버 교체는 수동 `Release Green Web ASG` workflow에서만 수행한다.
-수동 release workflow는 다음 값을 요구한다.
+이미지 발행 후 서버 반영은 다음 수동 workflow 중 하나에서만 수행한다.
+
+- `Fast Deploy Green Web ASG`
+- `Release Green Web ASG`
+
+두 workflow는 다음 값을 요구한다.
 
 | 입력 | 의미 |
 | --- | --- |
@@ -1130,7 +1158,81 @@ Web ASG는 계속 `Min 1 / Desired 1 / Max 1`로 유지한다. 다만 배포 중
 | `git_sha` | 현재 `origin/main`의 정확한 40자리 SHA |
 | `image_tag` | `git_sha`와 동일한 immutable ECR tag |
 
-### 17.2 Release 순서
+### 17.2 Fast Deploy 적용 조건
+
+Fast Deploy는 기존 EC2를 재사용하므로 다음 조건을 모두 확인하고 하나라도
+다르면 변경 없이 중단한다.
+
+- ASG가 `Min 1 / Desired 1 / Max 1`
+- ASG가 승인된 Launch Template의 특정 숫자 version 사용
+- ASG에 정확히 한 대가 있고 `InService`, `Healthy`
+- Target Group에 같은 인스턴스 한 대만 port `80`, `healthy`
+- 해당 인스턴스가 SSM `Online`
+- Pending·InProgress·Baking·Rollback 중인 Instance Refresh 없음
+- source AMI가 `available`, `Validation=passed`
+- 실행 Git SHA·image manifest가 source Launch Template release와 일치
+- target SHA가 정확한 현재 `origin/main`이고 source SHA의 후손
+- 선택한 ECR SHA tag가 immutable digest 하나로 해석됨
+- `BUILDGRAPH_SCHEDULING_ENABLED=false` 유지
+
+`tools/bootstrap_green_asg.sh`, `tools/prepare_green_asg_builder.sh`, production
+Compose, Nginx 설정 또는 base release manifest가 source와 target SHA 사이에서
+바뀌었다면 Fast Deploy를 거절하고 Immutable Release를 사용한다. Nginx image
+변경도 Fast Deploy 대상이 아니다.
+
+### 17.3 Fast Deploy 순서
+
+1. API 또는 XGB immutable ECR image를 먼저 발행한다.
+2. `Fast Deploy Green Web ASG` workflow에서 `service`, `git_sha`,
+   `image_tag`를 선택한다.
+3. helper가 ASG 상태에서 현재 단일 EC2 ID를 동적으로 찾는다. workflow
+   variable이나 입력으로 Instance ID를 받지 않는다.
+4. 읽기 전용 preflight에서 ASG·Target·SSM·source release·ECR digest를
+   검증한다.
+5. SSM으로 선택한 service image를 pull하고 해당 컨테이너만
+   `--no-deps --force-recreate`로 교체한다.
+6. API는 `/api/health`, XGB는 container health를 확인하고 API·XGB·Nginx
+   실행 image가 target manifest와 일치하는지 확인한다. API container의 실제
+   `BUILDGRAPH_SCHEDULING_ENABLED=false`와 비대상 container ID가 유지됐는지도
+   함께 검증한다.
+7. 같은 release manifest와 Git SHA가 들어 있는 새 숫자형 Launch Template
+   version을 만든다. User data 외 다른 Launch Template 필드는 바꾸지 않는다.
+8. **Instance Refresh 없이** ASG의 Launch Template 포인터만 새 숫자 version으로
+   변경한다.
+9. EC2 ID가 처음 발견한 값과 동일하고 Target이 계속 Healthy인지 다시 확인한
+   뒤 transaction을 commit하고 rollback 자료를 정리한다.
+10. API smoke와 WebSocket 재연결을 확인한다.
+
+Fast Deploy helper는 다음 파일이다.
+
+```text
+tools/deploy_green_web_asg_in_place.sh
+tools/apply_green_asg_release_in_place.sh
+```
+
+기본 실행은 읽기 전용이다. `--apply`가 있을 때만 SSM container 교체, 새
+Launch Template version 생성과 ASG 숫자 포인터 변경을 수행한다.
+
+Fast Deploy에서는 다음 작업을 하지 않는다.
+
+- 새 EC2 생성·종료·교체
+- Instance Refresh 시작·취소·rollback
+- CloudFront origin 또는 behavior 변경
+- ASG 용량 변경
+- AMI, Security Group, Subnet 변경
+- 여러 ASG EC2에 동시 SSM 실행
+
+단일 컨테이너가 강제로 재생성되는 동안 짧은 API 실패 또는 WebSocket 연결
+종료가 발생할 수 있다. 이 중단은 개발·데모 환경의 승인된 정책이며 client
+재연결과 배포 직후 smoke test로 확인한다.
+
+SSM 실패, health 실패 또는 ASG 포인터 변경 실패 시 helper는 저장한 source
+Git SHA와 manifest로 기존 컨테이너를 복구하고 ASG 포인터도 이전 숫자
+version으로 되돌린다. SSM 취소와 실행 순서가 엇갈려도 같은 deployment ID의
+취소 fence를 먼저 기록하므로 늦게 도착한 prepare는 변경을 시작하지 않는다.
+자동 보상이 완료되지 않으면 추가 배포를 중지하고 수동 복구한다.
+
+### 17.4 Immutable Release 순서
 
 1. 현재 `/api/health`, WebSocket, PC Agent 상태를 기록한다.
 2. CloudFront `/api/*`, `/ws/*`는 ALB origin을 계속 사용한다.
@@ -1155,7 +1257,7 @@ tools/rollout_green_web_asg_release.sh
 기본 실행은 읽기 전용이다. `--apply`를 지정한 경우에만 Launch Template과
 Instance Refresh를 변경한다.
 
-### 17.3 Instance Refresh 정책
+### 17.5 Immutable Release의 Instance Refresh 정책
 
 CloudFront 격리 없이 다음 값을 사용한다.
 
@@ -1193,7 +1295,24 @@ rollback한다. Refresh가 이미 성공했지만 Target health 검증이 실패
 version을 `DesiredConfiguration`으로 지정한 reverse Refresh를 새로 시작한다.
 기존 AMI와 이전 Launch Template version을 삭제하지 않는다.
 
-### 17.4 GitHub OIDC Role 권한
+### 17.6 고정 Instance ID 금지와 SSM 권한 경계
+
+Fast Deploy의 SSM 사용은 과거 고정 EC2 배포를 다시 허용하는 것이 아니다.
+
+- `GREEN_EC2_INSTANCE_ID` 같은 Repository Variable을 배포 대상으로 사용하지
+  않는다.
+- workflow input, Secret 또는 문서에 특정 ASG EC2 ID를 저장하지 않는다.
+- helper가 승인된 ASG에서 정확히 한 대의 `InService/Healthy` instance를 매번
+  동적으로 찾고, Target health와 SSM Online 상태까지 교차 검증한다.
+- SSM instance 권한은 `ManagedBy=asg`, `Stack=green`, `Service=api` resource
+  tag를 모두 만족하는 EC2로 제한한다.
+- SSM document는 `AWS-RunShellScript` 하나로 제한한다.
+- ASG에 0대 또는 2대 이상이 있거나 instance가 중간에 바뀌면 fail closed한다.
+
+수동 Green EC2, Blue EC2 또는 임의의 고정 Instance ID에 SSM 배포하는 경로는
+계속 금지한다.
+
+### 17.7 GitHub OIDC Role 권한
 
 ASG rollout에 필요한 추가 최소 권한은 다음 파일에 정의한다.
 
@@ -1202,10 +1321,21 @@ infra/iam/buildgraph-demo-github-actions-green-asg-rollout-policy.json
 ```
 
 정책 범위는 현재 Green Web Launch Template, ASG, Private App Subnet, ASG SG,
-검증 AMI와 runtime IAM Role로 제한한다. 다음 권한은 추가하지 않는다.
+검증 AMI와 runtime IAM Role로 제한한다.
+
+Immutable Release에는 기존 Launch Template version 생성, 제한된 replacement
+launch, Instance Refresh 권한을 사용한다. Fast Deploy에는 다음 최소 권한만
+추가한다.
+
+- 승인된 Green Web ASG 하나의 `autoscaling:UpdateAutoScalingGroup`
+- tag 조건을 통과한 Green ASG EC2의 `ssm:SendCommand`
+- `AWS-RunShellScript` document의 `ssm:SendCommand`
+- command 상태 확인과 실패 보상을 위한 `ssm:GetCommandInvocation`,
+  `ssm:CancelCommand`
+
+다음 권한과 동작은 허용하지 않는다.
 
 - 고정 EC2 대상 SSM 배포
-- `autoscaling:UpdateAutoScalingGroup`
 - ASG·Launch Template 삭제
 - EC2 수동 종료
 - Secret value 조회
@@ -1391,6 +1521,9 @@ EC2 Auto Scaling 기능 자체에는 추가 사용료가 없지만 다음은 과
 | Health check grace period | |
 | 최초 ASG Instance ID/AZ | |
 | Replacement Instance ID/AZ | |
+| 배포 모드 | `Fast Deploy / Immutable Release` |
+| Fast Deploy 기존 Instance ID 유지 | |
+| Fast Deploy 신규 LT 숫자 version | |
 | SAFE_RPS_PER_TARGET | |
 | Request target value | |
 | Scale-out 1→2 소요시간 | |
@@ -1424,6 +1557,9 @@ Secret value, WebSocket ticket, user data 원문은 기록하지 않는다.
 - [ ] API·WebSocket smoke PASS
 - [ ] 기존 수동 Green·EIP·EC2 origin 보존
 - [ ] replacement drill PASS
+- [ ] Fast Deploy가 고정 Instance ID 없이 단일 Healthy ASG EC2를 동적으로 선택
+- [ ] Fast Deploy 후 기존 EC2 ID 유지·Target Healthy·LT 숫자 포인터 전진 확인
+- [ ] Immutable Release `100/200` Instance Refresh와 이전 LT rollback 확인
 
 ### 단계 2 진입 전 — 현재 미진행
 
