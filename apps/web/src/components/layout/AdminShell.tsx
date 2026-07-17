@@ -98,7 +98,7 @@ function AdminSidebar() {
 
   return (
     <aside className="w-60 bg-brand-navy px-4 py-6 text-white">
-      <div className="mb-8 text-xl font-bold">BuildGraph<br />관리자</div>
+      <div data-testid="admin-brand" className="mb-8 text-xl font-bold">Dazzajo<br />관리자</div>
       <nav aria-label="관리자 메뉴" className="space-y-5">
         {groups.map((group) => (
           <div key={group.heading}>

@@ -965,6 +965,7 @@ test('renders all admin shell navigation entries for ADMIN role', async ({ page 
 
   await page.goto('/admin');
 
+  await expect(page.getByTestId('admin-brand')).toHaveText(/Dazzajo\s*관리자/);
   const navigation = page.getByRole('navigation', { name: '관리자 메뉴' });
   await expect(navigation.getByRole('link')).toHaveCount(11);
   await expect(navigation.getByRole('link', { name: '대시보드' })).toHaveAttribute('href', '/admin');
