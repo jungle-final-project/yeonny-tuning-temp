@@ -22,6 +22,8 @@ on:
 permissions:
   contents: read
   id-token: write
+  # 자가치유 스텝이 Publish 워크플로를 디스패치·관전하기 위해 필요.
+  actions: write
 
 concurrency:
   group: deploy-green-web-asg-release
@@ -100,6 +102,49 @@ jobs:
         with:
           role-to-assume: ${{ vars.AWS_DEPLOY_ROLE_ARN }}
           aws-region: ${{ vars.AWS_REGION }}
+
+      # 이미지 부재 자가치유 — web-only 커밋이 main HEAD가 되면 Publish는 경로 필터로 스킵돼
+      # HEAD 태그 이미지가 ECR에 없고, 아래 preflight가 반드시 거부한다(반복 발생 이력).
+      # 불변 계약(git_sha == image_tag == 현재 main HEAD)은 그대로 두고, 이미지가 없을 때만
+      # 해당 서비스의 Publish 워크플로를 같은 SHA로 디스패치해 완료를 기다린 뒤 진행한다.
+      # Publish는 reuse-or-publish라 중복 디스패치에도 안전하고, concurrency 그룹이 달라 교착 없음.
+      - name: Ensure immutable image exists (self-heal via Publish)
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SERVICE: ${{ steps.target.outputs.service }}
+          DEPLOY_SHA: ${{ steps.target.outputs.sha }}
+          API_REPOSITORY: ${{ vars.GREEN_API_ECR_REPOSITORY }}
+          XGB_REPOSITORY: ${{ vars.GREEN_XGB_ECR_REPOSITORY }}
+        run: |
+          set -euo pipefail
+          case "$SERVICE" in
+            api) repository="$API_REPOSITORY"; publish_workflow="Publish Green API Image" ;;
+            xgb-reranker) repository="$XGB_REPOSITORY"; publish_workflow="Publish Green XGB Reranker Image" ;;
+            *) echo "::error::unknown service: $SERVICE"; exit 1 ;;
+          esac
+          : "${repository:?ECR repository variable is required for $SERVICE}"
+          if aws ecr describe-images --repository-name "$repository" --image-ids "imageTag=$DEPLOY_SHA" >/dev/null 2>&1; then
+            echo "Immutable image already published for $DEPLOY_SHA"
+            exit 0
+          fi
+          echo "No image for $DEPLOY_SHA (path-filtered publish skip) — dispatching '$publish_workflow' and waiting"
+          gh workflow run "$publish_workflow" --ref main -f git_sha="$DEPLOY_SHA"
+          run_id=""
+          for _ in $(seq 1 30); do
+            sleep 10
+            run_id="$(gh run list --workflow "$publish_workflow" --limit 10 \
+              --json databaseId,headSha,createdAt \
+              --jq "[.[] | select(.headSha == \"$DEPLOY_SHA\")] | sort_by(.createdAt) | last | .databaseId // empty")"
+            [[ -n "$run_id" ]] && break
+          done
+          [[ -n "$run_id" ]] || { echo "::error::dispatched publish run not found for $DEPLOY_SHA"; exit 1; }
+          echo "Waiting for publish run $run_id"
+          gh run watch "$run_id" --exit-status
+          aws ecr describe-images --repository-name "$repository" --image-ids "imageTag=$DEPLOY_SHA" >/dev/null || {
+            echo "::error::publish finished but image still missing for $DEPLOY_SHA"
+            exit 1
+          }
 
       - name: Read-only Fast Deploy preflight
         shell: bash
