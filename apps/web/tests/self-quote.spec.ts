@@ -4810,6 +4810,53 @@ test('requires contact and delivery address fields before creating an assembly r
   });
 });
 
+test('keeps the checkout request panel expanded while editing contact information', async ({ page }) => {
+  await loginAsUser(page);
+  await page.route('**/api/quote-drafts/current**', (route) => route.fulfill({
+    status: 200,
+    contentType: 'application/json',
+    body: JSON.stringify(checkoutDraft)
+  }));
+  await page.route('**/api/build-graphs/resolve', (route) => route.fulfill({
+    status: 200,
+    contentType: 'application/json',
+    body: JSON.stringify(buildGraphResponse('BUILD_OVERVIEW'))
+  }));
+
+  await page.goto('/checkout');
+
+  const requestPanel = page.locator('#checkout-request-info');
+  await expect(page.getByLabel('연락처')).toBeVisible();
+  await expect.poll(() => requestPanel.evaluate((element) => element.style.height)).toBe('auto');
+
+  await requestPanel.evaluate((element) => {
+    const panel = element as HTMLElement & {
+      checkoutHeightChanges?: string[];
+      checkoutHeightObserver?: MutationObserver;
+    };
+    panel.checkoutHeightChanges = [];
+    panel.checkoutHeightObserver = new MutationObserver(() => {
+      panel.checkoutHeightChanges?.push(panel.style.height);
+    });
+    panel.checkoutHeightObserver.observe(panel, { attributes: true, attributeFilter: ['style'] });
+  });
+
+  await page.getByLabel('연락처').type('0');
+  await page.evaluate(() => new Promise<void>((resolve) => {
+    window.requestAnimationFrame(() => window.requestAnimationFrame(() => resolve()));
+  }));
+
+  const heightChanges = await requestPanel.evaluate((element) => {
+    const panel = element as HTMLElement & {
+      checkoutHeightChanges?: string[];
+      checkoutHeightObserver?: MutationObserver;
+    };
+    panel.checkoutHeightObserver?.disconnect();
+    return panel.checkoutHeightChanges ?? [];
+  });
+  expect(heightChanges).not.toContain('0px');
+});
+
 test('shows a newly arrived technician offer from the in-progress request without reload', async ({ page }) => {
   const requestId = '00000000-0000-4000-8000-000000020012';
   let detailCalls = 0;

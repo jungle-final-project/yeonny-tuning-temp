@@ -475,7 +475,7 @@ function CollapsiblePanelBody({ id, open, children }: { id: string; open: boolea
       window.cancelAnimationFrame(frame);
       window.clearTimeout(unmountTimer);
     };
-  }, [children, open, shouldRender]);
+  }, [open, shouldRender]);
 
   if (!shouldRender) {
     return <div id={id} hidden />;
