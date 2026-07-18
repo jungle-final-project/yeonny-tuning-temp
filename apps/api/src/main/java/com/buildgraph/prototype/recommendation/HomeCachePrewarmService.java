@@ -15,15 +15,18 @@ public class HomeCachePrewarmService {
 
     private final PublicHomeService publicHomeService;
     private final HomeCategoryPartsService homeCategoryPartsService;
+    private final AuthenticatedHomeService authenticatedHomeService;
     private final boolean enabled;
 
     public HomeCachePrewarmService(
             PublicHomeService publicHomeService,
             HomeCategoryPartsService homeCategoryPartsService,
+            AuthenticatedHomeService authenticatedHomeService,
             @Value("${buildgraph.home.cache.prewarm.enabled:true}") boolean enabled
     ) {
         this.publicHomeService = publicHomeService;
         this.homeCategoryPartsService = homeCategoryPartsService;
+        this.authenticatedHomeService = authenticatedHomeService;
         this.enabled = enabled;
     }
 
@@ -38,8 +41,12 @@ public class HomeCachePrewarmService {
         try {
             homeCategoryPartsService.priceDescCategoryParts();
             publicHomeService.home();
+            authenticatedHomeService.prewarm();
             long elapsedMs = (System.nanoTime() - startedAt) / 1_000_000L;
-            log.info("Home cache prewarmed: categoryParts=true, publicHome=true, elapsedMs={}", elapsedMs);
+            log.info(
+                    "Home cache prewarmed: categoryParts=true, publicHome=true, authenticatedHome=true, elapsedMs={}",
+                    elapsedMs
+            );
         } catch (Exception error) {
             log.warn("Home cache prewarm failed: {}", error.getMessage());
         }

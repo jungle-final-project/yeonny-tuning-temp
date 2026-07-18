@@ -49,6 +49,64 @@ class ReadThroughTtlCacheTest {
     }
 
     @Test
+    void staleWhileRevalidateReturnsStaleValueAndRefreshesInBackground() throws Exception {
+        ReadThroughTtlCache<String, String> cache = new ReadThroughTtlCache<>(Duration.ofMillis(5), 16);
+        AtomicInteger loads = new AtomicInteger();
+        CountDownLatch refreshStarted = new CountDownLatch(1);
+        CountDownLatch finishRefresh = new CountDownLatch(1);
+        ExecutorService executor = Executors.newSingleThreadExecutor();
+        try {
+            assertThat(cache.getStaleWhileRevalidate(
+                    "k",
+                    () -> "v" + loads.incrementAndGet(),
+                    Duration.ofSeconds(1),
+                    executor
+            )).isEqualTo("v1");
+            Thread.sleep(30);
+
+            String value = cache.getStaleWhileRevalidate(
+                    "k",
+                    () -> {
+                        int load = loads.incrementAndGet();
+                        refreshStarted.countDown();
+                        try {
+                            finishRefresh.await(5, TimeUnit.SECONDS);
+                        } catch (InterruptedException exception) {
+                            Thread.currentThread().interrupt();
+                        }
+                        return "v" + load;
+                    },
+                    Duration.ofSeconds(1),
+                    executor
+            );
+
+            assertThat(value).isEqualTo("v1");
+            assertThat(refreshStarted.await(5, TimeUnit.SECONDS)).isTrue();
+            assertThat(loads.get()).isEqualTo(2);
+            finishRefresh.countDown();
+
+            long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(5);
+            String refreshed = null;
+            while (System.nanoTime() < deadline) {
+                refreshed = cache.getStaleWhileRevalidate(
+                        "k",
+                        () -> "v" + loads.incrementAndGet(),
+                        Duration.ofSeconds(1),
+                        executor
+                );
+                if ("v2".equals(refreshed)) {
+                    break;
+                }
+                Thread.sleep(10);
+            }
+            assertThat(refreshed).isEqualTo("v2");
+        } finally {
+            finishRefresh.countDown();
+            executor.shutdownNow();
+        }
+    }
+
+    @Test
     void nullLoaderResultIsNotCached() {
         ReadThroughTtlCache<String, String> cache = new ReadThroughTtlCache<>(Duration.ofSeconds(30), 16);
         AtomicInteger loads = new AtomicInteger();

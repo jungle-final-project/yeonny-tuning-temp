@@ -287,6 +287,9 @@ recommendation:
   # 홈 응답(사용자 무관) 인메모리 캐시 TTL(초). 0이면 캐시 끔. 가격은 일일 갱신이라 수십 초 지연 무해.
   home-cache:
     ttl-seconds: ${HOME_CACHE_TTL_SECONDS:30}
+    authenticated:
+      ttl-seconds: ${AUTH_HOME_CACHE_TTL_SECONDS:300}
+      stale-seconds: ${AUTH_HOME_CACHE_STALE_SECONDS:900}
   # 인증 홈추천의 ACTIVE 후보 전수 스캔(3 LATERAL) row 캐시 TTL(초). 0이면 캐시 끔.
   # 점수·순위·shadow 기록은 여전히 요청마다 계산된다 — DB 스캔만 재사용.
   home-parts:
