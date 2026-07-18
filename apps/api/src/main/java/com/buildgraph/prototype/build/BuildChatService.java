@@ -232,7 +232,7 @@ public class BuildChatService {
         this.partCompatibleCandidateService = partCompatibleCandidateService;
     }
 
-    @Autowired
+    @Autowired(required = false)
     public void setBuildChatTestMode(BuildChatTestMode buildChatTestMode, MockAiChatEngine mockAiChatEngine) {
         this.buildChatTestMode = buildChatTestMode;
         this.mockAiChatEngine = mockAiChatEngine;
