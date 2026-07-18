@@ -808,6 +808,14 @@ def can_offer_as(
         )
     if result.diagnosis_type != "DEVICE_DRIVER_CONFIGURATION_ISSUE":
         return True
+    supported_mode = bool(
+        getattr(request, "mode", None) == "LIVE"
+        or (
+            getattr(request, "mode", None) == DEMO_DATA_MODE
+            and result.data_mode == DEMO_DATA_MODE
+            and result.scenario_id == GRAPHICS_CODE43_REMOTE_SUPPORT_SCENARIO_ID
+        )
+    )
     return bool(
         result.remote_as_recommended
         and not result.can_auto_recover
@@ -815,7 +823,7 @@ def can_offer_as(
         and request is not None
         and getattr(request, "diagnosis_id", None) == result.diagnosis_id
         and getattr(request, "source", None) == "WEB_REQUEST"
-        and getattr(request, "mode", None) == "LIVE"
+        and supported_mode
         and bool(str(getattr(request, "symptom", "") or "").strip())
     )
 

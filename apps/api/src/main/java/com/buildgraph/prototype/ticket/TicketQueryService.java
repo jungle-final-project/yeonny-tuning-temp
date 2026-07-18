@@ -859,6 +859,8 @@ public class TicketQueryService {
         return """
                 SELECT t.public_id::text AS id,
                        user_owner.public_id::text AS user_id,
+                       user_owner.email AS user_email,
+                       user_owner.name AS user_name,
                        t.status,
                        t.analysis_status,
                        t.review_status,
@@ -868,10 +870,27 @@ public class TicketQueryService {
                        t.symptom,
                        t.request_number,
                        t.request_type,
+                       t.diagnosis_id::text AS diagnosis_id,
                        t.diagnosis_mode,
                        t.diagnosis_title,
                        t.diagnosis_summary,
                        t.evidence_summary AS diagnosis_evidence,
+                       t.diagnosis_result,
+                       COALESCE((
+                         SELECT jsonb_agg(
+                           jsonb_build_object(
+                             'eventId', event.event_id,
+                             'taskId', event.task_id,
+                             'eventType', event.event_type,
+                             'status', event.status,
+                             'progressPercent', event.progress_percent,
+                             'message', event.message,
+                             'occurredAt', event.occurred_at
+                           ) ORDER BY event.occurred_at ASC, event.id ASC
+                         )
+                         FROM pc_agent_diagnosis_events event
+                         WHERE event.diagnosis_id = t.diagnosis_id
+                       ), '[]'::jsonb) AS diagnosis_events,
                        t.diagnosed_at,
                        lu.public_id::text AS log_upload_id,
                        lu.summary AS uploaded_log_summary,
@@ -950,6 +969,8 @@ public class TicketQueryService {
         return MockData.map(
                 "id", DbValueMapper.string(row, "id"),
                 "userId", DbValueMapper.string(row, "user_id"),
+                "userEmail", DbValueMapper.string(row, "user_email"),
+                "userName", DbValueMapper.string(row, "user_name"),
                 "status", DbValueMapper.string(row, "status"),
                 "analysisStatus", DbValueMapper.string(row, "analysis_status"),
                 "reviewStatus", DbValueMapper.string(row, "review_status"),
@@ -957,12 +978,17 @@ public class TicketQueryService {
                 "riskLevel", DbValueMapper.string(row, "risk_level"),
                 "autoResponseAllowed", row.get("auto_response_allowed"),
                 "symptom", DbValueMapper.string(row, "symptom"),
+                "title", DbValueMapper.string(row, "diagnosis_title"),
+                "description", DbValueMapper.string(row, "diagnosis_summary"),
                 "requestNumber", DbValueMapper.string(row, "request_number"),
                 "requestType", DbValueMapper.string(row, "request_type"),
+                "diagnosisId", DbValueMapper.string(row, "diagnosis_id"),
                 "diagnosisMode", DbValueMapper.string(row, "diagnosis_mode"),
                 "diagnosisTitle", DbValueMapper.string(row, "diagnosis_title"),
                 "diagnosisSummary", DbValueMapper.string(row, "diagnosis_summary"),
                 "diagnosisEvidence", DbValueMapper.json(row, "diagnosis_evidence", List.of()),
+                "diagnosisResult", DbValueMapper.json(row, "diagnosis_result", null),
+                "diagnosisEvents", DbValueMapper.json(row, "diagnosis_events", List.of()),
                 "diagnosedAt", DbValueMapper.timestamp(row, "diagnosed_at"),
                 "logUploadId", DbValueMapper.string(row, "log_upload_id"),
                 "uploadedLogSummary", DbValueMapper.string(row, "uploaded_log_summary"),

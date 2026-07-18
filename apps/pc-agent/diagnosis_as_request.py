@@ -16,6 +16,7 @@ from diagnosis_result import (
     actual_device_problem_evidence,
     matching_display_driver_evidence,
 )
+from pc_agent_demo_scenarios import GRAPHICS_CODE43_REMOTE_SUPPORT_SCENARIO_ID
 
 
 AS_REQUEST_PATH = "/api/agent/as-requests"
@@ -168,8 +169,15 @@ def build_diagnosis_as_request(
         # 일치를 검증하므로 웹에서 시작한 진단 세션에서만 연다.
         raise DiagnosisAsValidationError("웹에서 전달된 증상이 있는 진단 세션에서만 AS 요청을 생성할 수 있습니다.")
     if result.diagnosis_type == "DEVICE_DRIVER_CONFIGURATION_ISSUE":
-        if request.source != WEB_REQUEST or request.mode != "LIVE" or not request.symptom.strip():
-            raise DiagnosisAsValidationError("웹에서 전달된 LIVE 증상이 현재 진단 세션에 필요합니다.")
+        supported_mode = request.mode == "LIVE" or (
+            request.mode == "DEMO"
+            and result.data_mode == "DEMO"
+            and result.scenario_id == GRAPHICS_CODE43_REMOTE_SUPPORT_SCENARIO_ID
+        )
+        if request.source != WEB_REQUEST or not supported_mode or not request.symptom.strip():
+            raise DiagnosisAsValidationError(
+                "웹에서 전달된 LIVE 진단 또는 검증된 Code 43 시연 진단이 필요합니다."
+            )
         if result.can_auto_recover or not result.remote_as_recommended:
             raise DiagnosisAsValidationError("로컬 자동 복구 불가·원격 기사 점검 결과만 AS 요청을 생성할 수 있습니다.")
         if actual_device_problem_evidence(result) is None:

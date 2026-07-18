@@ -8206,6 +8206,13 @@ components:
         userId:
           type: string
           format: uuid
+        userEmail:
+          type: string
+          format: email
+          nullable: true
+        userName:
+          type: string
+          nullable: true
         status:
           $ref: "#/components/schemas/AsTicketStatus"
         analysisStatus:
@@ -8222,9 +8229,77 @@ components:
           type: boolean
         symptom:
           type: string
+        title:
+          type: string
+          nullable: true
+        description:
+          type: string
+          nullable: true
+        requestNumber:
+          type: string
+          nullable: true
+        requestType:
+          type: string
+          nullable: true
+        diagnosisId:
+          type: string
+          format: uuid
+          nullable: true
+        diagnosisMode:
+          type: string
+          enum: [LIVE, DEMO]
+          nullable: true
+        diagnosisTitle:
+          type: string
+          nullable: true
+        diagnosisSummary:
+          type: string
+          nullable: true
+        diagnosisEvidence:
+          type: array
+          items:
+            type: object
+            additionalProperties: true
+        diagnosisResult:
+          type: object
+          additionalProperties: true
+          nullable: true
+        diagnosisEvents:
+          type: array
+          description: PC Agent가 저장한 진행 이벤트를 occurredAt, 내부 id 순으로 반환한다.
+          items:
+            type: object
+            required: [eventId]
+            properties:
+              eventId:
+                type: string
+              taskId:
+                type: string
+                nullable: true
+              eventType:
+                type: string
+                nullable: true
+              status:
+                type: string
+                nullable: true
+              progressPercent:
+                type: integer
+                minimum: 0
+                maximum: 100
+              message:
+                type: string
+                nullable: true
+              occurredAt:
+                type: string
+                format: date-time
+        diagnosedAt:
+          type: string
+          format: date-time
+          nullable: true
         logUploadId:
           type: string
           format: uuid
+          nullable: true
         logSummaryId:
           type: string
           format: uuid

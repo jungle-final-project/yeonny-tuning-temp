@@ -230,6 +230,7 @@ class GraphicsDiagnosisFlowTest(unittest.TestCase):
         self.assertTrue(result.remote_as_recommended)
         self.assertEqual("DEMO", result.data_mode)
         self.assertEqual(GRAPHICS_CODE43_REMOTE_SUPPORT_SCENARIO_ID, result.scenario_id)
+        self.assertTrue(agent.can_offer_as(result, snapshot, session))
         self.assertIn("드라이버 재설치 또는 이전 버전 롤백", " ".join(result.recommended_actions))
         self.assertIn("방문 점검 전환", " ".join(result.recommended_actions))
         self.assertNotIn("물리 고장으로 확정", result.title)

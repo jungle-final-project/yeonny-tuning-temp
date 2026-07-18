@@ -314,6 +314,16 @@ export type AsSupportDecision =
   | 'UNSUPPORTED';
 export type RiskLevel = 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL';
 
+export type AdminDiagnosisEvent = {
+  eventId: string;
+  taskId?: string | null;
+  eventType?: string | null;
+  status?: string | null;
+  progressPercent?: number | null;
+  message?: string | null;
+  occurredAt?: string | null;
+};
+
 export type AdminAsTicket = {
   id: string;
   userId?: string | null;
@@ -327,6 +337,16 @@ export type AdminAsTicket = {
   title?: string | null;
   description?: string | null;
   detailDescription?: string | null;
+  requestNumber?: string | null;
+  requestType?: string | null;
+  diagnosisId?: string | null;
+  diagnosisMode?: string | null;
+  diagnosisTitle?: string | null;
+  diagnosisSummary?: string | null;
+  diagnosisEvidence?: Record<string, unknown>[] | null;
+  diagnosisResult?: Record<string, unknown> | null;
+  diagnosisEvents?: AdminDiagnosisEvent[] | null;
+  diagnosedAt?: string | null;
   logUploadId?: string | null;
   incidentWindow?: Record<string, unknown> | null;
   logSummary?: string | Record<string, unknown> | null;

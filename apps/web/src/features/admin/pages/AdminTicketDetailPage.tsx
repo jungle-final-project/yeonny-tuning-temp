@@ -365,6 +365,8 @@ export function AdminTicketDetailPage() {
 
 function ticketDetailRows(ticket: AdminAsTicket) {
   return [
+    { '항목': '진단 ID', '내용': ticket.diagnosisId ?? '-' },
+    { '항목': '진단 모드', '내용': ticket.diagnosisMode ?? '-' },
     { '항목': '상태', '내용': <StatusBadge status={ticket.status} /> },
     { '항목': '분석 상태', '내용': ticket.analysisStatus ?? '-' },
     { '항목': '검토 상태', '내용': ticket.reviewStatus ? <StatusBadge status={ticket.reviewStatus} /> : '-' },
@@ -374,9 +376,11 @@ function ticketDetailRows(ticket: AdminAsTicket) {
     { '항목': '위험도', '내용': ticket.riskLevel ?? '-' },
     { '항목': '진단 적중 여부', '내용': ticket.diagnosticAccuracy ?? '-' },
     { '항목': '자동 응답', '내용': ticket.autoResponseAllowed ? '허용' : '차단' },
-    { '항목': '제목/증상', '내용': ticket.title ?? firstLine(ticket.symptom) },
-    { '항목': '상세 설명', '내용': ticket.description ?? ticket.detailDescription ?? ticket.symptom },
-    { '항목': '사용자', '내용': ticket.userEmail ?? ticket.userName ?? ticket.userId ?? '-' },
+    { '항목': '진단 결과/증상', '내용': ticket.diagnosisTitle ?? ticket.title ?? firstLine(ticket.symptom) },
+    { '항목': '진단 요약', '내용': ticket.diagnosisSummary ?? ticket.description ?? ticket.detailDescription ?? ticket.symptom },
+    { '항목': '진단 근거', '내용': diagnosisEvidenceText(ticket) },
+    { '항목': '권장 조치', '내용': diagnosisActionsText(ticket) },
+    { '항목': '사용자 계정', '내용': ticket.userEmail ?? ticket.userName ?? ticket.userId ?? '-' },
     { '항목': '문제 발생 구간', '내용': incidentWindowSummary(ticket) },
     { '항목': '로그', '내용': logSummary(ticket) },
     { '항목': '추천 근거 코드', '내용': routingListText(ticket, 'reasonCodes') },
@@ -417,7 +421,39 @@ function logSummary(ticket: AdminAsTicket) {
     }
     return compactJson(ticket.logSummary);
   }
+  const diagnosisMessages = (ticket.diagnosisEvents ?? [])
+    .map((event) => event.message?.trim())
+    .filter((message): message is string => Boolean(message));
+  if (diagnosisMessages.length > 0) {
+    return diagnosisMessages.join(' / ');
+  }
   return ticket.logUploadId ? `업로드된 로그 있음: ${shortId(ticket.logUploadId)}` : '연결된 로그 없음';
+}
+
+function diagnosisEvidenceText(ticket: AdminAsTicket) {
+  const evidence = ticket.diagnosisEvidence ?? [];
+  if (evidence.length === 0) {
+    return '-';
+  }
+  return evidence.map((item) => {
+    const description = textValue(item.description);
+    if (description) {
+      return description;
+    }
+    const component = textValue(item.component) ?? 'component';
+    const metricType = textValue(item.metricType) ?? 'metric';
+    return `${component}.${metricType}: ${JSON.stringify(item.value)}`;
+  }).join(' / ');
+}
+
+function diagnosisActionsText(ticket: AdminAsTicket) {
+  const result = objectValue(ticket.diagnosisResult);
+  const actions = result?.recommendedActions ?? result?.actions;
+  if (!Array.isArray(actions)) {
+    return '-';
+  }
+  const text = actions.map((item) => textValue(item)).filter(Boolean);
+  return text.length > 0 ? text.join(' / ') : '-';
 }
 
 function logSummaryRows(ticket: AdminAsTicket) {
