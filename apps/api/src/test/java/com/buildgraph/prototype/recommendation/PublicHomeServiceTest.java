@@ -88,6 +88,27 @@ class PublicHomeServiceTest {
         verify(homePartRecommendationService, times(2)).publicHomeParts(5);
     }
 
+    @Test
+    void prewarmRefreshesPublicHomeCacheBeforeTtlExpires() {
+        when(homeCategoryPartsService.priceDescCategoryParts())
+                .thenReturn(Map.of("CPU", List.of(part("cpu-1", "CPU"))));
+        when(homePartRecommendationService.publicHomeParts(5))
+                .thenReturn(recommendedParts("generated-1"), recommendedParts("generated-2"));
+        PublicHomeService service = new PublicHomeService(
+                homeCategoryPartsService,
+                homePartRecommendationService,
+                Duration.ofSeconds(30),
+                Duration.ofSeconds(60),
+                Runnable::run
+        );
+
+        assertThat(castMap(service.home().get("recommendedParts")).get("generatedAt")).isEqualTo("generated-1");
+        service.prewarm();
+        assertThat(castMap(service.home().get("recommendedParts")).get("generatedAt")).isEqualTo("generated-2");
+
+        verify(homePartRecommendationService, times(2)).publicHomeParts(5);
+    }
+
     private static String awaitGeneratedAt(PublicHomeService service, String expected) throws Exception {
         long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(5);
         String generatedAt = null;

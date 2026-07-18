@@ -110,6 +110,27 @@ class AuthenticatedHomeServiceTest {
         verify(homePartRecommendationService, times(2)).sharedHomeParts(5);
     }
 
+    @Test
+    void prewarmRefreshesSharedAuthenticatedHomeCacheBeforeTtlExpires() {
+        Map<String, Object> categoryParts = Map.of("CPU", List.of(Map.of("name", "Ryzen")));
+        when(homeCategoryPartsService.priceDescCategoryParts()).thenReturn(categoryParts);
+        when(homePartRecommendationService.sharedHomeParts(5))
+                .thenReturn(recommendedParts("generated-1"), recommendedParts("generated-2"));
+        AuthenticatedHomeService service = new AuthenticatedHomeService(
+                homeCategoryPartsService,
+                homePartRecommendationService,
+                300L,
+                900L,
+                Runnable::run
+        );
+
+        assertThat(castMap(service.home(USER).get("recommendedParts")).get("generatedAt")).isEqualTo("generated-1");
+        service.prewarm();
+        assertThat(castMap(service.home(USER).get("recommendedParts")).get("generatedAt")).isEqualTo("generated-2");
+
+        verify(homePartRecommendationService, times(2)).sharedHomeParts(5);
+    }
+
     private static Map<String, Object> part(String id, String category) {
         return Map.ofEntries(
                 Map.entry("id", id),
@@ -131,6 +152,14 @@ class AuthenticatedHomeServiceTest {
                         "offerUrl", "https://example.com/" + id,
                         "supplierName", "Demo Shop"
                 ))
+        );
+    }
+
+    private static Map<String, Object> recommendedParts(String generatedAt) {
+        return Map.of(
+                "items", List.of(),
+                "generatedAt", generatedAt,
+                "fallbackUsed", true
         );
     }
 

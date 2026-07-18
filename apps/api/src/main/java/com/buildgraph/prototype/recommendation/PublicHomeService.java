@@ -73,6 +73,10 @@ public class PublicHomeService {
         return homeCache.getStaleWhileRevalidate(CACHE_KEY, this::computeHome, staleTtl, refreshExecutor);
     }
 
+    Map<String, Object> prewarm() {
+        return homeCache.refresh(CACHE_KEY, this::computeHome, staleTtl);
+    }
+
     private Map<String, Object> computeHome() {
         Map<String, Object> categoryParts = homeCategoryPartsService.priceDescCategoryParts();
         Map<String, Object> recommendedParts = homePartRecommendationService.publicHomeParts(5);

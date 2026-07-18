@@ -69,7 +69,7 @@ public class AuthenticatedHomeService {
     }
 
     Map<String, Object> prewarm() {
-        return cachedHome();
+        return homeCache.refresh(CACHE_KEY, this::computeHome, staleTtl);
     }
 
     private Map<String, Object> cachedHome() {
