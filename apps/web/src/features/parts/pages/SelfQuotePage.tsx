@@ -322,7 +322,7 @@ function SelfQuoteSlotBoardPage() {
   const unmetConditionCount = failCount === 0 ? blockingToolFailures(graphQuery.data, draftItems).length : 0;
 
   return (
-    <Screen mainClassName="mx-auto w-full min-w-0 max-w-[1800px] overflow-x-clip px-4 py-2 sm:px-6 lg:h-[calc(100dvh-210px)] lg:overflow-hidden lg:px-[clamp(40px,4.5vw,88px)] xl:h-[calc(100dvh-167px)]">
+    <Screen mainClassName="mx-auto min-h-[100dvh] w-full min-w-0 max-w-[1800px] overflow-x-clip px-4 py-2 sm:px-6 lg:h-[100dvh] lg:overflow-hidden lg:px-[clamp(40px,4.5vw,88px)]">
       <div className="min-w-0 space-y-4 lg:flex lg:h-full lg:min-h-0 lg:flex-col lg:gap-2 lg:space-y-0">
         {showSupplementaryQuotePanels && aiBuild ? (
           <AiSelectedBuildPanel

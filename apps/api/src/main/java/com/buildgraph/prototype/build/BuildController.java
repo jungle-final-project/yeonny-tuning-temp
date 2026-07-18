@@ -118,15 +118,22 @@ public class BuildController {
     DeferredResult<Object> buildChat(
             @RequestBody(required = false) Map<String, Object> request,
             @RequestHeader(value = "Authorization", required = false) String authorization,
-            @RequestHeader(value = "X-BuildGraph-AI-Profile", required = false) String aiProfile
+            @RequestHeader(value = "X-BuildGraph-AI-Profile", required = false) String aiProfile,
+            @RequestHeader(value = "X-BuildGraph-AI-Mode", required = false) String aiMode,
+            @RequestHeader(value = "X-BuildGraph-Test-Key", required = false) String testKey
     ) {
         // 인증은 요청(Tomcat) 스레드에서 동기로 처리한다 — 401은 빠르게 반환하고 채팅 풀을 낭비하지 않는다.
         CurrentUserService.CurrentUser user = currentUserService.requireUser(authorization);
         Map<String, Object> body = request == null ? Map.of() : request;
         boolean withProfile = aiProfile != null && !aiProfile.isBlank();
+        boolean withTestMode = (aiMode != null && !aiMode.isBlank()) || (testKey != null && !testKey.isBlank());
         // 채팅 처리는 전용 풀에서 비동기로 — Tomcat 스레드는 즉시 반납돼 로그인 등 빠른 요청과 분리된다.
-        return aiChatAsyncExecutor.submit(() ->
-                withProfile ? buildChatService.chat(body, aiProfile, user) : buildChatService.chat(body, user));
+        return aiChatAsyncExecutor.submit(() -> {
+            if (withTestMode) {
+                return buildChatService.chat(body, aiProfile, user, aiMode, testKey);
+            }
+            return withProfile ? buildChatService.chat(body, aiProfile, user) : buildChatService.chat(body, user);
+        });
     }
 
     @GetMapping("/recommendations/home-builds")

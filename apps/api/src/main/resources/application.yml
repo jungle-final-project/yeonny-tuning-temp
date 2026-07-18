@@ -246,6 +246,10 @@ ai:
       use-compact-prompt: ${AS_CHAT_HIGH_QUALITY_USE_COMPACT_PROMPT:true}
   build-chat:
     default-profile: ${BUILD_CHAT_DEFAULT_PROFILE:BUILD_CHAT_54_MINI_FAST}
+    # Server-side gate for request-scoped k6 mock mode. Mock routing is implemented in application code.
+    test-mode-enabled: ${AI_BUILD_CHAT_TEST_MODE_ENABLED:false}
+    test-key: ${AI_BUILD_CHAT_TEST_KEY:}
+    test-delay-ms: ${AI_BUILD_CHAT_TEST_DELAY_MS:3000}
     cache:
       enabled: ${BUILD_CHAT_CACHE_ENABLED:true}
       ttl-seconds: ${BUILD_CHAT_CACHE_TTL_SECONDS:600}

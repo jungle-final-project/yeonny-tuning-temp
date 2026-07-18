@@ -18,6 +18,22 @@ import org.springframework.jdbc.core.JdbcTemplate;
 
 class BuildChatSemanticCacheServiceTest {
     @Test
+    void verifiedMockRequestBypassesSemanticCacheLookupAndStore() {
+        JdbcTemplate jdbcTemplate = mock(JdbcTemplate.class);
+        OpenAiEmbeddingClient embeddingClient = mock(OpenAiEmbeddingClient.class);
+        BuildChatSemanticCacheService service =
+                new BuildChatSemanticCacheService(jdbcTemplate, embeddingClient, null, true, 0.94, 600);
+        BuildChatIntentDecision decision =
+                decision(BuildChatIntent.BUILD_RECOMMEND, "BUILD_RECOMMEND|budget=TARGET:3000000");
+        Map<String, Object> request = BuildChatTestMode.sanitizedRequest(Map.of("message", "mock"), true);
+
+        assertThat(service.lookup(request, null, decision)).isEmpty();
+        service.store(request, null, decision, Map.of("message", "mock"));
+
+        verifyNoInteractions(jdbcTemplate, embeddingClient);
+    }
+
+    @Test
     void lookupReturnsCachedResponseWhenDecisionIsEligibleAndSimilarityPassesThreshold() {
         JdbcTemplate jdbcTemplate = mock(JdbcTemplate.class);
         OpenAiEmbeddingClient embeddingClient = mock(OpenAiEmbeddingClient.class);

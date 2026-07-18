@@ -1,6 +1,6 @@
 import '@fontsource/outfit/500.css';
 import { FormEvent, ReactNode, useEffect, useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { ChevronDown, LifeBuoy, LogIn, LogOut, Search, ShieldCheck, ShoppingCart, UserRound, Wrench } from 'lucide-react';
 import { getCurrentUser, logout as logoutApi, type CurrentUser } from '../../features/auth/authApi';
 import { AUTH_CHANGED_EVENT, ApiError, clearToken, getCachedAuthUser, getRefreshToken, getToken } from '../../lib/api';
@@ -9,9 +9,16 @@ import { PrimaryNav } from './PrimaryNav';
 
 export function AppHeader() {
   const navigate = useNavigate();
+  const location = useLocation();
   const [user, setUser] = useState<CurrentUser | null>(() => readCachedCurrentUser());
   const [searchInput, setSearchInput] = useState('');
   const [headerSearchMode, setHeaderSearchMode] = useState<'general' | 'ai'>('ai');
+  const [isSelfQuoteHeaderOpen, setIsSelfQuoteHeaderOpen] = useState(false);
+  const isSelfQuoteRoute = location.pathname === '/self-quote';
+  useEffect(() => {
+    setIsSelfQuoteHeaderOpen(false);
+  }, [location.pathname]);
+
 
   function submitSearch(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -94,7 +101,21 @@ export function AppHeader() {
     : user?.name || '다짜줘 사용자';
 
   return (
-    <>
+    <div className={isSelfQuoteRoute ? 'relative z-50 h-0' : ''}>
+      {isSelfQuoteRoute && !isSelfQuoteHeaderOpen ? (
+        <button
+          type="button"
+          aria-haspopup="menu"
+          aria-expanded={false}
+          onClick={() => setIsSelfQuoteHeaderOpen(true)}
+          className="absolute right-4 top-0 z-[60] rounded-b-lg border border-t-0 border-commerce-line bg-[#f7f7f8] px-4 py-2 text-sm font-bold text-[#595959] shadow-md transition hover:text-[#222222] focus:outline-none focus:ring-4 focus:ring-blue-100 sm:right-6 lg:right-8"
+        >
+          &#xC0C1;&#xB2E8; &#xBA54;&#xB274;
+        </button>
+      ) : null}
+      <div className={isSelfQuoteRoute
+        ? 'absolute inset-x-0 top-0 z-50 shadow-xl transition duration-150 ' + (isSelfQuoteHeaderOpen ? 'visible translate-y-0 opacity-100' : 'pointer-events-none invisible -translate-y-2 opacity-0')
+        : ''}>
       <header className="bg-[#f7f7f8]">
         <div className="mx-auto grid min-h-[68px] w-full max-w-[1320px] grid-cols-[auto_minmax(0,1fr)] items-center gap-x-3 gap-y-3 px-4 pb-[7px] pt-3 sm:px-6 lg:grid-cols-[minmax(180px,1fr)_minmax(360px,760px)_minmax(180px,1fr)] lg:gap-x-6 lg:px-8 xl:px-0">
           <div className="flex min-w-0 items-center gap-5">
@@ -180,7 +201,17 @@ export function AppHeader() {
         </div>
       </header>
       <PrimaryNav />
-    </>
+      {isSelfQuoteRoute ? (
+        <button
+          type="button"
+          onClick={() => setIsSelfQuoteHeaderOpen(false)}
+          className="absolute right-4 top-full rounded-b-lg border border-t-0 border-commerce-line bg-[#f7f7f8] px-4 py-2 text-sm font-bold text-[#595959] shadow-md transition hover:text-[#222222] focus:outline-none focus:ring-4 focus:ring-blue-100 sm:right-6 lg:right-8"
+        >
+          &#xB2EB;&#xAE30;
+        </button>
+      ) : null}
+      </div>
+    </div>
   );
 }
 

@@ -77,6 +77,10 @@ public class BuildChatCacheService {
     }
 
     public Optional<Map<String, Object>> lookup(Map<String, Object> request, String requestedAiProfile, Long userId) {
+        if (BuildChatTestMode.isVerifiedMockRequest(request)) {
+            log.debug("Build Chat cache lookup skipped: verified mock request");
+            return Optional.empty();
+        }
         log.debug("Build Chat cache lookup entered: enabled={}, userId={}, requestedAiProfile={}", enabled, userId, requestedAiProfile);
         if (!enabled) {
             log.info("Build Chat cache lookup skipped: disabled");
@@ -116,6 +120,10 @@ public class BuildChatCacheService {
     }
 
     public void store(Map<String, Object> request, String requestedAiProfile, Long userId, Map<String, Object> response, Duration ttlOverride) {
+        if (BuildChatTestMode.isVerifiedMockRequest(request)) {
+            log.debug("Build Chat cache store skipped: verified mock request");
+            return;
+        }
         log.debug("Build Chat cache store entered: enabled={}, userId={}, requestedAiProfile={}", enabled, userId, requestedAiProfile);
         if (!enabled) {
             log.info("Build Chat cache store skipped: disabled");
@@ -150,6 +158,9 @@ public class BuildChatCacheService {
     }
 
     public void storeAsync(Map<String, Object> request, String requestedAiProfile, Long userId, Map<String, Object> response, Duration ttlOverride) {
+        if (BuildChatTestMode.isVerifiedMockRequest(request)) {
+            return;
+        }
         if (!enabled || response == null || response.isEmpty()) {
             return;
         }

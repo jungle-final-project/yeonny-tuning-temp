@@ -65,6 +65,9 @@ public class BuildChatSemanticCacheService {
     }
 
     public Optional<Map<String, Object>> lookup(Map<String, Object> request, String requestedAiProfile, BuildChatIntentDecision decision) {
+        if (BuildChatTestMode.isVerifiedMockRequest(request)) {
+            return Optional.empty();
+        }
         if (!isUsable(decision)) {
             return Optional.empty();
         }
@@ -114,6 +117,9 @@ public class BuildChatSemanticCacheService {
     }
 
     public void store(Map<String, Object> request, String requestedAiProfile, BuildChatIntentDecision decision, Map<String, Object> response) {
+        if (BuildChatTestMode.isVerifiedMockRequest(request)) {
+            return;
+        }
         if (!isUsable(decision) || response == null || response.isEmpty()) {
             return;
         }
@@ -147,6 +153,9 @@ public class BuildChatSemanticCacheService {
     }
 
     public void storeAsync(Map<String, Object> request, String requestedAiProfile, BuildChatIntentDecision decision, Map<String, Object> response) {
+        if (BuildChatTestMode.isVerifiedMockRequest(request)) {
+            return;
+        }
         if (!isUsable(decision) || response == null || response.isEmpty()) {
             return;
         }

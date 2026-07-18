@@ -464,6 +464,20 @@ paths:
           schema:
             type: string
             enum: [BUILD_CHAT_FAST, BUILD_CHAT_54_FAST, BUILD_CHAT_54_MINI_FAST]
+        - in: header
+          name: X-BuildGraph-AI-Mode
+          required: false
+          description: Internal load-test mode. MOCK is accepted only when server-side test mode is enabled.
+          schema:
+            type: string
+            enum: [MOCK]
+        - in: header
+          name: X-BuildGraph-Test-Key
+          required: false
+          description: Secret key for internal request-scoped Build Chat mock tests. Never sent by the user web UI.
+          schema:
+            type: string
+            format: password
       requestBody:
         required: true
         content:
@@ -477,6 +491,18 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/AiBuildChatResponse"
+        "400":
+          description: Invalid or incomplete AI test-mode headers
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "403":
+          description: AI test mode is disabled or the test key is invalid
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
         "428":
           description: OPENAI_API_KEY 등 LLM 필수 설정 누락
           content:
