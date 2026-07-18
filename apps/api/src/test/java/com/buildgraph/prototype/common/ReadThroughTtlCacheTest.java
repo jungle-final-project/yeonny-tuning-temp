@@ -23,6 +23,22 @@ class ReadThroughTtlCacheTest {
     }
 
     @Test
+    void jitterExtendsEntryExpiry() throws Exception {
+        ReadThroughTtlCache<String, String> cache = new ReadThroughTtlCache<>(
+                Duration.ofMillis(1),
+                Duration.ofSeconds(2),
+                16,
+                () -> TimeUnit.SECONDS.toNanos(2)
+        );
+        AtomicInteger loads = new AtomicInteger();
+
+        assertThat(cache.get("k", () -> "v" + loads.incrementAndGet())).isEqualTo("v1");
+        Thread.sleep(50);
+        assertThat(cache.get("k", () -> "v" + loads.incrementAndGet())).isEqualTo("v1");
+        assertThat(loads.get()).isEqualTo(1);
+    }
+
+    @Test
     void zeroTtlDisablesCaching() {
         ReadThroughTtlCache<String, String> cache = new ReadThroughTtlCache<>(Duration.ZERO, 16);
         AtomicInteger loads = new AtomicInteger();

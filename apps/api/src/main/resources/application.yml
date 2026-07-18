@@ -114,7 +114,9 @@ buildgraph:
     # requireUser의 JWT subject→사용자 캐시 TTL(초). 0이면 캐시 끔(요청마다 users SELECT).
     # role 변경·소프트 삭제 반영이 최대 이 시간만큼 늦을 수 있다 — 프로필 변경은 즉시 무효화된다.
     user-cache:
-      ttl-seconds: ${AUTH_USER_CACHE_TTL_SECONDS:30}
+      ttl-seconds: ${AUTH_USER_CACHE_TTL_SECONDS:300}
+      jitter-seconds: ${AUTH_USER_CACHE_JITTER_SECONDS:60}
+      max-size: ${AUTH_USER_CACHE_MAX_SIZE:4096}
     refresh-token-cleanup:
       enabled: ${BUILDGRAPH_AUTH_REFRESH_TOKEN_CLEANUP_ENABLED:true}
       run-on-startup: ${BUILDGRAPH_AUTH_REFRESH_TOKEN_CLEANUP_RUN_ON_STARTUP:true}
