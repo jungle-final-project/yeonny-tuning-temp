@@ -3,6 +3,8 @@ package com.buildgraph.prototype.common;
 import java.time.Duration;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ThreadLocalRandom;
+import java.util.function.LongSupplier;
 import java.util.function.Supplier;
 
 /**
@@ -27,11 +29,23 @@ public final class ReadThroughTtlCache<K, V> {
     private final Map<K, Entry<V>> store = new ConcurrentHashMap<>();
     private final Map<K, Object> inFlight = new ConcurrentHashMap<>();
     private final long ttlNanos;
+    private final long jitterNanos;
     private final int maxSize;
+    private final LongSupplier jitterSupplier;
 
     public ReadThroughTtlCache(Duration ttl, int maxSize) {
-        this.ttlNanos = ttl == null ? 0L : Math.max(0L, ttl.toNanos());
+        this(ttl, Duration.ZERO, maxSize);
+    }
+
+    public ReadThroughTtlCache(Duration ttl, Duration jitter, int maxSize) {
+        this(ttl, jitter, maxSize, null);
+    }
+
+    ReadThroughTtlCache(Duration ttl, Duration jitter, int maxSize, LongSupplier jitterSupplier) {
+        this.ttlNanos = positiveNanos(ttl);
+        this.jitterNanos = positiveNanos(jitter);
         this.maxSize = Math.max(1, maxSize);
+        this.jitterSupplier = jitterSupplier == null ? this::randomJitterNanos : jitterSupplier;
     }
 
     /** 키가 살아있으면 캐시 값을, 아니면 loader로 계산해 캐시에 담고 반환한다. loader 결과가 null이면 캐시하지 않는다. */
@@ -58,12 +72,53 @@ public final class ReadThroughTtlCache<K, V> {
                 if (store.size() >= maxSize) {
                     store.clear();
                 }
-                store.put(key, new Entry<>(value, System.nanoTime() + ttlNanos));
+                store.put(key, new Entry<>(value, expiresAtNanos()));
                 return value;
             } finally {
                 inFlight.remove(key);
             }
         }
+    }
+
+    private long expiresAtNanos() {
+        return saturatedAdd(System.nanoTime(), saturatedAdd(ttlNanos, boundedJitterNanos()));
+    }
+
+    private long boundedJitterNanos() {
+        if (jitterNanos <= 0L) {
+            return 0L;
+        }
+        long value = Math.max(0L, jitterSupplier.getAsLong());
+        return Math.min(value, jitterNanos);
+    }
+
+    private long randomJitterNanos() {
+        if (jitterNanos <= 0L) {
+            return 0L;
+        }
+        if (jitterNanos == Long.MAX_VALUE) {
+            return ThreadLocalRandom.current().nextLong(Long.MAX_VALUE);
+        }
+        return ThreadLocalRandom.current().nextLong(jitterNanos + 1L);
+    }
+
+    private static long positiveNanos(Duration duration) {
+        if (duration == null || duration.isZero() || duration.isNegative()) {
+            return 0L;
+        }
+        try {
+            return Math.max(0L, duration.toNanos());
+        } catch (ArithmeticException overflow) {
+            return Long.MAX_VALUE;
+        }
+    }
+
+    private static long saturatedAdd(long left, long right) {
+        long result = left + right;
+        if (((left ^ result) & (right ^ result)) < 0L) {
+            return Long.MAX_VALUE;
+        }
+        return result;
     }
 
     /** 특정 키 즉시 무효화 — 사용자 프로필 변경처럼 대상이 명확한 mutation 훅용. */

@@ -23,15 +23,25 @@ public class CurrentUserService {
     public CurrentUserService(
             JdbcTemplate jdbcTemplate,
             JwtTokenService jwtTokenService,
-            @Value("${buildgraph.auth.user-cache.ttl-seconds:30}") long userCacheTtlSeconds
+            @Value("${buildgraph.auth.user-cache.ttl-seconds:300}") long userCacheTtlSeconds,
+            @Value("${buildgraph.auth.user-cache.jitter-seconds:60}") long userCacheJitterSeconds,
+            @Value("${buildgraph.auth.user-cache.max-size:4096}") int userCacheMaxSize
     ) {
         this.jdbcTemplate = jdbcTemplate;
         this.jwtTokenService = jwtTokenService;
-        this.userCache = new ReadThroughTtlCache<>(Duration.ofSeconds(userCacheTtlSeconds), 4096);
+        this.userCache = new ReadThroughTtlCache<>(
+                Duration.ofSeconds(userCacheTtlSeconds),
+                Duration.ofSeconds(userCacheJitterSeconds),
+                userCacheMaxSize
+        );
     }
 
     CurrentUserService(JdbcTemplate jdbcTemplate, JwtTokenService jwtTokenService) {
-        this(jdbcTemplate, jwtTokenService, 0L);
+        this(jdbcTemplate, jwtTokenService, 0L, 0L, 4096);
+    }
+
+    CurrentUserService(JdbcTemplate jdbcTemplate, JwtTokenService jwtTokenService, long userCacheTtlSeconds) {
+        this(jdbcTemplate, jwtTokenService, userCacheTtlSeconds, 0L, 4096);
     }
 
     public CurrentUser requireUser(String authorization) {
