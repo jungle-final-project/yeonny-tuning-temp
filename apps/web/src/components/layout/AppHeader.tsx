@@ -89,6 +89,9 @@ export function AppHeader() {
   const searchPlaceholder = isGeneralSearch
     ? '부품명이나 모델명을 검색해보세요. 예: RTX 5060 Ti'
     : '어떤 PC를 맞춰드릴까요? 예: QHD 게임용 200만원 PC';
+  const accountDisplayName = user?.role === 'ADMIN' && user.name === 'BuildGraph Admin'
+    ? 'admin'
+    : user?.name || '다짜줘 사용자';
 
   return (
     <>
@@ -135,14 +138,14 @@ export function AppHeader() {
             <HeaderIconLink to="/my/quotes" icon={<ShoppingCart size={21} />} label="내 견적함" />
             {user ? (
               <details data-testid="header-account-slot" className="group relative w-[118px] shrink-0">
-                <summary aria-label={'계정 메뉴: ' + (user.name || '다짜줘 사용자')} className="flex h-10 w-full cursor-pointer list-none items-center gap-2 rounded-lg px-2 text-[#595959] transition hover:bg-slate-100 hover:text-[#222222] focus:outline-none focus:ring-4 focus:ring-blue-100 [&::-webkit-details-marker]:hidden">
+                <summary aria-label={'계정 메뉴: ' + accountDisplayName} className="flex h-10 w-full cursor-pointer list-none items-center gap-2 rounded-lg px-2 text-[#595959] transition hover:bg-slate-100 hover:text-[#222222] focus:outline-none focus:ring-4 focus:ring-blue-100 [&::-webkit-details-marker]:hidden">
                   <UserRound size={21} className="shrink-0" aria-hidden="true" />
-                  <span data-testid="header-account-name" className="w-[72px] truncate text-left text-[15px] font-medium leading-none">{user.name || '다짜줘 사용자'}</span>
+                  <span data-testid="header-account-name" className="w-[72px] truncate text-left text-[15px] font-medium leading-none">{accountDisplayName}</span>
                   <ChevronDown size={10} className="shrink-0 transition group-open:rotate-180" aria-hidden="true" />
                 </summary>
                 <div className="absolute right-0 top-[calc(100%+8px)] z-50 w-56 overflow-hidden rounded-xl border border-commerce-line bg-white py-2 shadow-xl">
                   <div className="border-b border-commerce-line px-4 pb-3 pt-2">
-                    <div className="truncate text-sm font-black text-commerce-ink">{user.name || '다짜줘 사용자'}</div>
+                    <div className="truncate text-sm font-black text-commerce-ink">{accountDisplayName}</div>
                     <div className="mt-0.5 truncate text-xs text-slate-500">{user.email}</div>
                   </div>
                   <AccountMenuLink to="/my/profile" icon={<UserRound size={16} />} label="마이페이지" />

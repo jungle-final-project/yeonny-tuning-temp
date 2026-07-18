@@ -126,7 +126,7 @@ test('shows admin navigation only for ADMIN role', async ({ page }) => {
     localStorage.setItem('buildgraph.authUser', JSON.stringify({
       id: 'admin-001',
       email: 'admin@example.com',
-      name: 'Admin User',
+      name: 'BuildGraph Admin',
       role: 'ADMIN'
     }));
   });
@@ -137,7 +137,7 @@ test('shows admin navigation only for ADMIN role', async ({ page }) => {
       body: JSON.stringify({
         id: 'admin-001',
         email: 'admin@example.com',
-        name: 'Admin User',
+        name: 'BuildGraph Admin',
         role: 'ADMIN'
       })
     });
@@ -145,7 +145,10 @@ test('shows admin navigation only for ADMIN role', async ({ page }) => {
 
   await page.goto('/login');
 
+  await expect(page.getByTestId('header-account-name')).toHaveText('admin');
+  await expect(page.locator('summary[aria-label="계정 메뉴: admin"]')).toBeVisible();
   await page.locator('summary[aria-label^="계정 메뉴:"]').click();
+  await expect(page.getByTestId('header-account-slot').locator(':scope > div').getByText('admin', { exact: true })).toBeVisible();
   await expect(page.getByText('admin@example.com')).toBeVisible();
   await expect(page.getByRole('link', { name: '관리자' })).toHaveAttribute('href', '/admin');
 });
