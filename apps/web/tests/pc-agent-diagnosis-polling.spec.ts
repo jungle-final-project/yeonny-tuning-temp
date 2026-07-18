@@ -213,6 +213,25 @@ test('cleans the polling timer when the page unmounts', async ({ page }) => {
   expect(getCount).toBe(countBeforeUnmount);
 });
 
+test('restores the same diagnosis from the URL after refresh', async ({ page }) => {
+  let getCount = 0;
+  await page.route(diagnosisGetPattern(), async (route) => {
+    getCount += 1;
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify(completedResponse(FIRST_DIAGNOSIS_ID))
+    });
+  });
+
+  await page.goto(`/support/new?diagnosisId=${FIRST_DIAGNOSIS_ID}`);
+  await expect(page.getByTestId('pc-agent-diagnosis-result')).toContainText('그래픽 장치·드라이버 구성 이상');
+  const countBeforeReload = getCount;
+  await page.reload();
+  await expect(page.getByTestId('pc-agent-diagnosis-result')).toContainText('그래픽 장치·드라이버 구성 이상');
+  expect(getCount).toBeGreaterThan(countBeforeReload);
+});
+
 async function startDiagnosis(page: Page) {
   await page.goto('/support/new');
   await page.getByLabel('증상 상세').fill('화면이 끊기고 그래픽 장치 오류가 발생합니다.');

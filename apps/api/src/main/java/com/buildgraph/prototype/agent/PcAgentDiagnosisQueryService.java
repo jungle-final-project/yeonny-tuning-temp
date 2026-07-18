@@ -9,6 +9,7 @@ import com.buildgraph.prototype.common.DbValueMapper;
 import com.buildgraph.prototype.common.MockData;
 import com.buildgraph.prototype.user.CurrentUserService;
 import java.time.Instant;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -50,6 +51,7 @@ public class PcAgentDiagnosisQueryService {
                                r.request_status,
                                r.connection_status,
                                r.accepted_at,
+                               r.requested_at,
                                r.created_at,
                                r.updated_at
                         FROM pc_agent_diagnosis_requests r
@@ -72,6 +74,11 @@ public class PcAgentDiagnosisQueryService {
                 || "DUPLICATE".equals(requestStatus);
         boolean completed = result != null
                 || (latestEvent != null && TERMINAL_STATES.contains(latestEvent.status()));
+        Object completedAt = result != null
+                ? result.updatedAt()
+                : latestEvent != null && TERMINAL_STATES.contains(latestEvent.status())
+                        ? latestEvent.occurredAt()
+                        : null;
         Object updatedAt = latestTimestamp(
                 DbValueMapper.timestamp(request, "updated_at"),
                 latestEvent == null ? null : latestEvent.createdAt(),
@@ -92,9 +99,59 @@ public class PcAgentDiagnosisQueryService {
                 "resolutionType", result == null ? null : result.resolutionType(),
                 "dataMode", result == null ? null : result.dataMode(),
                 "scenarioId", result == null ? null : result.scenarioId(),
+                "requestedAt", DbValueMapper.timestamp(request, "requested_at"),
+                "completedAt", completedAt,
                 "createdAt", DbValueMapper.timestamp(request, "created_at"),
                 "updatedAt", updatedAt
         );
+    }
+
+    @Transactional(readOnly = true)
+    public Map<String, Object> latest(CurrentUserService.CurrentUser user) {
+        String diagnosisId = jdbcTemplate.queryForList("""
+                        SELECT diagnosis_id::text AS diagnosis_id
+                        FROM pc_agent_diagnosis_requests
+                        WHERE user_id = ?
+                        ORDER BY requested_at DESC, diagnosis_id DESC
+                        LIMIT 1
+                        """, user.internalId())
+                .stream()
+                .findFirst()
+                .map(row -> DbValueMapper.string(row, "diagnosis_id"))
+                .orElse(null);
+        if (diagnosisId == null) {
+            return MockData.map("diagnosis", null);
+        }
+
+        Map<String, Object> diagnosis = new LinkedHashMap<>(get(user, diagnosisId));
+        diagnosis.put("asTicket", linkedTicket(user, UUID.fromString(diagnosisId)));
+        return MockData.map("diagnosis", diagnosis);
+    }
+
+    private Map<String, Object> linkedTicket(CurrentUserService.CurrentUser user, UUID diagnosisId) {
+        return jdbcTemplate.queryForList("""
+                        SELECT public_id::text AS id,
+                               status,
+                               review_status,
+                               support_decision,
+                               created_at
+                        FROM as_tickets
+                        WHERE diagnosis_id = ?
+                          AND user_id = ?
+                          AND deleted_at IS NULL
+                        ORDER BY created_at DESC, id DESC
+                        LIMIT 1
+                        """, diagnosisId, user.internalId())
+                .stream()
+                .findFirst()
+                .map(row -> MockData.map(
+                        "id", DbValueMapper.string(row, "id"),
+                        "status", DbValueMapper.string(row, "status"),
+                        "reviewStatus", DbValueMapper.string(row, "review_status"),
+                        "supportDecision", DbValueMapper.string(row, "support_decision"),
+                        "createdAt", DbValueMapper.timestamp(row, "created_at")
+                ))
+                .orElse(null);
     }
 
     private static Map<String, Object> eventResponse(PcAgentDiagnosisEventEntity event) {

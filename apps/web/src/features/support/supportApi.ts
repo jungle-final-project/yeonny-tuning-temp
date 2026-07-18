@@ -68,6 +68,14 @@ export type PcAgentDiagnosisResultDto = {
   updatedAt: string;
 };
 
+export type PcAgentDiagnosisTicketDto = {
+  id: string;
+  status: string;
+  reviewStatus?: string | null;
+  supportDecision?: string | null;
+  createdAt?: string | null;
+};
+
 export type PcAgentDiagnosisDto = {
   diagnosisId: string;
   status: string;
@@ -82,8 +90,15 @@ export type PcAgentDiagnosisDto = {
   resolutionType?: string | null;
   dataMode?: 'LIVE' | 'DEMO' | null;
   scenarioId?: string | null;
+  requestedAt?: string | null;
+  completedAt?: string | null;
+  asTicket?: PcAgentDiagnosisTicketDto | null;
   createdAt: string;
   updatedAt: string;
+};
+
+export type LatestPcAgentDiagnosisDto = {
+  diagnosis: PcAgentDiagnosisDto | null;
 };
 
 export function uploadAgentLog(rangeMinutes: number, consentAccepted: boolean, file: File, metadata: UploadAgentLogMetadata = {}) {
@@ -119,6 +134,12 @@ export function requestPcAgentDiagnosis(request: PcAgentDiagnosisRequestCreate) 
 
 export function getPcAgentDiagnosis(diagnosisId: string, signal?: AbortSignal) {
   return api<PcAgentDiagnosisDto>(`/api/users/me/agent-diagnosis-requests/${encodeURIComponent(diagnosisId)}`, {
+    signal
+  });
+}
+
+export function getLatestPcAgentDiagnosis(signal?: AbortSignal) {
+  return api<LatestPcAgentDiagnosisDto>('/api/users/me/agent-diagnosis-requests/latest', {
     signal
   });
 }

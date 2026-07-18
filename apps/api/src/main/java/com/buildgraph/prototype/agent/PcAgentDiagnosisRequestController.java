@@ -45,4 +45,11 @@ public class PcAgentDiagnosisRequestController {
     ) {
         return queryService.get(currentUserService.requireUser(authorization), diagnosisId);
     }
+
+    @GetMapping("/latest")
+    public Map<String, Object> latest(
+            @RequestHeader(value = "Authorization", required = false) String authorization
+    ) {
+        return queryService.latest(currentUserService.requireUser(authorization));
+    }
 }

@@ -297,8 +297,9 @@ function progressLabel(eventName: string) {
 
 export function SupportNewPage() {
   const navigate = useNavigate();
-  const [searchParams] = useSearchParams();
+  const [searchParams, setSearchParams] = useSearchParams();
   const draftId = searchParams.get('draftId')?.trim() ?? '';
+  const diagnosisIdParam = searchParams.get('diagnosisId')?.trim() ?? '';
   const [symptomTitle, setSymptomTitle] = useState('');
   const [symptomDetail, setSymptomDetail] = useState('');
   const [symptomType, setSymptomType] = useState('REMOTE_DRIVER_OS');
@@ -324,9 +325,9 @@ export function SupportNewPage() {
   const [submitState, setSubmitState] = useState<SubmitState>('default');
   const [agentDownloadState, setAgentDownloadState] = useState<AgentDownloadState>('idle');
   const [agentDownloadMessage, setAgentDownloadMessage] = useState('');
-  const [agentDiagnosisState, setAgentDiagnosisState] = useState<AgentDiagnosisRequestState>('idle');
-  const [agentDiagnosisMessage, setAgentDiagnosisMessage] = useState('');
-  const [agentDiagnosisId, setAgentDiagnosisId] = useState('');
+  const [agentDiagnosisState, setAgentDiagnosisState] = useState<AgentDiagnosisRequestState>(() => diagnosisIdParam ? 'accepted' : 'idle');
+  const [agentDiagnosisMessage, setAgentDiagnosisMessage] = useState(() => diagnosisIdParam ? '저장된 PC Agent 진단 상태를 불러옵니다.' : '');
+  const [agentDiagnosisId, setAgentDiagnosisId] = useState(diagnosisIdParam);
   const agentDiagnosisPolling = usePcAgentDiagnosisPolling(agentDiagnosisId);
   const [error, setError] = useState('');
   const [conflictChat, setConflictChat] = useState<BlockingSupportChat | null>(null);
@@ -343,6 +344,14 @@ export function SupportNewPage() {
     queryFn: () => getSupportDraft(draftId),
     enabled: Boolean(draftId)
   });
+
+  useEffect(() => {
+    setAgentDiagnosisId(diagnosisIdParam);
+    if (diagnosisIdParam) {
+      setAgentDiagnosisState('accepted');
+      setAgentDiagnosisMessage('저장된 PC Agent 진단 상태를 불러옵니다.');
+    }
+  }, [diagnosisIdParam]);
 
   useEffect(() => {
     const draft = draftQuery.data;
@@ -462,6 +471,7 @@ export function SupportNewPage() {
     setAgentDiagnosisState('requesting');
     setAgentDiagnosisMessage('');
     setAgentDiagnosisId('');
+    updateDiagnosisSearchParam('');
     try {
       const response = await requestPcAgentDiagnosis({
         symptom,
@@ -472,6 +482,7 @@ export function SupportNewPage() {
         setAgentDiagnosisState('accepted');
         setAgentDiagnosisMessage(`PC Agent가 진단 요청을 수신했습니다. (${response.diagnosisId})`);
         setAgentDiagnosisId(response.diagnosisId);
+        updateDiagnosisSearchParam(response.diagnosisId);
       } else {
         setAgentDiagnosisState('rejected');
         setAgentDiagnosisMessage(response.message || `PC Agent가 요청을 처리하지 않았습니다. (${response.status})`);
@@ -486,6 +497,16 @@ export function SupportNewPage() {
         setAgentDiagnosisMessage('PC Agent 진단 요청에 실패했습니다. 잠시 후 다시 시도해 주세요.');
       }
     }
+  }
+
+  function updateDiagnosisSearchParam(diagnosisId: string) {
+    const nextSearchParams = new URLSearchParams(searchParams);
+    if (diagnosisId) {
+      nextSearchParams.set('diagnosisId', diagnosisId);
+    } else {
+      nextSearchParams.delete('diagnosisId');
+    }
+    setSearchParams(nextSearchParams, { replace: true });
   }
 
   async function submit(event: FormEvent) {

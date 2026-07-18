@@ -43,6 +43,20 @@ class PcAgentDiagnosisRequestControllerTest {
     }
 
     @Test
+    void authenticatedUserCanQueryOnlyTheirLatestDiagnosis() {
+        when(currentUserService.requireUser("Bearer access-token")).thenReturn(USER);
+        when(queryService.latest(USER)).thenReturn(Map.of(
+                "diagnosis", Map.of("diagnosisId", DIAGNOSIS_ID)
+        ));
+
+        Map<String, Object> response = controller.latest("Bearer access-token");
+
+        assertThat(response).containsKey("diagnosis");
+        verify(currentUserService).requireUser("Bearer access-token");
+        verify(queryService).latest(USER);
+    }
+
+    @Test
     void unauthenticatedQueryIsRejectedBeforeDiagnosisLookup() {
         when(currentUserService.requireUser(null))
                 .thenThrow(new ResponseStatusException(HttpStatus.UNAUTHORIZED, "로그인이 필요합니다."));
@@ -52,5 +66,17 @@ class PcAgentDiagnosisRequestControllerTest {
                 .satisfies(error -> assertThat(((ResponseStatusException) error).getStatusCode())
                         .isEqualTo(HttpStatus.UNAUTHORIZED));
         verify(queryService, org.mockito.Mockito.never()).get(USER, DIAGNOSIS_ID);
+    }
+
+    @Test
+    void unauthenticatedLatestQueryIsRejectedBeforeDiagnosisLookup() {
+        when(currentUserService.requireUser(null))
+                .thenThrow(new ResponseStatusException(HttpStatus.UNAUTHORIZED, "로그인이 필요합니다."));
+
+        assertThatThrownBy(() -> controller.latest(null))
+                .isInstanceOf(ResponseStatusException.class)
+                .satisfies(error -> assertThat(((ResponseStatusException) error).getStatusCode())
+                        .isEqualTo(HttpStatus.UNAUTHORIZED));
+        verify(queryService, org.mockito.Mockito.never()).latest(USER);
     }
 }

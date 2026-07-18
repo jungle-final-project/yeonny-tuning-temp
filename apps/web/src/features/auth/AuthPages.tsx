@@ -4,6 +4,7 @@ import { LogIn, ShieldCheck, UserPlus, UserRound } from 'lucide-react';
 import { Screen, StateMessage } from '../../components/ui';
 import { ApiError, clearToken, saveAuthTokens, saveAuthUser } from '../../lib/api';
 import { exchangeAuthCode, getCurrentUser, googleOAuthStartUrl, login, signup, updateCurrentUser, verifyProfilePassword, type CurrentUser, type LoginResponse } from './authApi';
+import { PcAgentDashboardCard } from '../support/PcAgentDashboardCard';
 
 const initialExchangeByCode = new Map<string, Promise<LoginResponse>>();
 const KAKAO_POSTCODE_SCRIPT_ID = 'kakao-postcode-script';
@@ -481,6 +482,7 @@ export function MyProfilePage() {
       {loading ? <StateMessage type="info" title="내 정보 불러오는 중" body="잠시만 기다려 주세요." /> : null}
       {error ? <StateMessage type="warn" title="내 정보 처리 실패" body={error} /> : null}
       {success ? <StateMessage type="success" title="저장 완료" body={success} /> : null}
+      {!loading && profile ? <PcAgentDashboardCard /> : null}
       {!loading && profile && !passwordVerified ? (
         <div className="space-y-4">
           {profile.authProviders?.includes('LOCAL') ? (

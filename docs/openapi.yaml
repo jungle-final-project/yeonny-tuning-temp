@@ -3078,6 +3078,51 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
+  /api/users/me/agent-diagnosis-requests/latest:
+    get:
+      summary: 현재 사용자의 최신 PC Agent 진단 조회
+      description: 인증 사용자의 requested_at 기준 최신 진단 한 건과 같은 사용자·diagnosis에 연결된 AS 티켓 요약을 반환한다. 진단 이력이 없으면 diagnosis는 null이다.
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: 최신 진단과 연결된 AS 티켓 상태
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PcAgentLatestDiagnosisResponse"
+        "401":
+          description: 인증되지 않은 요청
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+  /api/users/me/agent-diagnosis-requests/{diagnosisId}:
+    get:
+      summary: 현재 사용자의 PC Agent 진단 진행·결과 조회
+      description: diagnosisId와 인증 사용자 소유권이 모두 일치하는 진단의 저장된 이벤트와 결과를 반환한다.
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: diagnosisId
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: 진단 진행 상태, 이벤트와 최종 결과
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PcAgentDiagnosisDto"
+        "404":
+          description: 진단이 없거나 현재 사용자 소유가 아님
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
   /api/agent/heartbeat:
     post:
       summary: PC Agent heartbeat
@@ -3942,6 +3987,95 @@ components:
           enum: [ACCEPTED, DUPLICATE, EXPIRED, DEVICE_MISMATCH, AUTH_FAILED, BUSY, REJECTED]
         message:
           type: string
+          nullable: true
+    PcAgentLatestDiagnosisResponse:
+      type: object
+      required: [diagnosis]
+      properties:
+        diagnosis:
+          allOf:
+            - $ref: "#/components/schemas/PcAgentDiagnosisDto"
+          nullable: true
+    PcAgentDiagnosisDto:
+      type: object
+      required: [diagnosisId, status, agentConnected, accepted, currentProgress, events, completed, createdAt, updatedAt]
+      properties:
+        diagnosisId:
+          type: string
+          format: uuid
+        status:
+          type: string
+        connectionStatus:
+          type: string
+          nullable: true
+        agentConnected:
+          type: boolean
+        accepted:
+          type: boolean
+        currentProgress:
+          type: integer
+          minimum: 0
+          maximum: 100
+        currentTask:
+          type: string
+          nullable: true
+        events:
+          type: array
+          items:
+            type: object
+            additionalProperties: true
+        completed:
+          type: boolean
+        result:
+          type: object
+          nullable: true
+          additionalProperties: true
+        resolutionType:
+          type: string
+          nullable: true
+        dataMode:
+          type: string
+          enum: [LIVE, DEMO]
+          nullable: true
+        scenarioId:
+          type: string
+          nullable: true
+        requestedAt:
+          type: string
+          format: date-time
+          nullable: true
+        completedAt:
+          type: string
+          format: date-time
+          nullable: true
+        asTicket:
+          allOf:
+            - $ref: "#/components/schemas/PcAgentDiagnosisTicketSummary"
+          nullable: true
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+    PcAgentDiagnosisTicketSummary:
+      type: object
+      required: [id, status]
+      properties:
+        id:
+          type: string
+          format: uuid
+        status:
+          type: string
+        reviewStatus:
+          type: string
+          nullable: true
+        supportDecision:
+          type: string
+          nullable: true
+        createdAt:
+          type: string
+          format: date-time
           nullable: true
     ErrorResponse:
       type: object
