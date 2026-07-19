@@ -104,7 +104,7 @@ buildgraph:
     cache:
       prewarm:
         enabled: ${BUILDGRAPH_HOME_CACHE_PREWARM_ENABLED:true}
-        public-refresh-delay-ms: ${BUILDGRAPH_HOME_CACHE_PREWARM_PUBLIC_REFRESH_DELAY_MS:25000}
+        public-refresh-delay-ms: ${BUILDGRAPH_HOME_CACHE_PREWARM_PUBLIC_REFRESH_DELAY_MS:100000}
         authenticated-refresh-delay-ms: ${BUILDGRAPH_HOME_CACHE_PREWARM_AUTHENTICATED_REFRESH_DELAY_MS:240000}
   cors:
     allowed-origins: ${BUILDGRAPH_CORS_ALLOWED_ORIGINS:}
@@ -314,8 +314,8 @@ recommendation:
       shutdown-wait-seconds: ${RECOMMENDATION_EVENTS_PUBLISHER_SHUTDOWN_WAIT_SECONDS:5}
   # 홈 응답(사용자 무관) 인메모리 캐시 TTL(초). 0이면 캐시 끔. 가격은 일일 갱신이라 수십 초 지연 무해.
   home-cache:
-    ttl-seconds: ${HOME_CACHE_TTL_SECONDS:30}
-    stale-seconds: ${HOME_CACHE_STALE_SECONDS:300}
+    ttl-seconds: ${HOME_CACHE_TTL_SECONDS:120}
+    stale-seconds: ${HOME_CACHE_STALE_SECONDS:600}
     authenticated:
       ttl-seconds: ${AUTH_HOME_CACHE_TTL_SECONDS:300}
       stale-seconds: ${AUTH_HOME_CACHE_STALE_SECONDS:900}
@@ -323,7 +323,7 @@ recommendation:
   # 점수·순위·shadow 기록은 여전히 요청마다 계산된다 — DB 스캔만 재사용.
   home-parts:
     candidate-cache:
-      ttl-seconds: ${HOME_PARTS_CANDIDATE_CACHE_TTL_SECONDS:30}
+      ttl-seconds: ${HOME_PARTS_CANDIDATE_CACHE_TTL_SECONDS:120}
   reranker:
     enabled: ${RECOMMENDATION_RERANKER_ENABLED:false}
     shadow-enabled: ${RECOMMENDATION_RERANKER_SHADOW_ENABLED:true}
