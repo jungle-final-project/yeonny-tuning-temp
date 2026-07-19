@@ -359,6 +359,11 @@ part:
   # 순수 카탈로그 조회(GET /api/parts, draft compatibility 제외) 인메모리 캐시 TTL(초). 0이면 캐시 끔.
   query-cache:
     ttl-seconds: ${PART_QUERY_CACHE_TTL_SECONDS:30}
+  # draft 기반 호환성 평가 응답(전수 평가·정렬 완료본, 페이지 자르기 전) 단기 캐시 TTL(초). 0이면 캐시 끔.
+  # 캐시 키에 draft 내용 서명(part_id×quantity)이 포함되어 draft 변경은 TTL과 무관하게 즉시 반영된다 —
+  # TTL은 가격/판매상태 변경(일 1회 배치) 반영 지연의 상한일 뿐이다.
+  compatibility-cache:
+    ttl-seconds: ${PART_COMPATIBILITY_CACHE_TTL_SECONDS:15}
   price-refresh:
     enabled: ${PART_PRICE_REFRESH_ENABLED:true}
     cron: "${PART_PRICE_REFRESH_CRON:0 0 4 * * *}"

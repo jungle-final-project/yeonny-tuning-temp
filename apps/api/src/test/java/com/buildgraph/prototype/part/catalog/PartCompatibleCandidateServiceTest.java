@@ -36,8 +36,8 @@ class PartCompatibleCandidateServiceTest {
                 candidate("candidate-pass", 202L, "GPU", "RTX 5070 Ti", 990000, MockData.map("wattage", 285, "lengthMm", 310)),
                 candidate("candidate-warn", 203L, "GPU", "RTX 5080 Compact", 1_490_000, MockData.map("wattage", 360, "lengthMm", 330))
         ));
-        when(toolCheckService.checkBuild(anyList(), anyInt(), any())).thenAnswer(invocation -> {
-            List<ToolBuildPart> parts = invocation.getArgument(0);
+        when(toolCheckService.checkBuildTools(anyList(), anyList(), anyInt(), any())).thenAnswer(invocation -> {
+            List<ToolBuildPart> parts = invocation.getArgument(1);
             String gpuId = parts.stream()
                     .filter(part -> "GPU".equals(part.category()))
                     .findFirst()
@@ -100,8 +100,8 @@ class PartCompatibleCandidateServiceTest {
                 candidate("psu-pass", 401L, "PSU", "850W Gold", 150000, MockData.map("capacityW", 850)),
                 candidate("psu-warn", 402L, "PSU", "750W Bronze", 110000, MockData.map("capacityW", 750))
         ));
-        when(toolCheckService.checkBuild(anyList(), anyInt(), any())).thenAnswer(invocation -> {
-            List<ToolBuildPart> parts = invocation.getArgument(0);
+        when(toolCheckService.checkBuildTools(anyList(), anyList(), anyInt(), any())).thenAnswer(invocation -> {
+            List<ToolBuildPart> parts = invocation.getArgument(1);
             String psuId = parts.stream()
                     .filter(part -> "PSU".equals(part.category()))
                     .findFirst()
@@ -141,8 +141,8 @@ class PartCompatibleCandidateServiceTest {
                 candidate("cpu-lga-c", 505L, "CPU", "Core Ultra 5 245K", 320000, MockData.map("socket", "LGA1851")),
                 candidate("cpu-lga-unchecked", 506L, "CPU", "Core Ultra 5 235", 250000, MockData.map("socket", "LGA1851"))
         ));
-        when(toolCheckService.checkBuild(anyList(), anyInt(), any())).thenAnswer(invocation -> {
-            List<ToolBuildPart> parts = invocation.getArgument(0);
+        when(toolCheckService.checkBuildTools(anyList(), anyList(), anyInt(), any())).thenAnswer(invocation -> {
+            List<ToolBuildPart> parts = invocation.getArgument(1);
             boolean socketMatched = parts.stream()
                     .filter(part -> "CPU".equals(part.category()))
                     .map(ToolBuildPart::publicId)
@@ -163,7 +163,7 @@ class PartCompatibleCandidateServiceTest {
                 3);
 
         assertThat(accepted).containsExactly("cpu-lga-a", "cpu-lga-b", "cpu-lga-c");
-        verify(toolCheckService, times(5)).checkBuild(anyList(), anyInt(), any());
+        verify(toolCheckService, times(5)).checkBuildTools(anyList(), anyList(), anyInt(), any());
         verify(jdbcTemplate, times(1)).queryForList(
                 org.mockito.ArgumentMatchers.argThat(sql -> sql.contains("public_id = ?::uuid")),
                 any(Object[].class));
@@ -185,8 +185,8 @@ class PartCompatibleCandidateServiceTest {
                 candidate("gpu-pass-b", 504L, "GPU", "Pass B", 630000, MockData.map()),
                 candidate("gpu-pass-c", 505L, "GPU", "Pass C", 640000, MockData.map())
         ));
-        when(toolCheckService.checkBuild(anyList(), anyInt(), any())).thenAnswer(invocation -> {
-            List<ToolBuildPart> parts = invocation.getArgument(0);
+        when(toolCheckService.checkBuildTools(anyList(), anyList(), anyInt(), any())).thenAnswer(invocation -> {
+            List<ToolBuildPart> parts = invocation.getArgument(1);
             String gpuId = parts.stream()
                     .filter(part -> "GPU".equals(part.category()))
                     .map(ToolBuildPart::publicId)
@@ -202,7 +202,7 @@ class PartCompatibleCandidateServiceTest {
                 3);
 
         assertThat(accepted).containsExactly("gpu-pass-a", "gpu-pass-b", "gpu-pass-c");
-        verify(toolCheckService, times(5)).checkBuild(anyList(), anyInt(), any());
+        verify(toolCheckService, times(5)).checkBuildTools(anyList(), anyList(), anyInt(), any());
     }
 
     @Test
@@ -217,7 +217,7 @@ class PartCompatibleCandidateServiceTest {
                 candidate("psu-current", 301L, "PSU", "Current PSU", 150000, MockData.map("capacityW", 850)),
                 candidate("psu-alternative", 302L, "PSU", "Alternative PSU", 170000, MockData.map("capacityW", 1000))
         ));
-        when(toolCheckService.checkBuild(anyList(), anyInt(), any()))
+        when(toolCheckService.checkBuildTools(anyList(), anyList(), anyInt(), any()))
                 .thenReturn(List.of(tool("power", "PASS", "파워 검사를 통과했습니다.")));
 
         PartCompatibleCandidateService.CompatibleCandidateSelection selection = service.compatibleCandidateSelection(
@@ -225,7 +225,7 @@ class PartCompatibleCandidateServiceTest {
 
         assertThat(selection.acceptedIds()).containsExactly("psu-alternative");
         assertThat(selection.alreadySelectedIds()).containsExactly("psu-current");
-        verify(toolCheckService, times(1)).checkBuild(anyList(), anyInt(), any());
+        verify(toolCheckService, times(1)).checkBuildTools(anyList(), anyList(), anyInt(), any());
     }
 
     @Test
@@ -245,7 +245,7 @@ class PartCompatibleCandidateServiceTest {
                 candidate("ram-alternative-b", 303L, "RAM", "Alternative RAM B", 180000,
                         MockData.map("capacityGb", 32, "moduleCount", 2))
         ));
-        when(toolCheckService.checkBuild(anyList(), anyInt(), any()))
+        when(toolCheckService.checkBuildTools(anyList(), anyList(), anyInt(), any()))
                 .thenReturn(List.of(tool("compatibility", "PASS", "RAM 검사를 통과했습니다.")));
 
         PartCompatibleCandidateService.CompatibleCandidateSelection selection = service.compatibleCandidateSelection(
@@ -253,11 +253,35 @@ class PartCompatibleCandidateServiceTest {
 
         assertThat(selection.acceptedIds()).containsExactly("ram-alternative-a", "ram-alternative-b");
         assertThat(selection.alreadySelectedIds()).containsExactly("ram-current");
-        verify(toolCheckService, times(2)).checkBuild(anyList(), anyInt(), any());
+        verify(toolCheckService, times(2)).checkBuildTools(anyList(), anyList(), anyInt(), any());
     }
 
     @Test
     void candidateLoopPrefetchesBenchmarksOnceInsteadOfPerCandidate() {
+        when(jdbcTemplate.queryForList(anyString(), eq(1004L))).thenReturn(List.of(activeDraft()));
+        when(jdbcTemplate.queryForList(anyString(), eq(700L))).thenReturn(List.of(
+                draftPartRow("draft-cpu", 301L, "CPU", "Current CPU", 420000, MockData.map()),
+                draftPartRow("draft-psu", 302L, "PSU", "Current PSU", 150000, MockData.map("capacityW", 850))
+        ));
+        when(jdbcTemplate.queryForList(
+                org.mockito.ArgumentMatchers.argThat(sql -> sql.contains("public_id = ?::uuid")),
+                any(Object[].class))).thenReturn(List.of(
+                candidate("gpu-alternative-a", 501L, "GPU", "Alternative GPU A", 900000, MockData.map("wattage", 250)),
+                candidate("gpu-alternative-b", 502L, "GPU", "Alternative GPU B", 950000, MockData.map("wattage", 285))
+        ));
+        when(toolCheckService.checkBuildTools(anyList(), anyList(), anyInt(), any()))
+                .thenReturn(List.of(tool("power", "PASS", "파워 검사를 통과했습니다.")));
+
+        service.compatibleCandidateSelection(
+                user(), "GPU", "ADD", List.of("gpu-alternative-a", "gpu-alternative-b"), 3);
+
+        // 핵심 계약: 후보가 몇 개든 벤치마크 배치 로드는 요청당 1회 — 후보별 재조회(N+1) 금지
+        verify(toolCheckService, times(1)).loadLatestBenchmarks(anyList());
+        verify(toolCheckService, times(2)).checkBuildTools(anyList(), anyList(), anyInt(), any());
+    }
+
+    @Test
+    void benchmarkPrefetchIsSkippedWhenPerformanceToolIsNotChecked() {
         when(jdbcTemplate.queryForList(anyString(), eq(1004L))).thenReturn(List.of(activeDraft()));
         when(jdbcTemplate.queryForList(anyString(), eq(700L))).thenReturn(List.of(
                 draftPartRow("ram-current", 301L, "RAM", "Current RAM", 150000,
@@ -267,19 +291,15 @@ class PartCompatibleCandidateServiceTest {
                 org.mockito.ArgumentMatchers.argThat(sql -> sql.contains("public_id = ?::uuid")),
                 any(Object[].class))).thenReturn(List.of(
                 candidate("ram-alternative-a", 302L, "RAM", "Alternative RAM A", 170000,
-                        MockData.map("capacityGb", 32, "moduleCount", 2)),
-                candidate("ram-alternative-b", 303L, "RAM", "Alternative RAM B", 180000,
                         MockData.map("capacityGb", 32, "moduleCount", 2))
         ));
-        when(toolCheckService.checkBuild(anyList(), anyInt(), any()))
+        when(toolCheckService.checkBuildTools(anyList(), anyList(), anyInt(), any()))
                 .thenReturn(List.of(tool("compatibility", "PASS", "RAM 검사를 통과했습니다.")));
 
-        service.compatibleCandidateSelection(
-                user(), "RAM", "ADD", List.of("ram-alternative-a", "ram-alternative-b"), 3);
+        service.compatibleCandidateSelection(user(), "RAM", "ADD", List.of("ram-alternative-a"), 3);
 
-        // 핵심 계약: 후보가 몇 개든 벤치마크 배치 로드는 요청당 1회 — 후보별 재조회(N+1) 금지
-        verify(toolCheckService, times(1)).loadLatestBenchmarks(anyList());
-        verify(toolCheckService, times(2)).checkBuild(anyList(), anyInt(), any());
+        // 벤치마크는 performance 툴만 소비한다 — performance를 검사하지 않는 카테고리는 조회 자체가 없다.
+        verify(toolCheckService, times(0)).loadLatestBenchmarks(anyList());
     }
 
     @Test
@@ -295,8 +315,8 @@ class PartCompatibleCandidateServiceTest {
                 candidate("gpu-pass", 502L, "GPU", "RTX 5070 Ti", 990000, MockData.map("wattage", 285, "lengthMm", 310)),
                 candidate("gpu-warn", 503L, "GPU", "RTX 5080 Compact", 1_490_000, MockData.map("wattage", 360, "lengthMm", 330))
         );
-        when(toolCheckService.checkBuild(anyList(), anyInt(), any())).thenAnswer(invocation -> {
-            List<ToolBuildPart> parts = invocation.getArgument(0);
+        when(toolCheckService.checkBuildTools(anyList(), anyList(), anyInt(), any())).thenAnswer(invocation -> {
+            List<ToolBuildPart> parts = invocation.getArgument(1);
             String gpuId = parts.stream()
                     .filter(part -> "GPU".equals(part.category()))
                     .findFirst()
@@ -346,8 +366,8 @@ class PartCompatibleCandidateServiceTest {
                 candidate("cpu-compatible", 501L, "CPU", "Compatible CPU", 450000, MockData.map("socket", "AM5")),
                 candidate("cpu-wrong-socket", 502L, "CPU", "Wrong Socket CPU", 460000, MockData.map("socket", "LGA1851"))
         );
-        when(toolCheckService.checkBuild(anyList(), anyInt(), any())).thenAnswer(invocation -> {
-            List<ToolBuildPart> parts = invocation.getArgument(0);
+        when(toolCheckService.checkBuildTools(anyList(), anyList(), anyInt(), any())).thenAnswer(invocation -> {
+            List<ToolBuildPart> parts = invocation.getArgument(1);
             String cpuId = parts.stream()
                     .filter(part -> "CPU".equals(part.category()))
                     .findFirst()
@@ -390,7 +410,7 @@ class PartCompatibleCandidateServiceTest {
         List<Map<String, Object>> rows = List.of(
                 candidate("gpu-fitting", 501L, "GPU", "Fitting GPU", 950000, MockData.map("lengthMm", 320, "wattage", 250))
         );
-        when(toolCheckService.checkBuild(anyList(), anyInt(), any())).thenReturn(List.of(
+        when(toolCheckService.checkBuildTools(anyList(), anyList(), anyInt(), any())).thenReturn(List.of(
                 tool("power", "PASS", "파워 용량을 충족합니다."),
                 tool("size", "FAIL", "파워 깊이가 케이스 허용 길이를 초과합니다.", MockData.map(
                         "gpuLengthMm", 320,
@@ -415,7 +435,7 @@ class PartCompatibleCandidateServiceTest {
                 draftItem("draft-cpu", 301L, "CPU", "Ryzen 7", 420000, MockData.map("socket", "AM5")),
                 draftItem("draft-gpu", 302L, "GPU", "RTX 5070", 900000, MockData.map("wattage", 250))
         ));
-        when(toolCheckService.checkBuild(anyList(), anyInt(), any()))
+        when(toolCheckService.checkBuildTools(anyList(), anyList(), anyInt(), any()))
                 .thenReturn(List.of(tool("power", "PASS", "파워 후보를 확인했습니다.")));
         Map<String, Object> externalOffer = MockData.map(
                 "title", "AONE 컴퓨터 파워 ATX 300W 600T",
@@ -457,8 +477,8 @@ class PartCompatibleCandidateServiceTest {
                 draftPartRow("draft-board", 302L, "MOTHERBOARD", "B850 보드", 250000, MockData.map("memorySlots", 4))
         ));
         List<List<ToolBuildPart>> capturedBuilds = new java.util.ArrayList<>();
-        when(toolCheckService.checkBuild(anyList(), anyInt(), any())).thenAnswer(invocation -> {
-            capturedBuilds.add(new java.util.ArrayList<>(invocation.getArgument(0)));
+        when(toolCheckService.checkBuildTools(anyList(), anyList(), anyInt(), any())).thenAnswer(invocation -> {
+            capturedBuilds.add(new java.util.ArrayList<>(invocation.getArgument(1)));
             return List.of(tool("compatibility", "FAIL", "램 스틱 수(4개)가 메인보드 메모리 슬롯(4개)을 초과합니다."));
         });
         List<Map<String, Object>> rows = List.of(
@@ -480,8 +500,8 @@ class PartCompatibleCandidateServiceTest {
                 draftPartRow("draft-ram", 301L, "RAM", "DDR5 킷", 180000, MockData.map("memoryType", "DDR5", "moduleCount", 2))
         ));
         List<List<ToolBuildPart>> capturedBuilds = new java.util.ArrayList<>();
-        when(toolCheckService.checkBuild(anyList(), anyInt(), any())).thenAnswer(invocation -> {
-            capturedBuilds.add(new java.util.ArrayList<>(invocation.getArgument(0)));
+        when(toolCheckService.checkBuildTools(anyList(), anyList(), anyInt(), any())).thenAnswer(invocation -> {
+            capturedBuilds.add(new java.util.ArrayList<>(invocation.getArgument(1)));
             return List.of(tool(
                     "compatibility",
                     "FAIL",
@@ -510,8 +530,8 @@ class PartCompatibleCandidateServiceTest {
                 draftPartRow("draft-ram-b", 302L, "RAM", "DDR5 킷 B", 170000, MockData.map("memoryType", "DDR5", "moduleCount", 2))
         ));
         List<List<ToolBuildPart>> capturedBuilds = new java.util.ArrayList<>();
-        when(toolCheckService.checkBuild(anyList(), anyInt(), any())).thenAnswer(invocation -> {
-            capturedBuilds.add(new java.util.ArrayList<>(invocation.getArgument(0)));
+        when(toolCheckService.checkBuildTools(anyList(), anyList(), anyInt(), any())).thenAnswer(invocation -> {
+            capturedBuilds.add(new java.util.ArrayList<>(invocation.getArgument(1)));
             return List.of(tool("compatibility", "PASS", "호환됩니다."));
         });
         List<Map<String, Object>> rows = List.of(

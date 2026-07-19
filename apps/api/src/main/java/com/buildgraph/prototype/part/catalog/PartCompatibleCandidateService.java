@@ -455,7 +455,9 @@ public class PartCompatibleCandidateService {
      * performance 툴이 DB를 조회하던 N+1 회피. 판정 로직·결과는 프리페치 유무와 무관하게 동일하다.
      */
     private Map<Long, Map<String, Object>> prefetchBenchmarks(List<ToolBuildPart> baseParts, Stream<ToolBuildPart> candidates, List<String> checkedTools) {
-        if (checkedTools.isEmpty()) {
+        // 벤치마크는 performance 툴만 소비한다 — performance를 검사하지 않는 카테고리(CPU/RAM/보드 등)
+        // 경로에서 요청당 1회씩 나가던 배치 조회를 없앤다.
+        if (!checkedTools.contains("performance")) {
             return Map.of();
         }
         return toolCheckService.loadLatestBenchmarks(Stream.concat(baseParts.stream(), candidates).toList());
@@ -509,10 +511,11 @@ public class PartCompatibleCandidateService {
                     .toList());
             nextParts.add(candidate.toolPart());
         }
-        List<Map<String, Object>> toolResults = toolCheckService.checkBuild(nextParts, total(nextParts), prefetchedBenchmarks);
+        // 적용 가능 판정을 실행 '전'에 내려 필요한 툴만 돌린다 — 5개 전부 실행 후 버리던
+        // 카테고리 무관 툴(호환성 경로 CPU의 대부분)이 실행 자체를 건너뛴다. 결과는 종전과 동일하다.
         List<String> applicableCheckedTools = ToolApplicabilityPolicy.applicableCandidateTools(checkedTools, nextParts);
+        List<Map<String, Object>> toolResults = toolCheckService.checkBuildTools(applicableCheckedTools, nextParts, total(nextParts), prefetchedBenchmarks);
         List<Map<String, Object>> relevantResults = toolResults.stream()
-                .filter(result -> applicableCheckedTools.contains(text(result.get("tool"))))
                 .map(result -> projectCandidateResult(category, result))
                 .toList();
         String status = worstStatus(relevantResults);
