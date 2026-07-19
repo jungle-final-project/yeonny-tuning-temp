@@ -8,7 +8,7 @@ import org.junit.jupiter.api.Test;
 
 class PcAgentDiagnosisHistoryMigrationContractTest {
     private static final Path MIGRATION = Path.of(
-            "src/main/resources/db/migration/V124__pc_agent_diagnosis_history.sql"
+            "src/main/resources/db/migration/V128__pc_agent_diagnosis_history.sql"
     );
 
     @Test
