@@ -59,6 +59,8 @@ class QuoteDraftQueryServiceTest {
                 draftItem("draft-item-cpu", "part-cpu-ai", "CPU", "Ryzen AI CPU", 420000),
                 draftItem("draft-item-gpu", "part-gpu-ai", "GPU", "RTX AI GPU", 890000)
         ));
+        when(jdbcTemplate.queryForList(argThat((String sql) -> sql != null && sql.contains("RETURNING")), eq(700L)))
+                .thenReturn(List.of(activeDraft()));
 
         Map<String, Object> draft = quoteDraftQueryService.applyAiBuild(USER_TOKEN, Map.of(
                 "buildId", "ai-2000000-balanced",
@@ -84,6 +86,8 @@ class QuoteDraftQueryServiceTest {
         when(jdbcTemplate.queryForList(anyString(), eq(700L))).thenReturn(List.of(
                 draftItem("draft-item-cpu", "part-cpu-b", "CPU", "CPU B", 450000)
         ));
+        when(jdbcTemplate.queryForList(argThat((String sql) -> sql != null && sql.contains("RETURNING")), eq(700L)))
+                .thenReturn(List.of(activeDraft()));
 
         quoteDraftQueryService.putItem(USER_TOKEN, "part-cpu-a", Map.of());
         Map<String, Object> draft = quoteDraftQueryService.putItem(USER_TOKEN, "part-cpu-b", Map.of());
@@ -112,6 +116,8 @@ class QuoteDraftQueryServiceTest {
         when(jdbcTemplate.queryForList(anyString(), eq(700L))).thenReturn(List.of(
                 draftItem("draft-item-cpu", "part-cpu-a", "CPU", "CPU A", 400000)
         ));
+        when(jdbcTemplate.queryForList(argThat((String sql) -> sql != null && sql.contains("RETURNING")), eq(700L)))
+                .thenReturn(List.of(activeDraft()));
 
         Map<String, Object> draft = quoteDraftQueryService.putItem(USER_TOKEN, "part-cpu-a", Map.of());
 

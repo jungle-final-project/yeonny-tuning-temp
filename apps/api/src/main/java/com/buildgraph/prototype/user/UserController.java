@@ -1,6 +1,7 @@
 package com.buildgraph.prototype.user;
 
 import com.buildgraph.prototype.agent.PcAgentAsService;
+import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.NotBlank;
@@ -18,6 +19,7 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.server.ResponseStatusException;
 
 @RestController
 @RequestMapping("/api")
@@ -26,22 +28,35 @@ public class UserController {
     private final CurrentUserService currentUserService;
     private final PcAgentAsService pcAgentAsService;
     private final GoogleOAuthService googleOAuthService;
+    private final LoginRateLimiter loginRateLimiter;
 
     public UserController(
             UserQueryService userQueryService,
             CurrentUserService currentUserService,
             PcAgentAsService pcAgentAsService,
-            GoogleOAuthService googleOAuthService
+            GoogleOAuthService googleOAuthService,
+            LoginRateLimiter loginRateLimiter
     ) {
         this.userQueryService = userQueryService;
         this.currentUserService = currentUserService;
         this.pcAgentAsService = pcAgentAsService;
         this.googleOAuthService = googleOAuthService;
+        this.loginRateLimiter = loginRateLimiter;
     }
 
     @PostMapping("/auth/login")
-    Map<String, Object> login(@Valid @RequestBody LoginRequest request) {
-        return userQueryService.login(request.email(), request.password());
+    Map<String, Object> login(@Valid @RequestBody LoginRequest request, HttpServletRequest servletRequest) {
+        loginRateLimiter.checkAllowed(request.email(), servletRequest);
+        try {
+            Map<String, Object> response = userQueryService.login(request.email(), request.password());
+            loginRateLimiter.recordSuccess(request.email(), servletRequest);
+            return response;
+        } catch (ResponseStatusException error) {
+            if (error.getStatusCode().isSameCodeAs(HttpStatus.UNAUTHORIZED)) {
+                loginRateLimiter.recordFailure(request.email(), servletRequest);
+            }
+            throw error;
+        }
     }
 
     @PostMapping("/auth/refresh")

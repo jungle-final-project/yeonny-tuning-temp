@@ -24,7 +24,7 @@ export const options = {
                 { target: 8, duration: '20s' },
                 { target: 16, duration: '20s' },
                 { target: 32, duration: '20s' },
-                { target: 64, duration: '20s' },
+                { target: 64, duration: '20s' },  // 병목 없을 시, 이론상 최소 1,536RPS
             ],
 
             env: {
@@ -49,7 +49,7 @@ export const options = {
 };
 
 /* 로그인은 테스트 1회 = 1회로 한정 
-   : 다만 가상 계정은 5개로 지정 */
+   : 다만 가상 계정은 N개로 지정 */
 export function setup() {
     const baseUrl = __ENV.NONE_BASE_URL || 'http://localhost:8080';
     const accountCount = Number(__ENV.TEST_USER_COUNT || '5');

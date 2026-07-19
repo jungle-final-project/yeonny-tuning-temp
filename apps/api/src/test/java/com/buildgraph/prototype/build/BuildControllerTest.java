@@ -79,6 +79,47 @@ class BuildControllerTest {
 
         verifyNoInteractions(buildChatService);
     }
+    @Test
+    void buildChatForwardsVerifiedMockHeadersToService() throws Exception {
+        when(buildChatService.chat(
+                anyMap(),
+                eq("BUILD_CHAT_FAST"),
+                eq(USER),
+                eq("MOCK"),
+                eq("secret")
+        )).thenReturn(Map.of(
+                "answerType", "GENERAL",
+                "message", "mock response",
+                "builds", List.of(),
+                "warnings", List.of()
+        ));
+
+        MvcResult started = mockMvc.perform(post("/api/ai/build-chat")
+                        .header("Authorization", USER_TOKEN)
+                        .header("X-BuildGraph-AI-Profile", "BUILD_CHAT_FAST")
+                        .header("X-BuildGraph-AI-Mode", "MOCK")
+                        .header("X-BuildGraph-Test-Key", "secret")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "message": "mock request"
+                                }
+                                """))
+                .andExpect(request().asyncStarted())
+                .andReturn();
+
+        mockMvc.perform(asyncDispatch(started))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.message").value("mock response"));
+
+        verify(buildChatService).chat(
+                anyMap(),
+                eq("BUILD_CHAT_FAST"),
+                eq(USER),
+                eq("MOCK"),
+                eq("secret")
+        );
+    }
 
     @Test
     void saveBuildFromChatReturnsUnauthorizedWhenTokenIsMissing() throws Exception {

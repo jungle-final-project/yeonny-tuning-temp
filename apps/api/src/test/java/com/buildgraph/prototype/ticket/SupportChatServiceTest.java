@@ -152,6 +152,45 @@ class SupportChatServiceTest {
     }
 
     @Test
+    void currentSummarySkipsHeavyMessageAndVisitReservationQueries() {
+        // findLatestUserRoom → 활성 방 1개
+        when(jdbcTemplate.queryForList(contains("r.status = 'ACTIVE'"), eq(USER.internalId())))
+                .thenReturn(List.of(Map.of("id", ROOM_ID)));
+        // roomForUser → 룸 1행(배지 필드 포함)
+        mockRoom("ACTIVE", "OPEN", 5, 0);
+
+        Map<String, Object> summary = service.currentSummary(USER, null);
+
+        // 계약: 경량 요약(summary=true), 느슨한 폴링(30s), messages 미포함
+        assertThat(summary)
+                .containsEntry("summary", true)
+                .containsEntry("pollingIntervalMs", 30000)
+                .containsEntry("messages", null);
+        assertThat((Map<String, Object>) summary.get("contact"))
+                .containsEntry("id", ROOM_ID)
+                .containsEntry("userUnreadCount", 5)
+                .containsEntry("lastMessagePreview", "최근 메시지")
+                .containsEntry("canSendMessage", true);
+        // 핵심: 무거운 쿼리 미호출 — messages(방ID,100)·visitReservation
+        verify(jdbcTemplate, never()).queryForList(anyString(), eq(7001L), eq(100));
+        verify(jdbcTemplate, never()).queryForList(contains("latest_visit_reservation"), eq(6001L));
+    }
+
+    @Test
+    void currentSummaryReturnsEmptyWhenNoActiveRoom() {
+        when(jdbcTemplate.queryForList(contains("r.status = 'ACTIVE'"), eq(USER.internalId())))
+                .thenReturn(List.of());
+
+        Map<String, Object> summary = service.currentSummary(USER, null);
+
+        assertThat(summary)
+                .containsEntry("contact", null)
+                .containsEntry("summary", true)
+                .containsEntry("pollingIntervalMs", 30000);
+        verify(jdbcTemplate, never()).queryForList(anyString(), eq(7001L), eq(100));
+    }
+
+    @Test
     void detailIncludesLatestVisitReservation() {
         mockRoom("ACTIVE", "OPEN", 0, 0);
         mockMessages();

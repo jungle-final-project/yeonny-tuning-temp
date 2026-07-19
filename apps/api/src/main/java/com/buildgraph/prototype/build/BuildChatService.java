@@ -2,6 +2,7 @@ package com.buildgraph.prototype.build;
 
 import com.buildgraph.prototype.agent.AiChatEngine;
 import com.buildgraph.prototype.agent.AiChatEngineRequest;
+import com.buildgraph.prototype.agent.mock.MockAiChatEngine;
 import com.buildgraph.prototype.agent.SupportGuidanceDraft;
 import com.buildgraph.prototype.agent.AiChatEngineResponse;
 import com.buildgraph.prototype.agent.AiChatIntent;
@@ -118,6 +119,8 @@ public class BuildChatService {
     private final JdbcTemplate jdbcTemplate;
     private final ToolCheckService toolCheckService;
     private final AiChatEngine aiChatEngine;
+    private MockAiChatEngine mockAiChatEngine;
+    private BuildChatTestMode buildChatTestMode;
     private final BuildChatCacheService buildChatCacheService;
     private final PartReplacementRanker partReplacementRanker;
     private final CandidateReranker candidateReranker;
@@ -229,6 +232,12 @@ public class BuildChatService {
         this.partCompatibleCandidateService = partCompatibleCandidateService;
     }
 
+    @Autowired(required = false)
+    public void setBuildChatTestMode(BuildChatTestMode buildChatTestMode, MockAiChatEngine mockAiChatEngine) {
+        this.buildChatTestMode = buildChatTestMode;
+        this.mockAiChatEngine = mockAiChatEngine;
+    }
+
     public Map<String, Object> chat(Map<String, Object> request) {
         return chat(request, (String) null);
     }
@@ -242,8 +251,24 @@ public class BuildChatService {
     }
 
     public Map<String, Object> chat(Map<String, Object> request, String requestedAiProfile, CurrentUserService.CurrentUser user) {
+        return chat(request, requestedAiProfile, user, null, null);
+    }
+
+    public Map<String, Object> chat(
+            Map<String, Object> request,
+            String requestedAiProfile,
+            CurrentUserService.CurrentUser user,
+            String requestedAiMode,
+            String suppliedTestKey
+    ) {
+        if (buildChatTestMode == null && ((requestedAiMode != null && !requestedAiMode.isBlank())
+                || (suppliedTestKey != null && !suppliedTestKey.isBlank()))) {
+            throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE, "AI Build Chat test mode is unavailable.");
+        }
+        boolean mockRequest = buildChatTestMode != null
+                && buildChatTestMode.requireMockRequest(requestedAiMode, suppliedTestKey);
         long startedNanos = System.nanoTime();
-        Map<String, Object> rawBody = request == null ? Map.of() : request;
+        Map<String, Object> rawBody = BuildChatTestMode.sanitizedRequest(request, mockRequest);
         String rawMessage = requireText(rawBody.get("message"), "message는 필수입니다.");
         // 직전 되묻기(clarification)에 대한 후속 답변이면 원 요청과 합성해 한 문장처럼 라우팅한다.
         // 서버는 상태를 저장하지 않고 프론트가 originalMessage를 에코하는 무상태 왕복이다.
@@ -546,7 +571,7 @@ public class BuildChatService {
         }
         AiChatEngineResponse engineResponse;
         try {
-            engineResponse = aiChatEngine.respondLlmRequired(new AiChatEngineRequest(
+            AiChatEngineRequest engineRequest = new AiChatEngineRequest(
                     message,
                     chatSurface(body),
                     firstText(
@@ -557,7 +582,10 @@ public class BuildChatService {
                     text(body.get("draftId")),
                     engineBody,
                     userId
-            ), requestedAiProfile);
+            );
+            engineResponse = mockRequest
+                    ? mockAiChatEngine.respond(engineRequest)
+                    : aiChatEngine.respondLlmRequired(engineRequest, requestedAiProfile);
         } catch (RuntimeException error) {
             if (recommendFlow) {
                 throw error;

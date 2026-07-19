@@ -146,17 +146,17 @@ function recordHomeRecommendedPartImpressions(token, response) {
     });
   }
   if (!events.length) return;
-  const eventResponse = http.post(`${baseUrl()}/api/recommendation-events/bulk`, JSON.stringify({ events }), {
+  const eventResponse = http.post(`${baseUrl()}/api/recommendation-events/bulk/async`, JSON.stringify({ events }), {
     headers: authHeaders(token),
     tags: homeTags('recommended-part-impression', {
-      endpoint: 'recommendation_events_bulk',
+      endpoint: 'recommendation_events_bulk_async',
       visitor: 'authenticated',
       eventType: 'IMPRESSION'
     }),
     timeout: requestTimeout()
   });
   check(eventResponse, {
-    'home impressions recorded': (res) => res.status === 201 || res.status === 200
+    'home impressions queued': (res) => res.status === 202
   });
 }
 

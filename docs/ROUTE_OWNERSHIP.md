@@ -113,7 +113,7 @@ Auth 화면과 Auth/User API 구현 주 owner는 1번이다. 5번은 `apps/web/s
 | frontend files | `features/support/**` 중 AS AI Chat 화면/API, `features/admin/agent/**`, `features/admin/evidence/**` |
 | backend packages | `agent`, `rag`, `recommendation` |
 | DB tables | `agent_sessions`, `tool_invocations`, `rag_evidence`, `as_chat_sessions`, `as_chat_messages`, `llm_generations`, `recommendation_events`, `recommendation_model_versions`, `recommendation_shadow_scores`, `recommendation_training_datasets`, `recommendation_training_dataset_items`, `recommendation_training_jobs`, `as_ticket_labels` 협업 |
-| API endpoints | `POST /api/ai/build-chat`, `GET /api/public/home`, `GET /api/home`, `GET /api/recommendations/home-builds`, `GET /api/recommendations/home-parts`, `POST /api/recommendation-events`, `POST /api/admin/recommendation-feedback/as-tickets/{id}`, `POST /api/admin/recommendation-feedback/home-parts`, `GET /api/admin/recommendation-models`, `GET /api/admin/recommendation-models/summary`, `GET /api/admin/recommendation-shadow/summary`, `GET /api/admin/recommendation-drift`, `GET /api/ai/as-chat`, `POST /api/ai/as-chat`, `POST /api/ai/as-chat/stream`, `POST /api/ai/agent-sessions`, `POST /api/ai/agent-sessions/{id}/run`, `GET /api/ai/agent-sessions/{id}`, `GET /api/rag/search`, `GET /api/rag/evidence/{id}`, `POST /api/admin/rag-embeddings/backfill`, `GET /api/admin/agent-sessions`, `GET /api/admin/agent-sessions/{id}`, `GET /api/admin/tool-invocations`, `GET /api/admin/tool-invocations/{id}`, `GET /api/admin/rag-evidence`, `GET /api/admin/rag-evidence/{id}` |
+| API endpoints | `POST /api/ai/build-chat`, `GET /api/public/home`, `GET /api/home`, `GET /api/recommendations/home-builds`, `GET /api/recommendations/home-parts`, `POST /api/recommendation-events`, `POST /api/recommendation-events/bulk/async`, `POST /api/admin/recommendation-feedback/as-tickets/{id}`, `POST /api/admin/recommendation-feedback/home-parts`, `GET /api/admin/recommendation-models`, `GET /api/admin/recommendation-models/summary`, `GET /api/admin/recommendation-shadow/summary`, `GET /api/admin/recommendation-drift`, `GET /api/ai/as-chat`, `POST /api/ai/as-chat`, `POST /api/ai/as-chat/stream`, `POST /api/ai/agent-sessions`, `POST /api/ai/agent-sessions/{id}/run`, `GET /api/ai/agent-sessions/{id}`, `GET /api/rag/search`, `GET /api/rag/evidence/{id}`, `POST /api/admin/rag-embeddings/backfill`, `GET /api/admin/agent-sessions`, `GET /api/admin/agent-sessions/{id}`, `GET /api/admin/tool-invocations`, `GET /api/admin/tool-invocations/{id}`, `GET /api/admin/rag-evidence`, `GET /api/admin/rag-evidence/{id}` |
 | 협업자 | 추천 결과 UI는 1번, Tool 판정 로직은 2번, AS 원인 후보는 4번 |
 
 XGBoost reranker는 Build Chat에서 shadow scoring만 수행하고, 홈 하단 추천부품은 `GET /api/recommendations/home-parts`에서 보이는 랭킹으로 사용한다. 3번은 추천 이벤트 수집, 홈 추천부품 관리자 라벨, 모델 버전/점수 기록, 학습 dataset/job 운영 API, Python worker/scorer, Docker scorer 운영 설정을 담당한다. 관리자 라벨은 학습 이벤트만 남기며 `parts.status`나 사용자 노출 여부를 직접 바꾸지 않는다. Tool `FAIL` 후보를 되살리거나 기존 견적 추천 순서를 바꾸지 않는다. AS feedback은 4번의 `as_tickets`와 `agent_log_summaries`를 읽어 `as_ticket_labels`를 저장하고, 조건이 맞을 때만 관리자 확정 negative 이벤트를 남긴다. 티켓 상태와 후보 JSON은 수정하지 않는다.
@@ -159,7 +159,7 @@ XGBoost reranker는 Build Chat에서 shadow scoring만 수행하고, 홈 하단 
 
 | Route | 주 owner | 협업자 | 연결 API |
 |---|---|---|---|
-| `/` | 1번 | 2번 | `POST /api/ai/build-chat`, `POST /api/build-graphs/resolve`, `POST /api/parts/compatible-candidates`, `GET /api/quote-drafts/current`(챗봇이 견적 문맥 어휘에서 선조회), `PUT /api/quote-drafts/current/apply-ai-build`, `GET /api/public/home`, `GET /api/home`, `GET /api/recommendations/home-builds`, `GET /api/recommendations/home-parts`, `POST /api/recommendation-events` |
+| `/` | 1번 | 2번 | `POST /api/ai/build-chat`, `POST /api/build-graphs/resolve`, `POST /api/parts/compatible-candidates`, `GET /api/quote-drafts/current`(챗봇이 견적 문맥 어휘에서 선조회), `PUT /api/quote-drafts/current/apply-ai-build`, `GET /api/public/home`, `GET /api/home`, `GET /api/recommendations/home-builds`, `GET /api/recommendations/home-parts`, `POST /api/recommendation-events`, `POST /api/recommendation-events/bulk/async` |
 | `/requirements/new` | 1번 | 3번 | `POST /api/requirements/parse`, `POST /api/builds/recommend` |
 | `/builds/latest` | 1번 | 3번 | 프론트 세션 보관 AI 추천 조합 표시, `POST /api/build-graphs/resolve`, `POST /api/builds/from-chat` |
 | `/builds/:buildId` | 1번 | 2번, 3번 | `GET /api/builds/{id}`, `GET /api/rag/evidence/{id}` |
@@ -285,6 +285,7 @@ XGBoost reranker는 Build Chat에서 shadow scoring만 수행하고, 홈 하단 
 | GET /api/recommendations/home-parts | 3번 | 1번 |
 | `GET /api/recommendations/home-builds` | 3번 | 1번 |
 | `POST /api/recommendation-events` | 3번 | 1번, 2번 |
+| `POST /api/recommendation-events/bulk/async` | 3번 | 1번, 2번 |
 | `/api/admin/recommendation-*` 전체 (models·feedback·training) | 3번 | 5번 |
 | `GET /api/ai/as-chat` | 3번 | 4번, 5번 |
 | `POST /api/ai/as-chat` | 3번 | 4번, 5번 |

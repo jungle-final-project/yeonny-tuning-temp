@@ -51,6 +51,9 @@ class RecommendationControllerTest {
     private RecommendationLearningService recommendationLearningService;
 
     @MockitoBean
+    private RecommendationEventPublisher recommendationEventPublisher;
+
+    @MockitoBean
     private RecommendationTrainingService recommendationTrainingService;
 
     @MockitoBean
@@ -138,6 +141,44 @@ class RecommendationControllerTest {
                 .andExpect(jsonPath("$.items[0].eventType").value("IMPRESSION"));
 
         verify(recommendationLearningService).recordEvents(anyMap(), org.mockito.ArgumentMatchers.eq(USER));
+    }
+
+    @Test
+    void recommendationEventBulkAsyncQueuesUserEvents() throws Exception {
+        when(recommendationLearningService.validateBulkUserEvents(anyMap())).thenReturn(1);
+        when(recommendationEventPublisher.publishBulkEvents(
+                anyMap(),
+                org.mockito.ArgumentMatchers.eq(USER),
+                org.mockito.ArgumentMatchers.eq(1)
+        )).thenReturn(Map.of(
+                "accepted", true,
+                "queued", 1
+        ));
+
+        mockMvc.perform(post("/api/recommendation-events/bulk/async")
+                        .header("Authorization", USER_TOKEN)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "events": [
+                                    {
+                                      "eventType": "IMPRESSION",
+                                      "sourceSurface": "HOME_RECOMMENDED_PARTS",
+                                      "recommendationId": "home-part-1"
+                                    }
+                                  ]
+                                }
+                                """))
+                .andExpect(status().isAccepted())
+                .andExpect(jsonPath("$.accepted").value(true))
+                .andExpect(jsonPath("$.queued").value(1));
+
+        verify(recommendationLearningService).validateBulkUserEvents(anyMap());
+        verify(recommendationEventPublisher).publishBulkEvents(
+                anyMap(),
+                org.mockito.ArgumentMatchers.eq(USER),
+                org.mockito.ArgumentMatchers.eq(1)
+        );
     }
 
     @Test

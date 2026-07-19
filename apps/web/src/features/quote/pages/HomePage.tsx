@@ -31,8 +31,8 @@ import {
   applyAiBuildToQuoteDraft,
   getHome,
   getPublicHome,
+  queueRecommendationEventsBulk,
   recordRecommendationEvent,
-  recordRecommendationEventsBulk
 } from '../../parts/partsApi';
 import type { HomeRecommendedPart, RecommendationEventRequest } from '../../parts/types';
 import { type PartCategory } from '../aiSelection';
@@ -679,7 +679,7 @@ function PopularPartsSection({ isAuthenticated, items, loading, error }: Popular
       });
     }
     if (events.length) {
-      void recordRecommendationEventsBulk({ events }).catch(() => undefined);
+      void queueRecommendationEventsBulk({ events }).catch(() => undefined);
     }
   }, [isAuthenticated, items]);
 

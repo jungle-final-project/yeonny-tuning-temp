@@ -9,6 +9,7 @@ import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
+import static org.mockito.Mockito.verifyNoInteractions;
 
 import com.buildgraph.prototype.agent.AiProfile;
 import com.buildgraph.prototype.agent.AiProfileConfig;
@@ -26,6 +27,20 @@ import org.springframework.data.redis.core.ValueOperations;
 import org.springframework.jdbc.core.JdbcTemplate;
 
 class BuildChatCacheServiceTest {
+    @Test
+    void verifiedMockRequestBypassesExactCacheLookupAndStore() {
+        @SuppressWarnings("unchecked")
+        ObjectProvider<StringRedisTemplate> provider = mock(ObjectProvider.class);
+        JdbcTemplate jdbcTemplate = mock(JdbcTemplate.class);
+        BuildChatCacheService service = new BuildChatCacheService(provider, jdbcTemplate, profileConfig(), true, 600);
+        Map<String, Object> request = BuildChatTestMode.sanitizedRequest(Map.of("message", "mock"), true);
+
+        assertThat(service.lookup(request, null, 1L)).isEmpty();
+        service.store(request, null, 1L, Map.of("message", "mock"));
+
+        verifyNoInteractions(provider, jdbcTemplate);
+    }
+
     @Test
     void cacheHitRemovesVolatileTraceIdsAndSeparatesUserProfileDraftAndVersions() {
         Map<String, String> redisStore = new LinkedHashMap<>();

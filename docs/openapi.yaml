@@ -135,6 +135,18 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/AuthResponse"
+        "401":
+          description: 이메일 또는 비밀번호 불일치
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "429":
+          description: 반복 로그인 시도 제한
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
   /api/auth/refresh:
     post:
       summary: access token 재발급
@@ -464,6 +476,20 @@ paths:
           schema:
             type: string
             enum: [BUILD_CHAT_FAST, BUILD_CHAT_54_FAST, BUILD_CHAT_54_MINI_FAST]
+        - in: header
+          name: X-BuildGraph-AI-Mode
+          required: false
+          description: Internal load-test mode. MOCK is accepted only when server-side test mode is enabled.
+          schema:
+            type: string
+            enum: [MOCK]
+        - in: header
+          name: X-BuildGraph-Test-Key
+          required: false
+          description: Secret key for internal request-scoped Build Chat mock tests. Never sent by the user web UI.
+          schema:
+            type: string
+            format: password
       requestBody:
         required: true
         content:
@@ -477,6 +503,18 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/AiBuildChatResponse"
+        "400":
+          description: Invalid or incomplete AI test-mode headers
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "403":
+          description: AI test mode is disabled or the test key is invalid
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
         "428":
           description: OPENAI_API_KEY 등 LLM 필수 설정 누락
           content:
@@ -547,6 +585,43 @@ paths:
                 $ref: "#/components/schemas/ErrorResponse"
         "403":
           description: Admin-only events must use admin APIs
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+  /api/recommendation-events/bulk/async:
+    post:
+      summary: Queue recommendation behavior events in bulk
+      description: Accepts up to 20 recommendation learning events after authenticating the user once, places them into a bounded local publish queue, then publishes to RabbitMQ from a background publisher thread for asynchronous storage. Home impression events use this endpoint so DB writes and RabbitMQ publish waits do not block the home response path.
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RecommendationEventBulkRequest"
+      responses:
+        "202":
+          description: Recommendation events accepted for asynchronous storage
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RecommendationEventBulkAcceptedResponse"
+        "400":
+          description: Missing events, more than 20 events, unsupported sourceSurface, or invalid eventType
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "403":
+          description: Admin-only events must use admin APIs
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "503":
+          description: Recommendation event publish queue is full or unavailable
           content:
             application/json:
               schema:
@@ -1051,7 +1126,7 @@ paths:
             enum: [category, price_asc, price_desc, name, compatibility]
         - in: query
           name: compatibilitySource
-          description: 특정 category 조회에서 현재 견적초안 기준 호환성 상태를 PartDto.compatibility에 포함한다. 연계 부품이 선택되어 있으면 PASS 후보 최대 3개에 PartDto.recommendation을 추가하고 목록 최상단에 둔다.
+          description: 특정 category 조회에서 현재 견적초안 기준 호환성 상태를 PartDto.compatibility에 포함한다. 연계 부품이 선택되어 있으면 PASS 후보 최대 3개에 PartDto.recommendation을 추가한다. 추천 후보의 목록 최상단 고정(재정렬)은 기본(category)·compatibility 정렬에서만 적용되고, 명시적 정렬(price_asc/price_desc/name)은 정렬 순서를 유지한 채 페이지 내 PASS 후보 기준으로 recommendation 뱃지만 단다(서버가 페이지 행만 평가).
           schema:
             type: string
             enum: [QUOTE_DRAFT_CURRENT]
@@ -3303,7 +3378,10 @@ paths:
   /api/support/chat-sessions/current:
     get:
       summary: 현재 사용자 상담방 조회
-      description: asTicketId가 없고 active 상담방도 없으면 contact=null과 supportNewPath=/support/new를 반환한다.
+      description: >-
+        asTicketId가 없고 active 상담방도 없으면 contact=null과 supportNewPath=/support/new를 반환한다.
+        summary=true(닫힌 위젯 배지용)이면 최근 메시지·방문예약을 제외한 경량 요약을 반환하고
+        pollingIntervalMs를 더 느슨하게(30초) 내려준다. summary 생략 시 기존 전체 응답과 동일.
       security:
         - bearerAuth: []
       parameters:
@@ -3313,6 +3391,13 @@ paths:
           schema:
             type: string
             format: uuid
+        - in: query
+          name: summary
+          required: false
+          description: true면 messages/방문예약을 제외한 경량 배지 요약 응답(닫힌 위젯 폴링용).
+          schema:
+            type: boolean
+            default: false
       responses:
         "200":
           description: 현재 사용자 상담방 또는 AS 접수 유도 응답
@@ -4054,7 +4139,7 @@ components:
       properties:
         code:
           type: string
-          enum: [VALIDATION_ERROR, UNAUTHORIZED, FORBIDDEN, NOT_FOUND, CONFLICT_STATE, DUPLICATE_RESOURCE, FILE_VALIDATION_ERROR, PRECONDITION_REQUIRED, UPSTREAM_ERROR, INTERNAL_ERROR, INVALID_DIAGNOSIS_REQUEST, AGENT_DISCONNECTED, DUPLICATE_DIAGNOSIS_ID, AGENT_RESPONSE_TIMEOUT, AGENT_RESPONSE_INTERRUPTED, AGENT_CONNECTION_FAILED, AGENT_RESPONSE_FAILED]
+          enum: [VALIDATION_ERROR, UNAUTHORIZED, FORBIDDEN, NOT_FOUND, CONFLICT_STATE, DUPLICATE_RESOURCE, FILE_VALIDATION_ERROR, RATE_LIMITED, PRECONDITION_REQUIRED, UPSTREAM_ERROR, INTERNAL_ERROR, INVALID_DIAGNOSIS_REQUEST, AGENT_DISCONNECTED, DUPLICATE_DIAGNOSIS_ID, AGENT_RESPONSE_TIMEOUT, AGENT_RESPONSE_INTERRUPTED, AGENT_CONNECTION_FAILED, AGENT_RESPONSE_FAILED]
         message:
           type: string
         details:
@@ -5077,6 +5162,15 @@ components:
             $ref: "#/components/schemas/RecommendationEventDto"
         count:
           type: integer
+    RecommendationEventBulkAcceptedResponse:
+      type: object
+      required: [accepted, queued]
+      properties:
+        accepted:
+          type: boolean
+        queued:
+          type: integer
+          minimum: 1
     AdminAsRecommendationFeedbackRequest:
       type: object
       properties:
@@ -5223,35 +5317,35 @@ components:
         CPU:
           type: array
           items:
-            $ref: "#/components/schemas/PartDto"
+            $ref: "#/components/schemas/HomePartSummaryDto"
         GPU:
           type: array
           items:
-            $ref: "#/components/schemas/PartDto"
+            $ref: "#/components/schemas/HomePartSummaryDto"
         MOTHERBOARD:
           type: array
           items:
-            $ref: "#/components/schemas/PartDto"
+            $ref: "#/components/schemas/HomePartSummaryDto"
         RAM:
           type: array
           items:
-            $ref: "#/components/schemas/PartDto"
+            $ref: "#/components/schemas/HomePartSummaryDto"
         STORAGE:
           type: array
           items:
-            $ref: "#/components/schemas/PartDto"
+            $ref: "#/components/schemas/HomePartSummaryDto"
         PSU:
           type: array
           items:
-            $ref: "#/components/schemas/PartDto"
+            $ref: "#/components/schemas/HomePartSummaryDto"
         CASE:
           type: array
           items:
-            $ref: "#/components/schemas/PartDto"
+            $ref: "#/components/schemas/HomePartSummaryDto"
         COOLER:
           type: array
           items:
-            $ref: "#/components/schemas/PartDto"
+            $ref: "#/components/schemas/HomePartSummaryDto"
     HomeRecommendedPartsResponse:
       type: object
       required: [items, generatedAt, fallbackUsed]
@@ -5266,6 +5360,36 @@ components:
         fallbackUsed:
           type: boolean
           description: XGBoost scorer를 쓰지 못해 deterministic fallback 랭킹을 사용했는지 여부
+    HomePartSummaryDto:
+      type: object
+      required: [id, category, name, price, status]
+      properties:
+        id:
+          type: string
+          format: uuid
+        category:
+          $ref: "#/components/schemas/PartCategory"
+        name:
+          type: string
+        manufacturer:
+          type: string
+          nullable: true
+        price:
+          type: integer
+        status:
+          $ref: "#/components/schemas/GenericStatus"
+        attributes:
+          type: object
+          nullable: true
+          description: Home card display attributes only, such as imageUrl and shortSpec.
+          additionalProperties: true
+        externalOffer:
+          type: object
+          nullable: true
+          properties:
+            imageUrl:
+              type: string
+              nullable: true
     HomeRecommendedBuildsResponse:
       type: object
       required: [items, generatedAt, fallbackUsed]
@@ -5290,7 +5414,7 @@ components:
         rankPosition:
           type: integer
         part:
-          $ref: "#/components/schemas/PartDto"
+          $ref: "#/components/schemas/HomePartSummaryDto"
         scoreSource:
           type: string
           enum: [XGBOOST, FALLBACK]

@@ -58,6 +58,14 @@ public class RecommendationLearningService {
         return MockData.map("items", items, "count", items.size());
     }
 
+    public int validateBulkUserEvents(Map<String, Object> request) {
+        List<Map<String, Object>> eventRequests = eventRequests(request.get("events"));
+        for (Map<String, Object> eventRequest : eventRequests) {
+            validateUserEventEnvelope(eventRequest);
+        }
+        return eventRequests.size();
+    }
+
     public Map<String, Object> recordEvent(Map<String, Object> request, CurrentUserService.CurrentUser user) {
         String eventType = normalizeEventType(text(request.get("eventType")));
         if ("AS_CONFIRMED_NEGATIVE".equals(eventType)) {
@@ -117,6 +125,17 @@ public class RecommendationLearningService {
             events.add(event);
         }
         return events;
+    }
+
+    private void validateUserEventEnvelope(Map<String, Object> request) {
+        String eventType = normalizeEventType(text(request.get("eventType")));
+        if ("AS_CONFIRMED_NEGATIVE".equals(eventType) || eventType.startsWith("ADMIN_")) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Admin-only recommendation events must use admin APIs.");
+        }
+        String sourceSurface = firstText(text(request.get("sourceSurface")), "BUILD_CHAT").toUpperCase(Locale.ROOT);
+        if (!USER_SOURCE_SURFACES.contains(sourceSurface)) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Unsupported sourceSurface.");
+        }
     }
 
     public Map<String, Object> confirmAsNegativeFeedback(

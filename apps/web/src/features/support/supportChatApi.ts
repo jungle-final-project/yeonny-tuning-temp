@@ -1,9 +1,12 @@
 import { API_BASE_URL, api, getToken } from '../../lib/api';
 import type { SupportChatSessionDto, SupportChatSessionListDto } from './types';
 
-export function getCurrentSupportChat(asTicketId?: string | null) {
-  const query = asTicketId ? `?asTicketId=${encodeURIComponent(asTicketId)}` : '';
-  return api<SupportChatSessionDto>(`/api/support/chat-sessions/current${query}`);
+export function getCurrentSupportChat(asTicketId?: string | null, summary = false) {
+  const params = new URLSearchParams();
+  if (asTicketId) params.set('asTicketId', asTicketId);
+  if (summary) params.set('summary', 'true');
+  const query = params.toString();
+  return api<SupportChatSessionDto>(`/api/support/chat-sessions/current${query ? `?${query}` : ''}`);
 }
 
 export function getSupportChatSession(sessionId: string) {

@@ -1,5 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
 import { TrendingUp } from 'lucide-react';
+import { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { AdminShell, DataTable, MetricCard, Panel, StateMessage, StatusBadge } from '../../../components/ui';
 import { listAdminAssemblyRequests } from '../../parts/assemblyApi';
@@ -46,6 +47,32 @@ const ORDER_STATUS_COLORS: Record<string, string> = {
   COMPLETED: '#16a34a',
   CANCELLED: '#ef3f3f'
 };
+
+function useViewportAnimation<T extends Element>() {
+  const elementRef = useRef<T>(null);
+  const [isVisible, setIsVisible] = useState(false);
+
+  useEffect(() => {
+    const element = elementRef.current;
+    if (!element) return;
+    if (!('IntersectionObserver' in window)) {
+      setIsVisible(true);
+      return;
+    }
+
+    const observer = new IntersectionObserver(([entry]) => {
+      if (entry?.isIntersecting) {
+        setIsVisible(true);
+        observer.disconnect();
+      }
+    }, { threshold: 0.2 });
+
+    observer.observe(element);
+    return () => observer.disconnect();
+  }, []);
+
+  return { elementRef, isVisible };
+}
 
 export function AdminDashboardPage() {
   const { data: dashboard, isError, isLoading } = useQuery({
@@ -234,19 +261,18 @@ function RevenueMetricCard({
   return (
     <div className="rounded-md border border-commerce-line bg-white p-4 shadow-sm">
       <div className="text-xs font-bold text-slate-500">{label}</div>
-      <div className="mt-2 flex items-center justify-between gap-3">
-        <div className="min-w-0 break-words text-2xl font-black tracking-tight text-commerce-ink">{wonLabel(value)}</div>
-        <span className="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-violet-100 text-violet-600">
-          <TrendingUp aria-hidden="true" className="h-5 w-5 motion-safe:animate-pulse" strokeWidth={2.5} />
-        </span>
+      <div className="mt-2 min-w-0 break-words text-2xl font-black tracking-tight text-commerce-ink">{wonLabel(value)}</div>
+      <div className="mt-2 flex items-center gap-1.5 text-[11px] font-semibold text-slate-400">
+        <span>{changeLabel}</span>
+        <TrendingUp aria-hidden="true" className="h-4 w-4 shrink-0 text-violet-500 motion-safe:animate-pulse" strokeWidth={2.5} />
       </div>
-      <div className="mt-2 text-[11px] font-semibold text-slate-400">{changeLabel}</div>
     </div>
   );
 }
 
 function RevenueTrendChart({ items }: { items: Array<{ date: string; label: string; revenue: number }> }) {
   const maxRevenue = Math.max(...items.map((item) => item.revenue), 0);
+  const { elementRef, isVisible } = useViewportAnimation<HTMLDivElement>();
   if (items.length === 0) {
     return <StateMessage type="info" title="매출 데이터 없음" body="결제 완료 이력이 쌓이면 최근 7일 매출 추이가 표시됩니다." />;
   }
@@ -254,7 +280,7 @@ function RevenueTrendChart({ items }: { items: Array<{ date: string; label: stri
   const axisValues = [maxRevenue, Math.round(maxRevenue * 0.67), Math.round(maxRevenue * 0.33), 0];
 
   return (
-    <div className="rounded-md border border-slate-100 bg-slate-50/60 px-2 py-4">
+    <div ref={elementRef} className="rounded-md border border-slate-100 bg-slate-50/60 px-2 py-4">
       <div className="grid grid-cols-[52px_minmax(0,1fr)] gap-2">
         <div className="flex h-48 flex-col justify-between text-right text-[10px] font-bold text-slate-500">
           {axisValues.map((value, index) => <span key={`${value}-${index}`}>{compactWonLabel(value)}</span>)}
@@ -270,13 +296,13 @@ function RevenueTrendChart({ items }: { items: Array<{ date: string; label: stri
               />
             ))}
             <div className="absolute inset-0 grid grid-cols-7 items-end gap-1 px-1.5">
-              {items.map((item) => {
+              {items.map((item, index) => {
                 const height = maxRevenue > 0 ? Math.max((item.revenue / maxRevenue) * 100, item.revenue > 0 ? 5 : 1) : 1;
                 return (
                   <div key={item.date} className="group relative flex h-full min-w-0 items-end justify-center">
                     <div
-                      className="w-full max-w-8 rounded-t bg-[#de6c2d] shadow-sm transition-[height,background-color] duration-300 ease-out group-hover:bg-[#c45c22]"
-                      style={{ height: `${height}%` }}
+                      className="w-full max-w-8 rounded-t bg-[#de6c2d] shadow-sm transition-[height,background-color] duration-700 ease-out motion-reduce:transition-none group-hover:bg-[#c45c22]"
+                      style={{ height: isVisible ? `${height}%` : '0%', transitionDelay: isVisible ? `${index * 70}ms` : '0ms' }}
                       aria-label={`${item.label} 매출 ${wonLabel(item.revenue)}`}
                       title={`${item.label} · ${wonLabel(item.revenue)}`}
                     />
@@ -324,6 +350,7 @@ function donutSegmentPath(cx: number, cy: number, outerRadius: number, innerRadi
 function StatusDonutChart({ items, totalLabel }: { items: StatusChartItem[]; totalLabel: string }) {
   const total = items.reduce((sum, item) => sum + item.count, 0);
   const largestCount = Math.max(...items.map((item) => item.count), 0);
+  const { elementRef, isVisible } = useViewportAnimation<HTMLDivElement>();
   let angle = -90;
   const segments = items
     .filter((item) => item.count > 0)
@@ -336,25 +363,42 @@ function StatusDonutChart({ items, totalLabel }: { items: StatusChartItem[]; tot
     });
 
   return (
-    <div className="mx-auto w-full max-w-[320px]">
+    <div ref={elementRef} className="mx-auto w-full max-w-[320px]">
       <svg viewBox="0 0 240 220" className="h-auto w-full overflow-visible" role="img" aria-label={`${totalLabel} 총 ${total}건`}>
-        <circle cx="120" cy="104" r="61" fill="none" stroke="#e4e7ec" strokeWidth="30" />
-        {segments.map((segment) => {
+        <circle
+          cx="120"
+          cy="104"
+          r="61"
+          fill="none"
+          stroke="#e4e7ec"
+          strokeWidth="30"
+          className="transition-opacity duration-500 motion-reduce:transition-none"
+          style={{ opacity: isVisible ? 1 : 0 }}
+        />
+        {segments.map((segment, index) => {
           const color = ORDER_STATUS_COLORS[segment.status] ?? '#64748b';
           const isLargest = segment.count === largestCount;
-          const direction = polarPoint(0, 0, isLargest ? 4 : 0, segment.midAngle);
-          const valuePoint = polarPoint(120 + direction.x, 104 + direction.y, 61, segment.midAngle);
-          const lineStart = polarPoint(120 + direction.x, 104 + direction.y, 78, segment.midAngle);
-          const lineElbow = polarPoint(120 + direction.x, 104 + direction.y, 91, segment.midAngle);
+          const valuePoint = polarPoint(120, 104, 61, segment.midAngle);
+          const lineStart = polarPoint(120, 104, 78, segment.midAngle);
+          const lineElbow = polarPoint(120, 104, 91, segment.midAngle);
           const isRight = Math.cos((segment.midAngle * Math.PI) / 180) >= 0;
           const labelY = Math.max(18, Math.min(196, lineElbow.y));
           const lineEndX = isRight ? 213 : 27;
           const labelX = isRight ? 218 : 22;
           const percentage = Math.round(segment.portion * 100);
           return (
-            <g key={segment.status}>
+            <g
+              key={segment.status}
+              className="transition-[opacity,transform] duration-700 ease-out motion-reduce:transition-none"
+              style={{
+                opacity: isVisible ? 1 : 0,
+                transform: `scale(${isVisible ? 1 : 0.86})`,
+                transformOrigin: '120px 104px',
+                transitionDelay: isVisible ? `${index * 90}ms` : '0ms'
+              }}
+            >
               <path
-                d={donutSegmentPath(120 + direction.x, 104 + direction.y, 76, 46, segment.startAngle, segment.endAngle)}
+                d={donutSegmentPath(120, 104, 76, 46, segment.startAngle, segment.endAngle)}
                 fill={color}
                 className="transition-transform duration-200 ease-out hover:scale-[1.02]"
                 style={{ filter: isLargest ? 'drop-shadow(0 4px 5px rgb(15 23 42 / 0.22))' : undefined, transformOrigin: '120px 104px' }}
@@ -369,6 +413,12 @@ function StatusDonutChart({ items, totalLabel }: { items: StatusChartItem[]; tot
                 strokeWidth="1.5"
                 strokeLinecap="round"
                 strokeLinejoin="round"
+                className="transition-[stroke-dashoffset] duration-700 ease-out motion-reduce:transition-none"
+                style={{
+                  strokeDasharray: 190,
+                  strokeDashoffset: isVisible ? 0 : 190,
+                  transitionDelay: isVisible ? `${250 + index * 90}ms` : '0ms'
+                }}
               />
               <text x={labelX} y={labelY - 3} textAnchor={isRight ? 'start' : 'end'} fill={color} className="text-[9px] font-black">
                 {segment.label}

@@ -687,7 +687,8 @@ test('renders the slot board as an information-first compatibility diagram with 
   await page.goto('/self-quote');
 
   const board = page.getByTestId('slot-board');
-  await expect(page.getByText('구성 관계도 — 부품 간 호환 상태')).toBeVisible();
+  // 헤더 제거 리디자인: 제목 텍스트 대신 판 위 플로팅 보기 전환이 보드 존재를 보증한다.
+  await expect(page.getByRole('radiogroup', { name: '보드 보기 방식' })).toBeVisible();
   // 기본 보기는 배치도(fused) — 실장도 카드/관계선 검증을 위해 3단 토글에서 실장도로 전환한다.
   await expect(board).toHaveAttribute('data-visual-mode', 'fused');
   const modeGroup = page.getByRole('radiogroup', { name: '보드 보기 방식' });
@@ -892,7 +893,8 @@ test('spotlights only the focused 3D part from slot card hover without dimming t
   await expect(ramIso).toHaveAttribute('data-dimmed', 'false');
   await expect(psuIso).toHaveAttribute('data-dimmed', 'false');
 
-  await page.getByText('구성 관계도 — 부품 간 호환 상태').hover();
+  // 3D 씬 밖 중립 지점(플로팅 보기 전환)으로 커서를 옮겨 hover 상태를 초기화한다.
+  await page.getByRole('radiogroup', { name: '보드 보기 방식' }).hover();
   await expect(gpuIso).toHaveAttribute('data-hovered', 'false');
   await expect(ramIso).toHaveAttribute('data-dimmed', 'false');
 });
@@ -1727,7 +1729,7 @@ test('overlays photo candidates on the board body without resizing the compatibi
   await page.getByTestId('checklist-CPU').click();
   const panel = page.getByTestId('slot-candidate-panel');
   await expect(panel).toBeVisible();
-  await expect(page.getByText('구성 관계도 — 부품 간 호환 상태')).toBeVisible();
+  // 헤더 제거 리디자인: 후보 패널이 떠도 판 위 플로팅 보기 전환은 그대로 보인다.
   await expect(page.getByRole('radio', { name: '배치도' })).toBeVisible();
   await expect(page.getByRole('radio', { name: '3D' })).toBeVisible();
   await expect(panel.getByTestId('candidate-part-image').first()).toBeVisible();
@@ -2031,8 +2033,9 @@ test('shows graph edge labels on the fallback topology relationships', async ({ 
   await expect(page.getByTestId('relation-map-bottom-banner')).toHaveCount(0);
   const relationMapStatusRegion = page.getByTestId('slot-board-status-region');
   await expect(relationMapStatusRegion).toHaveAttribute('data-placement', 'overlay');
+  // 헤더 제거 리디자인: 문제 칩은 보드 스테이지 좌상단 공용 스트립 소속 — 관계도에서도 판 상단 영역에 떠 있다.
   await expect.poll(async () => relationMapStatusRegion.evaluate((node) => (
-    Boolean(node.parentElement?.closest('[data-testid="relation-map-frame"]'))
+    Boolean(node.parentElement?.closest('[data-testid="slot-board-widget"]'))
   ))).toBe(true);
   await expect.poll(async () => {
     const [statusBox, boardBox] = await Promise.all([
@@ -2042,7 +2045,7 @@ test('shows graph edge labels on the fallback topology relationships', async ({ 
     return Boolean(
       statusBox
       && boardBox
-      && statusBox.y >= boardBox.y - 1
+      && statusBox.y >= boardBox.y - 24
       && statusBox.y + statusBox.height <= boardBox.y + boardBox.height
       && statusBox.y <= boardBox.y + boardBox.height * 0.24
     );
@@ -2070,6 +2073,9 @@ test('shows graph edge labels on the fallback topology relationships', async ({ 
     const legendBoxAfterExpand = await relationMapLegend.boundingBox();
     return legendBoxAfterExpand ? Math.abs(legendBoxAfterExpand.y - legendBoxBeforeExpand.y) : Number.POSITIVE_INFINITY;
   }).toBeLessThanOrEqual(1);
+  // 리디자인: 문제 목록은 모달이라 열린 채로는 뒤 조작을 막는다 — 확인 후 닫고 진행.
+  await page.keyboard.press('Escape');
+  await expect(page.getByTestId('slot-board-problem-list')).toHaveCount(0);
   const relationMapFitsBoard = await page.getByTestId('relation-map-stage').evaluate((stage) => {
     const board = stage.closest('[data-testid="slot-board"]');
     if (!(board instanceof HTMLElement)) return false;
@@ -2488,17 +2494,8 @@ test('keeps the ATX case mismatch warning in context without overlapping board c
     }).toBe(true);
   };
 
-  const expectStatusAboveBoard = async () => {
-    const statusRegion = page.getByTestId('slot-board-status-region');
-    const board = page.getByTestId('slot-board');
-    await expect(statusRegion).toHaveAttribute('data-placement', 'top');
-    await expect(statusRegion).toBeVisible();
-    await expect(board).toBeVisible();
-    await expect.poll(async () => {
-      const [statusBox, boardBox] = await Promise.all([statusRegion.boundingBox(), board.boundingBox()]);
-      return Boolean(statusBox && boardBox && statusBox.y + statusBox.height <= boardBox.y + 1);
-    }).toBe(true);
-  };
+  // 헤더 제거 리디자인: 문제 칩은 모든 보기에서 보드 스테이지 좌상단 공용 스트립에 뜬다 — 배치 계약이 하나로 통일됨.
+  const expectStatusAboveBoard = expectStatusOverlayInBoard;
 
   const expectStatusOverlayInRelationMapFrame = async () => {
     const statusRegion = page.getByTestId('slot-board-status-region');
@@ -2507,14 +2504,14 @@ test('keeps the ATX case mismatch warning in context without overlapping board c
     await expect(statusRegion).toBeVisible();
     await expect(frame).toBeVisible();
     await expect.poll(async () => statusRegion.evaluate((node) => (
-      Boolean(node.parentElement?.closest('[data-testid="relation-map-frame"]'))
+      Boolean(node.parentElement?.closest('[data-testid="slot-board-widget"]'))
     ))).toBe(true);
     await expect.poll(async () => {
       const [statusBox, frameBox] = await Promise.all([statusRegion.boundingBox(), frame.boundingBox()]);
       return Boolean(
         statusBox
         && frameBox
-        && statusBox.y >= frameBox.y - 1
+        && statusBox.y >= frameBox.y - 24
         && statusBox.y + statusBox.height <= frameBox.y + frameBox.height
         && statusBox.x >= frameBox.x - 1
         && statusBox.x + statusBox.width <= frameBox.x + frameBox.width + 1
@@ -2524,8 +2521,14 @@ test('keeps the ATX case mismatch warning in context without overlapping board c
   };
 
   const banner = page.getByTestId('slot-board-problem-banner');
-  await expect(banner).toContainText(message);
-  await expect(banner.getByTestId('slot-problem-ai-explain')).toBeVisible();
+  // 리디자인: 칩은 건수만 표기 — 상세 메시지와 AI 설명 버튼은 클릭 시 열리는 모달이 담당한다.
+  await expect(banner).toContainText('1건');
+  await banner.click();
+  const singleProblemList = page.getByTestId('slot-board-problem-list');
+  await expect(singleProblemList).toContainText(message);
+  await expect(singleProblemList.getByTestId('slot-problem-ai-explain')).toBeVisible();
+  await page.keyboard.press('Escape');
+  await expect(singleProblemList).toHaveCount(0);
   await expectStatusOverlayInBoard();
   const defaultProblemBannerBox = await banner.boundingBox();
   if (!defaultProblemBannerBox) {

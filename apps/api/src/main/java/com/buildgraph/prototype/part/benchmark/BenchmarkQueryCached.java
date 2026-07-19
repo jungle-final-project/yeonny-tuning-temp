@@ -18,6 +18,13 @@ public class BenchmarkQueryCached {
 
     public static final String CACHE_NAME = "benchmark-summary";
 
+    /**
+     * '벤치마크 행 없음'을 캐시에 남기는 센티널. 없는 부품(쿨러·케이스 등)이 매 요청 캐시 미스로
+     * 배치 쿼리를 유발하던 것을 TTL 동안 봉인한다. 반환 맵에는 절대 포함하지 않는다 —
+     * '없는 id는 결과 맵 미포함'이 호출부(ToolCheckService.benchmarkScore) 계약이다.
+     */
+    private static final Map<String, Object> NO_BENCHMARK = Map.of();
+
     private final CacheManager cacheManager;
     private final JdbcTemplate jdbcTemplate;
 
@@ -48,17 +55,24 @@ public class BenchmarkQueryCached {
             Map<String, Object> cached = cache.get(partId, Map.class);
             if (cached == null) {
                 missedIds.add(partId);
-            } else {
+            } else if (!cached.isEmpty()) {
                 loaded.put(partId, cached);
             }
+            // 빈 맵 = negative 캐시 적중(벤치마크 없음) — 재조회도, 결과 포함도 하지 않는다.
         }
 
-        /* missedIds가 있을 경우 */
+        /* missedIds가 있을 경우 — 조회 후 없는 id도 센티널로 캐시해 반복 미스를 막는다 */
         if (!missedIds.isEmpty()) {
-            findBenchmarksByIds(missedIds).forEach((partId, benchmark) -> {
-                loaded.put(partId, benchmark);
-                cache.put(partId, benchmark);
-            });
+            Map<Long, Map<String, Object>> fetched = findBenchmarksByIds(missedIds);
+            for (Long partId : missedIds) {
+                Map<String, Object> benchmark = fetched.get(partId);
+                if (benchmark == null) {
+                    cache.put(partId, NO_BENCHMARK);
+                } else {
+                    loaded.put(partId, benchmark);
+                    cache.put(partId, benchmark);
+                }
+            }
         }
         return loaded;
     }

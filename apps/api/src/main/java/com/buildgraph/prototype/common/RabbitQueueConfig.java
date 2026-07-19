@@ -21,6 +21,9 @@ public class RabbitQueueConfig {
     public static final String PRICE_REFRESH_QUEUE = "buildgraph.price.refresh";
     public static final String PRICE_REFRESH_DLQ = "buildgraph.price.refresh.dlq";
     public static final String PRICE_REFRESH_ROUTING_KEY = "price.refresh";
+    public static final String RECOMMENDATION_EVENTS_QUEUE = "buildgraph.recommendation.events";
+    public static final String RECOMMENDATION_EVENTS_DLQ = "buildgraph.recommendation.events.dlq";
+    public static final String RECOMMENDATION_EVENTS_ROUTING_KEY = "recommendation.events";
 
     @Bean
     MessageConverter rabbitMessageConverter() {
@@ -81,5 +84,28 @@ public class RabbitQueueConfig {
     @Bean
     Binding priceRefreshDlqBinding() {
         return BindingBuilder.bind(priceRefreshDlq()).to(jobsExchange()).with(PRICE_REFRESH_DLQ);
+    }
+
+    @Bean
+    Queue recommendationEventsQueue() {
+        return QueueBuilder.durable(RECOMMENDATION_EVENTS_QUEUE)
+                .deadLetterExchange(JOBS_EXCHANGE)
+                .deadLetterRoutingKey(RECOMMENDATION_EVENTS_DLQ)
+                .build();
+    }
+
+    @Bean
+    Queue recommendationEventsDlq() {
+        return QueueBuilder.durable(RECOMMENDATION_EVENTS_DLQ).build();
+    }
+
+    @Bean
+    Binding recommendationEventsBinding() {
+        return BindingBuilder.bind(recommendationEventsQueue()).to(jobsExchange()).with(RECOMMENDATION_EVENTS_ROUTING_KEY);
+    }
+
+    @Bean
+    Binding recommendationEventsDlqBinding() {
+        return BindingBuilder.bind(recommendationEventsDlq()).to(jobsExchange()).with(RECOMMENDATION_EVENTS_DLQ);
     }
 }
