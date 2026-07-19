@@ -6,9 +6,11 @@ import com.buildgraph.prototype.part.price.NaverShoppingOfferService;
 import java.util.Map;
 import org.springframework.amqp.rabbit.annotation.RabbitListener;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Component;
 
 @Component
+@ConditionalOnProperty(name = "part.price-refresh.worker.enabled", havingValue = "true", matchIfMissing = true)
 public class PriceJobWorker {
     private final PriceQueryService priceQueryService;
     private final NaverShoppingOfferService naverShoppingOfferService;

@@ -155,6 +155,8 @@ support-chat:
     ttl-seconds: ${SUPPORT_CHAT_WS_TICKET_TTL_SECONDS:60}
 
 agent:
+  worker:
+    enabled: ${AGENT_WORKER_ENABLED:true}
   runner:
     mode: ${AGENT_RUNNER_MODE:deterministic}
   log-storage-root: ${AGENT_LOG_STORAGE_ROOT:data/agent-logs}
@@ -306,6 +308,8 @@ ai:
 
 recommendation:
   events:
+    worker:
+      enabled: ${RECOMMENDATION_EVENTS_WORKER_ENABLED:true}
     publisher:
       workers: ${RECOMMENDATION_EVENTS_PUBLISHER_WORKERS:2}
       queue-capacity: ${RECOMMENDATION_EVENTS_PUBLISHER_QUEUE_CAPACITY:2048}
@@ -373,6 +377,8 @@ part:
     ttl-seconds: ${PART_COMPATIBILITY_CACHE_TTL_SECONDS:15}
   price-refresh:
     enabled: ${PART_PRICE_REFRESH_ENABLED:true}
+    worker:
+      enabled: ${PART_PRICE_REFRESH_WORKER_ENABLED:true}
     cron: "${PART_PRICE_REFRESH_CRON:0 0 4 * * *}"
     zone: "${PART_PRICE_REFRESH_ZONE:Asia/Seoul}"
   danawa-refresh:

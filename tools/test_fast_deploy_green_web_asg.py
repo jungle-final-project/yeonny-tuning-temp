@@ -1060,7 +1060,7 @@ class FastDeployRemoteTransactionTest(unittest.TestCase):
                     cid-nginx)
                       manifest_value NGINX_IMAGE_URI "$FAKE_RUNTIME_ENV"
                       ;;
-                    cid-api)
+                    cid-api|cid-recommendation-event-worker)
                       manifest_value API_IMAGE_URI "$FAKE_IMAGE_MANIFEST"
                       ;;
                     cid-xgb-reranker)
@@ -1078,6 +1078,8 @@ class FastDeployRemoteTransactionTest(unittest.TestCase):
                   printf '%s\\n' cid-nginx
                 elif [[ "$args" == *" ps -q api "* ]]; then
                   printf '%s\\n' cid-api
+                elif [[ "$args" == *" ps -q recommendation-event-worker "* ]]; then
+                  printf '%s\\n' cid-recommendation-event-worker
                 elif [[ "$args" == *" ps -q xgb-reranker "* ]]; then
                   printf '%s\\n' cid-xgb-reranker
                 elif [[ "$args" == *" up -d "* && "${FAKE_SIGNAL_PARENT_ON_TARGET_UP:-false}" == "true" && "$(manifest_value API_IMAGE_URI "$FAKE_IMAGE_MANIFEST")" == "$FAKE_TARGET_API_IMAGE" ]]; then

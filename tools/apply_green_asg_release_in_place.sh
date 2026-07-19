@@ -226,6 +226,30 @@ container_id_for() {
   printf '%s' "$container_id"
 }
 
+runtime_services() {
+  printf '%s\n' nginx api recommendation-event-worker xgb-reranker
+}
+
+target_deploy_services() {
+  local service="$1"
+  if [[ "$service" == "api" ]]; then
+    printf '%s\n' api recommendation-event-worker
+  else
+    printf '%s\n' "$service"
+  fi
+}
+
+is_target_deploy_service() {
+  local service="$1"
+  local target_service="$2"
+  local candidate
+
+  for candidate in $(target_deploy_services "$target_service"); do
+    [[ "$service" != "$candidate" ]] || return 0
+  done
+  return 1
+}
+
 verify_running_image() {
   local service="$1"
   local expected_image="$2"
@@ -254,7 +278,7 @@ snapshot_container_ids() {
   local transaction_dir="$1"
   local service
 
-  for service in nginx api xgb-reranker; do
+  for service in $(runtime_services); do
     container_id_for "$service" >"$transaction_dir/container-id-$service"
   done
 }
@@ -264,8 +288,10 @@ verify_non_target_containers_unchanged() {
   local target_service="$2"
   local service before after
 
-  for service in nginx api xgb-reranker; do
-    [[ "$service" != "$target_service" ]] || continue
+  for service in $(runtime_services); do
+    if is_target_deploy_service "$service" "$target_service"; then
+      continue
+    fi
     before="$(cat "$transaction_dir/container-id-$service")"
     after="$(container_id_for "$service")"
     [[ "$after" == "$before" ]] ||
@@ -277,6 +303,7 @@ verify_all_running_images() {
   local manifest="$1"
   verify_running_image nginx "$(read_manifest_value NGINX_IMAGE_URI "$manifest")"
   verify_running_image api "$(read_manifest_value API_IMAGE_URI "$manifest")"
+  verify_running_image recommendation-event-worker "$(read_manifest_value API_IMAGE_URI "$manifest")"
   verify_running_image xgb-reranker "$(read_manifest_value XGB_IMAGE_URI "$manifest")"
   verify_api_scheduling_disabled
 }
@@ -339,9 +366,11 @@ restore_transaction() {
   compose_with "$IMAGE_MANIFEST" "$ASG_RUNTIME_ENV" config --quiet || return 1
   aws ecr get-login-password --region "$APPROVED_AWS_REGION" --no-cli-pager |
     docker login --username AWS --password-stdin "$ECR_REGISTRY" >/dev/null || return 1
-  compose_with "$IMAGE_MANIFEST" "$ASG_RUNTIME_ENV" pull "$service" || return 1
   compose_with "$IMAGE_MANIFEST" "$ASG_RUNTIME_ENV" \
-    up -d --no-deps --force-recreate --no-build "$service" || return 1
+    pull $(target_deploy_services "$service") || return 1
+  compose_with "$IMAGE_MANIFEST" "$ASG_RUNTIME_ENV" \
+    up -d --no-deps --force-recreate --no-build \
+    $(target_deploy_services "$service") || return 1
   if [[ "$service" == "api" ]]; then
     compose_with "$IMAGE_MANIFEST" "$ASG_RUNTIME_ENV" exec -T nginx nginx -t || return 1
     compose_with "$IMAGE_MANIFEST" "$ASG_RUNTIME_ENV" exec -T nginx nginx -s reload || return 1
@@ -651,7 +680,7 @@ aws ecr get-login-password --region "$APPROVED_AWS_REGION" --no-cli-pager |
 compose_with \
   "$TRANSACTION_DIR/green-images.candidate.env" \
   "$TRANSACTION_DIR/asg-runtime.candidate.env" \
-  pull "$SERVICE"
+  pull $(target_deploy_services "$SERVICE")
 
 [[ ! -e "$CANCELLATION_FENCE" ]] ||
   die "deployment was cancelled before runtime mutation"
@@ -668,7 +697,8 @@ install_runtime_file \
   "$TRANSACTION_DIR/target-release.env" \
   "$RELEASE_ROOT/green-release-${TARGET_GIT_SHA}.env"
 compose_with "$IMAGE_MANIFEST" "$ASG_RUNTIME_ENV" \
-  up -d --no-deps --force-recreate --no-build "$SERVICE"
+  up -d --no-deps --force-recreate --no-build \
+  $(target_deploy_services "$SERVICE")
 
 if [[ "$SERVICE" == "api" ]]; then
   compose_with "$IMAGE_MANIFEST" "$ASG_RUNTIME_ENV" exec -T nginx nginx -t
