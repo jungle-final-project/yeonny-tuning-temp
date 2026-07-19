@@ -62,6 +62,8 @@ const PART_CATEGORIES: CategoryItem[] = [
 ];
 
 const BUILD_CATEGORY_ORDER: PartCategory[] = ['CPU', 'MOTHERBOARD', 'RAM', 'GPU', 'STORAGE', 'PSU', 'CASE', 'COOLER'];
+const HOME_IMPRESSION_EVENT_DELAY_MS = 750;
+const HOME_IMPRESSION_EVENT_JITTER_MS = 1500;
 
 const CURATED_BUILD_TEMPLATES: Array<Omit<CuratedBuild, 'partSearches'>> = [
   {
@@ -679,7 +681,9 @@ function PopularPartsSection({ isAuthenticated, items, loading, error }: Popular
       });
     }
     if (events.length) {
-      void queueRecommendationEventsBulk({ events }).catch(() => undefined);
+      window.setTimeout(() => {
+        void queueRecommendationEventsBulk({ events }).catch(() => undefined);
+      }, homeImpressionEventDelayMs());
     }
   }, [isAuthenticated, items]);
 
@@ -718,6 +722,10 @@ function PopularPartsSection({ isAuthenticated, items, loading, error }: Popular
       ) : null}
     </section>
   );
+}
+
+function homeImpressionEventDelayMs() {
+  return HOME_IMPRESSION_EVENT_DELAY_MS + Math.floor(Math.random() * HOME_IMPRESSION_EVENT_JITTER_MS);
 }
 
 function PopularPartCard({ item, trackEvent }: { item: HomeRecommendedPart; trackEvent: boolean }) {
