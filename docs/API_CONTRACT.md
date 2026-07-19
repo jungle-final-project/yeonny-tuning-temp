@@ -690,9 +690,18 @@ Support Chat Rooms 규칙:
 | `GET` | `/api/agent-logs/{id}` | USER | 4번 | - | `{ "id": "1b363bcb-42be-4428-b625-54a6b267d66f", "status": "UPLOADED", "fileName": "agent-log.jsonl", "rangeMinutes": 30, "summary": "GPU driver error 반복", "createdAt": "2026-06-29T10:40:00Z", "deleteAfter": "2026-07-29T10:40:00Z" }` | `agent_log_uploads` |
 | `POST` | `/api/as-tickets` | USER | 4번 | `{ "logUploadId": "1b363bcb-42be-4428-b625-54a6b267d66f", "symptom": "화면이 멈춤" }` | `201 { "id": "4aef8ef7-1dc7-45d1-bfc2-bb0cfdaf7f8a", "status": "OPEN", "symptom": "화면이 멈춤", "logUploadId": "1b363bcb-42be-4428-b625-54a6b267d66f", "causeCandidates": [], "upgradeCandidates": [], "supportChatRoomId": "7c2f8f17-8f18-4d10-bcd1-9d20d1c71a01", "supportChatUserUnreadCount": 0, "supportChatAdminUnreadCount": 0, "createdAt": "2026-06-29T10:42:00Z" }`. 기존 진행 중 상담이 있어도 별도 티켓과 상담방을 생성한다. | `as_tickets`, `agent_log_uploads`, `support_chat_rooms`, `support_chat_messages` |
 | `GET` | `/api/as-tickets/{id}` | USER | 4번 | - | `{ "id": "4aef8ef7-1dc7-45d1-bfc2-bb0cfdaf7f8a", "status": "OPEN", "symptom": "화면이 멈춤", "logUploadId": "1b363bcb-42be-4428-b625-54a6b267d66f", "causeCandidates": [], "upgradeCandidates": [], "supportChatRoomId": "7c2f8f17-8f18-4d10-bcd1-9d20d1c71a01", "supportChatUserUnreadCount": 0, "supportChatAdminUnreadCount": 0, "supportChatLastMessageAt": "2026-06-29T10:42:00Z", "adminNote": null, "createdAt": "2026-06-29T10:42:00Z" }` | `as_tickets`, `support_chat_rooms` |
+| `GET` | `/api/as-tickets/{id}/remote-support` | USER | 4번 | - | 본인 소유 승인 티켓의 `{ "status": "CODE_READY", "provider": "CHROME_REMOTE_DESKTOP", "accessCodeRegistered": true, "accessCodeRegisteredAt": "...", "startedAt": null, "completedAt": null }`. 코드 원문과 마스킹값은 반환하지 않는다. | `as_tickets`, `remote_support_sessions` |
+| `PUT` | `/api/as-tickets/{id}/remote-support/access-code` | USER | 4번 | `{ "accessCode": "123 456-789" }` | 공백·하이픈을 제거한 숫자 코드를 등록 또는 교체하고 사용자용 `CODE_READY` 상태를 반환한다. 승인 전, 타인 소유, 완료 티켓은 거부하며 응답에는 코드 원문이 없다. | `as_tickets`, `remote_support_sessions`, `admin_audit_logs` |
 | `GET` | `/api/admin/as-tickets` | ADMIN | 4번 | `?page=0&size=20` | `{ "items": [{ "id": "4aef8ef7-1dc7-45d1-bfc2-bb0cfdaf7f8a", "status": "OPEN", "symptom": "화면이 멈춤", "userId": "c6d75f0c-0f57-4d1c-a8b2-a4079dcd40fd", "assignedAdminId": null, "createdAt": "2026-06-29T10:42:00Z" }], "page": 0, "size": 20, "total": 1 }` | `as_tickets` |
 | `GET` | `/api/admin/as-tickets/{id}` | ADMIN | 4번 | - | `{ "id": "4aef8ef7-1dc7-45d1-bfc2-bb0cfdaf7f8a", "status": "OPEN", "symptom": "화면이 멈춤", "logUploadId": null, "diagnosisEvidence": [{ "component": "gpu", "metricType": "temperature", "value": 95, "unit": "C", "source": "nvidia-smi", "sampledAt": "..." }], "assignedAdminId": null, "causeCandidates": [], "upgradeCandidates": [], "adminNote": null }`. 관리 화면은 `logSummary.rawSamples`가 있으면 마스킹 업로드 샘플을, 없고 `diagnosisEvidence`가 있으면 실시간 진단 근거를 출처를 구분해 표시한다. | `as_tickets`, `agent_log_uploads` |
 | `PATCH` | `/api/admin/as-tickets/{id}` | ADMIN | 4번 | `{ "status": "IN_PROGRESS", "assignedAdminId": "c6d75f0c-0f57-4d1c-a8b2-a4079dcd40fd", "adminNote": "확인 중" }` | `{ "id": "4aef8ef7-1dc7-45d1-bfc2-bb0cfdaf7f8a", "status": "IN_PROGRESS", "assignedAdminId": "c6d75f0c-0f57-4d1c-a8b2-a4079dcd40fd", "adminNote": "확인 중", "resolvedAt": null, "updatedAt": "2026-06-29T10:45:00Z" }` | `as_tickets`, `users`, `admin_audit_logs` |
+| `POST` | `/api/admin/as-tickets/{id}/assign-to-me` | ADMIN | 4번 | - | 현재 인증 관리자를 담당자로 배정하고 `OPEN→ASSIGNED`, `REQUIRED→IN_REVIEW`를 함께 적용한다. 동일 관리자 재호출은 멱등 처리하며 다른 관리자 담당 티켓은 `409`다. | `as_tickets`, `admin_audit_logs` |
+| `POST` | `/api/admin/as-tickets/{id}/request-more-info` | ADMIN | 4번 | `{ "adminNote": "재현 시각과 화면 녹화를 알려 주세요." }` | 현재 관리자를 배정하고 `status=IN_PROGRESS`, `reviewStatus=IN_REVIEW`, `supportDecision=NEEDS_MORE_INFO`와 요청 사유를 한 트랜잭션으로 저장한다. | `as_tickets`, `admin_audit_logs` |
+| `POST` | `/api/admin/as-tickets/{id}/approve-remote-support` | ADMIN | 4번 | `{ "adminNote": "원격 점검 승인" }` | 원격지원 권장 티켓을 현재 관리자에게 배정하고 `status=IN_PROGRESS`, `reviewStatus=APPROVED`, `supportDecision=REMOTE_POSSIBLE`, `reviewedAt`을 저장한 뒤 Chrome Remote Desktop 세션을 `WAITING_FOR_CODE`로 준비한다. 실제 연결이나 코드는 생성하지 않는다. | `as_tickets`, `remote_support_sessions`, `admin_audit_logs` |
+| `GET` | `/api/admin/as-tickets/{id}/remote-support` | ADMIN | 4번 | - | 현재 담당 관리자에게만 `{ "status": "CODE_READY", "maskedAccessCode": "****** 1234", ... }`를 반환한다. 전체 코드는 포함하지 않는다. | `as_tickets`, `remote_support_sessions` |
+| `GET` | `/api/admin/as-tickets/{id}/remote-support/access-code` | ADMIN | 4번 | - | 담당 관리자가 복사 동작을 수행할 때만 `{ "accessCode": "123456789" }`를 반환한다. `CODE_READY` 또는 `IN_PROGRESS` 외 상태는 `409`다. | `as_tickets`, `remote_support_sessions` |
+| `POST` | `/api/admin/as-tickets/{id}/remote-support/start` | ADMIN | 4번 | - | 담당 관리자가 Chrome Remote Desktop 연결을 직접 확인한 뒤 `CODE_READY→IN_PROGRESS`와 시작 시각을 기록한다. 중복 시작은 시각을 변경하지 않는다. | `as_tickets`, `remote_support_sessions`, `admin_audit_logs` |
+| `POST` | `/api/admin/as-tickets/{id}/remote-support/complete` | ADMIN | 4번 | - | 담당 관리자가 `IN_PROGRESS→COMPLETED`와 완료 시각을 기록하고 일회용 코드를 삭제한다. 중복 완료는 멱등 처리한다. | `as_tickets`, `remote_support_sessions`, `admin_audit_logs` |
 | `DELETE` | `/api/admin/as-tickets/{id}` | ADMIN | 4번 | - | `{ "id": "4aef8ef7-1dc7-45d1-bfc2-bb0cfdaf7f8a", "deleted": true, "deletedAt": "2026-07-16T06:00:00Z", "supportChatRoomId": "7c2f8f17-8f18-4d10-bcd1-9d20d1c71a01" }` | `as_tickets.deleted_at` soft delete, 연결된 active `support_chat_rooms`/`as_chat_sessions` archive, 원격·방문지원 cancel, `admin_audit_logs` 기록. 원본 로그와 학습 이력은 보존 |
 
 `POST /api/agent-logs/upload` multipart fields:
@@ -738,6 +747,17 @@ PC Agent 등록/인증 규칙:
 - `RESOLVED`에서 `CLOSED` 외 상태로 변경하면 `409 CONFLICT_STATE`다.
 - 위 허용 전이표에 없는 전이는 `409 CONFLICT_STATE`다.
 - 409가 발생해도 DB status는 변경하지 않는다. admin 요청이므로 거절 이력은 `admin_audit_logs`에 기록한다.
+
+관리자 AS 업무 행동 규칙:
+
+- `assign-to-me`, `request-more-info`, `approve-remote-support`는 요청 body로 담당자 ID를 받지 않고 인증된 ADMIN의 내부 ID를 사용한다.
+- 다른 관리자가 이미 배정된 티켓은 덮어쓰지 않고 `409`를 반환한다.
+- `RESOLVED`, `CLOSED`, `CANCELLED` 티켓과 이미 완료된 검토는 다시 승인하지 않는다.
+- 원격지원 승인은 기존 `supportDecision=REMOTE_POSSIBLE`, 지원 라우팅의 원격 권장 또는 PC Agent `diagnosisResult.resolutionType=REMOTE_SUPPORT` 중 하나가 확인될 때만 허용한다.
+- 원격지원 승인만으로 `diagnosticAccuracy`를 변경하지 않는다.
+- 승인 시 Chrome Remote Desktop 세션은 `WAITING_FOR_CODE`가 되고, 사용자의 코드 등록·교체는 `CODE_READY`, 담당 관리자의 수동 시작은 `IN_PROGRESS`, 완료 처리는 `COMPLETED`로 전이한다.
+- 전체 지원 코드는 일반 사용자·관리자 티켓 목록 및 상세 DTO에 포함하지 않는다. 담당 관리자가 복사할 때만 별도 API로 조회하며, 완료·티켓 종료·삭제 시 저장 코드를 제거한다.
+- Chrome Remote Desktop 공식 페이지의 로그인, 코드 생성·입력, 화면 공유 승인과 실제 연결 확인은 사람이 직접 수행한다. 서비스는 외부 페이지를 자동화하거나 연결 성공을 감지하지 않는다.
 
 ### Admin/Health
 

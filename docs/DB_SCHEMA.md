@@ -1473,7 +1473,7 @@ Index:
 
 ### remote_support_sessions
 
-목적: AS 티켓에 대한 원격 지원 세션(외부 도구 링크) 이력을 저장한다 (V56).
+목적: AS 티켓에 대한 원격 지원 세션 상태와 외부 지원 도구 정보를 저장한다 (V56, Chrome Remote Desktop 코드 필드는 V127).
 
 Owner: 4번
 
@@ -1483,10 +1483,12 @@ Owner: 4번
 | `public_id` | `UUID` | no | - | 외부 ID |
 | `as_ticket_id` | `BIGINT` | no | `as_tickets.id` | 기준 AS 티켓 |
 | `device_id` | `BIGINT` | yes | `agent_devices.id` | 관련 디바이스 |
-| `provider` | `VARCHAR(80)` | no | - | `EXTERNAL_LINK`, `ANYDESK`, `TEAMVIEWER`, `ZOOM`, `GOOGLE_MEET` |
+| `provider` | `VARCHAR(80)` | no | - | `EXTERNAL_LINK`, `CHROME_REMOTE_DESKTOP`, `ANYDESK`, `TEAMVIEWER`, `ZOOM`, `GOOGLE_MEET` |
 | `session_url` | `TEXT` | yes | - | 세션 URL |
-| `status` | `VARCHAR(30)` | no | - | `REQUESTED`, `LINK_SENT`, `IN_PROGRESS`, `COMPLETED`, `CANCELLED` |
+| `status` | `VARCHAR(30)` | no | - | `REQUESTED`, `LINK_SENT`, `WAITING_FOR_CODE`, `CODE_READY`, `IN_PROGRESS`, `COMPLETED`, `CANCELLED` |
 | `requested_by_admin_id` | `BIGINT` | yes | `users.id` | 요청 관리자 |
+| `access_code` | `TEXT` | yes | - | Chrome Remote Desktop 일회용 지원 코드. 민감 데이터이며 완료·취소·티켓 종료 시 제거 |
+| `access_code_registered_at` | `TIMESTAMPTZ` | yes | - | 현재 일회용 지원 코드 등록 또는 교체 시각 |
 | `started_at` | `TIMESTAMPTZ` | yes | - | 시작 시각 |
 | `ended_at` | `TIMESTAMPTZ` | yes | - | 종료 시각 |
 | `created_at` | `TIMESTAMPTZ` | no | - | 생성 시각 |
@@ -1498,6 +1500,12 @@ Index:
 - index: `remote_support_sessions.device_id`
 - index: `remote_support_sessions.status`
 - index: `remote_support_sessions.created_at`
+
+보안 규칙:
+
+- `access_code`는 일반 티켓 목록·상세 DTO, 로그, 예외 메시지에 포함하지 않는다.
+- 담당 관리자 복사 API에서만 원문을 반환하고 기본 관리자 상태 응답은 마스킹한다.
+- 이번 범위에서는 기존 암호화 저장 유틸리티가 없어 평문 컬럼을 최소 권한으로 사용한다. 운영 환경에서는 DB 또는 애플리케이션 계층 암호화가 추가로 필요하다.
 
 ### visit_support_reservations
 
@@ -1714,6 +1722,7 @@ Owner: 4번
 | `upgrade_candidates` | `JSONB` | yes | - | 업그레이드 후보 배열 |
 | `admin_note` | `TEXT` | yes | - | 관리자 메모 |
 | `resolved_at` | `TIMESTAMPTZ` | yes | - | 해결 시각 |
+| `reviewed_at` | `TIMESTAMPTZ` | yes | - | 관리자 검토가 최종 승인 또는 반려된 시각 (V126) |
 | `created_at` | `TIMESTAMPTZ` | no | - | 생성 시각 |
 | `updated_at` | `TIMESTAMPTZ` | yes | - | 수정 시각 |
 | `deleted_at` | `TIMESTAMPTZ` | yes | - | soft delete |

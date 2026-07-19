@@ -50,6 +50,8 @@ REQUIRED_PATHS = [
     "/api/agent-logs/{id}",
     "/api/as-tickets",
     "/api/as-tickets/{id}",
+    "/api/as-tickets/{id}/remote-support",
+    "/api/as-tickets/{id}/remote-support/access-code",
     "/api/admin/dashboard",
     "/api/admin/audit-logs/recent",
     "/api/admin/build-graph-layouts/default",
@@ -61,6 +63,10 @@ REQUIRED_PATHS = [
     "/api/admin/rag-evidence/{id}",
     "/api/admin/as-tickets",
     "/api/admin/as-tickets/{id}",
+    "/api/admin/as-tickets/{id}/remote-support",
+    "/api/admin/as-tickets/{id}/remote-support/access-code",
+    "/api/admin/as-tickets/{id}/remote-support/start",
+    "/api/admin/as-tickets/{id}/remote-support/complete",
 ]
 
 POST_JSON_REQUEST_SCHEMAS = {
@@ -81,6 +87,7 @@ POST_JSON_REQUEST_SCHEMAS = {
 
 PUT_JSON_REQUEST_SCHEMAS = {
     "/api/quote-drafts/current/apply-ai-build": "AiBuildApplyRequest",
+    "/api/as-tickets/{id}/remote-support/access-code": "RemoteAccessCodeRegistrationRequest",
     "/api/admin/build-graph-layouts/default": "BuildGraphLayoutSaveRequest",
 }
 
@@ -105,6 +112,9 @@ REQUIRED_SCHEMAS = [
     "ToolInvocationDto",
     "RagEvidenceDto",
     "AdminRagEvidenceDto",
+    "RemoteSupportStateDto",
+    "AdminRemoteSupportStateDto",
+    "RemoteAccessCodeResponse",
 ]
 
 REQUIRED_ERROR_CODES = {
