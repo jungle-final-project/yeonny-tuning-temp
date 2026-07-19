@@ -3097,7 +3097,13 @@ test('composite ghost for an AI linked GPU+PSU preview swaps both parts instead 
     totalPrice: 870000,
     itemCount: 3
   };
+  const putRequests: string[] = [];
   await page.route('**/api/quote-drafts/current**', async (route) => {
+    const request = route.request();
+    if (request.method() === 'PUT') {
+      const match = new URL(request.url()).pathname.match(/\/items\/([^/]+)$/);
+      if (match) putRequests.push(match[1]);
+    }
     await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(draft) });
   });
   const ghostResolveRequests: Array<Record<string, unknown>> = [];
@@ -3212,6 +3218,16 @@ test('composite ghost for an AI linked GPU+PSU preview swaps both parts instead 
   await expect(page.getByTestId('ai-chat-messages').getByText('파워까지 함께 바꾸는')).toHaveCount(2, { timeout: 10000 });
   await expect(panel.getByTestId('quote-composite-ghost-gauge')).toBeVisible();
   await expect(panel.getByTestId('quote-composite-compare-score')).toHaveText('745');
+
+  // 회귀: '이 제품으로 교체해 담기'는 고스트 점수를 만든 조합 그대로 담아야 한다 —
+  // GPU만 담으면 실제 견적은 "새 GPU + 옛 파워"가 되어 방금 보여준 745점과 정반대로 전력 FAIL이 된다.
+  putRequests.length = 0;
+  await panel.getByTestId('perf-apply-replace').click();
+  await expect.poll(() => putRequests.length, { timeout: 10000 }).toBe(2);
+  expect(putRequests).toEqual(expect.arrayContaining(['cand-gpu-5080', 'cand-psu-850']));
+  // 연계 파워를 GPU보다 먼저 담아 중간 상태에서도 전력이 모자라지 않게 한다.
+  expect(putRequests[0]).toBe('cand-psu-850');
+  await expect(panel.getByTestId('perf-apply-error')).toHaveCount(0);
 });
 
 test('drives the candidate popover: open, dismiss without picking, pick WARN, and clear', async ({ page }) => {

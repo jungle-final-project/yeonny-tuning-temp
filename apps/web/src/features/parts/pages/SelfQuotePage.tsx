@@ -167,6 +167,20 @@ function SelfQuoteSlotBoardPage() {
     };
   }, []);
 
+  /**
+   * 교체해 담기 — 비교가 보여준 조합 그대로 담는다.
+   * AI 연계 변경안(예: 새 GPU에 필요한 파워)은 고스트 종합점수에 이미 포함돼 있으므로,
+   * 주 부품만 담으면 실제 견적이 "새 GPU + 옛 파워"가 되어 방금 보여준 점수와 반대로 전력 FAIL이 된다.
+   * 연계 부품을 먼저 담아 중간 상태에서도 전력이 모자라지 않게 한다.
+   */
+  const applyComparisonTarget = useCallback(async (target: PerfCompareTarget) => {
+    for (const linked of target.linkedChanges ?? []) {
+      if (!linked.partId || linked.category === target.category) continue;
+      await addMutation.mutateAsync({ partId: linked.partId, quantity: 1 });
+    }
+    return addMutation.mutateAsync({ partId: target.partId, quantity: 1 });
+  }, [addMutation]);
+
   // 성능 비교 시작: 비교 대상을 저장하고 성능 패널로 부드럽게 이동한다(패널은 그리드 아래에 있어 안 보일 수 있다).
   const startPerfComparison = useCallback((target: PerfCompareTarget) => {
     setPerfComparison(target);
@@ -404,7 +418,7 @@ function SelfQuoteSlotBoardPage() {
                 comparison={perfComparison}
                 onClearComparison={() => setPerfComparison(null)}
                 onStartComparison={startPerfComparison}
-                onApplyComparison={(target) => addMutation.mutateAsync({ partId: target.partId, quantity: 1 })}
+                onApplyComparison={applyComparisonTarget}
                 isLoading={graphQuery.isLoading || graphQuery.isFetching}
                 isError={graphQuery.isError}
                 onRetry={() => void graphQuery.refetch()}
