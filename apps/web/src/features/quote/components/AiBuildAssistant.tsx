@@ -1,8 +1,9 @@
 import { type CSSProperties, type FormEvent, type ReactNode, memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
-import { ArrowRight, BarChart3, Bot, CheckCircle2, Download, LifeBuoy, Send, ShoppingCart, Sparkles, X } from 'lucide-react';
+import { ArrowDown, ArrowRight, BarChart3, Bot, CheckCircle2, Download, LifeBuoy, Send, ShoppingCart, Sparkles, X } from 'lucide-react';
 import { useLockedPageScroll } from '../../../hooks/useHiddenPageScrollbar';
+import { useStickToBottom } from '../../../hooks/useStickToBottom';
 import { AUTH_CHANGED_EVENT, ApiError, clearToken, getToken } from '../../../lib/api';
 import { AI_BUILD_ASSISTANT_CLOSE_EVENT, AI_BUILD_ASSISTANT_OPEN_EVENT, AI_BUILD_ASSISTANT_TOGGLE_EVENT, SUPPORT_CHAT_CLOSE_EVENT, SUPPORT_CHAT_OPEN_EVENT, requestPerfCompare, setAiAssistantOpen, type AiAssistantOpenDetail } from '../../../lib/events';
 import { applyAiBuildToQuoteDraft, getCurrentQuoteDraft, putQuoteDraftItem } from '../../parts/partsApi';
@@ -143,6 +144,8 @@ export function AiBuildAssistant({ surface = 'home', variant = 'floating', onBoa
   const queryClient = useQueryClient();
   const messagesEndRef = useRef<HTMLDivElement | null>(null);
   const centerMessagesScrollRef = useRef<HTMLDivElement | null>(null);
+  // 답변이 자라는 동안 최신 글자까지 따라가되, 사용자가 위로 올려 읽는 중에는 멈추고 버튼으로 되돌린다.
+  const stickToBottom = useStickToBottom();
   const centerScrollbarHideTimerRef = useRef<number | null>(null);
   const centerScrollbarVisibleRef = useRef(false);
   const isEmbedded = variant === 'embedded';
@@ -316,10 +319,12 @@ export function AiBuildAssistant({ surface = 'home', variant = 'floating', onBoa
     };
   }, []);
 
+  // 패널을 열면 최신 대화부터 보여준다. 이후 답변이 자라는 동안의 추적은 useStickToBottom이 맡는다 —
+  // 여기서 메시지 개수/updatedAt까지 보면 사용자가 위로 올려 읽는 중에도 강제로 끌어내리게 된다.
   useEffect(() => {
     if (!isPanelOpen) return;
-    messagesEndRef.current?.scrollIntoView({ block: 'end' });
-  }, [isPanelOpen, session.messages.length, session.updatedAt]);
+    stickToBottom.scrollToBottom();
+  }, [isPanelOpen, stickToBottom.scrollToBottom]);
 
   const updateCenterScrollbar = useCallback((visible: boolean) => {
     centerScrollbarVisibleRef.current = visible;
@@ -460,6 +465,9 @@ export function AiBuildAssistant({ surface = 'home', variant = 'floating', onBoa
     }
 
     setIsSending(true);
+    // 사용자가 직접 보낸 질문은 위로 올려 읽던 중이어도 바닥으로 데려간다(본인이 시작한 행동).
+    // AI가 스스로 자라는 답변만 "끌어내리지 않음" 규칙의 대상이다.
+    stickToBottom.scrollToBottom();
 
     // 응답 대기 표시 arm — fastCategory route는 위에서 이미 return했으므로 여기까지 오지 않는다.
     // 300ms 타이머가 발화하기 전에 응답이 오면 finally가 타이머를 지워 버블이 뜨지 않는다.
@@ -874,7 +882,10 @@ export function AiBuildAssistant({ surface = 'home', variant = 'floating', onBoa
                 {centeredCloseButton}
                 <div className="relative min-h-0">
                   <div
-                    ref={centerMessagesScrollRef}
+                    ref={(node) => {
+                      centerMessagesScrollRef.current = node;
+                      stickToBottom.containerRef(node);
+                    }}
                     data-testid="ai-chat-messages"
                     className="scrollbar-hidden max-h-[calc(100dvh-14rem)] space-y-6 overflow-y-auto pb-4 pt-3"
                     onWheel={(event) => {
@@ -905,6 +916,10 @@ export function AiBuildAssistant({ surface = 'home', variant = 'floating', onBoa
                     ) : null}
                     <div ref={messagesEndRef} />
                   </div>
+
+                  {stickToBottom.hasNewBelow ? (
+                    <NewMessagesBelowButton onClick={() => stickToBottom.scrollToBottom(true)} />
+                  ) : null}
 
                   {centerScrollbar.canScroll ? (
                     <div
@@ -1008,7 +1023,8 @@ export function AiBuildAssistant({ surface = 'home', variant = 'floating', onBoa
             </button>
           </div>
         ) : null}
-        <div data-testid="ai-chat-messages" className="min-h-0 flex-1 space-y-3 overflow-y-auto px-4 py-4">
+        <div className="relative flex min-h-0 flex-1 flex-col">
+        <div ref={stickToBottom.containerRef} data-testid="ai-chat-messages" className="min-h-0 flex-1 space-y-3 overflow-y-auto px-4 py-4">
           {session.messages.map((message, messageIndex) => (
             <ChatMessage
               key={message.id}
@@ -1025,6 +1041,10 @@ export function AiBuildAssistant({ surface = 'home', variant = 'floating', onBoa
             <AiChatPendingBubble excerpt={pending.excerpt} />
           ) : null}
           <div ref={messagesEndRef} />
+        </div>
+        {stickToBottom.hasNewBelow ? (
+          <NewMessagesBelowButton onClick={() => stickToBottom.scrollToBottom(true)} />
+        ) : null}
         </div>
 
         <form autoComplete="off" onSubmit={submitPrompt} className={isDockedAssistant || isEmbedded ? 'border-t border-slate-200 bg-[#f7f7f8] p-3' : 'border-t border-slate-200 bg-white p-3'}>
@@ -1209,6 +1229,26 @@ function FadeInBlock({ children }: { children: ReactNode }) {
   return (
     <div className={`transition-all duration-300 ease-out ${shown ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-1'}`}>
       {children}
+    </div>
+  );
+}
+
+/**
+ * 위로 올려 읽는 중 새 답변이 도착했을 때만 뜨는 복귀 버튼 — 자동 스크롤로 끌어내리는 대신
+ * 사용자가 직접 내려갈 수단을 준다(읽던 위치 보존). 바닥에 닿으면 자동 추적이 다시 켜진다.
+ */
+function NewMessagesBelowButton({ onClick }: { onClick: () => void }) {
+  return (
+    <div className="pointer-events-none absolute inset-x-0 bottom-3 z-10 flex justify-center">
+      <button
+        type="button"
+        data-testid="ai-chat-scroll-to-latest"
+        onClick={onClick}
+        className="pointer-events-auto inline-flex items-center gap-1.5 rounded-full border border-[#e2c3ad] bg-white px-3 py-1.5 text-[11px] font-black text-[#c45c22] shadow-lg transition hover:bg-[#fff4ec] focus:outline-none focus:ring-4 focus:ring-[#de6c2d]/20"
+      >
+        <ArrowDown size={13} />
+        새 메시지
+      </button>
     </div>
   );
 }

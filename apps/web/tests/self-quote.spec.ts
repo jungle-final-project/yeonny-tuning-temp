@@ -6878,3 +6878,66 @@ test('셀프견적 임베드 챗봇도 느린 응답 동안 박스 없는 대기
   await expect(page.getByText('셀프견적 응답이 도착했습니다.')).toBeVisible();
   await expect(pending).toHaveCount(0);
 });
+
+// 답변이 단계별로 채워지는 동안 최신 글자까지 따라가되, 사용자가 위로 올려 읽는 중에는 끌어내리지 않는다.
+test('AI 답변이 길어져도 바닥을 따라가고, 위로 올려 읽는 중에는 새 메시지 버튼으로만 복귀한다', async ({ page }) => {
+  await loginAsUser(page);
+  await page.addInitScript(() => {
+    localStorage.setItem('buildgraph.authUser', JSON.stringify({ id: 'user-follow-scroll', email: 'user@example.com', name: 'Demo User', role: 'USER' }));
+  });
+  await page.route('**/api/quote-drafts/current**', async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({ id: 'draft-follow-scroll', status: 'ACTIVE', name: '셀프 견적', items: [], totalPrice: 0, itemCount: 0 })
+    });
+  });
+  await page.route('**/api/parts**', async (route) => {
+    await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ items: [], page: 0, size: 20, total: 0 }) });
+  });
+  // 컨테이너를 확실히 넘치게 만드는 긴 답변 — 문장이 하나씩 드러나며 높이가 계속 자란다.
+  const longAnswer = Array.from({ length: 12 }, (_, index) => (
+    `${index + 1}번째 근거 문단입니다. 현재 구성의 전력·발열·장착 여유와 게임별 예상 성능을 근거 수치와 함께 길게 설명하는 문단입니다.`
+  )).join(' ');
+  await page.route('**/api/ai/build-chat', async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({ answerType: 'GENERAL', message: longAnswer, builds: [], warnings: [] })
+    });
+  });
+
+  await page.goto('/self-quote');
+  const messages = page.getByTestId('ai-chat-messages');
+  await page.getByRole('textbox', { name: 'AI 챗봇에게 PC 사양 질문' }).fill('현재 견적 평가해줘');
+  await page.getByRole('button', { name: '질문 보내기' }).click();
+  await expect(messages).toContainText('1번째 근거 문단입니다');
+
+  // 답변이 문장 단위로 드러나며 컨테이너를 넘길 때까지 기다린다(메시지 개수는 그대로인 성장 구간).
+  await expect.poll(async () => messages.evaluate((element) => (
+    element.scrollHeight - element.clientHeight
+  )), { timeout: 15000 }).toBeGreaterThan(100);
+  // 마지막 문단까지 드러난 뒤에도 바닥에 붙어 있어야 한다 — 개수만 보던 기존 방식은 여기서 뒤처졌다.
+  // (문장이 하나씩 드러나므로 기본 5초보다 넉넉한 대기가 필요하다.)
+  await expect(messages).toContainText('12번째 근거 문단입니다', { timeout: 20000 });
+  await expect.poll(async () => messages.evaluate((element) => (
+    element.scrollHeight - element.scrollTop - element.clientHeight
+  )), { timeout: 10000 }).toBeLessThanOrEqual(48);
+
+  // AI가 아직 쓰는 중에 위로 올려 읽으면: 남은 문장이 계속 붙어도 끌어내리지 않고 버튼만 띄운다.
+  await page.getByRole('textbox', { name: 'AI 챗봇에게 PC 사양 질문' }).fill('하나 더 물어볼게');
+  await page.getByRole('button', { name: '질문 보내기' }).click();
+  await expect(messages).toContainText('2번째 근거 문단입니다');
+  await messages.evaluate((element) => { element.scrollTop = 0; });
+
+  const scrollToLatest = page.getByTestId('ai-chat-scroll-to-latest');
+  await expect(scrollToLatest).toBeVisible();
+  expect(await messages.evaluate((element) => element.scrollTop)).toBeLessThan(200);
+
+  // 버튼을 누르면 최신 글자로 복귀하고, 바닥에 닿았으므로 버튼은 사라진다(추적 재개).
+  await scrollToLatest.click();
+  await expect.poll(async () => messages.evaluate((element) => (
+    element.scrollHeight - element.scrollTop - element.clientHeight
+  )), { timeout: 10000 }).toBeLessThanOrEqual(48);
+  await expect(scrollToLatest).toHaveCount(0);
+});
