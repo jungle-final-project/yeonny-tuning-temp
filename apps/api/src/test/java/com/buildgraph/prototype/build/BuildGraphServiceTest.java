@@ -31,7 +31,7 @@ class BuildGraphServiceTest {
     private final BuildGraphService buildGraphService = new BuildGraphService(
             partQuery,
             buildGraphLayoutService,
-            new BuildEvaluationService(partQuery, toolCheckService, buildCompositeScoreService, new BuildScoreAdviceService())
+            new BuildEvaluationService(partQuery, toolCheckService, buildCompositeScoreService, new BuildScoreAdviceService(), null)
     );
 
     BuildGraphServiceTest() {
@@ -391,7 +391,7 @@ class BuildGraphServiceTest {
                 MockData.map("memoryType", "DDR5", "moduleCount", 2)));
         BuildGraphService realToolService = new BuildGraphService(
                 partQuery, buildGraphLayoutService,
-                new BuildEvaluationService(partQuery, new ToolCheckService(jdbcTemplate), buildCompositeScoreService, new BuildScoreAdviceService()));
+                new BuildEvaluationService(partQuery, new ToolCheckService(jdbcTemplate), buildCompositeScoreService, new BuildScoreAdviceService(), null));
 
         Map<String, Object> graph = realToolService.resolve(currentUser(), Map.of(
                 "source", "AI_BUILD",
@@ -426,7 +426,7 @@ class BuildGraphServiceTest {
                 MockData.map("memoryType", "DDR5", "moduleCount", 2)));
         BuildGraphService realToolService = new BuildGraphService(
                 partQuery, buildGraphLayoutService,
-                new BuildEvaluationService(partQuery, new ToolCheckService(jdbcTemplate), buildCompositeScoreService, new BuildScoreAdviceService()));
+                new BuildEvaluationService(partQuery, new ToolCheckService(jdbcTemplate), buildCompositeScoreService, new BuildScoreAdviceService(), null));
 
         Map<String, Object> graph = realToolService.resolve(currentUser(), Map.of(
                 "source", "AI_BUILD",

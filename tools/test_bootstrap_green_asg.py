@@ -100,7 +100,47 @@ class GreenAsgBootstrapContractTest(unittest.TestCase):
                 "BUILDGRAPH_SCHEDULING_ENABLED"
             ),
         )
-        for service_name in ("api", "xgb-reranker"):
+        self.assertEqual(
+            "false",
+            services["api"].get("environment", {}).get(
+                "RECOMMENDATION_EVENTS_WORKER_ENABLED"
+            ),
+        )
+        self.assertEqual(
+            "${API_IMAGE_URI:?API_IMAGE_URI is required}",
+            services["recommendation-event-worker"].get("image"),
+        )
+        self.assertEqual(
+            "true",
+            services["recommendation-event-worker"]
+            .get("environment", {})
+            .get("RECOMMENDATION_EVENTS_WORKER_ENABLED"),
+        )
+        self.assertEqual(
+            "false",
+            services["recommendation-event-worker"]
+            .get("environment", {})
+            .get("AGENT_WORKER_ENABLED"),
+        )
+        self.assertEqual(
+            "false",
+            services["recommendation-event-worker"]
+            .get("environment", {})
+            .get("PART_PRICE_REFRESH_WORKER_ENABLED"),
+        )
+        self.assertEqual(
+            "false",
+            services["recommendation-event-worker"]
+            .get("environment", {})
+            .get("BUILDGRAPH_AUTH_REFRESH_TOKEN_CLEANUP_ENABLED"),
+        )
+        self.assertEqual(
+            "false",
+            services["recommendation-event-worker"]
+            .get("environment", {})
+            .get("BUILDGRAPH_AUTH_REFRESH_TOKEN_CLEANUP_RUN_ON_STARTUP"),
+        )
+        for service_name in ("api", "recommendation-event-worker", "xgb-reranker"):
             with self.subTest(service=service_name):
                 self.assertEqual(
                     "${AWS_STS_REGIONAL_ENDPOINTS:-regional}",
@@ -313,7 +353,7 @@ class GreenAsgBootstrapExecutionTest(unittest.TestCase):
               inspect)
                 container_id="${*: -1}"
                 case "$container_id" in
-                  api-container)
+                  api-container|recommendation-event-worker-container)
                     dotenv_value API_IMAGE_URI "$FAKE_IMAGE_MANIFEST"
                     ;;
                   xgb-reranker-container)

@@ -26,24 +26,30 @@ public class QuoteDraftQueryService {
     // @Transactional이 응답 read-back(3-way JOIN)까지 감싸 커밋 전 락·커넥션을 오래 잡았다(idle-in-transaction 본류).
     // 쓰기 구간만 짧게 감싸 즉시 커밋하기 위해 프로그래매틱 트랜잭션을 쓴다.
     private final TransactionTemplate transactionTemplate;
+    // draft 읽기 캐시 — 조회는 캐시를 타고, 이 클래스의 모든 쓰기 경로가 커밋 직후 무효화한다.
+    private final QuoteDraftReadCache draftReadCache;
 
     public QuoteDraftQueryService(
             JdbcTemplate jdbcTemplate,
             CurrentUserService currentUserService,
-            PlatformTransactionManager transactionManager
+            PlatformTransactionManager transactionManager,
+            QuoteDraftReadCache draftReadCache
     ) {
         this.jdbcTemplate = jdbcTemplate;
         this.currentUserService = currentUserService;
         this.transactionTemplate = new TransactionTemplate(transactionManager);
+        this.draftReadCache = draftReadCache;
     }
 
     public Map<String, Object> current(String authorization) {
         Long userId = currentUserId(authorization);
-        Map<String, Object> draft = activeDraft(userId);
-        if (draft == null) {
-            return emptyDraft();
-        }
-        return draftMap(draft);
+        return draftReadCache.response(userId, () -> {
+            Map<String, Object> draft = activeDraft(userId);
+            if (draft == null) {
+                return emptyDraft();
+            }
+            return draftMap(draft);
+        });
     }
 
     public Map<String, Object> putItem(String authorization, String partId, Map<String, Object> request) {
@@ -58,6 +64,8 @@ public class QuoteDraftQueryService {
             upsertDraftItem(draftId, part, quantity);
             return touchDraftReturning(draftId);
         });
+        // 커밋 직후 무효화 — 응답은 아래에서 직접 재조립하고(캐시에 되쓰지 않음), 다음 읽기가 재적재한다.
+        draftReadCache.invalidate(userId);
         return draftMap(draft);
     }
 
@@ -93,6 +101,7 @@ public class QuoteDraftQueryService {
                             .toList());
             return touchDraftReturning(draftId);
         });
+        draftReadCache.invalidate(userId);
         return draftMap(draft);
     }
 
@@ -114,6 +123,7 @@ public class QuoteDraftQueryService {
         if (updated == 0) {
             throw new ResponseStatusException(HttpStatus.NOT_FOUND, "견적초안에 담긴 부품을 찾을 수 없습니다.");
         }
+        draftReadCache.invalidate(userId);
         // 이 경로는 draft 행을 건드리지 않으므로 진입 시 읽은 행을 그대로 응답에 쓴다 — 재조회 중복 제거.
         return draftMap(draft);
     }
@@ -135,6 +145,7 @@ public class QuoteDraftQueryService {
                   AND part_id = ?
                   AND deleted_at IS NULL
                 """, longValue(draft, "internal_id"), longValue(part, "internal_id"));
+        draftReadCache.invalidate(userId);
         // 이 경로는 draft 행을 건드리지 않으므로 진입 시 읽은 행을 그대로 응답에 쓴다 — 재조회 중복 제거.
         return draftMap(draft);
     }

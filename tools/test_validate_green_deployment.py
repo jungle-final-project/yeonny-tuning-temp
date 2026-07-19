@@ -28,7 +28,7 @@ WORKFLOWS = {
     "release": ROOT / ".github/workflows/release-green-web-asg.yml",
 }
 
-EXPECTED_SERVICES = {"nginx", "api", "xgb-reranker"}
+EXPECTED_SERVICES = {"nginx", "api", "recommendation-event-worker", "xgb-reranker"}
 EXPECTED_API_IMAGE = "${API_IMAGE_URI:?API_IMAGE_URI is required}"
 EXPECTED_XGB_IMAGE = "${XGB_IMAGE_URI:?XGB_IMAGE_URI is required}"
 GREEN_CLOUDFRONT_VARIABLE = "vars.GREEN_CF_DISTRIBUTION_ID"
@@ -82,7 +82,7 @@ class GreenDeploymentContractTest(unittest.TestCase):
         missing = [str(path.relative_to(ROOT)) for path in required if not path.is_file()]
         self.assertEqual([], missing, f"missing Phase 8 files: {missing}")
 
-    def test_ecr_compose_has_only_three_runtime_services(self) -> None:
+    def test_ecr_compose_has_expected_runtime_services(self) -> None:
         compose = load_yaml(ECR_COMPOSE)
         services = compose.get("services")
         self.assertIsInstance(services, dict)
@@ -92,8 +92,13 @@ class GreenDeploymentContractTest(unittest.TestCase):
         services = load_yaml(ECR_COMPOSE)["services"]
 
         self.assertNotIn("build", services["api"])
+        self.assertNotIn("build", services["recommendation-event-worker"])
         self.assertNotIn("build", services["xgb-reranker"])
         self.assertEqual(EXPECTED_API_IMAGE, services["api"].get("image"))
+        self.assertEqual(
+            EXPECTED_API_IMAGE,
+            services["recommendation-event-worker"].get("image"),
+        )
         self.assertEqual(EXPECTED_XGB_IMAGE, services["xgb-reranker"].get("image"))
 
     def test_only_nginx_publishes_host_port_80(self) -> None:
@@ -101,9 +106,36 @@ class GreenDeploymentContractTest(unittest.TestCase):
 
         self.assertEqual(["80:80"], published_ports(services["nginx"]))
         self.assertEqual([], published_ports(services["api"]))
+        self.assertEqual([], published_ports(services["recommendation-event-worker"]))
         self.assertEqual([], published_ports(services["xgb-reranker"]))
         self.assertEqual(["8080"], services["api"].get("expose"))
         self.assertEqual(["8091"], services["xgb-reranker"].get("expose"))
+
+    def test_recommendation_event_worker_runs_only_recommendation_consumer(self) -> None:
+        services = load_yaml(ECR_COMPOSE)["services"]
+        api_environment = services["api"].get("environment", {})
+        worker_environment = services["recommendation-event-worker"].get("environment", {})
+
+        self.assertEqual("false", api_environment.get("RECOMMENDATION_EVENTS_WORKER_ENABLED"))
+        self.assertEqual(
+            "${AGENT_WORKER_ENABLED:-true}",
+            api_environment.get("AGENT_WORKER_ENABLED"),
+        )
+        self.assertEqual(
+            "${PART_PRICE_REFRESH_WORKER_ENABLED:-true}",
+            api_environment.get("PART_PRICE_REFRESH_WORKER_ENABLED"),
+        )
+        self.assertEqual("true", worker_environment.get("RECOMMENDATION_EVENTS_WORKER_ENABLED"))
+        self.assertEqual("false", worker_environment.get("AGENT_WORKER_ENABLED"))
+        self.assertEqual("false", worker_environment.get("PART_PRICE_REFRESH_WORKER_ENABLED"))
+        self.assertEqual(
+            "false",
+            worker_environment.get("BUILDGRAPH_AUTH_REFRESH_TOKEN_CLEANUP_ENABLED"),
+        )
+        self.assertEqual(
+            "false",
+            worker_environment.get("BUILDGRAPH_AUTH_REFRESH_TOKEN_CLEANUP_RUN_ON_STARTUP"),
+        )
 
     def test_deploy_script_has_ecr_ssm_runtime_safety_contract(self) -> None:
         script = DEPLOY_SCRIPT.read_text(encoding="utf-8")
@@ -474,7 +506,7 @@ class GreenDeploymentImageSelectionRegressionTest(unittest.TestCase):
                 if [[ "$format" == *State.Health.Status* ]]; then
                   printf '%s\n' 'healthy'
                 elif [[ "$format" == *Config.Image* ]]; then
-                  if [[ "$container_id" == api-* ]]; then
+                  if [[ "$container_id" == api-* || "$container_id" == recommendation-event-worker-* ]]; then
                     cat "$state_dir/api.image"
                   else
                     cat "$state_dir/xgb-reranker.image"
@@ -529,20 +561,25 @@ class GreenDeploymentImageSelectionRegressionTest(unittest.TestCase):
                     exit 0
                     ;;
                   up)
-                    target_service=''
+                    update_api=false
+                    update_xgb=false
                     for argument in "$@"; do
                       case "$argument" in
-                        api|xgb-reranker)
-                          target_service="$argument"
+                        api|recommendation-event-worker)
+                          update_api=true
+                          ;;
+                        xgb-reranker)
+                          update_xgb=true
                           ;;
                       esac
                     done
-                    [[ -n "$target_service" ]]
+                    [[ "$update_api" == 'true' || "$update_xgb" == 'true' ]]
 
                     if [[ "${FAKE_DOCKER_REFUSE_TARGET_UPDATE:-false}" != 'true' ]]; then
-                      if [[ "$target_service" == 'api' ]]; then
+                      if [[ "$update_api" == 'true' ]]; then
                         printf '%s\n' "$resolved_api" >"$state_dir/api.image"
-                      else
+                      fi
+                      if [[ "$update_xgb" == 'true' ]]; then
                         printf '%s\n' "$resolved_xgb" >"$state_dir/xgb-reranker.image"
                       fi
                     fi
@@ -551,7 +588,7 @@ class GreenDeploymentImageSelectionRegressionTest(unittest.TestCase):
                     service=''
                     for argument in "$@"; do
                       case "$argument" in
-                        api|xgb-reranker)
+                        api|recommendation-event-worker|xgb-reranker)
                           service="$argument"
                           ;;
                       esac

@@ -5,6 +5,7 @@ import com.buildgraph.prototype.part.query.PartQueryCachedLoader;
 import com.buildgraph.prototype.part.tool.ToolApplicabilityPolicy;
 import com.buildgraph.prototype.part.tool.ToolBuildPart;
 import com.buildgraph.prototype.part.tool.ToolCheckService;
+import com.buildgraph.prototype.quote.QuoteDraftReadCache;
 import java.util.List;
 import java.util.Map;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -18,21 +19,25 @@ public class BuildEvaluationService {
     private final ToolCheckService toolCheckService;
     private final BuildCompositeScoreService buildCompositeScoreService;
     private final BuildScoreAdviceService buildScoreAdviceService;
+    // 현재 draft 파츠의 단일 출처(쓰기 즉시 무효화) — resolve 경로의 draft 재조회를 캐시로 대체한다.
+    private final QuoteDraftReadCache draftReadCache;
 
     @Autowired
     public BuildEvaluationService(
             PartQuery partQuery,
             ToolCheckService toolCheckService,
             BuildCompositeScoreService buildCompositeScoreService,
-            BuildScoreAdviceService buildScoreAdviceService
+            BuildScoreAdviceService buildScoreAdviceService,
+            QuoteDraftReadCache draftReadCache
     ) {
         this.partQuery = partQuery;
         this.toolCheckService = toolCheckService;
         this.buildCompositeScoreService = buildCompositeScoreService;
         this.buildScoreAdviceService = buildScoreAdviceService;
+        this.draftReadCache = draftReadCache;
     }
 
-    // 기존 테스트/내부 편의 생성자도 동일한 PartQuery 경로를 사용한다. 실제 Bean은 위 생성자에서 Caffeine CacheManager를 주입받는다.
+    // 기존 테스트/내부 편의 생성자 — draft 캐시 없이 기존 PartQuery 경로를 그대로 쓴다(테스트의 jdbc 목 유지).
     public BuildEvaluationService(
             JdbcTemplate jdbcTemplate,
             ToolCheckService toolCheckService,
@@ -43,7 +48,8 @@ public class BuildEvaluationService {
                 new PartQuery(jdbcTemplate, new PartQueryCachedLoader(new NoOpCacheManager(), jdbcTemplate)),
                 toolCheckService,
                 buildCompositeScoreService,
-                buildScoreAdviceService
+                buildScoreAdviceService,
+                null
         );
     }
 
@@ -105,7 +111,11 @@ public class BuildEvaluationService {
             String focusCategory,
             String focusTool
     ) {
-        return evaluate(partQuery.partsByActiveDraftUserId(userInternalId), requestedBudget, focusCategory, focusTool);
+        // 운영 빈은 draft read 캐시(쓰기 즉시 무효화)를 타고, 캐시 없는 편의 생성자(테스트)는 기존 SQL 경로 유지.
+        List<ToolBuildPart> parts = draftReadCache != null
+                ? draftReadCache.toolParts(userInternalId)
+                : partQuery.partsByActiveDraftUserId(userInternalId);
+        return evaluate(parts, requestedBudget, focusCategory, focusTool);
     }
 
     private static int total(List<ToolBuildPart> parts) {

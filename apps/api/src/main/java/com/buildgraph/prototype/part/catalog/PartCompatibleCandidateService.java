@@ -7,6 +7,7 @@ import com.buildgraph.prototype.part.tool.BuildSizeFitPolicy;
 import com.buildgraph.prototype.part.tool.ToolApplicabilityPolicy;
 import com.buildgraph.prototype.part.tool.ToolBuildPart;
 import com.buildgraph.prototype.part.tool.ToolCheckService;
+import com.buildgraph.prototype.quote.QuoteDraftReadCache;
 import com.buildgraph.prototype.user.CurrentUserService;
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -29,12 +30,15 @@ public class PartCompatibleCandidateService {
     private final JdbcTemplate jdbcTemplate;
     private final ToolCheckService toolCheckService;
     private final PartQuery partQuery;
+    // draft 파츠의 단일 출처(쓰기 즉시 무효화) — test-only 생성자에서는 null이라 기존 SQL 폴백을 탄다.
+    private final QuoteDraftReadCache draftReadCache;
 
     @Autowired
-    public PartCompatibleCandidateService(JdbcTemplate jdbcTemplate, ToolCheckService toolCheckService, PartQuery partQuery) {
+    public PartCompatibleCandidateService(JdbcTemplate jdbcTemplate, ToolCheckService toolCheckService, PartQuery partQuery, QuoteDraftReadCache draftReadCache) {
         this.jdbcTemplate = jdbcTemplate;
         this.toolCheckService = toolCheckService;
         this.partQuery = partQuery;
+        this.draftReadCache = draftReadCache;
     }
 
     /* Test-only constructor; the Spring bean uses the shared PartQuery constructor above. */
@@ -42,6 +46,7 @@ public class PartCompatibleCandidateService {
         this.jdbcTemplate = jdbcTemplate;
         this.toolCheckService = toolCheckService;
         this.partQuery = null;
+        this.draftReadCache = null;
     }
 
     public Map<String, Object> compatibleCandidates(CurrentUserService.CurrentUser user, Map<String, Object> request) {
@@ -327,6 +332,10 @@ public class PartCompatibleCandidateService {
     }
 
     private List<ToolBuildPart> currentQuoteDraftParts(CurrentUserService.CurrentUser user) {
+        // draft read 캐시가 있으면(운영 빈) 활성 draft 조회+파츠 조회를 캐시 1곳으로 대체한다.
+        if (draftReadCache != null) {
+            return draftReadCache.toolParts(user.internalId());
+        }
         List<Map<String, Object>> drafts = jdbcTemplate.queryForList("""
                 SELECT id AS internal_id,
                        public_id::text AS id,

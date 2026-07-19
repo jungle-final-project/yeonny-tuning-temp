@@ -186,10 +186,10 @@ class PartQueryServiceTest {
         service.parts(user, "GPU", null, null, null, null, null, 0, 10, "price_asc", "QUOTE_DRAFT_CURRENT", null, null);
         service.parts(user, "GPU", null, null, null, null, null, 1, 10, "price_asc", "QUOTE_DRAFT_CURRENT", null, null);
 
-        // 같은 (서명, 페이지)는 캐시 히트 — 평가·count는 페이지당 1회만.
+        // 같은 (서명, 페이지)는 캐시 히트 — 평가는 페이지당 1회, count는 검색 조건 키라 페이지와 무관하게 1회.
         verify(compatibilityService, org.mockito.Mockito.times(2))
                 .partRowsWithCompatibility(eq(user), eq("QUOTE_DRAFT_CURRENT"), eq("GPU"), eq(null), eq(null), anyList());
-        verify(jdbcTemplate, org.mockito.Mockito.times(2))
+        verify(jdbcTemplate, org.mockito.Mockito.times(1))
                 .queryForObject(anyString(), eq(Integer.class), any(Object[].class));
     }
 

@@ -5,6 +5,7 @@ import com.buildgraph.prototype.common.MockData;
 import com.buildgraph.prototype.common.ReadThroughTtlCache;
 import com.buildgraph.prototype.part.query.PartDetailCachedLoader;
 import com.buildgraph.prototype.part.query.PartDetailDto;
+import com.buildgraph.prototype.quote.QuoteDraftReadCache;
 import com.buildgraph.prototype.recommendation.PartContextRecommendationService;
 import com.buildgraph.prototype.user.CurrentUserService;
 import java.time.Duration;
@@ -40,6 +41,11 @@ public class PartQueryService {
     private final ReadThroughTtlCache<CompatibilityRowsKey, List<Map<String, Object>>> compatibilityRowsCache;
     // 페이지-스코프 평가(명시적 정렬) 응답 캐시 — 값에 total까지 담아 히트 시 DB 왕복이 draft 서명 1쿼리로 끝난다.
     private final ReadThroughTtlCache<CompatibilityRowsKey, Map<String, Object>> pagedCompatibilityCache;
+    // 후보 목록 count(*)는 draft와 무관한 카탈로그 수치 — 서명 키 캐시에 얹으면 담기마다 재실행되므로
+    // (부하 실측 PI: count가 draft 읽기 다음 순위) 검색 조건만 키로 하는 카탈로그 TTL 캐시로 분리한다.
+    private final ReadThroughTtlCache<PartSearch, Integer> partsCountCache;
+    // draft 서명·현재 파츠의 단일 출처 — 담기/삭제 등 쓰기가 즉시 무효화한다.
+    private final QuoteDraftReadCache draftReadCache;
 
     @Autowired
     public PartQueryService(
@@ -47,6 +53,7 @@ public class PartQueryService {
             PartCompatibleCandidateService compatibilityService,
             PartContextRecommendationService recommendationService,
             PartDetailCachedLoader partDetailCachedLoader,
+            QuoteDraftReadCache draftReadCache,
             @Value("${part.query-cache.ttl-seconds:30}") long cacheTtlSeconds,
             @Value("${part.compatibility-cache.ttl-seconds:15}") long compatibilityCacheTtlSeconds
     ) {
@@ -54,19 +61,22 @@ public class PartQueryService {
         this.compatibilityService = compatibilityService;
         this.recommendationService = recommendationService;
         this.partDetailCachedLoader = partDetailCachedLoader;
+        this.draftReadCache = draftReadCache;
         this.partsCache = new ReadThroughTtlCache<>(Duration.ofSeconds(cacheTtlSeconds), 512);
         this.compatibilityRowsCache = new ReadThroughTtlCache<>(Duration.ofSeconds(compatibilityCacheTtlSeconds), 1024);
         this.pagedCompatibilityCache = new ReadThroughTtlCache<>(Duration.ofSeconds(compatibilityCacheTtlSeconds), 2048);
+        this.partsCountCache = new ReadThroughTtlCache<>(Duration.ofSeconds(cacheTtlSeconds), 512);
     }
 
-    // 편의 생성자(테스트/내부용) — 캐시 기본 TTL(카탈로그 30초, 호환성 15초).
+    // 편의 생성자(테스트/내부용) — 캐시 기본 TTL(카탈로그 30초, 호환성 15초), draft 캐시는 TTL 0(항상 로더 실행).
     public PartQueryService(
             JdbcTemplate jdbcTemplate,
             PartCompatibleCandidateService compatibilityService,
             PartContextRecommendationService recommendationService,
             PartDetailCachedLoader partDetailCachedLoader
     ) {
-        this(jdbcTemplate, compatibilityService, recommendationService, partDetailCachedLoader, 30L, 15L);
+        this(jdbcTemplate, compatibilityService, recommendationService, partDetailCachedLoader,
+                new QuoteDraftReadCache(jdbcTemplate), 30L, 15L);
     }
 
     public Map<String, Object> parts(
@@ -435,9 +445,17 @@ public class PartQueryService {
                             .toList(),
                     "page", search.page(),
                     "size", search.size(),
-                    "total", countParts(search)
+                    "total", cachedCountParts(search)
             );
         });
+    }
+
+    // count(*)는 페이지·정렬·draft와 무관 — 검색 조건만으로 정규화한 키에 카탈로그 TTL로 캐시한다.
+    private Integer cachedCountParts(PartSearch search) {
+        PartSearch countKey = new PartSearch(
+                search.category(), search.query(), search.manufacturer(), search.status(),
+                search.minPrice(), search.maxPrice(), Integer.valueOf(0), Integer.valueOf(1), null);
+        return partsCountCache.get(countKey, () -> countParts(search));
     }
 
     private List<Map<String, Object>> evaluatedCompatibilityRows(CurrentUserService.CurrentUser user, PartSearch search, String compatibilitySource, String compatibilityMode, String replaceTargetPartId) {
@@ -457,38 +475,12 @@ public class PartQueryService {
     }
 
     /**
-     * 활성 draft의 내용 서명 — (draft id, 항목별 part_id×quantity)만 읽는 가벼운 1쿼리.
+     * 활성 draft의 내용 서명 — QuoteDraftReadCache의 light 스냅샷에서 파생한다(쓰기 즉시 무효화).
      * 담기/교체(upsert)·AI 적용·수량 변경·삭제(soft-delete) 전부가 서명을 바꿔 캐시 키가 즉시 갈린다.
-     * quote_drafts.updated_at은 수량 변경·삭제 경로에서 갱신되지 않아 버전 키로 쓸 수 없다.
      * draft가 없으면 고정 서명 — 빈 draft 사용자끼리는 같은 평가본을 공유해도 결과가 같다.
      */
     private String draftSignature(CurrentUserService.CurrentUser user) {
-        List<Map<String, Object>> rows = jdbcTemplate.queryForList("""
-                SELECT qd.id AS draft_id, qdi.part_id, qdi.quantity
-                FROM (
-                  SELECT id
-                  FROM quote_drafts
-                  WHERE user_id = ?
-                    AND status = 'ACTIVE'
-                    AND deleted_at IS NULL
-                  ORDER BY updated_at DESC, id DESC
-                  LIMIT 1
-                ) qd
-                LEFT JOIN quote_draft_items qdi
-                  ON qdi.quote_draft_id = qd.id
-                 AND qdi.deleted_at IS NULL
-                ORDER BY qdi.part_id ASC, qdi.id ASC
-                """, user.internalId());
-        if (rows.isEmpty()) {
-            return "no-draft";
-        }
-        StringBuilder signature = new StringBuilder();
-        for (Map<String, Object> row : rows) {
-            signature.append(row.get("draft_id")).append(':')
-                    .append(row.get("part_id")).append('x')
-                    .append(row.get("quantity")).append(';');
-        }
-        return signature.toString();
+        return draftReadCache.signature(user.internalId());
     }
     private List<Map<String, Object>> partRowsForCompatibility(PartSearch search) {
         List<String> publicIds = partPublicIds(search, "p.price ASC, p.id ASC", false);
