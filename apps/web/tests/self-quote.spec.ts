@@ -5273,7 +5273,13 @@ test('applies a recent AI recommendation from the assistant without rendering du
       contentType: 'application/json',
       body: JSON.stringify({
         tool: 'performance', status: 'PASS', confidence: 'HIGH', summary: '공개 FPS 참고값',
-        details: { gameFpsEvidence: [{ gameTitle: '배틀그라운드', gameKey: 'pubg', resolution: '4K', avgFps: 55 }] }
+        details: {
+          gameFpsEvidence: [
+            { gameTitle: '배틀그라운드', gameKey: 'pubg', resolution: '4K', avgFps: 55 },
+            { gameTitle: '배틀그라운드', gameKey: 'pubg', resolution: 'QHD', avgFps: 132 },
+            { gameTitle: '배틀그라운드', gameKey: 'pubg', resolution: 'FHD', avgFps: 190 }
+          ]
+        }
       })
     });
   });
@@ -5325,7 +5331,12 @@ test('applies a recent AI recommendation from the assistant without rendering du
   await expect(page.getByTestId('checklist-CPU')).toContainText('가성비 CPU');
   await expect(page.getByTestId('checklist-CPU')).toHaveAttribute('data-flash', 'false', { timeout: 3000 });
   await expect(page.getByTestId('checklist-GPU')).toHaveAttribute('data-flash', 'false', { timeout: 3000 });
-  await expect(page.getByTestId('ai-chat-messages')).toContainText('완성 견적이 담겼습니다. 현재 종합 점수는 734점이며, 배그 4K 예상 성능은 평균 55FPS입니다.');
+  // 해상도 하나(4K)만 보고하면 최소 견적이 저평가된다 — 근거가 있는 해상도를 낮은 순으로 모두 싣고
+  // 120Hz 기준 판정을 덧붙인다(2026-07-20 팀 제언).
+  // 문장은 개별 블록으로 렌더되므로 문장 단위로 단언한다(경계를 넘는 문자열은 공백이 사라져 매칭되지 않는다).
+  await expect(page.getByTestId('ai-chat-messages')).toContainText('완성 견적이 담겼습니다. 현재 종합 점수는 734점입니다.');
+  await expect(page.getByTestId('ai-chat-messages')).toContainText('배그 예상 성능은 FHD 190 · QHD 132 · 4K 55FPS입니다.');
+  await expect(page.getByTestId('ai-chat-messages')).toContainText('FHD·QHD는 120Hz 이상으로 쾌적하고, 4K는 120Hz에 못 미치니 참고하세요.');
   await expect(page.getByTestId('ai-selected-build-panel')).toHaveCount(0);
 
   // reduced-motion에서는 플래시 신호(data-flash)는 토글되지만 모션 자체는 꺼진다(전 화면 공통 규칙).
@@ -5460,7 +5471,7 @@ test('applies the single immediately preceding AI build from an explicit natural
   expect(buildChatCalls).toBe(0);
   await expect(page.getByTestId('ai-chat-messages')).toContainText('완성 견적이 담겼습니다');
   await expect(page.getByTestId('ai-chat-messages')).toContainText('현재 종합 점수는 736점');
-  await expect(page.getByTestId('ai-chat-messages')).toContainText('배그 4K 예상 성능은 평균 70FPS');
+  await expect(page.getByTestId('ai-chat-messages')).toContainText('배그 예상 성능은 4K 70FPS입니다');
   await expect(page.getByTestId('checklist-GPU')).toContainText('자연어 적용 GPU');
 });
 
@@ -5598,7 +5609,10 @@ test('auto-applies a single server-verified case repair when the current draft h
   await expect(page.getByTestId('ai-chat-messages')).toContainText('현재 종합 점수는 741점');
   const feedbackMessage = page.getByTestId('ai-chat-message-assistant').last();
   await expect(feedbackMessage).toContainText('상단에서 종합 점수와 게임별 예상 성능을 확인해 보세요.');
-  await expect(feedbackMessage.getByTestId('ai-message-sentence')).toHaveCount(3);
+  // 해상도 요약과 120Hz 판정이 각각 한 문장씩 늘었다(점수 → FPS 나열 → 판정 → 안내).
+  await expect(feedbackMessage).toContainText('배그 예상 성능은 4K 64FPS입니다.');
+  await expect(feedbackMessage).toContainText('4K 64FPS로 플레이하기 충분하지만, 120Hz 고주사율에는 못 미칩니다.');
+  await expect(feedbackMessage.getByTestId('ai-message-sentence')).toHaveCount(5);
   const snapshots = await page.evaluate(() => (
     (window as typeof window & { __aiChatTextSnapshots?: string[] }).__aiChatTextSnapshots ?? []
   ));
@@ -5823,8 +5837,9 @@ test('resumes a pending AI application receipt after reload and reports score wi
   const messages = page.getByTestId('ai-chat-messages');
   await expect(messages).toContainText('완성 견적이 담겼습니다');
   await expect(messages).toContainText('현재 종합 점수는 812점');
-  await expect(messages).toContainText('발로란트 FHD FPS 근거가 없어');
-  await expect(messages).toContainText('FPS 근거가 없어 수치를 임의로 표시하지 않았습니다');
+  // 근거가 없으면 성능 문장을 통째로 생략한다 — "자료 없음"을 굳이 알리지 않되 수치를 지어내지도 않는다.
+  await expect(messages).not.toContainText('FPS 근거가 없어');
+  await expect(messages).not.toContainText('예상 성능은');
   await expect(messages).not.toContainText('평균 0FPS');
   await expect(messages).not.toContainText('999FPS');
   await expect.poll(() => performanceContexts.some((context) => context.game === 'valorant' && context.resolution === 'fhd')).toBe(true);
@@ -5832,6 +5847,80 @@ test('resumes a pending AI application receipt after reload and reports score wi
 
   await page.reload();
   await expect(page.getByTestId('ai-chat-messages').getByText(/완성 견적이 담겼습니다/)).toHaveCount(1);
+});
+
+// 전 해상도가 120Hz에 못 미치면 "할 수 있는 것"을 먼저 말하고 한계를 뒤에 붙인다(부정문 선두 금지).
+test('전 해상도가 120Hz 미만이면 가장 낮은 해상도 기준으로 플레이 가능 여부를 먼저 알린다', async ({ page }) => {
+  await loginAsUser(page);
+  await page.addInitScript(() => {
+    localStorage.setItem('buildgraph.authUser', JSON.stringify({ id: 'user-lowfps', email: 'user@example.com', name: 'Demo User', role: 'USER' }));
+  });
+  const items = [
+    draftItem('part-lowfps-cpu', 'CPU', '보급형 CPU', 200000),
+    draftItem('part-lowfps-gpu', 'GPU', '보급형 GPU', 300000)
+  ];
+  const draft = { ...emptyDraft, id: 'draft-lowfps', items, totalPrice: 500000, itemCount: items.length };
+  await page.route('**/api/quote-drafts/current**', async (route) => {
+    if (route.request().method() === 'PUT') {
+      await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(draft) });
+      return;
+    }
+    await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(draft) });
+  });
+  await page.route('**/api/parts**', async (route) => {
+    await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ items: [], page: 0, size: 20, total: 0 }) });
+  });
+  await page.route('**/api/build-graphs/resolve', async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({ ...buildGraphResponse(), compositeScore: compositeScoreFixture(620, '보급형') })
+    });
+  });
+  await page.route('**/api/tools/performance/check', async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        tool: 'performance', status: 'WARN', confidence: 'MEDIUM', summary: '',
+        details: {
+          gameFpsEvidence: [
+            { gameTitle: '배틀그라운드', gameKey: 'pubg', resolution: '4K', avgFps: 38 },
+            { gameTitle: '배틀그라운드', gameKey: 'pubg', resolution: 'QHD', avgFps: 61 },
+            { gameTitle: '배틀그라운드', gameKey: 'pubg', resolution: 'FHD', avgFps: 95 }
+          ]
+        }
+      })
+    });
+  });
+
+  await page.goto('/self-quote');
+  await page.evaluate(() => {
+    const ownerKey = 'user-lowfps';
+    const startedAt = new Date().toISOString();
+    const session = {
+      messages: [{ id: 'msg-lowfps', role: 'assistant', text: '적용 중', createdAt: startedAt, kind: 'part' }],
+      latestBuilds: [],
+      savedBuildIds: {},
+      draftApplicationFeedback: {
+        id: 'feedback-lowfps',
+        messageId: 'msg-lowfps',
+        draftFingerprint: 'CPU:part-lowfps-cpu:1|GPU:part-lowfps-gpu:1',
+        applicationKind: 'COMPLETE_BUILD',
+        status: 'PENDING',
+        startedAt
+      },
+      updatedAt: startedAt
+    };
+    sessionStorage.setItem(`buildgraph.ai.assistantSession:${ownerKey}`, JSON.stringify(session));
+    window.dispatchEvent(new Event('buildgraph.ai.assistantSessionChanged'));
+  });
+
+  const messages = page.getByTestId('ai-chat-messages');
+  await expect(messages).toContainText('배그 예상 성능은 FHD 95 · QHD 61 · 4K 38FPS입니다');
+  await expect(messages).toContainText('FHD 95FPS로 플레이하기 충분하지만, 120Hz 고주사율에는 못 미칩니다');
+  // 부정문이 문장 앞에 오지 않는다 — "쾌적한 해상도가 없습니다" 같은 표현 금지.
+  await expect(messages).not.toContainText('쾌적한 해상도');
 });
 
 test('prioritizes a zero-score Tool failure over available FPS after an AI change', async ({ page }) => {
