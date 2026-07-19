@@ -88,6 +88,9 @@ class TicketQueryServiceTest {
         when(jdbcTemplate.queryForList(contains("SELECT t.public_id::text AS id"), eq("ticket-public-id"), eq(20L)))
                 .thenReturn(List.of(MockData.map(
                         "id", "ticket-public-id",
+                        "user_id", "user-public-id",
+                        "user_email", "user@example.com",
+                        "user_name", "User",
                         "status", "OPEN",
                         "analysis_status", "RULE_READY",
                         "review_status", "APPROVED",
@@ -97,11 +100,13 @@ class TicketQueryServiceTest {
                         "symptom", "GPU temperature spike",
                         "request_number", "AS-20260714-0001",
                         "request_type", "PHYSICAL_INSPECTION",
+                        "diagnosis_id", "9a0e3c21-6648-41e7-a88e-17be1761b806",
                         "diagnosis_mode", "LIVE",
                         "diagnosis_title", "GPU 냉각 계통 이상 가능성",
                         "diagnosis_summary", "고온과 열 제한 징후가 함께 감지되었습니다.",
                         "diagnosis_evidence", "[{\"component\":\"gpu\",\"metricType\":\"temperature\",\"value\":96,\"unit\":\"°C\"}]",
-                        "diagnosis_result", "{\"suspectedCauses\":[\"관리자 검토용 원인\"]}",
+                        "diagnosis_result", "{\"recommendedActions\":[\"그래픽 드라이버 재설치\"]}",
+                        "diagnosis_events", "[{\"eventId\":\"event-1\",\"message\":\"그래픽 장치 확인 완료\",\"progressPercent\":100}]",
                         "diagnosed_at", "2026-07-14T01:02:03Z",
                         "log_upload_id", "log-upload-public-id",
                         "assigned_admin_id", "admin-public-id",
@@ -117,6 +122,9 @@ class TicketQueryServiceTest {
         assertThat(response.get("supportDecision")).isEqualTo("REMOTE_POSSIBLE");
         assertThat(response.get("requestNumber")).isEqualTo("AS-20260714-0001");
         assertThat(response.get("requestType")).isEqualTo("PHYSICAL_INSPECTION");
+        assertThat(response.get("userEmail")).isEqualTo("user@example.com");
+        assertThat(response.get("userName")).isEqualTo("User");
+        assertThat(response.get("diagnosisId")).isEqualTo("9a0e3c21-6648-41e7-a88e-17be1761b806");
         assertThat(response.get("diagnosisMode")).isEqualTo("LIVE");
         assertThat(response.get("diagnosisTitle")).isEqualTo("GPU 냉각 계통 이상 가능성");
         assertThat(response.get("diagnosisSummary")).isEqualTo("고온과 열 제한 징후가 함께 감지되었습니다.");
@@ -127,9 +135,22 @@ class TicketQueryServiceTest {
                 "unit", "°C"
         )));
         assertThat(response.get("diagnosedAt")).isEqualTo("2026-07-14T01:02:03Z");
-        assertThat(response).doesNotContainKey("diagnosisResult");
         assertThat(response).doesNotContainKey("accessCode");
-        verify(jdbcTemplate).queryForList(contains("t.user_id = ?"), eq("ticket-public-id"), eq(20L));
+        assertThat(response.get("diagnosisResult")).isEqualTo(Map.of(
+                "recommendedActions", List.of("그래픽 드라이버 재설치")
+        ));
+        assertThat(response.get("diagnosisEvents")).isEqualTo(List.of(Map.of(
+                "eventId", "event-1",
+                "message", "그래픽 장치 확인 완료",
+                "progressPercent", 100
+        )));
+        verify(jdbcTemplate).queryForList(
+                argThat(sql -> sql.contains("t.user_id = ?")
+                        && sql.contains("user_owner.email AS user_email")
+                        && sql.contains("ORDER BY event.occurred_at ASC, event.id ASC")),
+                eq("ticket-public-id"),
+                eq(20L)
+        );
     }
 
     @Test

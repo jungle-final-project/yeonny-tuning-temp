@@ -209,7 +209,7 @@ jobs:
         run: |
           docker compose -f compose.yaml config
           docker compose -p buildgraph-green -f compose.api.ecr.prod.yaml --env-file .env.prod.example --env-file .env.images.example config --quiet
-          test "$(docker compose -p buildgraph-green -f compose.api.ecr.prod.yaml --env-file .env.prod.example --env-file .env.images.example config --services | sort | tr '\n' ' ')" = "api nginx xgb-reranker "
+          test "$(docker compose -p buildgraph-green -f compose.api.ecr.prod.yaml --env-file .env.prod.example --env-file .env.images.example config --services | sort | tr '\n' ' ')" = "api nginx recommendation-event-worker xgb-reranker "
 
   pc-agent:
     name: pc-agent

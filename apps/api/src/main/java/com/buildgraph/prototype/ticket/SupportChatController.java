@@ -41,10 +41,14 @@ public class SupportChatController {
     @GetMapping("/current")
     Map<String, Object> current(
             @RequestParam(value = "asTicketId", required = false) String asTicketId,
+            @RequestParam(value = "summary", required = false, defaultValue = "false") boolean summary,
             @RequestHeader(value = "Authorization", required = false) String authorization
     ) {
         CurrentUserService.CurrentUser user = currentUserService.requireUser(authorization);
-        return supportChatService.current(user, asTicketId);
+        // summary=true(닫힌 위젯 배지): 전체 대화 조회 없이 룸 요약만 → 상시 폴링 부하 감축.
+        return summary
+                ? supportChatService.currentSummary(user, asTicketId)
+                : supportChatService.current(user, asTicketId);
     }
 
     @GetMapping("/{id}")

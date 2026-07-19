@@ -49,13 +49,26 @@ test('MVP E2E: login, recommendation, alert, AS, admin worker views', async ({ p
   await page.goto(`/admin/as-tickets/${ticketId}`);
   await expect(page.getByRole('heading', { name: 'AS 티켓 상세' })).toBeVisible();
   await expect(page.getByText(ticketId, { exact: true }).first()).toBeVisible();
-  await page.getByRole('button', { name: '담당자 배정' }).click();
-  await page.getByRole('button', { name: '결정 저장' }).click();
-  await expect(page.getByText('결정 저장 완료')).toBeVisible();
-  await page.getByLabel('상태', { exact: true }).selectOption('IN_PROGRESS');
-  await page.getByLabel('관리자 메모').fill('MVP E2E 담당자 배정 및 상태 전이 확인');
-  await page.getByRole('button', { name: '결정 저장' }).click();
-  await expect(page.getByText('결정 저장 완료')).toBeVisible();
+  // 지원 결정 폼은 렌더링에서 빠지고 그 자리에 티켓 상담방 채팅이 나온다.
+  // (상담방은 사용자 티켓 화면 방문 시 ensureRoom으로 이미 생성돼 있다.)
+  await expect(page.getByRole('main')).not.toContainText('지원 결정 저장');
+  const ticketChat = page.getByTestId('admin-ticket-support-chat');
+  await ticketChat.getByPlaceholder('관리자 답변을 입력하세요').fill('MVP E2E 관리자 상담 답변');
+  await ticketChat.getByRole('button', { name: '답변 전송' }).click();
+  await expect(ticketChat.getByText('MVP E2E 관리자 상담 답변')).toBeVisible();
+
+  // 담당자 배정·상태 전이 커버리지는 결정 폼 대신 API PATCH로 유지한다.
+  const adminToken = await accessToken(page);
+  for (const data of [
+    { status: 'ASSIGNED' },
+    { status: 'IN_PROGRESS', adminNote: 'MVP E2E 담당자 배정 및 상태 전이 확인' }
+  ]) {
+    const patched = await request.patch(`${apiBaseUrl}/api/admin/as-tickets/${ticketId}`, {
+      headers: { Authorization: `Bearer ${adminToken}` },
+      data
+    });
+    expect(patched.ok(), await patched.text()).toBeTruthy();
+  }
 
   console.log('[MVP] agent trace');
   await page.goto(`/admin/agent-sessions/${recommendation.agentSessionId}`);

@@ -44,6 +44,27 @@ class PcAgentDiagnosisAsRequestServiceTest {
     }
 
     @Test
+    void code43TicketKeepsAdminDecisionOpenAndStoresRemoteSupportRecommendation() {
+        StubJdbcTemplate jdbc = new StubJdbcTemplate();
+        StubBroker broker = code43DemoBroker();
+
+        Map<String, Object> response = service(jdbc, broker).create(
+                PRINCIPAL,
+                request("DEMO", code43Evidence()),
+                DIAGNOSIS_ID
+        );
+
+        assertThat(response).containsEntry("status", "OPEN");
+        assertThat(jdbc.lastInsertSql)
+                .contains("'REQUIRED',\n  NULL,")
+                .doesNotContain("'VISIT_REQUIRED'");
+        assertThat(String.valueOf(jdbc.lastInsertArgs[13]))
+                .contains("\"recommendedService\":\"REMOTE_SUPPORT\"")
+                .contains("\"recommendedDecision\":\"REMOTE_POSSIBLE\"")
+                .contains("\"requiresAdminApproval\":true");
+    }
+
+    @Test
     void sameDiagnosisReturnsExistingTicketWithoutRecreatingIt() {
         StubJdbcTemplate jdbc = new StubJdbcTemplate();
         jdbc.existingRows = List.of(jdbc.ticketRow());
@@ -178,6 +199,23 @@ class PcAgentDiagnosisAsRequestServiceTest {
     }
 
     @Test
+    void recoversTheOwnedPersistedResultAfterBrokerRestart() {
+        StubJdbcTemplate jdbc = new StubJdbcTemplate();
+        StubBroker broker = eligibleBroker();
+        jdbc.resultRows = List.of(Map.of(
+                "device_id", DEVICE_ID,
+                "result_id", RESULT_ID,
+                "raw_payload", broker.result.result()
+        ));
+        broker.result = null;
+
+        Map<String, Object> response = service(jdbc, broker).create(PRINCIPAL, validRequest(), DIAGNOSIS_ID);
+
+        assertThat(response).containsEntry("requestNumber", "AS-20260714-000001");
+        assertThat(jdbc.insertCount).isEqualTo(1);
+    }
+
+    @Test
     void rejectsEvidenceSummaryThatWasNotInTheStoredDiagnosisResult() {
         Map<String, Object> forged = new LinkedHashMap<>(evidence().get(0));
         forged.put("value", 40);
@@ -202,6 +240,18 @@ class PcAgentDiagnosisAsRequestServiceTest {
 
     private static StubBroker eligibleBroker() {
         return broker("PHYSICAL_INSPECTION", evidence(), DEVICE_ID, "LIVE");
+    }
+
+    private static StubBroker code43DemoBroker() {
+        StubBroker broker = broker("SOFTWARE_RECOVERY", code43Evidence(), DEVICE_ID, "DEMO");
+        broker.result.result().put("diagnosisType", "DEVICE_DRIVER_CONFIGURATION_ISSUE");
+        broker.result.result().put("canAutoRecover", false);
+        broker.result.result().put("remoteAsRecommended", true);
+        broker.result.result().put("dataMode", "DEMO");
+        broker.result.result().put("scenarioId", "GRAPHICS_CODE43_REMOTE_SUPPORT");
+        broker.result.result().put("recommendedActions", List.of("그래픽 드라이버 재설치", "원격 기사 연결"));
+        broker.result.result().put("findings", List.of(Map.of("code", "GRAPHICS_DEVICE_CODE_43")));
+        return broker;
     }
 
     private static StubBroker broker(String resolutionType, List<Map<String, Object>> evidence, String deviceId, String mode) {
@@ -230,6 +280,13 @@ class PcAgentDiagnosisAsRequestServiceTest {
     }
 
     private static PcAgentDiagnosisAsRequestService.CreateRequest validRequest() {
+        return request("LIVE", evidence());
+    }
+
+    private static PcAgentDiagnosisAsRequestService.CreateRequest request(
+            String mode,
+            List<Map<String, Object>> evidenceSummary
+    ) {
         return new PcAgentDiagnosisAsRequestService.CreateRequest(
                 DIAGNOSIS_ID,
                 RESULT_ID,
@@ -238,9 +295,9 @@ class PcAgentDiagnosisAsRequestServiceTest {
                 SYMPTOM,
                 TITLE,
                 SUMMARY,
-                evidence(),
+                evidenceSummary,
                 EVALUATED_AT,
-                "LIVE",
+                mode,
                 true
         );
     }
@@ -255,6 +312,23 @@ class PcAgentDiagnosisAsRequestServiceTest {
                 Map.entry("availability", "AVAILABLE"),
                 Map.entry("status", "ABNORMAL"),
                 Map.entry("source", "nvidia-smi"),
+                Map.entry("sampledAt", EVALUATED_AT)
+        ));
+    }
+
+    private static List<Map<String, Object>> code43Evidence() {
+        return List.of(Map.ofEntries(
+                Map.entry("taskId", "graphics-device-status"),
+                Map.entry("component", "gpu"),
+                Map.entry("metricType", "display_device_status"),
+                Map.entry("value", Map.of(
+                        "deviceName", "Intel(R) Arc(TM) A350M Graphics",
+                        "problemCode", 43
+                )),
+                Map.entry("unit", ""),
+                Map.entry("availability", "AVAILABLE"),
+                Map.entry("status", "ABNORMAL"),
+                Map.entry("source", "Win32_PnPEntity"),
                 Map.entry("sampledAt", EVALUATED_AT)
         ));
     }
@@ -282,9 +356,11 @@ class PcAgentDiagnosisAsRequestServiceTest {
     private static final class StubJdbcTemplate extends JdbcTemplate {
         private List<Map<String, Object>> existingRows = List.of();
         private List<Map<String, Object>> ledgerRows = List.of();
+        private List<Map<String, Object>> resultRows = List.of();
         private int consentCount = 1;
         private int insertCount;
         private String lastInsertSql;
+        private Object[] lastInsertArgs;
         private boolean failInsert;
 
         @Override
@@ -297,6 +373,9 @@ class PcAgentDiagnosisAsRequestServiceTest {
             }
             if (sql.contains("FROM users")) {
                 return List.of(Map.of("id", 20L));
+            }
+            if (sql.contains("FROM pc_agent_diagnosis_results")) {
+                return resultRows;
             }
             if (sql.contains("FROM pc_agent_diagnosis_requests")) {
                 return ledgerRows;
@@ -313,6 +392,7 @@ class PcAgentDiagnosisAsRequestServiceTest {
         public Map<String, Object> queryForMap(String sql, Object... args) {
             insertCount += 1;
             lastInsertSql = sql;
+            lastInsertArgs = args;
             if (failInsert) {
                 throw new DataAccessResourceFailureException("simulated AS ticket insert failure");
             }

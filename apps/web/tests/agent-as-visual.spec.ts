@@ -108,6 +108,51 @@ const visitRecommendedTicket = {
   }
 };
 
+const code43AgentTicket = {
+  ...beforeDecisionTicket,
+  id: 'qa-ticket-code43',
+  status: 'OPEN',
+  reviewStatus: 'REQUIRED',
+  supportDecision: null,
+  symptom: '게임 중 화면이 끊기고 검은 화면이 나타납니다.',
+  userId: 'user-code43-public-id',
+  userEmail: 'code43-user@example.com',
+  userName: 'Code43 User',
+  logUploadId: null,
+  diagnosisId: '9a0e3c21-6648-41e7-a88e-17be1761b806',
+  diagnosisMode: 'DEMO',
+  diagnosisTitle: '그래픽 장치 오류 상태가 확인되었습니다',
+  diagnosisSummary: 'Intel Arc A350M이 Code 43을 보고해 원격 지원을 권장합니다.',
+  diagnosisEvidence: [{
+    component: 'gpu',
+    metricType: 'display_device_status',
+    value: { deviceName: 'Intel(R) Arc(TM) A350M Graphics', problemCode: 43 },
+    description: 'Intel Arc A350M / Code 43'
+  }],
+  diagnosisResult: {
+    recommendedActions: ['그래픽 드라이버 재설치 또는 이전 버전 롤백', '원격 AS 기사 연결']
+  },
+  diagnosisEvents: [
+    { eventId: 'event-code43-1', progressPercent: 35, message: '그래픽 장치 상태 확인 중' },
+    { eventId: 'event-code43-2', progressPercent: 100, message: 'Code 43 진단 완료' }
+  ],
+  logSummaryText: null,
+  logSummary: null,
+  supportRouting: {
+    recommendedDecision: 'REMOTE_POSSIBLE',
+    confidence: 'HIGH',
+    reasonCodes: ['GRAPHICS_DEVICE_CODE_43'],
+    remoteActions: ['그래픽 드라이버 재설치 또는 이전 버전 롤백', '원격 AS 기사 연결'],
+    visitReasons: [],
+    blockingFactors: [],
+    recommendedService: 'REMOTE_SUPPORT',
+    recommendedServiceLabel: '원격지원 신청',
+    requiresAdminApproval: true
+  },
+  causeCandidates: [],
+  upgradeCandidates: []
+};
+
 const noSampleTicket = {
   ...beforeDecisionTicket,
   id: 'qa-ticket-no-samples',
@@ -139,12 +184,15 @@ const diagnosisOnlyTicket = {
 };
 
 test('captures Agent AS demo UI evidence and verifies admin decision reflection', async ({ page }) => {
+  // 화면 증적 캡처 + 티켓 상담방 채팅 흐름까지 한 번에 도는 긴 테스트라 병렬 부하에서 30초를 넘길 수 있다.
+  test.slow();
   const consoleErrors: string[] = [];
   const apiCalls: string[] = [];
   const tickets = new Map<string, MockTicket>([
     [beforeDecisionTicket.id, beforeDecisionTicket],
     [afterDecisionTicket.id, afterDecisionTicket],
     [visitRecommendedTicket.id, visitRecommendedTicket],
+    [code43AgentTicket.id, code43AgentTicket],
     [noSampleTicket.id, noSampleTicket],
     [diagnosisOnlyTicket.id, diagnosisOnlyTicket]
   ]);
@@ -285,6 +333,62 @@ test('captures Agent AS demo UI evidence and verifies admin decision reflection'
     });
   });
 
+  // 티켓 상세에 상담방 채팅이 박히면서 관리자 채팅 API도 모킹한다.
+  // (모킹이 없으면 dev proxy가 죽은 포트로 향해 콘솔 에러 단언이 깨진다.)
+  const chatRoom = {
+    id: 'qa-chat-room-1',
+    asTicketId: beforeDecisionTicket.id,
+    status: 'ACTIVE',
+    ticketStatus: 'OPEN',
+    title: 'AS 상담방',
+    symptom: 'GPU temperature spike during gaming',
+    lastMessagePreview: '게임 중 GPU 온도가 계속 올라갑니다.',
+    lastMessageAt: '2026-07-02T07:00:00Z',
+    adminUnreadCount: 1,
+    canSendMessage: true,
+    user: { id: 'user-001', email: 'user@example.com', name: 'QA User' }
+  };
+  let chatMessages: Array<Record<string, unknown>> = [
+    { id: 'chat-msg-1', role: 'SYSTEM', content: '상담방이 생성되었습니다. 문의 내용을 남기면 담당자가 확인합니다.', createdAt: '2026-07-02T06:31:00Z' },
+    { id: 'chat-msg-2', role: 'USER', content: '게임 중 GPU 온도가 계속 올라갑니다.', senderName: 'QA User', createdAt: '2026-07-02T07:00:00Z' }
+  ];
+  let chatMessagePayload: Record<string, unknown> | undefined;
+  await page.route('**/api/admin/support/chat-sessions', async (route) => {
+    recordApiCall(apiCalls, route.request());
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({ items: [chatRoom], pollingIntervalMs: 5000 })
+    });
+  });
+  await page.route('**/api/admin/support/chat-sessions/qa-chat-room-1**', async (route) => {
+    recordApiCall(apiCalls, route.request());
+    const url = new URL(route.request().url());
+    if (url.pathname.endsWith('/ws-ticket')) {
+      // ticket 없이 응답하면 openSupportChatSocket이 WebSocket을 열지 않고 조용히 폴링으로 남는다.
+      await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({}) });
+      return;
+    }
+    if (route.request().method() === 'POST' && url.pathname.endsWith('/messages')) {
+      chatMessagePayload = route.request().postDataJSON() as Record<string, unknown>;
+      chatMessages = [
+        ...chatMessages,
+        {
+          id: `chat-msg-${chatMessages.length + 1}`,
+          role: 'ADMIN',
+          content: String(chatMessagePayload.content ?? ''),
+          senderName: 'BuildGraph Admin',
+          createdAt: '2026-07-02T07:05:00Z'
+        }
+      ];
+    }
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({ contact: chatRoom, messages: chatMessages, pollingIntervalMs: 5000 })
+    });
+  });
+
   await page.goto('/support/new');
   await expect(page.getByRole('main')).toContainText('AS 접수');
   await expect(page.getByRole('main')).toContainText('문제 발생 전후 로그');
@@ -317,6 +421,8 @@ test('captures Agent AS demo UI evidence and verifies admin decision reflection'
   await page.goto('/admin/as-tickets');
   await expect(page.getByRole('main')).toContainText('추천 서비스');
   await expect(page.getByRole('main')).toContainText('방문지원 신청');
+  await expect(page.getByRole('main')).toContainText('원격지원 신청');
+  await expect(page.getByRole('main')).toContainText('code43-user@example.com');
 
   for (const column of ['상태', '검토', '결정', '추천 서비스']) {
     await expect(page.getByRole('columnheader', { name: column, exact: true })).toHaveCSS('white-space', 'nowrap');
@@ -347,9 +453,19 @@ test('captures Agent AS demo UI evidence and verifies admin decision reflection'
     expect(summaryBox!.y).toBeGreaterThan(listBox!.y + listBox!.height);
   }
 
+  await page.goto('/admin/as-tickets/qa-ticket-code43');
+  await expect(page.getByRole('main')).toContainText('Intel Arc A350M / Code 43');
+  await expect(page.getByRole('main')).toContainText('그래픽 드라이버 재설치 또는 이전 버전 롤백');
+  await expect(page.getByRole('main')).toContainText('규칙 진단 완료');
+  await expect(page.getByRole('main')).toContainText('원격지원 신청');
+
   await page.goto('/admin/as-tickets/qa-ticket-before');
   await expect(page.getByRole('main')).toContainText('관리자 검토');
   await expect(page.getByRole('main')).toContainText('Agent 권장 처리');
+  // DB 필드 직접 수정 폼은 제거하고, 구조화된 검토 정보와 티켓 상담방을 함께 제공한다.
+  await expect(page.getByRole('main')).not.toContainText('지원 결정 저장');
+  await expect(page.getByTestId('admin-ticket-support-chat')).toBeVisible();
+  await expect(page.getByRole('main')).toContainText('사용자 요청 지원');
   await expect(page.getByRole('main')).toContainText('우선 진단만 받기');
   await expect(page.getByRole('main')).toContainText('GPU 온도 상승 신호');
 
@@ -402,7 +518,16 @@ test('captures Agent AS demo UI evidence and verifies admin decision reflection'
   await expect(diagnosisOverview.getByTestId('agent-log-samples-panel')).toContainText('nvidia-smi');
   await expect(page.getByRole('main')).toContainText('PC Agent 실시간 진단 근거 1건 연결됨');
 
+  // 상담방 답변과 관리자 검토 액션은 서로의 상태를 덮어쓰지 않고 함께 동작한다.
   await page.goto('/admin/as-tickets/qa-ticket-before');
+  const ticketChat = page.getByTestId('admin-ticket-support-chat');
+  await expect(ticketChat).toContainText('게임 중 GPU 온도가 계속 올라갑니다.');
+  await ticketChat.getByPlaceholder('관리자 답변을 입력하세요').fill('원격 지원 링크를 보내드렸습니다.');
+  await ticketChat.getByRole('button', { name: '답변 전송' }).click();
+  await expect(ticketChat).toContainText('원격 지원 링크를 보내드렸습니다.');
+  expect(chatMessagePayload).toMatchObject({ content: '원격 지원 링크를 보내드렸습니다.' });
+  await expect(ticketChat.getByPlaceholder('관리자 답변을 입력하세요')).toHaveValue('');
+
   await page.getByLabel('관리자 메모').fill('Remote support approved.');
   await page.getByRole('button', { name: '원격 지원 승인' }).click();
   await expect(page.getByRole('main')).toContainText('처리 결과');
@@ -413,12 +538,14 @@ test('captures Agent AS demo UI evidence and verifies admin decision reflection'
   expect(reviewActionPayload).toMatchObject({
     adminNote: 'Remote support approved.'
   });
-  await page.screenshot({ path: `${screenshotDir}/03-admin-ticket-decision-fields.png`, fullPage: true });
+  await expect(page.getByRole('main')).not.toContainText('undefined');
+  await page.screenshot({ path: `${screenshotDir}/03-admin-ticket-chat-and-review.png`, fullPage: true });
 
   await page.evaluate(() => {
     localStorage.setItem('buildgraph.token', 'jwt-user-token');
   });
-  await page.goto('/support/qa-ticket-before');
+  // 결정 반영 사용자측 화면은 결정이 저장된 정적 시드 티켓(qa-ticket-after)으로 확인한다.
+  await page.goto('/support/qa-ticket-after');
   await expect(page.getByRole('main')).toContainText('승인됨');
   await expect(page.getByRole('main')).toContainText('원격 지원 가능');
   await expect(page.getByRole('main')).toContainText('원격 지원이 승인되었습니다');
@@ -426,9 +553,9 @@ test('captures Agent AS demo UI evidence and verifies admin decision reflection'
   await page.screenshot({ path: `${screenshotDir}/04-support-ticket-after-decision.png`, fullPage: true });
 
   await page.setViewportSize({ width: 390, height: 844 });
-  await page.goto('/support/qa-ticket-before');
+  await page.goto('/support/qa-ticket-after');
   await expect(page.getByRole('main')).toContainText('원격 지원 가능');
-  await expect(page.getByRole('main')).toContainText('Remote support approved.');
+  await expect(page.getByRole('main')).toContainText('Remote support link sent.');
   await page.screenshot({ path: `${screenshotDir}/05-mobile-ticket.png`, fullPage: true });
 
   await page.evaluate(() => {
@@ -445,6 +572,8 @@ test('captures Agent AS demo UI evidence and verifies admin decision reflection'
     'GET /api/as-tickets/qa-ticket-before',
     'GET /api/admin/as-tickets/qa-ticket-before',
     'POST /api/admin/as-tickets/qa-ticket-before/approve-remote-support',
+    'GET /api/admin/support/chat-sessions',
+    'POST /api/admin/support/chat-sessions/qa-chat-room-1/messages',
     'DELETE /api/admin/as-tickets/qa-ticket-no-samples'
   ]));
   expect(consoleErrors).toEqual([]);

@@ -16,8 +16,12 @@ const PERF_COMPARABLE = new Set(['CPU', 'GPU']);
 
 const CANDIDATE_PAGE_SIZE = 20;
 
-// 데스크톱 패널 초기 위치·크기: 보드 스테이지 좌측에 12px 여백으로 떠 있던 기존 배치를 그대로 재현한다.
+// 데스크톱 패널 초기 위치·크기: 보드 스테이지 좌측에 떠 있던 기존 배치를 재현하되,
+// 헤더 제거 리디자인 이후 스테이지 좌상단에 사는 플로팅 컨트롤(문제 칩·다음 가이드·AI 강조)을
+// 가리지 않도록 그 아래(+56px)에서 시작한다. 패널은 body 포탈이라 z-index로는 스트립을 못 이긴다.
 // 포탈(document.body) + position:fixed라 보드 밖으로도 드래그할 수 있다.
+const PANEL_TOP_OFFSET_FOR_FLOATING_CONTROLS = 56;
+
 function panelInitialRect() {
   const fallback = { left: 24, top: 96, width: 420, height: 560 };
   if (typeof document === 'undefined') {
@@ -31,9 +35,9 @@ function panelInitialRect() {
   }
   return {
     left: rect.left + 12,
-    top: rect.top + 12,
+    top: rect.top + PANEL_TOP_OFFSET_FOR_FLOATING_CONTROLS,
     width: Math.min(Math.min(520, Math.max(360, rect.width * 0.52)), rect.width) - 24,
-    height: Math.max(320, rect.height - 24)
+    height: Math.max(320, rect.height - PANEL_TOP_OFFSET_FOR_FLOATING_CONTROLS - 12)
   };
 }
 

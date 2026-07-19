@@ -18,6 +18,7 @@ import org.springframework.web.bind.annotation.RestController;
 @RequestMapping("/api")
 public class RecommendationController {
     private final RecommendationLearningService recommendationLearningService;
+    private final RecommendationEventPublisher recommendationEventPublisher;
     private final RecommendationTrainingService recommendationTrainingService;
     private final HomePartRecommendationService homePartRecommendationService;
     private final RecommendationDriftService recommendationDriftService;
@@ -25,12 +26,14 @@ public class RecommendationController {
 
     public RecommendationController(
             RecommendationLearningService recommendationLearningService,
+            RecommendationEventPublisher recommendationEventPublisher,
             RecommendationTrainingService recommendationTrainingService,
             HomePartRecommendationService homePartRecommendationService,
             RecommendationDriftService recommendationDriftService,
             CurrentUserService currentUserService
     ) {
         this.recommendationLearningService = recommendationLearningService;
+        this.recommendationEventPublisher = recommendationEventPublisher;
         this.recommendationTrainingService = recommendationTrainingService;
         this.homePartRecommendationService = homePartRecommendationService;
         this.recommendationDriftService = recommendationDriftService;
@@ -55,6 +58,18 @@ public class RecommendationController {
     ) {
         CurrentUserService.CurrentUser user = currentUserService.requireUser(authorization);
         return recommendationLearningService.recordEvents(request == null ? Map.of() : request, user);
+    }
+
+    @PostMapping("/recommendation-events/bulk/async")
+    @ResponseStatus(HttpStatus.ACCEPTED)
+    Map<String, Object> queueRecommendationEvents(
+            @RequestBody(required = false) Map<String, Object> request,
+            @RequestHeader(value = "Authorization", required = false) String authorization
+    ) {
+        CurrentUserService.CurrentUser user = currentUserService.requireUser(authorization);
+        Map<String, Object> payload = request == null ? Map.of() : request;
+        int queuedCount = recommendationLearningService.validateBulkUserEvents(payload);
+        return recommendationEventPublisher.publishBulkEvents(payload, user, queuedCount);
     }
 
     @GetMapping("/recommendations/home-parts")

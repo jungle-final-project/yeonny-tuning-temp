@@ -51,7 +51,9 @@ export function SupportChatWidget() {
 
   const currentQuery = useQuery({
     queryKey: ['support-chat', authScope, 'current', routeTicketId ?? 'latest'],
-    queryFn: () => getCurrentSupportChat(routeTicketId),
+    // 배지/세션 판별용 경량 요약(summary=true) — 전체 대화(messages 100건)를 매 폴링마다
+    // 끌어오던 상시 부하를 없앤다. 열면 detailQuery가 전체 상세를 담당한다.
+    queryFn: () => getCurrentSupportChat(routeTicketId, true),
     enabled: hasToken && !hidden && canUseUserChat,
     // 닫힌 위젯: 서버가 지시한 주기는 그대로 따르고, 지시가 없을 때만 느슨한 기본값(30초)을 쓴다
     // — 다탭 환경에서 배지 갱신용 기본 폴링이 요청 폭주를 만들지 않게 한다.

@@ -17,6 +17,7 @@ from diagnosis_as_request import (
 )
 from diagnosis_request_agent import STANDALONE, DiagnosisRequest, DiagnosisSession
 from diagnosis_result import DiagnosisEvidence, DiagnosisFinding, DiagnosisResult
+from pc_agent_demo_scenarios import GRAPHICS_CODE43_REMOTE_SUPPORT_SCENARIO_ID
 
 
 class FakeResponse:
@@ -112,7 +113,12 @@ def make_normal_result() -> DiagnosisResult:
     )
 
 
-def make_device_configuration_result() -> DiagnosisResult:
+def make_device_configuration_result(
+    *,
+    problem_code: int = 22,
+    data_mode: str = "LIVE",
+    scenario_id: str | None = None,
+) -> DiagnosisResult:
     sampled_at = "2026-07-14T01:01:30Z"
     instance_id = "PCI\\VEN_8086&DEV_5694"
     device = DiagnosisEvidence(
@@ -120,11 +126,11 @@ def make_device_configuration_result() -> DiagnosisResult:
         {
             "deviceName": "Intel(R) Arc(TM) A350M Graphics",
             "instanceId": instance_id,
-            "problemCode": 22,
+            "problemCode": problem_code,
             "problemCodeQueryStatus": "OK",
         },
         "", "AVAILABLE", "DISABLED", "Win32_PnPEntity", sampled_at,
-        category="DEVICE", code=22, occurred_at=sampled_at,
+        category="DEVICE", code=problem_code, occurred_at=sampled_at,
     )
     driver = DiagnosisEvidence(
         "windows_display_drivers", "gpu", "display_driver",
@@ -145,7 +151,7 @@ def make_device_configuration_result() -> DiagnosisResult:
     )
     finding = DiagnosisFinding(
         "DEVICE_DRIVER_CONFIGURATION_ISSUE", "WARNING", "그래픽 장치 비활성 상태",
-        "실제 Code 22가 확인됐습니다.", (device.key, symptom.key), (), ("원격 기사 점검",),
+        f"실제 Code {problem_code}이 확인됐습니다.", (device.key, symptom.key), (), ("원격 기사 점검",),
         "PHYSICAL_INSPECTION",
     )
     return DiagnosisResult(
@@ -154,6 +160,7 @@ def make_device_configuration_result() -> DiagnosisResult:
         (device, driver, symptom), (finding,), (), ("원격 AS 기사 점검 권장",),
         "PHYSICAL_INSPECTION", False, (), "2026-07-14T01:01:45Z",
         diagnosis_type="DEVICE_DRIVER_CONFIGURATION_ISSUE", remote_as_recommended=True,
+        data_mode=data_mode, scenario_id=scenario_id,
     )
 
 
@@ -171,6 +178,31 @@ class DiagnosisAsRequestTest(unittest.TestCase):
         self.assertFalse(device["canAutoRecover"])
         self.assertEqual("Intel Corporation", driver["value"]["provider"])
         self.assertEqual("32.0.101.8826", driver["value"]["version"])
+
+    def test_verified_code43_demo_can_create_as_request_but_other_demo_cannot(self) -> None:
+        result = make_device_configuration_result(
+            problem_code=43,
+            data_mode="DEMO",
+            scenario_id=GRAPHICS_CODE43_REMOTE_SUPPORT_SCENARIO_ID,
+        )
+
+        payload = build_diagnosis_as_request(
+            make_session("DEMO"), result, consent_accepted=True,
+        ).to_dict()
+
+        self.assertEqual("DEMO", payload["mode"])
+        self.assertEqual(43, payload["evidenceSummary"][0]["code"])
+        with self.assertRaises(DiagnosisAsValidationError):
+            build_diagnosis_as_request(
+                make_session("DEMO"),
+                make_device_configuration_result(
+                    problem_code=43,
+                    data_mode="DEMO",
+                    scenario_id="UNVERIFIED_DEMO",
+                ),
+                consent_accepted=True,
+            )
+
     def test_live_and_demo_payload_use_actual_result(self) -> None:
         live = build_diagnosis_as_request(make_session(), make_result(), consent_accepted=True).to_dict()
         demo = build_diagnosis_as_request(make_session("DEMO"), make_result(), consent_accepted=True).to_dict()

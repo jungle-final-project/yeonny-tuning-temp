@@ -49,6 +49,17 @@ class ReadThroughTtlCacheTest {
     }
 
     @Test
+    void refreshRebuildsValueBeforeTtlExpires() {
+        ReadThroughTtlCache<String, String> cache = new ReadThroughTtlCache<>(Duration.ofSeconds(30), 16);
+        AtomicInteger loads = new AtomicInteger();
+
+        assertThat(cache.get("k", () -> "v" + loads.incrementAndGet())).isEqualTo("v1");
+        assertThat(cache.refresh("k", () -> "v" + loads.incrementAndGet(), Duration.ofSeconds(30))).isEqualTo("v2");
+        assertThat(cache.get("k", () -> "v" + loads.incrementAndGet())).isEqualTo("v2");
+        assertThat(loads.get()).isEqualTo(2);
+    }
+
+    @Test
     void staleWhileRevalidateReturnsStaleValueAndRefreshesInBackground() throws Exception {
         ReadThroughTtlCache<String, String> cache = new ReadThroughTtlCache<>(Duration.ofMillis(5), 16);
         AtomicInteger loads = new AtomicInteger();

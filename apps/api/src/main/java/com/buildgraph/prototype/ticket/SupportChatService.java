@@ -17,6 +17,9 @@ import org.springframework.web.server.ResponseStatusException;
 @Service
 public class SupportChatService {
     private static final int POLLING_INTERVAL_MS = 5000;
+    // 닫힌 위젯 배지 폴링 주기: 전체 대화 조회가 아니라 요약만 하므로 훨씬 느슨하게.
+    // 로그인 사용자 수에 비례해 깔리던 상시 부하(사용자당 5초마다 풀 detail)를 6배로 줄인다.
+    private static final int CLOSED_POLLING_INTERVAL_MS = 30000;
     private static final int MAX_MESSAGE_LENGTH = 2000;
     private static final int ADMIN_LIST_LIMIT = 100;
     private static final int MESSAGE_PAGE_LIMIT = 100;
@@ -43,6 +46,65 @@ public class SupportChatService {
         return findLatestUserRoom(user)
                 .map(room -> detail(room.publicId(), user, false))
                 .orElseGet(this::empty);
+    }
+
+    /**
+     * 닫힌 위젯 배지용 요약. 무거운 messages()(최근 100건 + users JOIN)와
+     * visitReservationMap(별도 SELECT)을 건너뛰고 룸 1행만 반환한다.
+     * 배지에 필요한 unread/preview/canSend는 이미 룸 행에 있으므로 신규 쿼리는 없다.
+     * markRead는 하지 않는다(닫힘 상태에서 읽음처리 금지 — 열 때만).
+     */
+    public Map<String, Object> currentSummary(CurrentUserService.CurrentUser user, String asTicketId) {
+        String ticketId = stringOrNull(asTicketId);
+        RoomRow room;
+        if (ticketId != null) {
+            TicketRef ticket = requireUserTicket(ticketId, user);
+            if (TERMINAL_TICKET_STATUSES.contains(ticket.status())) {
+                return emptySummary();
+            }
+            RoomRef ref = ensureRoom(ticket, user);
+            room = roomForUser(ref.publicId(), user);
+        } else {
+            java.util.Optional<RoomRef> latest = findLatestUserRoom(user);
+            if (latest.isEmpty()) {
+                return emptySummary();
+            }
+            room = roomForUser(latest.get().publicId(), user);
+        }
+        return summaryResponse(room);
+    }
+
+    private Map<String, Object> summaryResponse(RoomRow room) {
+        boolean canSend = "ACTIVE".equals(room.status())
+                && !TERMINAL_TICKET_STATUSES.contains(room.ticketStatus());
+        return MockData.map(
+                "contact", MockData.map(
+                        "id", room.publicId(),
+                        "asTicketId", room.ticketPublicId(),
+                        "status", room.status(),
+                        "ticketStatus", room.ticketStatus(),
+                        "title", room.title(),
+                        "symptom", room.ticketSymptom(),
+                        "lastMessagePreview", room.lastMessagePreview(),
+                        "lastMessageAt", room.lastMessageAt(),
+                        "userUnreadCount", room.userUnreadCount(),
+                        "canSendMessage", canSend
+                ),
+                "messages", null,
+                "summary", true,
+                "supportNewPath", "/support/new",
+                "pollingIntervalMs", CLOSED_POLLING_INTERVAL_MS
+        );
+    }
+
+    private Map<String, Object> emptySummary() {
+        return MockData.map(
+                "contact", null,
+                "messages", null,
+                "summary", true,
+                "supportNewPath", "/support/new",
+                "pollingIntervalMs", CLOSED_POLLING_INTERVAL_MS
+        );
     }
 
     public Map<String, Object> detail(String roomId, CurrentUserService.CurrentUser user) {

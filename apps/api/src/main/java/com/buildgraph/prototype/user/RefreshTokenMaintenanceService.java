@@ -18,7 +18,7 @@ public class RefreshTokenMaintenanceService {
             JdbcTemplate jdbcTemplate,
             @Value("${buildgraph.auth.refresh-token-cleanup.enabled:true}") boolean cleanupEnabled,
             @Value("${buildgraph.auth.refresh-token-cleanup.run-on-startup:true}") boolean cleanupOnStartup,
-            @Value("${buildgraph.auth.refresh-token-cleanup.max-active-per-user:10}") int maxActivePerUser
+            @Value("${buildgraph.auth.refresh-token-cleanup.max-active-per-user:3}") int maxActivePerUser
     ) {
         this.jdbcTemplate = jdbcTemplate;
         this.cleanupEnabled = cleanupEnabled;

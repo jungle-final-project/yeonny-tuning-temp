@@ -25,13 +25,16 @@ public class PcAgentDiagnosisWebSocketHandler extends TextWebSocketHandler {
 
     private final AgentTokenAuthenticationService authenticationService;
     private final PcAgentDiagnosisSocketBroker broker;
+    private final PcAgentDiagnosisPersistenceService persistenceService;
 
     public PcAgentDiagnosisWebSocketHandler(
             AgentTokenAuthenticationService authenticationService,
-            PcAgentDiagnosisSocketBroker broker
+            PcAgentDiagnosisSocketBroker broker,
+            PcAgentDiagnosisPersistenceService persistenceService
     ) {
         this.authenticationService = authenticationService;
         this.broker = broker;
+        this.persistenceService = persistenceService;
     }
 
     @Override
@@ -136,6 +139,20 @@ public class PcAgentDiagnosisWebSocketHandler extends TextWebSocketHandler {
         Number progressValue = detail.get("progress") instanceof Number number ? number : null;
         Map<String, Object> metadata = objectMap(detail.get("metadata"));
         int progress = progressValue == null ? -1 : progressValue.intValue();
+        try {
+            if (!persistenceService.storeStatus(principal, detail)) {
+                sendError(outbound(session), "INVALID_DIAGNOSIS_STATUS", "진단 상태 이벤트가 요청과 일치하지 않습니다.");
+                return;
+            }
+        } catch (RuntimeException error) {
+            sendError(
+                    outbound(session),
+                    "DIAGNOSIS_PERSISTENCE_FAILED",
+                    "진단 상태 저장에 실패했습니다. 동일 eventId로 다시 전송해 주세요.",
+                    true
+            );
+            return;
+        }
         if (!broker.recordStatus(
                 principal.deviceId(),
                 diagnosisId,
@@ -160,6 +177,20 @@ public class PcAgentDiagnosisWebSocketHandler extends TextWebSocketHandler {
         Map<String, Object> detail = objectMap(payload.get("detail"));
         String diagnosisId = text(detail.get("diagnosisId"));
         String resultId = text(detail.get("resultId"));
+        try {
+            if (!persistenceService.storeResult(principal, detail)) {
+                sendError(outbound(session), "INVALID_DIAGNOSIS_RESULT", "진단 결과가 요청과 일치하지 않습니다.");
+                return;
+            }
+        } catch (RuntimeException error) {
+            sendError(
+                    outbound(session),
+                    "DIAGNOSIS_PERSISTENCE_FAILED",
+                    "진단 결과 저장에 실패했습니다. 동일 resultId로 다시 전송해 주세요.",
+                    true
+            );
+            return;
+        }
         if (!broker.recordResult(principal.deviceId(), detail)) {
             sendError(outbound(session), "INVALID_DIAGNOSIS_RESULT", "진단 결과 형식이 올바르지 않습니다.");
             return;
@@ -192,11 +223,20 @@ public class PcAgentDiagnosisWebSocketHandler extends TextWebSocketHandler {
     }
 
     private static void sendError(WebSocketSession session, String code, String message) throws IOException {
+        sendError(session, code, message, false);
+    }
+
+    private static void sendError(
+            WebSocketSession session,
+            String code,
+            String message,
+            boolean retryable
+    ) throws IOException {
         session.sendMessage(new TextMessage(OBJECT_MAPPER.writeValueAsString(Map.of(
                 "type", "ERROR",
                 "code", code,
                 "message", message,
-                "retryable", false
+                "retryable", retryable
         ))));
     }
 

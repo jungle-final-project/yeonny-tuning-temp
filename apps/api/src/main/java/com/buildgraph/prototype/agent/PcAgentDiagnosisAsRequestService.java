@@ -25,6 +25,8 @@ import org.springframework.transaction.annotation.Transactional;
 public class PcAgentDiagnosisAsRequestService {
     private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
     private static final String REQUEST_TYPE = "PHYSICAL_INSPECTION";
+    private static final String DEVICE_CONFIGURATION_DIAGNOSIS = "DEVICE_DRIVER_CONFIGURATION_ISSUE";
+    private static final String CODE43_DEMO_SCENARIO = "GRAPHICS_CODE43_REMOTE_SUPPORT";
 
     private final JdbcTemplate jdbcTemplate;
     private final PcAgentDiagnosisSocketBroker diagnosisBroker;
@@ -67,6 +69,9 @@ public class PcAgentDiagnosisAsRequestService {
         }
 
         PcAgentDiagnosisSocketBroker.DiagnosisResultRecord resultRecord = diagnosisBroker.latestResult(diagnosisId);
+        if (resultRecord == null) {
+            resultRecord = storedDiagnosisResult(principal, diagnosisId);
+        }
         PcAgentDiagnosisRequest diagnosisRequest = diagnosisBroker.latestRequest(diagnosisId);
         if (diagnosisRequest == null) {
             diagnosisRequest = storedDiagnosisRequest(principal, diagnosisId);
@@ -103,6 +108,7 @@ public class PcAgentDiagnosisAsRequestService {
                   risk_level,
                   auto_response_allowed,
                   cause_candidates,
+                  support_routing,
                   upgrade_candidates,
                   admin_note,
                   updated_at
@@ -125,9 +131,10 @@ public class PcAgentDiagnosisAsRequestService {
                   'OPEN',
                   'RULE_READY',
                   'REQUIRED',
-                  'VISIT_REQUIRED',
+                  NULL,
                   ?,
                   false,
+                  ?::jsonb,
                   ?::jsonb,
                   '[]'::jsonb,
                   ?,
@@ -160,6 +167,7 @@ public class PcAgentDiagnosisAsRequestService {
                 toJson(diagnosis.result()),
                 diagnosis.riskLevel(),
                 toJson(diagnosis.findings()),
+                toJson(supportRouting(diagnosis.result())),
                 diagnosis.summary()
         );
         return response(row, principal.userInternalId());
@@ -212,6 +220,25 @@ public class PcAgentDiagnosisAsRequestService {
         if (!Objects.equals(mode, diagnosisRequest.mode())) {
             throw invalid("mode does not match the server diagnosis request.");
         }
+        String resultMode = text(result.get("dataMode"));
+        if (resultMode == null) {
+            resultMode = "LIVE";
+        }
+        if (!Objects.equals(mode, resultMode)) {
+            throw invalid("mode does not match the stored diagnosis result.");
+        }
+        if (DEVICE_CONFIGURATION_DIAGNOSIS.equals(text(result.get("diagnosisType")))
+                && "DEMO".equals(mode)
+                && (!CODE43_DEMO_SCENARIO.equals(text(result.get("scenarioId")))
+                || !Boolean.TRUE.equals(result.get("remoteAsRecommended"))
+                || !Boolean.FALSE.equals(result.get("canAutoRecover"))
+                || !containsProblemCode(storedEvidence, 43))) {
+            throw new ApiException(
+                    HttpStatus.CONFLICT,
+                    "AS_NOT_ELIGIBLE",
+                    "Only the verified Code 43 remote-support demo can create a device-configuration AS request."
+            );
+        }
         Instant diagnosedAt = timestamp(required(request.diagnosedAt(), "diagnosedAt"), "diagnosedAt");
         Instant evaluatedAt = timestamp(required(text(result.get("evaluatedAt")), "evaluatedAt"), "evaluatedAt");
         if (!diagnosedAt.equals(evaluatedAt)) {
@@ -230,6 +257,47 @@ public class PcAgentDiagnosisAsRequestService {
                 riskLevel(severity),
                 result
         );
+    }
+
+    private PcAgentDiagnosisSocketBroker.DiagnosisResultRecord storedDiagnosisResult(
+            AgentPrincipal principal,
+            String diagnosisId
+    ) {
+        return jdbcTemplate.queryForList("""
+                        SELECT d.public_id::text AS device_id,
+                               result.result_id,
+                               result.raw_payload
+                        FROM pc_agent_diagnosis_results result
+                        JOIN pc_agent_diagnosis_requests request
+                          ON request.diagnosis_id = result.diagnosis_id
+                        JOIN agent_devices d ON d.id = request.agent_device_id
+                        WHERE result.diagnosis_id = ?::uuid
+                          AND request.agent_device_id = ?
+                          AND request.user_id = ?
+                          AND d.public_id = ?::uuid
+                        """,
+                        diagnosisId,
+                        principal.deviceInternalId(),
+                        principal.userInternalId(),
+                        principal.deviceId()
+                )
+                .stream()
+                .findFirst()
+                .map(row -> {
+                    Object rawPayload = DbValueMapper.json(row, "raw_payload", Map.of());
+                    if (!(rawPayload instanceof Map<?, ?> storedResult)) {
+                        return null;
+                    }
+                    Map<String, Object> result = new java.util.LinkedHashMap<>();
+                    storedResult.forEach((key, value) -> result.put(String.valueOf(key), value));
+                    return new PcAgentDiagnosisSocketBroker.DiagnosisResultRecord(
+                            DbValueMapper.string(row, "device_id"),
+                            diagnosisId,
+                            DbValueMapper.string(row, "result_id"),
+                            java.util.Collections.unmodifiableMap(result)
+                    );
+                })
+                .orElse(null);
     }
 
     private PcAgentDiagnosisRequest storedDiagnosisRequest(AgentPrincipal principal, String diagnosisId) {
@@ -385,6 +453,53 @@ public class PcAgentDiagnosisAsRequestService {
             }
         }
         return Objects.equals(left, right);
+    }
+
+    private static boolean containsProblemCode(List<?> evidence, int expectedCode) {
+        return evidence.stream()
+                .filter(Map.class::isInstance)
+                .map(Map.class::cast)
+                .map(item -> item.get("value"))
+                .filter(Map.class::isInstance)
+                .map(Map.class::cast)
+                .anyMatch(value -> numericValueEquals(value.get("problemCode"), expectedCode));
+    }
+
+    private static Map<String, Object> supportRouting(Map<String, Object> result) {
+        List<String> reasonCodes = list(result.get("findings")).stream()
+                .filter(Map.class::isInstance)
+                .map(Map.class::cast)
+                .map(finding -> text(finding.get("code")))
+                .filter(Objects::nonNull)
+                .distinct()
+                .toList();
+        List<String> actions = stringList(result.containsKey("recommendedActions")
+                ? result.get("recommendedActions")
+                : result.get("actions"));
+        if (Boolean.TRUE.equals(result.get("remoteAsRecommended"))) {
+            return Map.ofEntries(
+                    Map.entry("recommendedDecision", "REMOTE_POSSIBLE"),
+                    Map.entry("recommendedService", "REMOTE_SUPPORT"),
+                    Map.entry("recommendedServiceLabel", "원격지원 신청"),
+                    Map.entry("confidence", "HIGH"),
+                    Map.entry("reasonCodes", reasonCodes),
+                    Map.entry("remoteActions", actions),
+                    Map.entry("visitReasons", List.of()),
+                    Map.entry("blockingFactors", List.of()),
+                    Map.entry("requiresAdminApproval", true)
+            );
+        }
+        return Map.ofEntries(
+                Map.entry("recommendedDecision", "NEEDS_MORE_INFO"),
+                Map.entry("recommendedService", "DIAGNOSIS_ONLY"),
+                Map.entry("recommendedServiceLabel", "우선 진단만 받기"),
+                Map.entry("confidence", "LOW"),
+                Map.entry("reasonCodes", reasonCodes),
+                Map.entry("remoteActions", List.of()),
+                Map.entry("visitReasons", List.of()),
+                Map.entry("blockingFactors", List.of()),
+                Map.entry("requiresAdminApproval", true)
+        );
     }
 
     private static List<String> stringList(Object value) {

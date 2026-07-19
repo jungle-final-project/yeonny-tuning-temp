@@ -30,6 +30,8 @@ class AgentAsJpaMappingTest {
         assertTable(AsTicketEntity.class, "as_tickets");
         assertTable(RemoteSupportSessionEntity.class, "remote_support_sessions");
         assertTable(VisitSupportReservationEntity.class, "visit_support_reservations");
+        assertTable(PcAgentDiagnosisEventEntity.class, "pc_agent_diagnosis_events");
+        assertTable(PcAgentDiagnosisResultEntity.class, "pc_agent_diagnosis_results");
     }
 
     @Test
@@ -92,6 +94,8 @@ class AgentAsJpaMappingTest {
         assertJpaRepository(AsTicketRepository.class, AsTicketEntity.class);
         assertJpaRepository(RemoteSupportSessionRepository.class, RemoteSupportSessionEntity.class);
         assertJpaRepository(VisitSupportReservationRepository.class, VisitSupportReservationEntity.class);
+        assertJpaRepository(PcAgentDiagnosisEventRepository.class, PcAgentDiagnosisEventEntity.class);
+        assertJpaRepository(PcAgentDiagnosisResultRepository.class, PcAgentDiagnosisResultEntity.class);
     }
 
     private static void assertTable(Class<?> entityType, String tableName) {

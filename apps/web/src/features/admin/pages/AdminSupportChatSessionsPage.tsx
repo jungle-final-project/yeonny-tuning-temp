@@ -11,7 +11,7 @@ import type { SupportChatContact, SupportChatMessage, SupportChatSessionDto, Sup
 
 const DEFAULT_POLL_MS = 5000;
 const SOCKET_RECONNECT_DELAYS_MS = [1000, 2000, 5000, 10000];
-type SocketStatus = 'polling' | 'connecting' | 'reconnecting' | 'connected' | 'disconnected';
+export type SocketStatus = 'polling' | 'connecting' | 'reconnecting' | 'connected' | 'disconnected';
 
 export function AdminSupportChatSessionsPage() {
   const queryClient = useQueryClient();
@@ -601,7 +601,7 @@ export function AdminSupportChatSessionsPage() {
   );
 }
 
-function AdminChatBubble({ message }: { message: SupportChatMessage }) {
+export function AdminChatBubble({ message }: { message: SupportChatMessage }) {
   const isAdmin = message.role === 'ADMIN';
   const isSystem = message.role === 'SYSTEM';
   return (
@@ -780,7 +780,7 @@ function pollingLabel(list: SupportChatSessionListDto | undefined) {
   return `${polling}ms`;
 }
 
-function socketStatusLabel(status: SocketStatus) {
+export function socketStatusLabel(status: SocketStatus) {
   switch (status) {
     case 'connected':
       return '실시간 연결';
@@ -795,7 +795,7 @@ function socketStatusLabel(status: SocketStatus) {
   }
 }
 
-function connectionClass(status: SocketStatus) {
+export function connectionClass(status: SocketStatus) {
   switch (status) {
     case 'connected':
       return 'bg-emerald-50 text-emerald-700 border-emerald-200';

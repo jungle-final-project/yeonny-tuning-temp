@@ -1,6 +1,8 @@
 package com.buildgraph.prototype.user;
 
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
@@ -11,6 +13,8 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import com.buildgraph.prototype.agent.PcAgentAsService;
+import com.buildgraph.prototype.common.ApiException;
+import jakarta.servlet.http.HttpServletRequest;
 import java.net.URI;
 import java.util.Map;
 import org.junit.jupiter.api.Test;
@@ -38,6 +42,9 @@ class UserControllerTest {
 
     @MockitoBean
     private GoogleOAuthService googleOAuthService;
+
+    @MockitoBean
+    private LoginRateLimiter loginRateLimiter;
 
     @Test
     void loginReturnsAuthResponse() throws Exception {
@@ -96,6 +103,31 @@ class UserControllerTest {
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.code").value("VALIDATION_ERROR"))
                 .andExpect(jsonPath("$.message").value("요청 값이 올바르지 않습니다."));
+
+        verifyNoInteractions(userQueryService);
+    }
+
+    @Test
+    void loginRateLimitRejectsBeforeAuthService() throws Exception {
+        doThrow(new ApiException(
+                HttpStatus.TOO_MANY_REQUESTS,
+                "RATE_LIMITED",
+                "Too many login attempts. Please try again later.",
+                Map.of("scope", "ip", "retryAfterSeconds", 60)
+        )).when(loginRateLimiter).checkAllowed(eq("admin@example.com"), any(HttpServletRequest.class));
+
+        mockMvc.perform(post("/api/auth/login")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "email": "admin@example.com",
+                                  "password": "passw0rd!"
+                                }
+                                """))
+                .andExpect(status().isTooManyRequests())
+                .andExpect(jsonPath("$.code").value("RATE_LIMITED"))
+                .andExpect(jsonPath("$.details.scope").value("ip"))
+                .andExpect(jsonPath("$.details.retryAfterSeconds").value(60));
 
         verifyNoInteractions(userQueryService);
     }

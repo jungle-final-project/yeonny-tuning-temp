@@ -1,28 +1,36 @@
 import type { ReactNode } from 'react';
 import { Link } from 'react-router-dom';
 import { DataTable, MetricCard, Panel, StateMessage, StatusBadge } from '../../../components/ui';
-import { BENCHMARK_REFERENCE_NOTICE } from '../../../lib/disclaimers';
-import type { AiAssistantSession, AiRecommendedBuild } from '../aiSelection';
-import type { BuildSummary, ToolResult, WarningDto } from '../types';
+import type { AiAssistantSession, AiRecommendedBuild, BuildGraphResolveResponse, BuildGraphStatus } from '../aiSelection';
+import type { BuildItem, BuildSummary, ToolResult, WarningDto } from '../types';
 
 export function BuildDetailSections({
   displayBuild,
+  compatibilityGraph,
+  compatibilityPending = false,
   conditionBody,
   summaryNotice,
   summaryActions
 }: {
   displayBuild: BuildSummary;
+  compatibilityGraph?: BuildGraphResolveResponse;
+  compatibilityPending?: boolean;
   conditionBody: string;
   summaryNotice?: ReactNode;
   summaryActions: ReactNode;
 }) {
   const toolResults = displayBuild.toolResults ?? [];
   const passCount = toolResults.filter((row) => row.status === 'PASS').length;
+  const compatibilityStatuses = compatibilityStatusIndex(compatibilityGraph);
 
   return (
-    <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_320px]">
-      <div className="min-w-0 space-y-5">
-        <Panel title="구성 부품">
+    <div className="grid items-stretch gap-5 lg:grid-cols-[minmax(0,1fr)_320px]">
+      <div className="min-w-0 lg:h-full">
+        <Panel
+          title="구성 부품"
+          action={<InlineVerificationSummary results={toolResults} passCount={passCount} />}
+          className="lg:h-full"
+        >
           <div className="space-y-2 md:hidden">
             {displayBuild.items.map((item) => (
               <div key={`${displayBuild.id}-${item.category}`} className="rounded-md border border-commerce-line bg-white p-3">
@@ -37,12 +45,18 @@ export function BuildDetailSections({
                     item.name
                   )}
                 </div>
-                <div className="mt-1 text-xs font-semibold text-slate-500">{item.manufacturer ?? '-'}</div>
+                <div className="mt-2 flex items-center justify-between gap-3">
+                  <span className="text-xs font-semibold text-slate-500">{item.manufacturer ?? '-'}</span>
+                  <span className="flex items-center gap-2">
+                    <span className="text-[11px] font-bold text-slate-400">호환성</span>
+                    <CompatibilityStatus status={compatibilityStatus(item, compatibilityStatuses)} pending={compatibilityPending} />
+                  </span>
+                </div>
               </div>
             ))}
           </div>
           <div className="hidden md:block">
-            <DataTable columns={['분류', '부품명', '제조사', '가격']} rows={displayBuild.items.map((item) => ({
+            <DataTable columns={['분류', '부품명', '제조사', '호환성', '가격']} nowrapColumns={['분류', '제조사', '호환성', '가격']} rows={displayBuild.items.map((item) => ({
               분류: item.category,
               부품명: item.partId ? (
                 <Link to={`/parts/${item.partId}`} className="font-bold text-commerce-ink hover:text-[#de6c2d] hover:underline">{item.name}</Link>
@@ -50,39 +64,13 @@ export function BuildDetailSections({
                 item.name
               ),
               제조사: item.manufacturer ?? '-',
+              호환성: <CompatibilityStatus status={compatibilityStatus(item, compatibilityStatuses)} pending={compatibilityPending} />,
               가격: <span className="whitespace-nowrap font-black text-commerce-ink">{item.price.toLocaleString()}원</span>
             }))} />
           </div>
         </Panel>
-        <Panel title="검증 결과">
-          {toolResults.length > 0 ? (
-            <div className={`mb-3 rounded-md border px-4 py-3 text-sm font-black ${passCount === toolResults.length ? 'border-emerald-100 bg-emerald-50 text-emerald-700' : 'border-amber-100 bg-amber-50 text-amber-700'}`}>
-              {passCount === toolResults.length
-                ? `${toolResults.length}개 검증 모두 통과`
-                : `${toolResults.length}개 검증 중 ${passCount}개 통과 · 아래에서 경고 항목을 확인하세요`}
-            </div>
-          ) : null}
-          <div className="space-y-2 md:hidden">
-            {toolResults.map((row) => (
-              <div key={`${row.tool}-${row.summary}`} className="rounded-md border border-commerce-line bg-white p-3">
-                <div className="flex items-center justify-between gap-2">
-                  <span className="text-xs font-black text-slate-500">{toolLabel(row.tool)}</span>
-                  <span className="flex items-center gap-2">
-                    <StatusBadge status={row.status} />
-                    <StatusBadge status={row.confidence} />
-                  </span>
-                </div>
-                <p className="mt-2 text-xs leading-5 text-slate-600">{row.summary}</p>
-              </div>
-            ))}
-          </div>
-          <div className="hidden md:block">
-            <DataTable columns={['검증 항목', '상태', '신뢰도', '요약']} rows={toolRows(toolResults)} />
-          </div>
-          <p className="mt-3 break-keep text-[11px] font-bold leading-5 text-slate-500">{BENCHMARK_REFERENCE_NOTICE}</p>
-        </Panel>
       </div>
-      <Panel title="견적 요약 / 액션">
+      <Panel title="견적 요약 / 액션" className="lg:h-full">
         <div className="space-y-4">
           <div className="rounded-md border border-commerce-line bg-white p-4 shadow-sm">
             <div className="text-xs font-bold text-slate-500">총액</div>
@@ -142,28 +130,94 @@ function warningDtos(warnings: string[]): WarningDto[] {
   return warnings.map((message) => ({ message, severity: 'WARN' }));
 }
 
-function toolRows(results: ToolResult[]) {
-  return results.map((row) => ({
-    '검증 항목': toolLabel(row.tool),
-    상태: <StatusBadge status={row.status} />,
-    신뢰도: <StatusBadge status={row.confidence} />,
-    요약: row.summary
-  }));
+function CompatibilityStatus({ status, pending }: { status?: BuildGraphStatus; pending: boolean }) {
+  if (pending && !status) {
+    return <span className="text-[11px] font-bold text-slate-400">검증 중</span>;
+  }
+  return status ? (
+    <StatusBadge status={status} />
+  ) : (
+    <span className="text-[11px] font-bold text-slate-400">검증 정보 없음</span>
+  );
 }
 
-function toolLabel(tool: string) {
-  switch (tool) {
-    case 'compatibility':
-      return '호환성 검증';
-    case 'power':
-      return '전력 검증';
-    case 'size':
-      return '규격 검증';
-    case 'performance':
-      return '성능 범위';
-    case 'price':
-      return '가격 확인';
-    default:
-      return tool;
+type CompatibilityStatusIndex = {
+  byPartId: Map<string, BuildGraphStatus>;
+  byCategory: Map<string, BuildGraphStatus>;
+};
+
+function compatibilityStatusIndex(graph?: BuildGraphResolveResponse): CompatibilityStatusIndex {
+  const byPartId = new Map<string, BuildGraphStatus>();
+  const byCategory = new Map<string, BuildGraphStatus>();
+  const partNodesById = new Map<string, BuildGraphResolveResponse['nodes'][number]>();
+
+  const promoteNode = (node: BuildGraphResolveResponse['nodes'][number] | undefined, status: BuildGraphStatus) => {
+    if (!node || node.type !== 'PART') {
+      return;
+    }
+    if (node.partId) {
+      promoteStatus(byPartId, node.partId, status);
+    }
+    if (node.category) {
+      promoteStatus(byCategory, node.category, status);
+    }
+  };
+
+  graph?.nodes.forEach((node) => {
+    if (node.type !== 'PART') {
+      return;
+    }
+    partNodesById.set(node.id, node);
+    promoteNode(node, node.status);
+  });
+  graph?.edges.forEach((edge) => {
+    if (edge.status === 'PASS') {
+      return;
+    }
+    promoteNode(partNodesById.get(edge.source), edge.status);
+    promoteNode(partNodesById.get(edge.target), edge.status);
+  });
+  graph?.insights.forEach((insight) => {
+    if (insight.status === 'PASS') {
+      return;
+    }
+    insight.relatedNodeIds.forEach((nodeId) => promoteNode(partNodesById.get(nodeId), insight.status));
+  });
+
+  return { byPartId, byCategory };
+}
+
+function compatibilityStatus(item: BuildItem, index: CompatibilityStatusIndex) {
+  return (item.partId ? index.byPartId.get(item.partId) : undefined) ?? index.byCategory.get(item.category);
+}
+
+function promoteStatus(map: Map<string, BuildGraphStatus>, key: string, status: BuildGraphStatus) {
+  const current = map.get(key);
+  if (!current || compatibilityStatusRank(status) > compatibilityStatusRank(current)) {
+    map.set(key, status);
   }
+}
+
+function compatibilityStatusRank(status: BuildGraphStatus) {
+  if (status === 'FAIL') return 3;
+  if (status === 'WARN') return 2;
+  return 1;
+}
+
+function InlineVerificationSummary({ results, passCount }: { results: ToolResult[]; passCount: number }) {
+  const overallStatus = results.some((row) => row.status.toUpperCase() === 'FAIL')
+    ? 'FAIL'
+    : results.some((row) => row.status.toUpperCase() === 'WARN')
+      ? 'WARN'
+      : 'PASS';
+
+  return (
+    <div aria-label="검증 요약" className="flex items-center gap-2 whitespace-nowrap">
+      <span className="text-xs font-black text-slate-500">검증 요약</span>
+      <span className="text-xs font-bold text-slate-700">
+        {results.length > 0 ? `${passCount}/${results.length} 통과` : '결과 없음'}
+      </span>
+      {results.length > 0 ? <StatusBadge status={overallStatus} /> : null}
+    </div>
+  );
 }

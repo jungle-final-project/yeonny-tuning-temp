@@ -9,6 +9,10 @@ from typing import Any, Callable
 
 from diagnosis_result import DiagnosisEvidence
 from initial_metrics import AVAILABLE, FAILED, PERMISSION_REQUIRED, UNSUPPORTED
+from pc_agent_demo_scenarios import (
+    DEMO_DATA_MODE,
+    GRAPHICS_CODE43_REMOTE_SUPPORT_SCENARIO_ID,
+)
 
 
 OK = "OK"
@@ -190,6 +194,8 @@ class WindowsGraphicsDiagnosticsSnapshot:
     graphics_event_query: PowerShellQueryResult
     whea_event_query: PowerShellQueryResult
     kernel_power_event_query: PowerShellQueryResult
+    data_mode: str = "LIVE"
+    scenario_id: str | None = None
 
     def query_statuses(self) -> dict[str, str]:
         return {
@@ -202,6 +208,22 @@ class WindowsGraphicsDiagnosticsSnapshot:
 
     def to_evidence(self) -> tuple[DiagnosisEvidence, ...]:
         evidence: list[DiagnosisEvidence] = []
+        if self.data_mode == DEMO_DATA_MODE and self.scenario_id:
+            evidence.append(DiagnosisEvidence(
+                task_id="windows_display_devices",
+                component="system",
+                metric_type="demo_scenario",
+                value={"dataMode": self.data_mode, "scenarioId": self.scenario_id},
+                unit="",
+                availability=AVAILABLE,
+                status="ACTIVE",
+                source="demo-scenario",
+                sampled_at=self.queried_at,
+                category="SYSTEM",
+                code=self.scenario_id,
+                occurred_at=self.queried_at,
+                description="Explicitly activated PC Agent demo scenario",
+            ))
         for device in self.devices:
             device_value = {
                 "deviceName": device.device_name,
@@ -280,6 +302,8 @@ class WindowsGraphicsDiagnosticsSnapshot:
     def to_dict(self) -> dict[str, Any]:
         return {
             "queriedAt": self.queried_at,
+            "dataMode": self.data_mode,
+            "scenarioId": self.scenario_id,
             "queryStatuses": self.query_statuses(),
             "queryErrors": {
                 "displayDevices": self.device_query.error,
@@ -360,6 +384,82 @@ class WindowsGraphicsDiagnosticsProvider:
             graphics_event_query=graphics_event_query,
             whea_event_query=whea_event_query,
             kernel_power_event_query=kernel_power_event_query,
+        )
+
+
+class Code43RemoteSupportDemoGraphicsProvider:
+    """Provider-boundary fixture for the explicit Code 43 demo scenario."""
+
+    def __init__(self, now: Callable[[], datetime] | None = None) -> None:
+        self.now = now or (lambda: datetime.now(timezone.utc))
+
+    def collect(self) -> WindowsGraphicsDiagnosticsSnapshot:
+        queried_at = _utc_iso(self.now())
+        iris_instance_id = "PCI\\VEN_8086&DEV_A7A0&SUBSYS_C2D4144D&REV_04\\3&11583659&0&10"
+        arc_instance_id = "PCI\\VEN_8086&DEV_5694&SUBSYS_C2D4144D&REV_05\\6&7F5B445&0&00080030"
+        device_query = PowerShellQueryResult(OK, (
+            {
+                "deviceName": "Intel(R) Iris(R) Xe Graphics",
+                "instanceId": iris_instance_id,
+                "pnpStatus": "OK",
+                "problemCode": 0,
+                "problemCodeQueryStatus": OK,
+                "deviceClass": "Display",
+                "manufacturer": "Intel Corporation",
+                "source": DISPLAY_DEVICE_CIM_SOURCE,
+            },
+            {
+                "deviceName": "Intel(R) Arc(TM) A350M Graphics",
+                "instanceId": arc_instance_id,
+                "pnpStatus": "Error",
+                "problemCode": 43,
+                "problemCodeQueryStatus": OK,
+                "deviceClass": "Display",
+                "manufacturer": "Intel Corporation",
+                "source": DISPLAY_DEVICE_CIM_SOURCE,
+            },
+        ))
+        driver_query = PowerShellQueryResult(OK, (
+            {
+                "deviceName": "Intel(R) Iris(R) Xe Graphics",
+                "instanceId": iris_instance_id,
+                "deviceClass": "Display",
+                "manufacturer": "Intel Corporation",
+                "provider": "Intel Corporation",
+                "version": "31.0.101.4502",
+                "date": "2023-06-15T00:00:00+00:00",
+                "signed": True,
+                "signer": "Microsoft Windows Hardware Compatibility Publisher",
+                "infName": "oem70.inf",
+            },
+            {
+                "deviceName": "Intel(R) Arc(TM) A350M Graphics",
+                "instanceId": arc_instance_id,
+                "deviceClass": "Display",
+                "manufacturer": "Intel Corporation",
+                "provider": "Intel Corporation",
+                "version": "32.0.101.8826",
+                "date": "2026-05-29T00:00:00+00:00",
+                "signed": True,
+                "signer": "Microsoft Windows Hardware Compatibility Publisher",
+                "infName": "oem81.inf",
+            },
+        ))
+        no_events = PowerShellQueryResult(NO_RESULTS)
+        devices = normalize_display_devices(device_query.items, driver_query.items, queried_at)
+        return WindowsGraphicsDiagnosticsSnapshot(
+            queried_at=queried_at,
+            devices=devices,
+            graphics_events=(),
+            whea_events=(),
+            kernel_power_events=(),
+            device_query=device_query,
+            driver_query=driver_query,
+            graphics_event_query=no_events,
+            whea_event_query=no_events,
+            kernel_power_event_query=no_events,
+            data_mode=DEMO_DATA_MODE,
+            scenario_id=GRAPHICS_CODE43_REMOTE_SUPPORT_SCENARIO_ID,
         )
 
 

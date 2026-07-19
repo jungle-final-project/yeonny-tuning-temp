@@ -26,24 +26,30 @@ public class QuoteDraftQueryService {
     // @Transactional이 응답 read-back(3-way JOIN)까지 감싸 커밋 전 락·커넥션을 오래 잡았다(idle-in-transaction 본류).
     // 쓰기 구간만 짧게 감싸 즉시 커밋하기 위해 프로그래매틱 트랜잭션을 쓴다.
     private final TransactionTemplate transactionTemplate;
+    // draft 읽기 캐시 — 조회는 캐시를 타고, 이 클래스의 모든 쓰기 경로가 커밋 직후 무효화한다.
+    private final QuoteDraftReadCache draftReadCache;
 
     public QuoteDraftQueryService(
             JdbcTemplate jdbcTemplate,
             CurrentUserService currentUserService,
-            PlatformTransactionManager transactionManager
+            PlatformTransactionManager transactionManager,
+            QuoteDraftReadCache draftReadCache
     ) {
         this.jdbcTemplate = jdbcTemplate;
         this.currentUserService = currentUserService;
         this.transactionTemplate = new TransactionTemplate(transactionManager);
+        this.draftReadCache = draftReadCache;
     }
 
     public Map<String, Object> current(String authorization) {
         Long userId = currentUserId(authorization);
-        Map<String, Object> draft = activeDraft(userId);
-        if (draft == null) {
-            return emptyDraft();
-        }
-        return draftMap(draft);
+        return draftReadCache.response(userId, () -> {
+            Map<String, Object> draft = activeDraft(userId);
+            if (draft == null) {
+                return emptyDraft();
+            }
+            return draftMap(draft);
+        });
     }
 
     public Map<String, Object> putItem(String authorization, String partId, Map<String, Object> request) {
@@ -51,12 +57,16 @@ public class QuoteDraftQueryService {
         Map<String, Object> part = part(partId);
         String category = DbValueMapper.string(part, "category");
         int quantity = quantity(request.get("quantity"), category);
-        transactionTemplate.executeWithoutResult(status -> {
+        // draft touch(UPDATE ... RETURNING)가 응답용 draft 행을 함께 돌려준다 — 커밋 후
+        // activeDraft 재조회(순수 중복 1쿼리)를 없앤다. items read-back은 여전히 트랜잭션 밖이다.
+        Map<String, Object> draft = transactionTemplate.execute(status -> {
             Long draftId = ensureActiveDraftId(userId);
             upsertDraftItem(draftId, part, quantity);
+            return touchDraftReturning(draftId);
         });
-        // read-back은 커밋 후 트랜잭션 밖에서 — 응답 조립이 락 보유 시간을 늘리지 않게 한다.
-        return draftMap(activeDraft(userId));
+        // 커밋 직후 무효화 — 응답은 아래에서 직접 재조립하고(캐시에 되쓰지 않음), 다음 읽기가 재적재한다.
+        draftReadCache.invalidate(userId);
+        return draftMap(draft);
     }
 
     public Map<String, Object> applyAiBuild(String authorization, Map<String, Object> request) {
@@ -66,7 +76,7 @@ public class QuoteDraftQueryService {
         }
         // 부품 해석·검증은 트랜잭션 진입 전에 끝낸다 — 실패해도 드래프트는 건드리지 않는다(기존 의미 유지).
         List<ResolvedAiItem> items = resolveAiItems(request.get("items"));
-        transactionTemplate.executeWithoutResult(status -> {
+        Map<String, Object> draft = transactionTemplate.execute(status -> {
             Long draftId = ensureActiveDraftId(userId);
             jdbcTemplate.update("""
                     UPDATE quote_draft_items
@@ -89,9 +99,10 @@ public class QuoteDraftQueryService {
                                     DbValueMapper.integer(item.part(), "price")
                             })
                             .toList());
-            jdbcTemplate.update("UPDATE quote_drafts SET updated_at = now() WHERE id = ?", draftId);
+            return touchDraftReturning(draftId);
         });
-        return draftMap(activeDraft(userId));
+        draftReadCache.invalidate(userId);
+        return draftMap(draft);
     }
 
     public Map<String, Object> patchItem(String authorization, String partId, Map<String, Object> request) {
@@ -112,7 +123,9 @@ public class QuoteDraftQueryService {
         if (updated == 0) {
             throw new ResponseStatusException(HttpStatus.NOT_FOUND, "견적초안에 담긴 부품을 찾을 수 없습니다.");
         }
-        return draftMap(activeDraft(userId));
+        draftReadCache.invalidate(userId);
+        // 이 경로는 draft 행을 건드리지 않으므로 진입 시 읽은 행을 그대로 응답에 쓴다 — 재조회 중복 제거.
+        return draftMap(draft);
     }
 
     public Map<String, Object> deleteItem(String authorization, String partId) {
@@ -132,7 +145,9 @@ public class QuoteDraftQueryService {
                   AND part_id = ?
                   AND deleted_at IS NULL
                 """, longValue(draft, "internal_id"), longValue(part, "internal_id"));
-        return draftMap(activeDraft(userId));
+        draftReadCache.invalidate(userId);
+        // 이 경로는 draft 행을 건드리지 않으므로 진입 시 읽은 행을 그대로 응답에 쓴다 — 재조회 중복 제거.
+        return draftMap(draft);
     }
 
     private Long currentUserId(String authorization) {
@@ -262,7 +277,20 @@ public class QuoteDraftQueryService {
         } else {
             upsertSingleCategoryItem(draftId, part, quantity);
         }
-        jdbcTemplate.update("UPDATE quote_drafts SET updated_at = now() WHERE id = ?", draftId);
+    }
+
+    // draft touch와 응답용 draft 행 조회를 RETURNING 한 문장으로 합친다 — 커밋 후 activeDraft
+    // 재조회를 없애면서 응답의 updatedAt은 touch 직후 값 그대로다.
+    private Map<String, Object> touchDraftReturning(Long draftId) {
+        return jdbcTemplate.queryForList("""
+                UPDATE quote_drafts
+                SET updated_at = now()
+                WHERE id = ?
+                RETURNING id AS internal_id, public_id::text AS id, status, name, created_at, updated_at
+                """, draftId)
+                .stream()
+                .findFirst()
+                .orElse(null);
     }
 
     // UPDATE→0행→INSERT 수동 업서트는 동시 PUT 2건이 둘 다 INSERT로 가서 23505로 터졌다(부하 실측 500의 범인).

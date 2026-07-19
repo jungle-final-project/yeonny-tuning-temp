@@ -878,6 +878,53 @@ test('shows the login choice prompt before dismissed and opens AI flow choices',
   await expect(aiFlowDialog.getByTestId('home-ai-flow-choice-all-parts')).toBeVisible();
 });
 
+// 중앙 AI 모달은 인라인 ref로 컨테이너를 넘겨, 리렌더마다 스크롤 컨테이너가 재부착되며
+// 바닥으로 튕겨 내려가던 회귀가 있었다(#255). 위로 올린 위치는 타이핑·리렌더에도 유지돼야 한다.
+test('홈 중앙 AI 모달에서 위로 올린 스크롤 위치가 타이핑·리렌더에도 유지된다', async ({ page }) => {
+  await mockCurrentQuoteDraftApi(page);
+  const longAnswer = Array.from({ length: 12 }, (_, index) => (
+    `${index + 1}번째 근거 문단입니다. 현재 구성의 전력·발열·장착 여유와 게임별 예상 성능을 근거 수치와 함께 길게 설명하는 문단입니다.`
+  )).join(' ');
+  await page.route('**/api/ai/build-chat', async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({ answerType: 'GENERAL', message: longAnswer, builds: [], warnings: [] })
+    });
+  });
+  await openHomeAsUser(page, { dismissHomeChoice: false });
+  await page.getByTestId('home-login-choice-dialog').getByTestId('home-login-choice-ai').click();
+  await page.getByTestId('home-ai-flow-choice-dialog').getByTestId('home-ai-flow-choice-ai').click();
+
+  const modal = page.getByTestId('ai-chatbot-modal');
+  await expect(modal).toBeVisible();
+  const input = modal.getByRole('textbox', { name: 'AI에게 PC 견적 질문' });
+  await input.fill('게이밍 200만원');
+  await page.getByRole('button', { name: '질문 보내기' }).click();
+
+  const messages = modal.getByTestId('ai-chat-messages');
+  await expect(messages).toContainText('12번째 근거 문단입니다', { timeout: 20000 });
+  await expect.poll(async () => messages.evaluate((element) => element.scrollHeight - element.clientHeight))
+    .toBeGreaterThan(100);
+
+  // 위로 올려 이전 대화를 읽는 중.
+  await messages.evaluate((element) => { element.scrollTop = 0; });
+  expect(await messages.evaluate((element) => element.scrollTop)).toBeLessThan(50);
+
+  // 입력창에 타이핑하면 리렌더가 발생한다 — 그래도 읽던 위치가 유지돼야 한다.
+  await input.pressSequentially('추천', { delay: 30 });
+  expect(await messages.evaluate((element) => element.scrollTop)).toBeLessThan(50);
+
+  // 휠로 조금 내려도 강제로 바닥까지 끌려가지 않는다.
+  await messages.evaluate((element) => { element.scrollTop = 120; });
+  await input.pressSequentially('해줘', { delay: 30 });
+  const afterTyping = await messages.evaluate((element) => ({
+    top: element.scrollTop,
+    bottom: element.scrollHeight - element.clientHeight
+  }));
+  expect(afterTyping.top).toBeLessThan(afterTyping.bottom - 50);
+});
+
 test('renders the editorial home with the quote validation flow', async ({ page }) => {
   await mockCurrentQuoteDraftApi(page);
   await openHomeAsUser(page);
@@ -1866,6 +1913,7 @@ test('renders a temporary chatbot build detail and saves it to a persisted build
   const latestBuilds = budgetBuilds(2_000_000);
   const temporaryBuild = latestBuilds[1];
   const saveRequests: unknown[] = [];
+  const buildGraphRequests = await mockBuildGraphApi(page);
   await page.route('**/api/builds/from-chat', async (route) => {
     const requestBody = JSON.parse(route.request().postData() ?? '{}');
     saveRequests.push(requestBody);
@@ -1911,6 +1959,29 @@ test('renders a temporary chatbot build detail and saves it to a persisted build
   await expect(page.getByRole('heading', { name: `추천 견적 결과 / ${temporaryBuild.title}` })).toBeVisible();
   await expect(page.getByText('저장 전 AI 챗봇 추천')).toBeVisible();
   await expect(page.getByRole('link', { name: temporaryBuild.items[0].name })).toBeVisible();
+  const partsPanel = page.getByRole('heading', { name: '구성 부품' }).locator('..').locator('..').locator('..');
+  const partsTable = partsPanel.getByRole('table');
+  await expect(partsTable.getByRole('columnheader', { name: '호환성' })).toBeVisible();
+  await expect(partsTable.getByText('활성', { exact: true })).toHaveCount(0);
+  const gpuItem = temporaryBuild.items.find((item) => item.category === 'GPU');
+  const gpuRow = partsTable.getByRole('row').filter({ hasText: gpuItem?.name ?? 'GPU' });
+  await expect(gpuRow.getByText('주의', { exact: true })).toBeVisible();
+  await expect.poll(() => buildGraphRequests.length).toBeGreaterThan(0);
+  expect(buildGraphRequests[0]).toMatchObject({
+    source: 'AI_BUILD',
+    items: expect.arrayContaining([
+      expect.objectContaining({ category: 'GPU', partId: gpuItem?.partId, quantity: gpuItem?.quantity })
+    ])
+  });
+  await expect(page.getByRole('heading', { name: '검증 결과' })).toHaveCount(0);
+  const summaryPanel = page.getByRole('heading', { name: '견적 요약 / 액션' }).locator('..').locator('..').locator('..');
+  await expect(partsPanel.getByText('검증 요약', { exact: true })).toBeVisible();
+  await expect(partsPanel.getByText('1/1 통과', { exact: true })).toBeVisible();
+  await expect(summaryPanel.getByText('검증 요약', { exact: true })).toHaveCount(0);
+  const [partsBox, summaryBox] = await Promise.all([partsPanel.boundingBox(), summaryPanel.boundingBox()]);
+  expect(partsBox).not.toBeNull();
+  expect(summaryBox).not.toBeNull();
+  expect(Math.abs((partsBox?.height ?? 0) - (summaryBox?.height ?? 0))).toBeLessThanOrEqual(1);
   await page.getByRole('button', { name: '견적 저장' }).click();
 
   await expect.poll(() => saveRequests.length).toBe(1);

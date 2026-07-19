@@ -25,7 +25,8 @@ class BuildEvaluationServiceTest {
                 partQuery,
                 toolCheckService,
                 new BuildCompositeScoreService(),
-                new BuildScoreAdviceService()
+                new BuildScoreAdviceService(),
+                null
         );
         List<com.buildgraph.prototype.part.tool.ToolBuildPart> parts = List.of(
                 new com.buildgraph.prototype.part.tool.ToolBuildPart(
@@ -84,7 +85,8 @@ class BuildEvaluationServiceTest {
                 partQuery,
                 toolCheckService,
                 new BuildCompositeScoreService(),
-                new BuildScoreAdviceService()
+                new BuildScoreAdviceService(),
+                null
         );
 
         BuildEvaluationService.BuildEvaluation evaluation = service.evaluateCurrentDraft(42L, null, null, null);

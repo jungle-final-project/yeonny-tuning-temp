@@ -1,5 +1,6 @@
 import tempfile
 import unittest
+from dataclasses import replace
 from pathlib import Path
 
 from diagnosis_orchestrator import DiagnosisRunSnapshot, DiagnosisTask
@@ -305,6 +306,20 @@ class DiagnosisResultStoreTest(unittest.TestCase):
             store.clear()
             self.assertIsNone(store.result)
             self.assertFalse(path.exists())
+
+    def test_persists_demo_mode_and_scenario_metadata(self):
+        result = DiagnosisRuleEngine().evaluate(*build_inputs(mode="DEMO"))
+        result = replace(result, scenario_id="GRAPHICS_CODE43_REMOTE_SUPPORT")
+        with tempfile.TemporaryDirectory() as directory:
+            store = DiagnosisResultStore(Path(directory) / "diagnosis-result.json")
+
+            store.save(result)
+            restored = DiagnosisResultStore(store.path).result
+
+            self.assertEqual("DEMO", restored.data_mode)
+            self.assertEqual("GRAPHICS_CODE43_REMOTE_SUPPORT", restored.scenario_id)
+            self.assertEqual("DEMO", restored.to_dict()["dataMode"])
+            self.assertEqual("GRAPHICS_CODE43_REMOTE_SUPPORT", restored.to_dict()["scenarioId"])
 
 
 if __name__ == "__main__":

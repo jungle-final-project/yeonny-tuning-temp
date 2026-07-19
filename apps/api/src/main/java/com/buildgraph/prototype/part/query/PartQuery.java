@@ -72,12 +72,20 @@ public class PartQuery {
         }
 
         List<String> partIds = draftItems.stream().map(row -> String.valueOf(row.get("part_id"))).toList();
-        List<ToolBuildPart> parts = cachedLoader.partsByPublicIds(partIds);
         Map<String, Integer> quantities = new LinkedHashMap<>();
         for (Map<String, Object> item : draftItems) {
             Object value = item.get("quantity");
             quantities.put(String.valueOf(item.get("part_id")), value instanceof Number number ? number.intValue() : 1);
         }
+        return partsForPublicIdQuantities(partIds, quantities);
+    }
+
+    /* public ID·수량 목록 -> 캐시 가능한 부품 본문에 수량을 실어 반환한다(draft read 캐시가 재사용). */
+    public List<ToolBuildPart> partsForPublicIdQuantities(List<String> orderedPublicIds, Map<String, Integer> quantities) {
+        if (orderedPublicIds.isEmpty()) {
+            return List.of();
+        }
+        List<ToolBuildPart> parts = cachedLoader.partsByPublicIds(orderedPublicIds);
         return parts.stream()
                 .map(part -> new ToolBuildPart(
                         part.internalId(),

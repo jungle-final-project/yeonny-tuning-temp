@@ -277,6 +277,7 @@ CURRENT_STEP="start-services"
 compose up -d --remove-orphans
 verify_running_image nginx "$NGINX_IMAGE_URI"
 verify_running_image api "$API_IMAGE_URI"
+verify_running_image recommendation-event-worker "$API_IMAGE_URI"
 verify_running_image xgb-reranker "$XGB_IMAGE_URI"
 compose exec -T nginx nginx -t
 

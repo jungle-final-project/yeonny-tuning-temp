@@ -334,6 +334,28 @@ class AgentDiagnosisWebSocketClientTest(unittest.TestCase):
 
 
 class BackgroundViewerControllerTest(unittest.TestCase):
+    def test_show_reuses_ready_root_and_only_requests_apply_and_focus(self):
+        events = []
+        controller = BackgroundViewerController(
+            Path("agent-config.json"),
+            diagnosis_session_provider=lambda: None,
+            connection_state_provider=lambda: "RUNNING",
+            show_viewer=lambda *args, **kwargs: events.append("new-root"),
+        )
+        controller._on_window_ready(
+            lambda: events.append("focus"),
+            lambda session: events.append(("session", session)),
+            lambda: None,
+            lambda: None,
+            lambda: None,
+        )
+        events.clear()
+
+        controller.show()
+
+        self.assertEqual([("session", None), "focus"], events)
+        self.assertIsNone(controller._thread)
+
     def test_forwards_metric_refresh_and_real_completion_to_existing_window(self):
         events = []
         controller = BackgroundViewerController(

@@ -57,6 +57,17 @@ public final class ReadThroughTtlCache<K, V> {
     }
 
     /**
+     * Rebuilds and stores the value even when a fresh entry already exists.
+     * Used by prewarm jobs so hot keys can have their TTL extended before user traffic hits expiry.
+     */
+    public V refresh(K key, Supplier<V> loader, Duration staleTtl) {
+        if (ttlNanos <= 0L) {
+            return loader.get();
+        }
+        return loadAndBlock(key, loader, positiveNanos(staleTtl), true);
+    }
+
+    /**
      * Returns a stale value immediately after fresh TTL expiry while one background refresh rebuilds the entry.
      * If no usable stale value exists, callers fall back to the normal single-flight blocking load.
      */
@@ -84,11 +95,15 @@ public final class ReadThroughTtlCache<K, V> {
     }
 
     private V loadFreshOrBlock(K key, Supplier<V> loader, long staleNanos) {
+        return loadAndBlock(key, loader, staleNanos, false);
+    }
+
+    private V loadAndBlock(K key, Supplier<V> loader, long staleNanos, boolean forceRefresh) {
         Object lock = inFlight.computeIfAbsent(key, ignored -> new Object());
         synchronized (lock) {
             try {
                 Entry<V> fresh = store.get(key);
-                if (fresh != null && fresh.expiresAtNanos() > System.nanoTime()) {
+                if (!forceRefresh && fresh != null && fresh.expiresAtNanos() > System.nanoTime()) {
                     return fresh.value();
                 }
                 return loadAndStore(key, loader, staleNanos);

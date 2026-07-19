@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="307" height="347" viewBox="0 0 307 347" role="img" aria-labelledby="title desc">
+  <title id="title">White lowercase d</title>
+  <desc id="desc">A bold white lowercase d on an orange background.</desc>
+  <rect width="307" height="347" fill="#e36226"/>
+  <path
+    fill="#ffffff"
+    fill-rule="evenodd"
+    d="M173 44h46v251h-46v-15c-12.5 10-28.2 15-47 15-47.7 0-78-35.1-78-88 0-52.8 30.3-88 78-88 18.8 0 34.5 5 47 15V44Zm0 163c0-30.6-13.7-47-39.5-47S94 176.4 94 207s13.7 47 39.5 47 39.5-16.4 39.5-47Z"
+  />
+</svg>

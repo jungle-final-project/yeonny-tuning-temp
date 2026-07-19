@@ -9,8 +9,11 @@ import type { AsChatEvidence, AsChatResponse, AsChatToolResult } from './asChatA
 import { downloadAgentPackage } from './agentDownload';
 import { prepareSupportLogFile } from './logFileProcessing';
 import { createSupportTicket, getRemoteSupportState, getSupportDraft, getSupportTicket, issueAgentActivationToken, previewAgentLogRag, registerRemoteSupportAccessCode, requestPcAgentDiagnosis, requestRemoteSupport, submitSupportFeedback, uploadAgentLog } from './supportApi';
+import type { PcAgentDiagnosisResultDto } from './supportApi';
 import { getCurrentSupportChat } from './supportChatApi';
 import type { AsRagAnalysisDto, AsTicketDraftDto, AsTicketDto, CauseCandidate, RemoteSupportStateDto, SupportChatContact } from './types';
+import { diagnosisStatus, usePcAgentDiagnosisPolling } from './usePcAgentDiagnosisPolling';
+import type { PcAgentDiagnosisPollingState } from './usePcAgentDiagnosisPolling';
 
 type SubmitState = 'default' | 'validation_error' | 'consent_required' | 'uploading' | 'upload_error' | 'ticket_error' | 'ticket_created';
 type AgentDownloadState = 'idle' | 'issuing' | 'done' | 'error';
@@ -295,8 +298,9 @@ function progressLabel(eventName: string) {
 
 export function SupportNewPage() {
   const navigate = useNavigate();
-  const [searchParams] = useSearchParams();
+  const [searchParams, setSearchParams] = useSearchParams();
   const draftId = searchParams.get('draftId')?.trim() ?? '';
+  const diagnosisIdParam = searchParams.get('diagnosisId')?.trim() ?? '';
   const [symptomTitle, setSymptomTitle] = useState('');
   const [symptomDetail, setSymptomDetail] = useState('');
   const [symptomType, setSymptomType] = useState('REMOTE_DRIVER_OS');
@@ -322,8 +326,10 @@ export function SupportNewPage() {
   const [submitState, setSubmitState] = useState<SubmitState>('default');
   const [agentDownloadState, setAgentDownloadState] = useState<AgentDownloadState>('idle');
   const [agentDownloadMessage, setAgentDownloadMessage] = useState('');
-  const [agentDiagnosisState, setAgentDiagnosisState] = useState<AgentDiagnosisRequestState>('idle');
-  const [agentDiagnosisMessage, setAgentDiagnosisMessage] = useState('');
+  const [agentDiagnosisState, setAgentDiagnosisState] = useState<AgentDiagnosisRequestState>(() => diagnosisIdParam ? 'accepted' : 'idle');
+  const [agentDiagnosisMessage, setAgentDiagnosisMessage] = useState(() => diagnosisIdParam ? '저장된 PC Agent 진단 상태를 불러옵니다.' : '');
+  const [agentDiagnosisId, setAgentDiagnosisId] = useState(diagnosisIdParam);
+  const agentDiagnosisPolling = usePcAgentDiagnosisPolling(agentDiagnosisId);
   const [error, setError] = useState('');
   const authScope = authScopeKey(getCachedAuthUser());
   const currentChatQuery = useQuery({
@@ -338,6 +344,14 @@ export function SupportNewPage() {
     queryFn: () => getSupportDraft(draftId),
     enabled: Boolean(draftId)
   });
+
+  useEffect(() => {
+    setAgentDiagnosisId(diagnosisIdParam);
+    if (diagnosisIdParam) {
+      setAgentDiagnosisState('accepted');
+      setAgentDiagnosisMessage('저장된 PC Agent 진단 상태를 불러옵니다.');
+    }
+  }, [diagnosisIdParam]);
 
   useEffect(() => {
     const draft = draftQuery.data;
@@ -456,15 +470,19 @@ export function SupportNewPage() {
     }
     setAgentDiagnosisState('requesting');
     setAgentDiagnosisMessage('');
+    setAgentDiagnosisId('');
+    updateDiagnosisSearchParam('');
     try {
       const response = await requestPcAgentDiagnosis({
         symptom,
         requestedChecks: ['cpu', 'gpu', 'memory', 'disk', 'cooling'],
         mode: 'LIVE'
       });
-      if (response.status === 'ACCEPTED') {
+      if (response.status === 'ACCEPTED' || response.status === 'DUPLICATE') {
         setAgentDiagnosisState('accepted');
         setAgentDiagnosisMessage(`PC Agent가 진단 요청을 수신했습니다. (${response.diagnosisId})`);
+        setAgentDiagnosisId(response.diagnosisId);
+        updateDiagnosisSearchParam(response.diagnosisId);
       } else {
         setAgentDiagnosisState('rejected');
         setAgentDiagnosisMessage(response.message || `PC Agent가 요청을 처리하지 않았습니다. (${response.status})`);
@@ -479,6 +497,16 @@ export function SupportNewPage() {
         setAgentDiagnosisMessage('PC Agent 진단 요청에 실패했습니다. 잠시 후 다시 시도해 주세요.');
       }
     }
+  }
+
+  function updateDiagnosisSearchParam(diagnosisId: string) {
+    const nextSearchParams = new URLSearchParams(searchParams);
+    if (diagnosisId) {
+      nextSearchParams.set('diagnosisId', diagnosisId);
+    } else {
+      nextSearchParams.delete('diagnosisId');
+    }
+    setSearchParams(nextSearchParams, { replace: true });
   }
 
   async function submit(event: FormEvent) {
@@ -728,6 +756,7 @@ export function SupportNewPage() {
                   {agentDiagnosisMessage}
                 </p>
               ) : null}
+              <PcAgentDiagnosisProgress state={agentDiagnosisPolling} />
               <input
                 id="support-log-file"
                 className="block w-full rounded border border-slate-300 p-3 text-sm focus:border-[#de6c2d] focus:outline-none focus:ring-4 focus:ring-[#f4c8b2] file:mr-4 file:rounded file:border-0 file:bg-[#de6c2d] file:px-4 file:py-2 file:text-sm file:font-bold file:text-white hover:file:bg-[#c45c22]"
@@ -765,6 +794,143 @@ export function SupportNewPage() {
       </form>
     </Screen>
   );
+}
+
+function PcAgentDiagnosisProgress({ state }: { state: PcAgentDiagnosisPollingState }) {
+  if (!state.diagnosisId) return null;
+
+  const snapshot = state.snapshot;
+  const status = snapshot ? diagnosisStatus(snapshot) : 'ACCEPTED';
+  const progress = Math.max(0, Math.min(100, snapshot?.currentProgress ?? 0));
+  const logs = state.events.filter((event) => Boolean(event.message?.trim()));
+
+  if (snapshot?.result) {
+    return <PcAgentDiagnosisResult result={snapshot.result} diagnosisId={state.diagnosisId} />;
+  }
+
+  const failed = status === 'FAILED' || status === 'TIMED_OUT';
+  const cancelled = status === 'CANCELLED';
+
+  return (
+    <div data-testid="pc-agent-diagnosis-progress" className="mb-3 rounded border border-slate-200 bg-white p-4">
+      <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+        <div>
+          <p className="text-sm font-bold text-slate-800">PC Agent 진단 진행</p>
+          <p className="mt-1 break-all text-[11px] text-slate-500">진단 ID: {state.diagnosisId}</p>
+        </div>
+        <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-bold text-slate-700">
+          {diagnosisStatusText(status)}
+        </span>
+      </div>
+      <div className="mb-2 flex items-center justify-between text-xs font-semibold text-slate-600">
+        <span>{snapshot?.currentTask || '진단 준비 중'}</span>
+        <span>{progress}%</span>
+      </div>
+      <div
+        role="progressbar"
+        aria-label="PC Agent 진단 진행률"
+        aria-valuemin={0}
+        aria-valuemax={100}
+        aria-valuenow={progress}
+        className="h-2 overflow-hidden rounded-full bg-slate-200"
+      >
+        <div className="h-full bg-[#de6c2d] transition-[width]" style={{ width: `${progress}%` }} />
+      </div>
+      {logs.length ? (
+        <div className="mt-4">
+          <p className="mb-2 text-xs font-bold text-slate-700">진행 로그</p>
+          <ol data-testid="pc-agent-diagnosis-logs" className="space-y-1 text-xs leading-5 text-slate-600">
+            {logs.map((event) => (
+              <li key={event.eventId} data-event-id={event.eventId}>{event.message}</li>
+            ))}
+          </ol>
+        </div>
+      ) : null}
+      {state.error ? (
+        <div className="mt-3">
+          <StateMessage type="warn" title="진단 상태 조회 확인 필요" body={state.error} />
+        </div>
+      ) : null}
+      {failed ? (
+        <div className="mt-3">
+          <StateMessage type="warn" title="PC Agent 진단 실패" body={logs[logs.length - 1]?.message || '서버에 기록된 진단 상태가 실패로 종료되었습니다.'} />
+        </div>
+      ) : null}
+      {cancelled ? (
+        <div className="mt-3">
+          <StateMessage type="warn" title="PC Agent 진단 취소" body={logs[logs.length - 1]?.message || '서버에 기록된 진단이 취소되었습니다.'} />
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+function PcAgentDiagnosisResult({ result, diagnosisId }: { result: PcAgentDiagnosisResultDto; diagnosisId: string }) {
+  const evidence = [...(result.evidence ?? []), ...(result.findings ?? [])]
+    .map(diagnosisDetailText)
+    .filter(Boolean);
+  const actions = (result.actions ?? []).map(diagnosisDetailText).filter(Boolean);
+  const remoteRecommended = diagnosisRawFlag(result.rawPayload, 'remoteAsRecommended');
+
+  return (
+    <div data-testid="pc-agent-diagnosis-result" className="mb-3 rounded border border-emerald-200 bg-emerald-50 p-4 text-emerald-950">
+      <div className="mb-3 flex flex-wrap items-start justify-between gap-2">
+        <div>
+          <p className="text-sm font-bold">{result.title}</p>
+          <p className="mt-1 break-all text-[11px] text-emerald-700">진단 ID: {diagnosisId}</p>
+        </div>
+        <span className="rounded-full bg-white px-3 py-1 text-xs font-bold text-emerald-800">진단 완료</span>
+      </div>
+      <p className="text-xs leading-5 text-emerald-900">{result.summary}</p>
+      {evidence.length ? (
+        <div className="mt-3">
+          <p className="mb-1 text-xs font-bold">진단 근거</p>
+          <ul className="space-y-1 text-xs leading-5">
+            {evidence.map((item, index) => <li key={`${item}-${index}`}>{item}</li>)}
+          </ul>
+        </div>
+      ) : null}
+      {actions.length ? (
+        <div className="mt-3">
+          <p className="mb-1 text-xs font-bold">권장 조치</p>
+          <ol className="list-decimal space-y-1 pl-4 text-xs leading-5">
+            {actions.map((item, index) => <li key={`${item}-${index}`}>{item}</li>)}
+          </ol>
+        </div>
+      ) : null}
+      {remoteRecommended ? (
+        <p className="mt-3 rounded border border-emerald-300 bg-white px-3 py-2 text-xs font-bold text-emerald-800">
+          서버 진단 결과에 따라 원격 지원이 권장됩니다.
+        </p>
+      ) : null}
+    </div>
+  );
+}
+
+function diagnosisStatusText(status: string) {
+  if (status === 'RECEIVED' || status === 'ACCEPTED') return '요청 접수';
+  if (status === 'COLLECTING') return '정보 수집 중';
+  if (status === 'DIAGNOSING') return '진단 중';
+  if (status === 'EVALUATING') return '결과 판정 중';
+  if (status === 'COMPLETED') return '완료';
+  if (status === 'PARTIALLY_COMPLETED') return '일부 완료';
+  if (status === 'FAILED') return '실패';
+  if (status === 'CANCELLED') return '취소';
+  if (status === 'TIMED_OUT') return '시간 초과';
+  return status;
+}
+
+function diagnosisDetailText(value: unknown) {
+  if (typeof value === 'string') return value.trim();
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return String(value ?? '');
+  return Object.entries(value)
+    .filter(([, item]) => typeof item === 'string' || typeof item === 'number' || typeof item === 'boolean')
+    .map(([key, item]) => `${key}: ${String(item)}`)
+    .join(' · ');
+}
+
+function diagnosisRawFlag(value: unknown, key: string) {
+  return Boolean(value && typeof value === 'object' && !Array.isArray(value) && (value as Record<string, unknown>)[key] === true);
 }
 
 class TicketCreateError extends Error {}

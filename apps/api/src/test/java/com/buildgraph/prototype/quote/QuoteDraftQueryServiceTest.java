@@ -27,7 +27,7 @@ class QuoteDraftQueryServiceTest {
     // TransactionTemplate은 mock PTM 위에서 콜백을 그대로 실행한다(getTransaction/commit은 no-op).
     private final PlatformTransactionManager transactionManager = mock(PlatformTransactionManager.class);
     private final QuoteDraftQueryService quoteDraftQueryService =
-            new QuoteDraftQueryService(jdbcTemplate, currentUserService, transactionManager);
+            new QuoteDraftQueryService(jdbcTemplate, currentUserService, transactionManager, new QuoteDraftReadCache(jdbcTemplate));
 
     @Test
     void applyAiBuildFailsBeforeDraftMutationWhenPartIdIsInvalid() {
@@ -59,6 +59,8 @@ class QuoteDraftQueryServiceTest {
                 draftItem("draft-item-cpu", "part-cpu-ai", "CPU", "Ryzen AI CPU", 420000),
                 draftItem("draft-item-gpu", "part-gpu-ai", "GPU", "RTX AI GPU", 890000)
         ));
+        when(jdbcTemplate.queryForList(argThat((String sql) -> sql != null && sql.contains("RETURNING")), eq(700L)))
+                .thenReturn(List.of(activeDraft()));
 
         Map<String, Object> draft = quoteDraftQueryService.applyAiBuild(USER_TOKEN, Map.of(
                 "buildId", "ai-2000000-balanced",
@@ -84,6 +86,8 @@ class QuoteDraftQueryServiceTest {
         when(jdbcTemplate.queryForList(anyString(), eq(700L))).thenReturn(List.of(
                 draftItem("draft-item-cpu", "part-cpu-b", "CPU", "CPU B", 450000)
         ));
+        when(jdbcTemplate.queryForList(argThat((String sql) -> sql != null && sql.contains("RETURNING")), eq(700L)))
+                .thenReturn(List.of(activeDraft()));
 
         quoteDraftQueryService.putItem(USER_TOKEN, "part-cpu-a", Map.of());
         Map<String, Object> draft = quoteDraftQueryService.putItem(USER_TOKEN, "part-cpu-b", Map.of());
@@ -112,6 +116,8 @@ class QuoteDraftQueryServiceTest {
         when(jdbcTemplate.queryForList(anyString(), eq(700L))).thenReturn(List.of(
                 draftItem("draft-item-cpu", "part-cpu-a", "CPU", "CPU A", 400000)
         ));
+        when(jdbcTemplate.queryForList(argThat((String sql) -> sql != null && sql.contains("RETURNING")), eq(700L)))
+                .thenReturn(List.of(activeDraft()));
 
         Map<String, Object> draft = quoteDraftQueryService.putItem(USER_TOKEN, "part-cpu-a", Map.of());
 
@@ -120,6 +126,30 @@ class QuoteDraftQueryServiceTest {
         verify(jdbcTemplate).update(
                 argThat((String sql) -> sql.contains("ON CONFLICT (quote_draft_id, category)")),
                 eq(700L), eq(101L), eq("CPU"), eq(1), eq(400000));
+    }
+
+    @Test
+    void writeInvalidatesDraftReadCacheSoNextReadSeesFreshDraft() {
+        // TTL을 켠 캐시로 "담기 → 즉시 조회"가 stale 응답을 주지 않는지 본다(캐시 도입의 핵심 리스크).
+        QuoteDraftReadCache readCache = new QuoteDraftReadCache(jdbcTemplate, null, 60L);
+        QuoteDraftQueryService service =
+                new QuoteDraftQueryService(jdbcTemplate, currentUserService, transactionManager, readCache);
+        when(currentUserService.requireUser(USER_TOKEN)).thenReturn(currentUser());
+        when(jdbcTemplate.queryForList(anyString(), eq("part-cpu-a"))).thenReturn(List.of(part("part-cpu-a", 101L, "CPU", "CPU A", 400000)));
+        when(jdbcTemplate.queryForList(anyString(), eq(1004L))).thenReturn(List.of(activeDraft()));
+        when(jdbcTemplate.queryForList(argThat((String sql) -> sql != null && sql.contains("RETURNING")), eq(700L)))
+                .thenReturn(List.of(activeDraft()));
+        // 담기 전 조회는 빈 견적, 담기 후 조회는 CPU 1개 — 캐시가 무효화되지 않으면 두 번째 조회가 빈 견적으로 남는다.
+        when(jdbcTemplate.queryForList(anyString(), eq(700L)))
+                .thenReturn(List.of())
+                .thenReturn(List.of(draftItem("draft-item-cpu", "part-cpu-a", "CPU", "CPU A", 400000)));
+
+        assertThat((List<?>) service.current(USER_TOKEN).get("items")).isEmpty();
+        service.putItem(USER_TOKEN, "part-cpu-a", Map.of());
+
+        Map<String, Object> afterWrite = service.current(USER_TOKEN);
+        assertThat((List<?>) afterWrite.get("items")).hasSize(1);
+        assertThat(afterWrite.get("totalPrice")).isEqualTo(400000);
     }
 
     private CurrentUserService.CurrentUser currentUser() {

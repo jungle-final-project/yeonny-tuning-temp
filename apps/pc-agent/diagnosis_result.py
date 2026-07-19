@@ -16,6 +16,11 @@ from initial_metrics import (
     DEFAULT_METRIC_POLICY,
     MetricsSnapshot,
 )
+from pc_agent_demo_scenarios import (
+    DEMO_DATA_MODE,
+    GRAPHICS_CODE43_REMOTE_SUPPORT_SCENARIO_ID,
+    LIVE_DATA_MODE,
+)
 
 
 SEVERITIES = ("NORMAL", "INFO", "WARNING", "CRITICAL", "INDETERMINATE")
@@ -156,6 +161,8 @@ class DiagnosisResult:
     evaluated_at: str
     diagnosis_type: str | None = None
     remote_as_recommended: bool = False
+    data_mode: str = LIVE_DATA_MODE
+    scenario_id: str | None = None
 
     @property
     def result_id(self) -> str:
@@ -176,7 +183,10 @@ class DiagnosisResult:
             "canAutoRecover": self.can_auto_recover,
             "unsupportedChecks": list(self.unsupported_checks),
             "evaluatedAt": self.evaluated_at,
+            "dataMode": self.data_mode,
         }
+        if self.scenario_id:
+            payload["scenarioId"] = self.scenario_id
         if self.diagnosis_type:
             payload["diagnosisType"] = self.diagnosis_type
             payload["remoteAsRecommended"] = self.remote_as_recommended
@@ -202,6 +212,8 @@ class DiagnosisResult:
             evaluated_at=str(payload.get("evaluatedAt") or ""),
             diagnosis_type=str(payload["diagnosisType"]) if payload.get("diagnosisType") else None,
             remote_as_recommended=bool(payload.get("remoteAsRecommended")),
+            data_mode=str(payload.get("dataMode") or LIVE_DATA_MODE),
+            scenario_id=str(payload["scenarioId"]) if payload.get("scenarioId") else None,
         )
 
 
@@ -369,12 +381,14 @@ class DiagnosisRuleEngine:
                 "주요 하드웨어 검사 중 여러 항목을 확인하지 못했습니다.", evidence, (), (),
                 ("지원되는 센서와 권한을 확인한 뒤 다시 진단",), "UNKNOWN", False,
                 tuple(unsupported_checks), evaluated_at,
+                data_mode=diagnosis.mode,
             )
         if not findings:
             return DiagnosisResult(
                 diagnosis_id, "NORMAL", "측정된 하드웨어 상태가 정상 범위입니다.",
                 "현재 수집된 근거에서는 즉시 조치가 필요한 이상이 확인되지 않았습니다.", evidence, (), (),
                 ("현재 상태 유지",), "NONE", False, tuple(unsupported_checks), evaluated_at,
+                data_mode=diagnosis.mode,
             )
 
         severity = self._overall_severity(findings)
@@ -385,6 +399,7 @@ class DiagnosisRuleEngine:
         return DiagnosisResult(
             diagnosis_id, severity, title, summary, evidence, tuple(findings), tuple(causes), tuple(actions),
             resolution_type, resolution_type == "SOFTWARE_RECOVERY", tuple(unsupported_checks), evaluated_at,
+            data_mode=diagnosis.mode,
         )
 
     def _evaluate_graphics_configuration(self, diagnosis: DiagnosisRunSnapshot) -> DiagnosisResult:
@@ -422,6 +437,28 @@ class DiagnosisRuleEngine:
             ),
             None,
         )
+        scenario_evidence = next(
+            (
+                item
+                for item in evidence
+                if item.metric_type == "demo_scenario"
+                and item.source == "demo-scenario"
+                and isinstance(item.value, dict)
+                and item.value.get("dataMode") == DEMO_DATA_MODE
+                and item.value.get("scenarioId") == GRAPHICS_CODE43_REMOTE_SUPPORT_SCENARIO_ID
+            ),
+            None,
+        )
+        scenario_id = (
+            GRAPHICS_CODE43_REMOTE_SUPPORT_SCENARIO_ID
+            if diagnosis.mode == DEMO_DATA_MODE and scenario_evidence is not None
+            else None
+        )
+        has_physical_error_evidence = any(
+            item.metric_type == "windows_event"
+            and item.category in {"HARDWARE", "DEVICE", "DRIVER"}
+            for item in evidence
+        )
 
         if symptom_evidence is not None and problem_device is not None:
             device_name = str(problem_device.value["deviceName"])
@@ -438,6 +475,17 @@ class DiagnosisRuleEngine:
                 result_title = "그래픽 장치 오류가 확인되었습니다"
                 finding_title = "그래픽 장치 오류 상태"
                 state_description = f"Windows가 장치 문제(problem code {problem_code})를 보고했습니다."
+            remote_support_demo = (
+                scenario_id == GRAPHICS_CODE43_REMOTE_SUPPORT_SCENARIO_ID
+                and problem_code == 43
+                and not has_physical_error_evidence
+            )
+            finding_actions = (
+                "원격 지원으로 그래픽 장치와 드라이버 상태 점검",
+                "공식 드라이버 재설치 또는 이전 버전 롤백 후 재부팅",
+                "재진단 후에도 증상이 지속되면 방문 점검 전환",
+            ) if remote_support_demo else ("장치 상태와 드라이버를 원격으로 점검",)
+            resolution_type = "SOFTWARE_RECOVERY" if remote_support_demo else "PHYSICAL_INSPECTION"
             finding = self._finding(
                 "DEVICE_DRIVER_CONFIGURATION_ISSUE",
                 "WARNING",
@@ -445,33 +493,45 @@ class DiagnosisRuleEngine:
                 f"{device_name} 장치에서 Windows problem code {problem_code}가 확인되었습니다. "
                 f"{state_description} 이 evidence만으로 물리 고장이나 검은 화면의 직접 원인을 확정하지 않습니다.",
                 (problem_device.key, symptom_evidence.key),
-                (),
-                ("장치 상태와 드라이버를 원격으로 점검",),
-                "PHYSICAL_INSPECTION",
+                ("그래픽 장치 또는 드라이버 구성 이상",) if remote_support_demo else (),
+                finding_actions,
+                resolution_type,
             )
+            if remote_support_demo:
+                summary = (
+                    f"{device_name} 그래픽 장치에서 problem code 43이 확인되었습니다. "
+                    "WHEA 또는 그래픽 장치의 물리 오류 이벤트 근거는 확인되지 않아 물리 고장으로 확정하지 않습니다. "
+                    "원격 지원으로 드라이버를 우선 점검하고, 조치 후에도 증상이 지속될 때 방문 점검으로 전환합니다."
+                )
+                recommended_actions = finding_actions
+            else:
+                summary = (
+                    f"{device_name} 그래픽 장치에서 problem code {problem_code}가 확인되었습니다. "
+                    f"{state_description} Agent는 장치나 드라이버를 자동 조작하지 않으며 원격 AS 기사 점검이 필요합니다. "
+                    "검은 화면 또는 화면 복구 증상의 직접 원인이나 물리 고장으로 확정하지 않습니다."
+                )
+                recommended_actions = (
+                    "Agent가 장치를 자동 비활성화·활성화하거나 드라이버를 변경하지 않음",
+                    "원격 AS 기사 점검 권장",
+                    "진단 상세에서 실제 장치 근거 확인",
+                )
             return DiagnosisResult(
                 diagnosis_id=diagnosis_id,
                 severity="WARNING",
                 title=result_title,
-                summary=(
-                    f"{device_name} 그래픽 장치에서 problem code {problem_code}가 확인되었습니다. "
-                    f"{state_description} Agent는 장치나 드라이버를 자동 조작하지 않으며 원격 AS 기사 점검이 필요합니다. "
-                    "검은 화면 또는 화면 복구 증상의 직접 원인이나 물리 고장으로 확정하지 않습니다."
-                ),
+                summary=summary,
                 evidence=evidence,
                 findings=(finding,),
-                suspected_causes=(),
-                recommended_actions=(
-                    "Agent가 장치를 자동 비활성화·활성화하거나 드라이버를 변경하지 않음",
-                    "원격 AS 기사 점검 권장",
-                    "진단 상세에서 실제 장치 근거 확인",
-                ),
-                resolution_type="PHYSICAL_INSPECTION",
+                suspected_causes=finding.suspected_causes,
+                recommended_actions=recommended_actions,
+                resolution_type=resolution_type,
                 can_auto_recover=False,
                 unsupported_checks=tuple(unsupported_checks),
                 evaluated_at=evaluated_at,
                 diagnosis_type="DEVICE_DRIVER_CONFIGURATION_ISSUE",
                 remote_as_recommended=True,
+                data_mode=diagnosis.mode,
+                scenario_id=scenario_id,
             )
 
         return DiagnosisResult(
@@ -494,6 +554,8 @@ class DiagnosisRuleEngine:
             evaluated_at=evaluated_at,
             diagnosis_type="INSUFFICIENT_EVIDENCE",
             remote_as_recommended=False,
+            data_mode=diagnosis.mode,
+            scenario_id=scenario_id,
         )
 
     @staticmethod
@@ -746,6 +808,14 @@ def can_offer_as(
         )
     if result.diagnosis_type != "DEVICE_DRIVER_CONFIGURATION_ISSUE":
         return True
+    supported_mode = bool(
+        getattr(request, "mode", None) == "LIVE"
+        or (
+            getattr(request, "mode", None) == DEMO_DATA_MODE
+            and result.data_mode == DEMO_DATA_MODE
+            and result.scenario_id == GRAPHICS_CODE43_REMOTE_SUPPORT_SCENARIO_ID
+        )
+    )
     return bool(
         result.remote_as_recommended
         and not result.can_auto_recover
@@ -753,7 +823,7 @@ def can_offer_as(
         and request is not None
         and getattr(request, "diagnosis_id", None) == result.diagnosis_id
         and getattr(request, "source", None) == "WEB_REQUEST"
-        and getattr(request, "mode", None) == "LIVE"
+        and supported_mode
         and bool(str(getattr(request, "symptom", "") or "").strip())
     )
 

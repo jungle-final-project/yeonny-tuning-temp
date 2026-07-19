@@ -72,6 +72,15 @@ compose_with() {
       "$@"
 }
 
+target_deploy_services() {
+  local service="$1"
+  if [[ "$service" == "api" ]]; then
+    printf '%s\n' api recommendation-event-worker
+  else
+    printf '%s\n' "$service"
+  fi
+}
+
 verify_running_image() {
   local runtime_env="$1"
   local image_env="$2"
@@ -186,8 +195,11 @@ rollback() {
       docker login --username AWS --password-stdin "$ECR_REGISTRY" >/dev/null || rollback_failed=1
 
     compose_with "$APP_ROOT/.env.prod" "$IMAGE_MANIFEST" config --quiet || rollback_failed=1
-    compose_with "$APP_ROOT/.env.prod" "$IMAGE_MANIFEST" pull "$TARGET_SERVICE" || rollback_failed=1
-    compose_with "$APP_ROOT/.env.prod" "$IMAGE_MANIFEST" up -d --no-deps --force-recreate --no-build "$TARGET_SERVICE" || rollback_failed=1
+    compose_with "$APP_ROOT/.env.prod" "$IMAGE_MANIFEST" \
+      pull $(target_deploy_services "$TARGET_SERVICE") || rollback_failed=1
+    compose_with "$APP_ROOT/.env.prod" "$IMAGE_MANIFEST" \
+      up -d --no-deps --force-recreate --no-build \
+      $(target_deploy_services "$TARGET_SERVICE") || rollback_failed=1
 
     if [[ "$TARGET_SERVICE" == "api" ]]; then
       compose_with "$APP_ROOT/.env.prod" "$IMAGE_MANIFEST" exec -T nginx nginx -t || rollback_failed=1
@@ -245,12 +257,19 @@ compose_with "$CANDIDATE_RUNTIME_ENV" "$CANDIDATE_MANIFEST" config --quiet
 
 aws ecr get-login-password --region "$AWS_REGION" |
   docker login --username AWS --password-stdin "$ECR_REGISTRY" >/dev/null
-compose_with "$CANDIDATE_RUNTIME_ENV" "$CANDIDATE_MANIFEST" pull "$TARGET_SERVICE"
+compose_with "$CANDIDATE_RUNTIME_ENV" "$CANDIDATE_MANIFEST" \
+  pull $(target_deploy_services "$TARGET_SERVICE")
 
 deployment_mutated=1
 git checkout --detach "$TARGET_SHA"
-compose_with "$CANDIDATE_RUNTIME_ENV" "$CANDIDATE_MANIFEST" up -d --no-deps --force-recreate --no-build "$TARGET_SERVICE"
+compose_with "$CANDIDATE_RUNTIME_ENV" "$CANDIDATE_MANIFEST" \
+  up -d --no-deps --force-recreate --no-build \
+  $(target_deploy_services "$TARGET_SERVICE")
 verify_running_image "$CANDIDATE_RUNTIME_ENV" "$CANDIDATE_MANIFEST" "$TARGET_SERVICE" "$TARGET_IMAGE_URI"
+if [[ "$TARGET_SERVICE" == "api" ]]; then
+  verify_running_image "$CANDIDATE_RUNTIME_ENV" "$CANDIDATE_MANIFEST" \
+    recommendation-event-worker "$TARGET_IMAGE_URI"
+fi
 
 if [[ "$TARGET_SERVICE" == "api" ]]; then
   compose_with "$CANDIDATE_RUNTIME_ENV" "$CANDIDATE_MANIFEST" exec -T nginx nginx -t

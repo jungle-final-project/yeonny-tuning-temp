@@ -27,15 +27,23 @@ export type AiDraftPerformanceView = AiDraftPerformanceSelection & {
   updatedAt: string;
 };
 
+/** 고주사율(120Hz) 기준 — 이 값 이상이면 "쾌적", 60 이상이면 "플레이 가능"으로 본다. */
+const HIGH_REFRESH_FPS = 120;
+const PLAYABLE_FPS = 60;
+/** 낮은 해상도부터 — 요약 문장과 판정 모두 이 순서를 따른다. */
+const RESOLUTION_ORDER = ['FHD', 'QHD', '4K'];
+
+type ResolutionFps = { resolution: string; avgFps: number };
+
 type ApplicationAnalysis =
   | {
       status: 'READY';
       score: number;
       maxScore: number;
-      avgFps?: number;
+      /** 근거가 있는 해상도만 낮은 순으로 담는다 — 없는 해상도는 문장에서 아예 언급하지 않는다. */
+      resolutionFps: ResolutionFps[];
       hasBlockingFail: boolean;
       gameLabel: string;
-      resolutionLabel: string;
     }
   | { status: 'STALE' | 'FAILED' | 'TIMEOUT' };
 
@@ -182,18 +190,17 @@ async function analyzeCurrentDraft(feedback: AiDraftApplicationFeedback): Promis
     const score = Math.round(graphResult.value.compositeScore.score);
     const maxScore = Math.round(graphResult.value.compositeScore.maxScore);
     const hasBlockingFail = score <= 0 || graphResult.value.toolResults.some((result) => result.status === 'FAIL');
-    const evidence = performanceResult.status === 'fulfilled'
-      ? performanceResult.value?.details?.gameFpsEvidence?.[0]
-      : undefined;
-    const rawAvgFps = Number(evidence?.avgFps);
+    // 한 번의 조회가 같은 조합의 여러 해상도 근거를 함께 돌려준다(FHD/QHD/4K) — 추가 요청 없이 전부 읽는다.
+    const evidenceRows = performanceResult.status === 'fulfilled'
+      ? performanceResult.value?.details?.gameFpsEvidence ?? []
+      : [];
     return {
       status: 'READY',
       score,
       maxScore,
-      avgFps: Number.isFinite(rawAvgFps) && rawAvgFps > 0 ? Math.round(rawAvgFps) : undefined,
+      resolutionFps: resolutionFpsList(evidenceRows),
       hasBlockingFail,
-      gameLabel: performanceView.gameLabel,
-      resolutionLabel: performanceView.resolutionLabel
+      gameLabel: performanceView.gameLabel
     };
   } catch {
     return { status: 'FAILED' };
@@ -247,10 +254,52 @@ function feedbackText(
     ? '완성 견적이 담겼습니다.'
     : '요청한 변경이 반영되었습니다.';
   const scoreText = `현재 종합 점수는 ${analysis.score.toLocaleString('ko-KR')}점입니다.`;
-  if (analysis.avgFps === undefined) {
-    return `${prefix} ${scoreText} ${analysis.gameLabel} ${analysis.resolutionLabel} FPS 근거가 없어 수치를 임의로 표시하지 않았습니다.\n\n상단에서 지원 게임별 예상 성능을 확인해 보세요.`;
+  const closing = '\n\n상단에서 종합 점수와 게임별 예상 성능을 확인해 보세요.';
+  // 근거가 없으면 성능 문장을 통째로 생략한다 — "자료 없음"을 굳이 알리지 않는다.
+  if (analysis.resolutionFps.length === 0) {
+    return `${prefix} ${scoreText}${closing}`;
   }
-  return `${prefix} 현재 종합 점수는 ${analysis.score.toLocaleString('ko-KR')}점이며, ${analysis.gameLabel} ${analysis.resolutionLabel} 예상 성능은 평균 ${analysis.avgFps.toLocaleString('ko-KR')}FPS입니다.\n\n상단에서 종합 점수와 게임별 예상 성능을 확인해 보세요.`;
+  const fpsText = analysis.resolutionFps
+    .map((entry) => `${entry.resolution} ${entry.avgFps.toLocaleString('ko-KR')}`)
+    .join(' · ');
+  return `${prefix} ${scoreText} ${analysis.gameLabel} 예상 성능은 ${fpsText}FPS입니다. ${refreshRateNote(analysis.resolutionFps)}${closing}`;
+}
+
+/**
+ * 해상도별 FPS를 120Hz 기준으로 해석한다 — 최소 견적에 4K 하나만 보여주던 문구가
+ * "고사양 기준으로 평가"처럼 읽히던 문제를 없앤다(2026-07-20 팀 제언).
+ * 항상 "가능한 것" 먼저, "한계"는 뒤에 붙인다.
+ */
+function refreshRateNote(entries: ResolutionFps[]) {
+  const smooth = entries.filter((entry) => entry.avgFps >= HIGH_REFRESH_FPS);
+  const below = entries.filter((entry) => entry.avgFps < HIGH_REFRESH_FPS);
+  if (smooth.length > 0 && below.length > 0) {
+    return `${smooth.map((entry) => entry.resolution).join('·')}는 120Hz 이상으로 쾌적하고, ${below.map((entry) => entry.resolution).join('·')}는 120Hz에 못 미치니 참고하세요.`;
+  }
+  if (below.length === 0) {
+    return '모든 해상도에서 120Hz 이상으로 쾌적합니다.';
+  }
+  // 전 구간 120 미만 — 가장 낮은 해상도 기준으로 "할 수 있는 것"을 먼저 말한다.
+  const best = entries[0];
+  if (best.avgFps >= PLAYABLE_FPS) {
+    return `${best.resolution} ${best.avgFps.toLocaleString('ko-KR')}FPS로 플레이하기 충분하지만, 120Hz 고주사율에는 못 미칩니다.`;
+  }
+  return '옵션을 낮추거나 더 낮은 해상도로 즐기기를 권합니다.';
+}
+
+/** 근거 행에서 해상도별 대표 FPS를 뽑아 낮은 해상도 순으로 정렬한다(중복 해상도는 첫 근거만). */
+function resolutionFpsList(rows: Array<{ resolution?: string | null; avgFps?: number | null }>): ResolutionFps[] {
+  const byResolution = new Map<string, number>();
+  rows.forEach((row) => {
+    const resolution = typeof row.resolution === 'string' ? row.resolution.trim().toUpperCase() : '';
+    const avgFps = Number(row.avgFps);
+    if (!RESOLUTION_ORDER.includes(resolution) || !Number.isFinite(avgFps) || avgFps <= 0) return;
+    if (byResolution.has(resolution)) return;
+    byResolution.set(resolution, Math.round(avgFps));
+  });
+  return RESOLUTION_ORDER
+    .filter((resolution) => byResolution.has(resolution))
+    .map((resolution) => ({ resolution, avgFps: byResolution.get(resolution) as number }));
 }
 
 function readAiDraftPerformanceView(): AiDraftPerformanceSelection {

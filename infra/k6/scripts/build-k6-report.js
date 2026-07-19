@@ -119,6 +119,41 @@ function escapeHtml(value) {
     .replaceAll("'", '&#039;');
 }
 
+function titleToken(token) {
+  const knownTokens = {
+    api: 'API',
+    auth: 'Auth',
+    async: 'Async',
+    d2: 'D2',
+    db: 'DB',
+    k6: 'k6',
+    local: 'Local',
+    none: 'None',
+    p95: 'p95',
+    swr: 'SWR',
+    ttl: 'TTL',
+  };
+  const lowerToken = token.toLowerCase();
+  if (knownTokens[lowerToken]) return knownTokens[lowerToken];
+  if (/^stage\d+$/i.test(token)) return token.replace(/^stage/i, 'Stage');
+  if (/^\d+$/.test(token)) return token;
+  return lowerToken.charAt(0).toUpperCase() + lowerToken.slice(1);
+}
+
+function reportTitleFromPath(resultPath) {
+  const explicitTitle = String(process.env.K6_REPORT_TITLE || '').trim();
+  if (explicitTitle) return explicitTitle;
+  const stem = path.basename(resultPath, path.extname(resultPath)).replace(/-report$/i, '');
+  const title = stem
+    .split(/[-_]+/)
+    .filter(Boolean)
+    .map(titleToken)
+    .join(' ');
+  return `BuildGraph k6 ${title || 'Load Test'} Report`;
+}
+
+const reportTitle = reportTitleFromPath(inputPath);
+
 function datasets(field) {
   return variants.map((variant, index) => ({
     label: `${variant} ${field === 'median' ? 'Median' : 'p95'}`,
@@ -148,7 +183,7 @@ const html = `<!doctype html>
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>BuildGraph k6 Self Quote Report</title>
+  <title>${escapeHtml(reportTitle)}</title>
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   <style>
     body { font-family: Aptos, "Segoe UI", sans-serif; margin: 32px; color: #172033; }
@@ -169,7 +204,7 @@ const html = `<!doctype html>
   </style>
 </head>
 <body>
-  <h1>BuildGraph k6 Self Quote Report</h1>
+  <h1>${escapeHtml(reportTitle)}</h1>
   <p>각 variant 시작을 0초로 정규화 · Bucket: ${bucketMs / 1000}s · Source: ${escapeHtml(inputPath)}</p>
   <div class="summary">
     ${variants.map((variant) => `<div class="metric"><span>${escapeHtml(variant)}</span><strong>${overallByVariant[variant].count} requests</strong><div>Median ${overallByVariant[variant].median} ms · p95 ${overallByVariant[variant].p95} ms</div></div>`).join('\n')}

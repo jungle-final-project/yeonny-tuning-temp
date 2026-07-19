@@ -16,6 +16,7 @@ import {
   startAdminTicketRemoteSupport
 } from '../adminApi';
 import type { AdminAsTicket, AdminRemoteSupportState } from '../adminApi';
+import { AdminTicketSupportChat } from '../components/AdminTicketSupportChat';
 
 const FAILURE_CATEGORY_OPTIONS = ['RECOMMENDATION_BUILD', 'PART_SELECTION', 'COMPATIBILITY', 'PERFORMANCE', 'USER_ENVIRONMENT', 'AGENT_LOG_ONLY', 'OTHER'];
 const SEVERITY_OPTIONS = ['LOW', 'MEDIUM', 'HIGH', 'CRITICAL'];
@@ -159,7 +160,7 @@ export function AdminTicketDetailPage() {
 
   return (
     <AdminShell title="AS 티켓 상세">
-      <div className="grid min-w-0 gap-4 min-[1000px]:grid-cols-[minmax(0,1fr)_340px]">
+      <div className="grid min-w-0 gap-5 min-[1000px]:grid-cols-[minmax(0,1fr)_420px]">
         <div data-testid="admin-as-ticket-overview" className="min-w-0 space-y-4">
           <Panel title="접수 정보" subtitle={ticket.id}>
             <DataTable columns={['항목', '내용']} rows={receiptRows(ticket)} nowrapColumns={['항목']} />
@@ -179,8 +180,17 @@ export function AdminTicketDetailPage() {
           <Link className="inline-block text-sm font-bold text-brand-blue" to="/admin/as-tickets">목록으로 돌아가기</Link>
         </div>
 
-        <div className="min-w-0 min-[1000px]:sticky min-[1000px]:top-4 min-[1000px]:self-start">
-          <Panel title={reviewCompleted ? '처리 결과' : '관리자 검토'} subtitle={reviewCompleted ? '완료된 검토 결과입니다.' : '필요한 업무 행동만 선택해 처리합니다.'}>
+        <div className="min-w-0 space-y-4">
+          <AdminTicketSupportChat
+            ticketId={ticketId}
+            remoteAction={remoteSupportApproved ? (
+              <a className="shrink-0 rounded border border-brand-blue px-2 py-1 text-xs font-bold text-brand-blue hover:bg-blue-50" href="#admin-ticket-remote-support">
+                {remoteSupportActionLabel(remoteSupportQuery.data?.status)}
+              </a>
+            ) : undefined}
+          />
+          <div>
+            <Panel title={reviewCompleted ? '처리 결과' : '관리자 검토'} subtitle={reviewCompleted ? '완료된 검토 결과입니다.' : '필요한 업무 행동만 선택해 처리합니다.'}>
             {reviewCompleted ? (
               <DataTable columns={['항목', '내용']} rows={reviewResultRows(ticket)} nowrapColumns={['항목']} />
             ) : (
@@ -215,9 +225,10 @@ export function AdminTicketDetailPage() {
                 {reviewMutation.isError ? <StateMessage type="warn" title="처리 실패" body={reviewMutation.error instanceof Error ? reviewMutation.error.message : '현재 상태에서는 요청한 업무를 처리할 수 없습니다.'} /> : null}
               </div>
             )}
-          </Panel>
+            </Panel>
+          </div>
           {remoteSupportApproved ? (
-            <div className="mt-4">
+            <div id="admin-ticket-remote-support" className="scroll-mt-4">
               <AdminRemoteSupportPanel
                 state={remoteSupportQuery.data}
                 isLoading={remoteSupportQuery.isLoading}
@@ -407,6 +418,13 @@ function adminRemoteSupportTitle(status?: string | null) {
   if (status === 'IN_PROGRESS') return '원격 지원 진행 중';
   if (status === 'COMPLETED') return '원격 지원 완료';
   return '지원 코드 등록 대기';
+}
+
+function remoteSupportActionLabel(status?: string | null) {
+  if (status === 'WAITING_FOR_CODE') return '지원 코드 대기';
+  if (status === 'IN_PROGRESS') return '원격 지원 진행 중';
+  if (status === 'COMPLETED') return '원격 지원 완료';
+  return '원격 지원 연결';
 }
 
 function adminRemoteSupportDescription(status?: string | null) {
@@ -633,6 +651,12 @@ function logSummary(ticket: AdminAsTicket) {
       }
     }
     return compactJson(ticket.logSummary);
+  }
+  const diagnosisMessages = (ticket.diagnosisEvents ?? [])
+    .map((event) => event.message?.trim())
+    .filter((message): message is string => Boolean(message));
+  if (diagnosisMessages.length > 0) {
+    return diagnosisMessages.join(' / ');
   }
   const diagnosisEvidenceCount = Array.isArray(ticket.diagnosisEvidence)
     ? ticket.diagnosisEvidence.length

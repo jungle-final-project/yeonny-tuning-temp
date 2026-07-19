@@ -361,6 +361,7 @@ Index:
 - unique: `refresh_tokens.token_hash`
 - index: `refresh_tokens.user_id`
 - index: `refresh_tokens.expires_at`
+- 서비스는 로그인·refresh 직후 사용자별 활성 refresh token을 최신 3개만 유지하고 초과분은 `revoked_at`으로 폐기한다. 기본 제한값은 `BUILDGRAPH_AUTH_REFRESH_TOKEN_MAX_ACTIVE_PER_USER=3`이다.
 
 ### requirements
 

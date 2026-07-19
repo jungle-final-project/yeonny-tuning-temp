@@ -11,6 +11,7 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Set;
 import java.util.stream.Collectors;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.cache.support.NoOpCacheManager;
@@ -50,7 +51,23 @@ public class ToolCheckService {
      * (예: builds/history)는 build마다 벤치마크를 조회하지 않는다(N+1 회피). null이면 기존처럼 조회한다.
      */
     public List<Map<String, Object>> checkBuild(List<ToolBuildPart> parts, int budget, Map<Long, Map<String, Object>> benchmarkRows) {
+        return checkBuildTools(TOOL_ORDER, parts, budget, benchmarkRows);
+    }
+
+    /**
+     * checkBuild 중 지정한 툴만 실행한다. 후보 평가 경로는 카테고리당 1~3개 툴만 소비하는데도
+     * 5개 전부를 실행한 뒤 버렸다 — 실행 전에 거르면 그 CPU/벤치마크 조회가 통째로 사라진다.
+     * 실행 순서는 TOOL_ORDER를 따르고, 빈 목록이면 아무 툴도 실행하지 않는다.
+     */
+    public List<Map<String, Object>> checkBuildTools(List<String> toolNames, List<ToolBuildPart> parts, int budget, Map<Long, Map<String, Object>> benchmarkRows) {
+        if (toolNames == null || toolNames.isEmpty()) {
+            return List.of();
+        }
+        Set<String> requested = toolNames.stream()
+                .map(ToolCheckService::normalizeToolName)
+                .collect(Collectors.toSet());
         return TOOL_ORDER.stream()
+                .filter(requested::contains)
                 .map(tool -> checkResolvedTool(tool, parts, budget, total(parts), Map.of(), benchmarkRows))
                 .toList();
     }
@@ -918,12 +935,17 @@ public class ToolCheckService {
         params.add(cpu == null ? -1L : cpu.internalId());
         params.add(cpu == null ? -1L : cpu.internalId());
         params.add(cpuClass);
-        params.add(resolution);
-        String gameFilter = "";
-        if (gameKey != null) {
-            gameFilter = " AND game_key = ?\n";
-            params.add(gameKey);
-        }
+        String gameFilter = gameKey == null ? "" : " AND game_key = ?\n";
+        // 해상도 미지정(선택 파라미터)이면 순위식에서 ?를 빼고 상수로 고정한다 — 타입 없는 NULL 파라미터를
+        // Postgres가 추론하지 못해 500이 나던 경로(라이브 재현: resolution 누락/빈값 → INTERNAL_ERROR).
+        String resolutionRankSql = resolution == null
+                ? "0 AS resolution_rank"
+                : """
+                  CASE
+                    WHEN ? IS NOT NULL AND resolution = ? THEN 0
+                    WHEN ? IS NULL THEN 0
+                    ELSE 1
+                  END AS resolution_rank""";
 
         return jdbcTemplate.queryForList("""
                         SELECT public_id::text AS id,
@@ -949,11 +971,8 @@ public class ToolCheckService {
                                  WHEN metadata->>'cpuClass' = ? THEN 1
                                  ELSE 2
                                END AS cpu_match_rank,
-                               CASE
-                                 WHEN ? IS NOT NULL AND resolution = ? THEN 0
-                                 WHEN ? IS NULL THEN 0
-                                 ELSE 1
-                               END AS resolution_rank
+                               """ + resolutionRankSql + """
+
                         FROM game_fps_benchmarks
                         WHERE deleted_at IS NULL
                           AND (gpu_part_id = ? OR metadata->>'gpuClass' = ?)
@@ -965,7 +984,7 @@ public class ToolCheckService {
                                  source_checked_at DESC,
                                  game_fps_benchmarks.id DESC
                         LIMIT 3
-                        """, fpsParams(params, gpu.internalId(), gpuClass, gameKey).toArray())
+                        """, fpsParams(params, gpu.internalId(), gpuClass, gameKey, resolution).toArray())
                 .stream()
                 .map(row -> gameFpsEvidenceMap(row, gpuClass, cpuClass, gameKey, resolution))
                 .toList();
@@ -985,17 +1004,22 @@ public class ToolCheckService {
         ));
     }
 
-    /** Expands FPS query parameters while keeping optional game filter readable. */
-    private static List<Object> fpsParams(List<Object> base, Long gpuId, String gpuClass, String gameKey) {
+    /**
+     * Expands FPS query parameters while keeping optional game filter readable.
+     * 해상도가 없으면 순위식이 상수로 대체되므로 해당 파라미터도 함께 빠진다 — SQL의 ? 개수와 정확히 맞춘다.
+     */
+    private static List<Object> fpsParams(List<Object> base, Long gpuId, String gpuClass, String gameKey, String resolution) {
         List<Object> result = new ArrayList<>();
         result.add(base.get(0));
         result.add(base.get(1));
         result.add(base.get(2));
         result.add(base.get(3));
         result.add(base.get(4));
-        result.add(base.get(5));
-        result.add(base.get(5));
-        result.add(base.get(5));
+        if (resolution != null) {
+            result.add(resolution);
+            result.add(resolution);
+            result.add(resolution);
+        }
         result.add(gpuId);
         result.add(gpuClass);
         if (gameKey != null) {

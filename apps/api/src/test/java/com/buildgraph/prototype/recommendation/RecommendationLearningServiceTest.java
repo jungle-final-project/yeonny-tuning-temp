@@ -1,5 +1,6 @@
 package com.buildgraph.prototype.recommendation;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import com.buildgraph.prototype.user.CurrentUserService;
@@ -53,5 +54,31 @@ class RecommendationLearningServiceTest {
                 .isInstanceOf(ResponseStatusException.class)
                 .extracting(error -> ((ResponseStatusException) error).getStatusCode())
                 .isEqualTo(HttpStatus.BAD_REQUEST);
+    }
+
+    @Test
+    void bulkValidationReturnsAcceptedEventCountWithoutWriting() {
+        RecommendationLearningService service = new RecommendationLearningService(org.mockito.Mockito.mock(JdbcTemplate.class));
+
+        int count = service.validateBulkUserEvents(Map.of(
+                "events", List.of(
+                        Map.of("eventType", "IMPRESSION", "sourceSurface", "HOME_RECOMMENDED_PARTS"),
+                        Map.of("eventType", "CLICK", "sourceSurface", "HOME_RECOMMENDED_PARTS")
+                )
+        ));
+
+        assertThat(count).isEqualTo(2);
+    }
+
+    @Test
+    void bulkValidationRejectsAdminFeedbackTypes() {
+        RecommendationLearningService service = new RecommendationLearningService(org.mockito.Mockito.mock(JdbcTemplate.class));
+
+        assertThatThrownBy(() -> service.validateBulkUserEvents(Map.of(
+                        "events", List.of(Map.of("eventType", "ADMIN_PROMOTE"))
+                )))
+                .isInstanceOf(ResponseStatusException.class)
+                .extracting(error -> ((ResponseStatusException) error).getStatusCode())
+                .isEqualTo(HttpStatus.FORBIDDEN);
     }
 }

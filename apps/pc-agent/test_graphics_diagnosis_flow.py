@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import tempfile
 import unittest
 from datetime import datetime, timedelta, timezone
@@ -7,7 +8,13 @@ from pathlib import Path
 
 import buildgraph_agent as agent
 from diagnosis_request_agent import DiagnosisRequest, DiagnosisSession
+from initial_metrics import DemoSensorProvider, InitialCollectionSettings
+from pc_agent_demo_scenarios import (
+    GRAPHICS_CODE43_REMOTE_SUPPORT_SCENARIO_ID,
+    GRAPHICS_CODE43_REMOTE_SUPPORT_SYMPTOM,
+)
 from windows_graphics_diagnostics import (
+    Code43RemoteSupportDemoGraphicsProvider,
     DEVICE_REPORTED_PROBLEM,
     DISABLED,
     NO_RESULTS,
@@ -19,6 +26,14 @@ from windows_graphics_diagnostics import (
 
 
 STARTED_AT = datetime(2026, 7, 14, 8, 0, tzinfo=timezone.utc)
+
+
+class CapturingSocket:
+    def __init__(self) -> None:
+        self.sent: list[dict] = []
+
+    def send(self, payload: str) -> None:
+        self.sent.append(json.loads(payload))
 
 
 def readings_at(sampled_at: datetime, value: float) -> tuple[agent.MetricReading, ...]:
@@ -95,16 +110,23 @@ def windows_snapshot(problem_code: int | None) -> WindowsGraphicsDiagnosticsSnap
 
 
 class GraphicsDiagnosisFlowTest(unittest.TestCase):
-    def run_flow(self, problem_code: int | None):
+    def run_flow(
+        self,
+        problem_code: int | None,
+        *,
+        mode: str = "LIVE",
+        symptom: str = "게임 중 검은 화면이 나타났다가 화면이 복구됩니다.",
+        snapshot_override: WindowsGraphicsDiagnosticsSnapshot | None = None,
+    ):
         diagnosis_id = "diagnosis-graphics-flow"
         request = DiagnosisRequest(
             diagnosis_id=diagnosis_id,
             device_id="device-1",
-            symptom="게임 중 검은 화면이 나타났다가 화면이 복구됩니다.",
+            symptom=symptom,
             requested_checks=("gpu",),
             requested_at=STARTED_AT.isoformat(),
             expires_at=(STARTED_AT + timedelta(minutes=5)).isoformat(),
-            mode="LIVE",
+            mode=mode,
         )
         temporary = tempfile.TemporaryDirectory()
         self.addCleanup(temporary.cleanup)
@@ -126,19 +148,19 @@ class GraphicsDiagnosisFlowTest(unittest.TestCase):
             evaluated_at=(STARTED_AT - timedelta(minutes=1)).isoformat(),
         ))
         metrics_store = agent.MetricsStore(Path(temporary.name) / "metrics.json")
-        metrics_store.begin(diagnosis_id, "LIVE")
+        metrics_store.begin(diagnosis_id, mode)
         metrics_store.append(diagnosis_id, readings_at(STARTED_AT - timedelta(seconds=1), 10.0))
         metrics_store.complete(diagnosis_id)
         log_store = agent.DiagnosisLogStore(Path(temporary.name) / "progress.json")
         log_store.replace(agent.DiagnosisRunSnapshot(
             diagnosis_id=diagnosis_id,
-            mode="LIVE",
+            mode=mode,
             state="COMPLETED",
             progress=100,
             transition_allowed=True,
         ))
         provider_calls: list[str] = []
-        actual_windows_snapshot = windows_snapshot(problem_code)
+        actual_windows_snapshot = snapshot_override or windows_snapshot(problem_code)
 
         def collect_windows() -> WindowsGraphicsDiagnosticsSnapshot:
             provider_calls.append(diagnosis_id)
@@ -187,6 +209,64 @@ class GraphicsDiagnosisFlowTest(unittest.TestCase):
         result = agent.DiagnosisRuleEngine().evaluate(metrics_store.snapshot, snapshot)
         result_store.save(result)
         return session_store.session, metrics_store.snapshot, snapshot, result, updates, provider_calls, result_cleared
+
+    def test_code43_demo_uses_rule_engine_and_sends_progress_and_result_metadata(self) -> None:
+        demo_snapshot = Code43RemoteSupportDemoGraphicsProvider(
+            now=lambda: STARTED_AT + timedelta(seconds=1),
+        ).collect()
+        session, _, snapshot, result, _, provider_calls, _ = self.run_flow(
+            43,
+            mode="DEMO",
+            symptom=GRAPHICS_CODE43_REMOTE_SUPPORT_SYMPTOM,
+            snapshot_override=demo_snapshot,
+        )
+
+        self.assertEqual(1, len(provider_calls))
+        self.assertEqual("COMPLETED", snapshot.state)
+        self.assertEqual("WARNING", result.severity)
+        self.assertEqual("DEVICE_DRIVER_CONFIGURATION_ISSUE", result.diagnosis_type)
+        self.assertEqual("SOFTWARE_RECOVERY", result.resolution_type)
+        self.assertFalse(result.can_auto_recover)
+        self.assertTrue(result.remote_as_recommended)
+        self.assertEqual("DEMO", result.data_mode)
+        self.assertEqual(GRAPHICS_CODE43_REMOTE_SUPPORT_SCENARIO_ID, result.scenario_id)
+        self.assertTrue(agent.can_offer_as(result, snapshot, session))
+        self.assertIn("드라이버 재설치 또는 이전 버전 롤백", " ".join(result.recommended_actions))
+        self.assertIn("방문 점검 전환", " ".join(result.recommended_actions))
+        self.assertNotIn("물리 고장으로 확정", result.title)
+        self.assertNotEqual("PHYSICAL_INSPECTION", result.resolution_type)
+
+        websocket_temporary = tempfile.TemporaryDirectory()
+        self.addCleanup(websocket_temporary.cleanup)
+        client = agent.AgentDiagnosisWebSocketClient(
+            "http://localhost:8080",
+            "agent-token",
+            agent.DiagnosisRequestProcessor(
+                agent.DiagnosisSessionStore(Path(websocket_temporary.name) / "ws.json")
+            ),
+            websocket_factory=lambda *args, **kwargs: None,
+        )
+        socket = CapturingSocket()
+        client.authenticated = True
+        client._socket = socket
+        for event in snapshot.events:
+            client.send_diagnosis_status(agent.diagnosis_event_sync_detail(snapshot, event, session))
+        client.send_diagnosis_result(result.to_dict())
+
+        status_frames = [frame for frame in socket.sent if frame.get("type") == "DIAGNOSIS_STATUS"]
+        result_frames = [frame for frame in socket.sent if frame.get("type") == "DIAGNOSIS_RESULT"]
+        self.assertTrue(status_frames)
+        self.assertTrue(any(frame["detail"].get("eventType") == "PROGRESS_UPDATED" for frame in status_frames))
+        self.assertTrue(all(frame["detail"]["dataMode"] == "DEMO" for frame in status_frames))
+        self.assertTrue(all(
+            frame["detail"]["scenarioId"] == GRAPHICS_CODE43_REMOTE_SUPPORT_SCENARIO_ID
+            for frame in status_frames
+        ))
+        self.assertEqual("DEMO", result_frames[-1]["detail"]["dataMode"])
+        self.assertEqual(
+            GRAPHICS_CODE43_REMOTE_SUPPORT_SCENARIO_ID,
+            result_frames[-1]["detail"]["scenarioId"],
+        )
 
     def test_black_screen_and_code_22_complete_real_task_event_and_result_flow(self) -> None:
         session, metrics, snapshot, result, updates, provider_calls, result_cleared = self.run_flow(22)
@@ -269,7 +349,7 @@ class GraphicsDiagnosisFlowTest(unittest.TestCase):
                 self.assertNotIn("메인 GPU가 고장 났습니다", rendered)
                 self.assertNotIn("자동으로 복구했습니다", rendered)
 
-    def test_reset_returns_agent_to_idle_and_accepts_a_new_web_request(self) -> None:
+    def test_reset_starts_a_clean_second_diagnosis_with_new_workers_and_state(self) -> None:
         temporary = tempfile.TemporaryDirectory()
         self.addCleanup(temporary.cleanup)
         root = Path(temporary.name)
@@ -327,14 +407,135 @@ class GraphicsDiagnosisFlowTest(unittest.TestCase):
         decision = processor.process({
             "diagnosisId": "diagnosis-next",
             "deviceId": "device-1",
-            "symptom": "화면이 꺼졌다가 다시 복구됩니다.",
+            "symptom": GRAPHICS_CODE43_REMOTE_SUPPORT_SYMPTOM,
             "requestedChecks": ["gpu"],
             "requestedAt": STARTED_AT.isoformat(),
             "expiresAt": (STARTED_AT + timedelta(minutes=5)).isoformat(),
-            "mode": "LIVE",
+            "mode": "DEMO",
         }, authenticated=True)
         self.assertEqual("ACCEPTED", decision.status)
         self.assertEqual("diagnosis-next", session_store.session.request.diagnosis_id)
+
+        provider_factory_calls: list[str] = []
+        metrics_updates: list[agent.MetricsSnapshot] = []
+        coordinator = agent.InitialMetricsCoordinator(
+            metrics_store,
+            live_provider_factory=lambda: DemoSensorProvider(),
+            demo_provider_factory=lambda: provider_factory_calls.append("DEMO") or DemoSensorProvider(),
+            settings=InitialCollectionSettings(
+                sample_count=1,
+                sample_interval_seconds=0.01,
+                sample_timeout_seconds=0.5,
+                steady_interval_seconds=0.05,
+            ),
+            on_update=metrics_updates.append,
+        )
+        second_windows_snapshot = Code43RemoteSupportDemoGraphicsProvider(
+            now=lambda: STARTED_AT + timedelta(seconds=1),
+        ).collect()
+        handlers = agent.graphics_diagnosis_task_handlers(
+            lambda: session_store.session,
+            lambda: metrics_store.snapshot,
+            lambda: log_store.snapshot,
+            lambda: second_windows_snapshot,
+            observation_timeout_seconds=0.1,
+        )
+        updates: list[agent.DiagnosisRunSnapshot] = []
+        orchestrator = agent.DiagnosisOrchestrator(
+            lambda: metrics_store.snapshot,
+            log_store,
+            settings=agent.DiagnosisSettings(
+                task_weights=agent.GRAPHICS_DIAGNOSIS_TASK_WEIGHTS,
+                task_timeout_seconds=1.0,
+                session_timeout_seconds=5.0,
+                max_retries=1,
+            ),
+            task_handlers=handlers,
+            task_definitions=agent.GRAPHICS_DIAGNOSIS_TASK_DEFINITIONS,
+            task_labels=agent.GRAPHICS_DIAGNOSIS_TASK_LABELS,
+            on_update=updates.append,
+            now=lambda: STARTED_AT + timedelta(minutes=1),
+        )
+
+        second_session = agent.start_initial_metrics_session(
+            decision.session,
+            "DEMO",
+            "device-1",
+            session_store,
+            metrics_store,
+            result_store,
+            orchestrator,
+            coordinator,
+        )
+        self.assertIsNotNone(second_session)
+        self.assertTrue(coordinator.wait(2.0))
+        self.assertTrue(coordinator.is_running("diagnosis-next"))
+        initial_metrics_thread = coordinator._thread
+        repeated_session = agent.start_initial_metrics_session(
+            second_session,
+            "DEMO",
+            "device-1",
+            session_store,
+            metrics_store,
+            result_store,
+            orchestrator,
+            coordinator,
+        )
+
+        self.assertEqual("diagnosis-next", repeated_session.request.diagnosis_id)
+        self.assertIs(initial_metrics_thread, coordinator._thread)
+        self.assertEqual(["DEMO"], provider_factory_calls)
+        self.assertEqual("diagnosis-next", metrics_store.snapshot.diagnosis_id)
+        self.assertTrue(metrics_store.snapshot.initial_complete)
+        self.assertTrue(metrics_updates)
+        self.assertIsNone(result_store.result)
+        self.assertEqual("diagnosis-next", log_store.snapshot.diagnosis_id)
+        self.assertEqual((), log_store.snapshot.events)
+
+        for index in range(1, 4):
+            metrics_store.append(
+                "diagnosis-next",
+                readings_at(STARTED_AT + timedelta(minutes=1, seconds=index), 20.0 + index),
+            )
+
+        started = agent.start_diagnosis_once(
+            second_session,
+            session_store,
+            metrics_store,
+            orchestrator,
+            result_store,
+        )
+        diagnosis_thread = orchestrator._thread
+        duplicate = agent.start_diagnosis_once(
+            second_session,
+            session_store,
+            metrics_store,
+            orchestrator,
+            result_store,
+        )
+        self.assertIsNotNone(started)
+        self.assertIsNone(duplicate)
+        self.assertIs(diagnosis_thread, orchestrator._thread)
+        self.assertTrue(orchestrator.wait(5.0))
+        self.assertTrue(coordinator.stop(2.0))
+
+        second_snapshot = log_store.snapshot
+        second_result = agent.DiagnosisRuleEngine().evaluate(metrics_store.snapshot, second_snapshot)
+        result_store.save(second_result)
+        session_store.update_state("COMPLETED")
+
+        self.assertEqual("diagnosis-next", second_snapshot.diagnosis_id)
+        self.assertEqual("COMPLETED", second_snapshot.state)
+        self.assertTrue(any(event.event_type == "PROGRESS_UPDATED" for event in second_snapshot.events))
+        self.assertEqual(
+            1,
+            sum(event.event_type == "DIAGNOSIS_STARTED" for event in second_snapshot.events),
+        )
+        self.assertTrue(all(event.event_id for event in second_snapshot.events))
+        self.assertNotIn("diagnosis-completed", json.dumps(second_snapshot.to_dict()))
+        self.assertEqual("diagnosis-next", result_store.result.diagnosis_id)
+        self.assertNotEqual(request.diagnosis_id, result_store.result.diagnosis_id)
+        self.assertEqual("COMPLETED", session_store.session.agent_state)
 
 
 if __name__ == "__main__":

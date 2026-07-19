@@ -5,6 +5,8 @@ from datetime import datetime, timezone
 
 from initial_metrics import AVAILABLE, FAILED, PERMISSION_REQUIRED
 from windows_graphics_diagnostics import (
+    Code43RemoteSupportDemoGraphicsProvider,
+    DEVICE_REPORTED_PROBLEM,
     DISABLED,
     NO_RESULTS,
     OK,
@@ -12,6 +14,7 @@ from windows_graphics_diagnostics import (
     PowerShellQueryResult,
     WindowsGraphicsDiagnosticsProvider,
 )
+from pc_agent_demo_scenarios import GRAPHICS_CODE43_REMOTE_SUPPORT_SCENARIO_ID
 
 
 QUERIED_AT = datetime(2026, 7, 14, 7, 0, tzinfo=timezone.utc)
@@ -41,6 +44,29 @@ def event_responses(status: str = NO_RESULTS) -> dict[str, PowerShellQueryResult
 
 
 class WindowsGraphicsDiagnosticsProviderTest(unittest.TestCase):
+    def test_code43_demo_fixture_contains_normal_iris_and_arc_problem_without_fake_events(self) -> None:
+        snapshot = Code43RemoteSupportDemoGraphicsProvider(now=lambda: QUERIED_AT).collect()
+
+        self.assertEqual("DEMO", snapshot.data_mode)
+        self.assertEqual(GRAPHICS_CODE43_REMOTE_SUPPORT_SCENARIO_ID, snapshot.scenario_id)
+        self.assertEqual(
+            (("Intel(R) Iris(R) Xe Graphics", 0, OK),
+             ("Intel(R) Arc(TM) A350M Graphics", 43, DEVICE_REPORTED_PROBLEM)),
+            tuple((device.device_name, device.problem_code, device.status) for device in snapshot.devices),
+        )
+        self.assertTrue(all(device.driver_provider == "Intel Corporation" for device in snapshot.devices))
+        self.assertTrue(all(device.driver_signed is True for device in snapshot.devices))
+        self.assertEqual((), snapshot.graphics_events)
+        self.assertEqual((), snapshot.whea_events)
+        self.assertEqual((), snapshot.kernel_power_events)
+        self.assertEqual(NO_RESULTS, snapshot.graphics_event_query.status)
+        self.assertEqual(NO_RESULTS, snapshot.whea_event_query.status)
+        context = next(item for item in snapshot.to_evidence() if item.metric_type == "demo_scenario")
+        self.assertEqual(
+            {"dataMode": "DEMO", "scenarioId": GRAPHICS_CODE43_REMOTE_SUPPORT_SCENARIO_ID},
+            context.value,
+        )
+
     def test_normalizes_display_device_and_signed_driver_metadata(self) -> None:
         responses = {
             "display_devices": PowerShellQueryResult(OK, ({

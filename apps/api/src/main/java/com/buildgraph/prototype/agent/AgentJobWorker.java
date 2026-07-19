@@ -4,9 +4,11 @@ import com.buildgraph.prototype.common.RabbitQueueConfig;
 import java.util.List;
 import java.util.Map;
 import org.springframework.amqp.rabbit.annotation.RabbitListener;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Component;
 
 @Component
+@ConditionalOnProperty(name = "agent.worker.enabled", havingValue = "true", matchIfMissing = true)
 public class AgentJobWorker {
     private final AgentTraceService agentTraceService;
     private final AgentRunner agentRunner;

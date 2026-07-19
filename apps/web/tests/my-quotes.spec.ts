@@ -322,20 +322,32 @@ async function openMyQuotesAsUser(page: Page, assemblyItems: unknown[] = []) {
   return { priceAlertRequests, applyBuildRequests, graphRequests };
 }
 
-test('shows saved quotes, actionable price alert setup, and alert progress', async ({ page }) => {
+test('shows saved quotes while hiding target price alert UI', async ({ page }) => {
   const { priceAlertRequests } = await openMyQuotesAsUser(page);
 
   await expect(page.getByRole('heading', { name: '내 견적함 / 목표가 알림' })).toHaveCount(0);
 
   const firstBuild = page.getByTestId('saved-build-card-build-qhd-balanced');
-  const lastBuild = page.getByTestId('saved-build-card-build-office');
   await expect(firstBuild).toContainText('QHD 균형 저장 견적');
-  const alertRegistration = page.getByTestId('quote-alert-registration');
-  await expect(alertRegistration).toBeVisible();
-  const alertRegistrationBox = await alertRegistration.boundingBox();
-  const lastBuildBox = await lastBuild.boundingBox();
-  expect(alertRegistrationBox?.y).toBeGreaterThanOrEqual((lastBuildBox?.y ?? 0) + (lastBuildBox?.height ?? 0));
-  await expect(firstBuild.getByRole('link', { name: '견적 상세' })).toHaveAttribute('href', '/builds/build-qhd-balanced');
+  await expect(page.getByTestId('quote-alert-registration')).toHaveCount(0);
+  await expect(page.getByRole('heading', { name: '목표가 알림', exact: true })).toHaveCount(0);
+  await expect(page.getByRole('button', { name: '목표가 등록' })).toHaveCount(0);
+  await expect(page.getByLabel('저장 견적 부품')).toHaveCount(0);
+  await expect(page.getByLabel('목표가', { exact: true })).toHaveCount(0);
+  await expect(page.getByTestId('price-alert-row-part-gpu-5070')).toHaveCount(0);
+  const detailButton = firstBuild.getByRole('button', { name: '견적 상세' });
+  await expect(detailButton).toBeVisible();
+  await expect(firstBuild.getByRole('link', { name: '견적 상세' })).toHaveCount(0);
+  await detailButton.click();
+  await expect(page).toHaveURL('/my/quotes');
+  const detailDialog = page.getByRole('dialog', { name: 'QHD 균형 저장 견적 구성 부품' });
+  await expect(detailDialog).toBeVisible();
+  await expect(detailDialog.getByRole('columnheader', { name: '분류' })).toBeVisible();
+  await expect(detailDialog).toContainText('AMD Ryzen 7 9700X');
+  await expect(detailDialog).toContainText('GeForce RTX 5070');
+  await expect(detailDialog).toContainText('2,180,000원');
+  await page.keyboard.press('Escape');
+  await expect(detailDialog).toHaveCount(0);
   await expect(firstBuild.getByRole('button', { name: '부품 변경' })).toBeVisible();
   // 저장 견적 비교 — 비교할 견적을 고르면 전 카테고리 부품 + 성능을 좌우로 나열.
   const perfMatrix = page.getByTestId('saved-builds-comparison');
@@ -367,8 +379,7 @@ test('shows saved quotes, actionable price alert setup, and alert progress', asy
   await expect(perfMatrix.getByTestId('quote-compare-fps-delta')).toContainText('B가 14 FPS 더 높음');
   await expect(perfMatrix.getByTestId('quote-compare-fps-bar-A')).toHaveClass(/transition-\[height\]/);
   await expect(perfMatrix.getByTestId('quote-compare-fps-bar-B')).toHaveCSS('background-color', 'rgb(53, 118, 202)');
-  await expect(perfMatrix.getByTestId('quote-score-policy')).toContainText('성능 43%');
-  await expect(perfMatrix.getByTestId('quote-score-policy')).toContainText('근거 신뢰도 8%');
+  await expect(perfMatrix.getByTestId('quote-score-policy')).toHaveCount(0);
   // 수치가 있는 부품만 동일 색상 상대 막대를 사용한다.
   await expect(perfMatrix.getByTestId('quote-compare-bar-CPU-A')).toContainText('72점');
   await expect(perfMatrix.getByTestId('quote-compare-bar-GPU-B')).toContainText('92점');
@@ -394,41 +405,14 @@ test('shows saved quotes, actionable price alert setup, and alert progress', asy
   await perfMatrix.getByTestId('compare-toggle-build-workstation').click();
   await expect(perfMatrix.getByTestId('quote-compare-selection-guide')).toContainText('하나 더 선택');
   await expect(perfMatrix.getByTestId('compare-toggle-build-office')).toBeEnabled();
-  await firstBuild.getByRole('button', { name: '목표가 등록' }).click();
-
-  await expect(page.getByLabel('저장 견적 부품')).toHaveValue('part-cpu-9700x');
-  await expect(page.getByLabel('저장 견적 부품').locator('option')).toHaveCount(savedBuilds[0].items.length);
-  await expect(page.getByLabel('저장 견적 부품')).toContainText('AMD Ryzen 7 9700X');
-  await expect(page.getByLabel('저장 견적 부품')).toContainText('GeForce RTX 5070');
-  await expect(page.getByLabel('저장 견적 부품')).not.toContainText('GeForce RTX 5080');
-  await page.getByLabel('목표가').fill('880000');
-  await page.getByRole('button', { name: '알림 등록' }).click();
-
-  await expect.poll(() => priceAlertRequests.length).toBe(1);
-  expect(priceAlertRequests[0]).toEqual({ partId: 'part-cpu-9700x', targetPrice: 880_000 });
-  await expect(page.getByText('알림 등록 완료')).toBeVisible();
-
-  const activeAlert = page.getByTestId('price-alert-row-part-gpu-5070');
-  await expect(activeAlert).toContainText('GeForce RTX 5070');
-  await expect(activeAlert).toContainText('목표까지 60,000원');
-
-  const triggeredAlert = page.getByTestId('price-alert-row-part-ssd-990pro');
-  await expect(triggeredAlert).toContainText('Samsung 990 PRO 1TB');
-  await expect(triggeredAlert).toContainText('목표 달성');
+  expect(priceAlertRequests).toHaveLength(0);
 });
 
-test('limits target price dropdown to the selected quote and opens checkout for that quote', async ({ page }) => {
+test('opens checkout for a saved quote without exposing target price controls', async ({ page }) => {
   const { applyBuildRequests } = await openMyQuotesAsUser(page);
 
   const secondBuild = page.getByTestId('saved-build-card-build-workstation');
-  await secondBuild.getByRole('button', { name: '목표가 등록' }).click();
-
-  const savedPartSelect = page.getByLabel('저장 견적 부품');
-  await expect(savedPartSelect).toHaveValue('part-cpu-9900x');
-  await expect(savedPartSelect.locator('option')).toHaveCount(savedBuilds[1].items.length);
-  await expect(savedPartSelect).toContainText('GeForce RTX 5080');
-  await expect(savedPartSelect).toContainText('DDR5 64GB 6400 Kit');
-  await expect(savedPartSelect).not.toContainText('AMD Ryzen 7 9700X');
+  await expect(secondBuild.getByRole('button', { name: '목표가 등록' })).toHaveCount(0);
 
   await secondBuild.getByRole('button', { name: '구매하기' }).click();
 
@@ -487,12 +471,14 @@ test('opens a duplicate in self quote without saving a new build', async ({ page
   await expect(page).toHaveURL('/self-quote');
 });
 
-test('does not expose manual part id entry for target price alerts', async ({ page }) => {
+test('does not expose any target price alert controls', async ({ page }) => {
   await openMyQuotesAsUser(page);
 
   await expect(page.getByRole('button', { name: '직접 입력' })).toHaveCount(0);
   await expect(page.getByLabel('부품 ID 직접 입력')).toHaveCount(0);
-  await expect(page.getByLabel('저장 견적 부품')).toBeVisible();
+  await expect(page.getByLabel('저장 견적 부품')).toHaveCount(0);
+  await expect(page.getByLabel('목표가', { exact: true })).toHaveCount(0);
+  await expect(page.getByRole('button', { name: '알림 등록' })).toHaveCount(0);
 });
 
 test('opens a read-only dependency graph popup for each saved quote', async ({ page }) => {

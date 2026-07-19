@@ -42,6 +42,8 @@ class PcAgentDiagnosisRequestServiceTest {
         when(broker.isConnected("device-1")).thenReturn(true);
         when(jdbcTemplate.update(contains("INSERT INTO pc_agent_diagnosis_requests"), any(Object[].class)))
                 .thenReturn(1);
+        when(jdbcTemplate.update(contains("UPDATE pc_agent_diagnosis_requests"), any(Object[].class)))
+                .thenReturn(1);
         when(broker.dispatchAndAwait(any())).thenReturn(
                 new PcAgentDiagnosisSocketBroker.AgentResponse("ACCEPTED", "수신 완료")
         );
@@ -59,6 +61,7 @@ class PcAgentDiagnosisRequestServiceTest {
         assertThat(captor.getValue().expiresAt()).isEqualTo(Instant.parse("2026-07-13T01:02:00Z"));
         assertThat(result).containsEntry("status", "ACCEPTED");
         verify(jdbcTemplate).update(contains("INSERT INTO pc_agent_diagnosis_requests"), any(Object[].class));
+        verify(jdbcTemplate).update(contains("SET request_status = ?"), any(Object[].class));
     }
 
     @Test

@@ -2,7 +2,7 @@ import { FormEvent, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useMutation, useQueries, useQuery, useQueryClient } from '@tanstack/react-query';
 import { ArrowDown, ArrowUp, Check, ClipboardList, Copy, FileText, GitBranch, Pencil, PencilLine, Save, ShoppingBag, Target, Trash2, Trophy, X } from 'lucide-react';
-import { Panel, Screen, StateMessage } from '../../../components/ui';
+import { DataTable, Panel, Screen, StateMessage } from '../../../components/ui';
 import { applyAiBuildToQuoteDraft, getPart } from '../../parts/partsApi';
 import { listAssemblyRequests } from '../../parts/assemblyApi';
 import { QuotePerformancePanel } from '../../parts/components/slot-board/QuotePerformancePanel';
@@ -25,19 +25,27 @@ type SavedBuildApplyVariables = {
   destination: SavedBuildApplyDestination;
 };
 
+// 목표가 알림 API·DB 계약은 유지하고, 현재 사용자 화면에서만 진입점을 숨긴다.
+const PRICE_ALERT_UI_ENABLED = false;
+
 export function MyQuotesPage() {
   const queryClient = useQueryClient();
   const navigate = useNavigate();
   const [selectedAlertBuildId, setSelectedAlertBuildId] = useState('');
   const [selectedSavedPartId, setSelectedSavedPartId] = useState('');
   const [graphBuild, setGraphBuild] = useState<BuildSummary | null>(null);
+  const [detailBuild, setDetailBuild] = useState<BuildSummary | null>(null);
   const [recommendedBuild, setRecommendedBuild] = useState<{ buildId: string; label: 'A' | 'B' } | null>(null);
   const [targetPrice, setTargetPrice] = useState('850000');
   const [alertInputError, setAlertInputError] = useState('');
   const alertFormRef = useRef<HTMLDivElement | null>(null);
 
   const buildsQuery = useQuery({ queryKey: ['build-history'], queryFn: getBuildHistory });
-  const alertsQuery = useQuery({ queryKey: ['price-alerts'], queryFn: getPriceAlerts });
+  const alertsQuery = useQuery({
+    queryKey: ['price-alerts'],
+    queryFn: getPriceAlerts,
+    enabled: PRICE_ALERT_UI_ENABLED
+  });
   const assemblyRequestsQuery = useQuery({
     queryKey: ['assembly-requests'],
     queryFn: () => listAssemblyRequests(),
@@ -163,7 +171,7 @@ export function MyQuotesPage() {
         <div className="grid gap-5">
           <Panel
             title="저장 견적"
-            subtitle="상세 확인, 부품 변경, 목표가 알림 등록까지 바로 이어집니다."
+            subtitle="저장한 견적을 확인하고 부품 변경이나 구매 준비를 이어갈 수 있습니다."
             className="order-1"
             action={(
               <div className="flex flex-wrap items-center gap-2">
@@ -200,6 +208,7 @@ export function MyQuotesPage() {
                     onCheckout={openCheckoutForBuild}
                     onEditParts={openSelfQuoteForBuild}
                     onDuplicate={openSelfQuoteForBuild}
+                    onOpenDetails={setDetailBuild}
                     onOpenGraph={setGraphBuild}
                     onRename={(name) => renameBuildMutation.mutate({ buildId: build.id, name })}
                     onDelete={() => { if (!deleteBuildMutation.isPending) deleteBuildMutation.mutate(build.id); }}
@@ -223,98 +232,102 @@ export function MyQuotesPage() {
             )}
           </Panel>
 
-          <div ref={alertFormRef} data-testid="quote-alert-registration" className="order-2">
-            <Panel title="목표가 알림 등록">
-              <form onSubmit={submitAlert} className="grid gap-4 lg:grid-cols-[minmax(320px,1.4fr)_minmax(180px,0.7fr)_160px_minmax(220px,0.9fr)] lg:items-end">
-                <div>
-                  {selectedAlertBuild ? (
-                    <div className="mb-3 rounded-md border border-[#f4c8b2] bg-[#fff5ef] px-3 py-2">
-                      <div className="text-[11px] font-black text-[#de6c2d]">선택한 저장 견적</div>
-                      <div className="mt-1 truncate text-sm font-black text-commerce-ink" title={displayBuildName(selectedAlertBuild)}>{displayBuildName(selectedAlertBuild)}</div>
-                      {selectedSavedPart ? (
-                        <p className="mt-1 text-xs font-semibold text-slate-500">
-                          현재 저장가 {selectedSavedPart.price.toLocaleString()}원
+          {PRICE_ALERT_UI_ENABLED ? (
+            <>
+              <div ref={alertFormRef} data-testid="quote-alert-registration" className="order-2">
+                <Panel title="목표가 알림 등록">
+                  <form onSubmit={submitAlert} className="grid gap-4 lg:grid-cols-[minmax(320px,1.4fr)_minmax(180px,0.7fr)_160px_minmax(220px,0.9fr)] lg:items-end">
+                    <div>
+                      {selectedAlertBuild ? (
+                        <div className="mb-3 rounded-md border border-[#f4c8b2] bg-[#fff5ef] px-3 py-2">
+                          <div className="text-[11px] font-black text-[#de6c2d]">선택한 저장 견적</div>
+                          <div className="mt-1 truncate text-sm font-black text-commerce-ink" title={displayBuildName(selectedAlertBuild)}>{displayBuildName(selectedAlertBuild)}</div>
+                          {selectedSavedPart ? (
+                            <p className="mt-1 text-xs font-semibold text-slate-500">
+                              현재 저장가 {selectedSavedPart.price.toLocaleString()}원
+                            </p>
+                          ) : null}
+                        </div>
+                      ) : null}
+                      <label htmlFor="quote-alert-saved-part" className="mb-1 block text-xs font-black text-slate-600">저장 견적 부품</label>
+                      <select
+                        id="quote-alert-saved-part"
+                        className="h-11 w-full rounded-md border border-slate-300 bg-white px-3 text-sm font-bold text-commerce-ink focus:border-[#de6c2d] focus:outline-none focus:ring-4 focus:ring-[#f4c8b2] disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-400"
+                        value={selectedSavedPartId}
+                        onChange={(event) => setSelectedSavedPartId(event.target.value)}
+                        disabled={savedPartOptions.length === 0}
+                      >
+                        {savedPartOptions.map((option) => (
+                          <option key={option.partId} value={option.partId}>
+                            {option.label}
+                          </option>
+                        ))}
+                      </select>
+                      {!selectedSavedPart ? (
+                        <p className="mt-2 break-keep text-xs leading-5 text-slate-500">
+                          목표가를 등록하려면 저장 견적 카드의 목표가 등록 버튼을 먼저 선택하세요.
                         </p>
                       ) : null}
                     </div>
-                  ) : null}
-                  <label htmlFor="quote-alert-saved-part" className="mb-1 block text-xs font-black text-slate-600">저장 견적 부품</label>
-                  <select
-                    id="quote-alert-saved-part"
-                    className="h-11 w-full rounded-md border border-slate-300 bg-white px-3 text-sm font-bold text-commerce-ink focus:border-[#de6c2d] focus:outline-none focus:ring-4 focus:ring-[#f4c8b2] disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-400"
-                    value={selectedSavedPartId}
-                    onChange={(event) => setSelectedSavedPartId(event.target.value)}
-                    disabled={savedPartOptions.length === 0}
-                  >
-                    {savedPartOptions.map((option) => (
-                      <option key={option.partId} value={option.partId}>
-                        {option.label}
-                      </option>
-                    ))}
-                  </select>
-                  {!selectedSavedPart ? (
-                    <p className="mt-2 break-keep text-xs leading-5 text-slate-500">
-                      목표가를 등록하려면 저장 견적 카드의 목표가 등록 버튼을 먼저 선택하세요.
-                    </p>
-                  ) : null}
-                </div>
 
-                <div>
-                  <label htmlFor="quote-alert-target-price" className="mb-1 block text-xs font-black text-slate-600">목표가</label>
-                  <input
-                    id="quote-alert-target-price"
-                    className="h-11 w-full rounded-md border border-slate-300 px-3 text-sm font-bold text-commerce-ink focus:border-[#de6c2d] focus:outline-none focus:ring-4 focus:ring-[#f4c8b2]"
-                    inputMode="numeric"
-                    value={targetPrice}
-                    onChange={(event) => {
-                      setTargetPrice(event.target.value);
-                      setAlertInputError('');
-                    }}
-                  />
-                  {alertInputError ? <p className="mt-1 text-xs font-bold text-red-600">{alertInputError}</p> : null}
-                </div>
+                    <div>
+                      <label htmlFor="quote-alert-target-price" className="mb-1 block text-xs font-black text-slate-600">목표가</label>
+                      <input
+                        id="quote-alert-target-price"
+                        className="h-11 w-full rounded-md border border-slate-300 px-3 text-sm font-bold text-commerce-ink focus:border-[#de6c2d] focus:outline-none focus:ring-4 focus:ring-[#f4c8b2]"
+                        inputMode="numeric"
+                        value={targetPrice}
+                        onChange={(event) => {
+                          setTargetPrice(event.target.value);
+                          setAlertInputError('');
+                        }}
+                      />
+                      {alertInputError ? <p className="mt-1 text-xs font-bold text-red-600">{alertInputError}</p> : null}
+                    </div>
 
-                <button
-                  disabled={createAlertMutation.isPending || !selectedPartIdForSubmit || !targetPriceNumber}
-                  className="flex w-full min-h-11 items-center justify-center rounded-md bg-[#de6c2d] px-4 py-3 text-sm font-black text-white hover:bg-[#c45c22] disabled:cursor-not-allowed disabled:bg-slate-400 disabled:hover:bg-slate-400"
-                >
-                  <Save className="mr-1.5 inline" size={15} /> {createAlertMutation.isPending ? '등록 중' : '알림 등록'}
-                </button>
+                    <button
+                      disabled={createAlertMutation.isPending || !selectedPartIdForSubmit || !targetPriceNumber}
+                      className="flex w-full min-h-11 items-center justify-center rounded-md bg-[#de6c2d] px-4 py-3 text-sm font-black text-white hover:bg-[#c45c22] disabled:cursor-not-allowed disabled:bg-slate-400 disabled:hover:bg-slate-400"
+                    >
+                      <Save className="mr-1.5 inline" size={15} /> {createAlertMutation.isPending ? '등록 중' : '알림 등록'}
+                    </button>
 
-                {nearestAlert ? (
-                  <div className="rounded-md border border-[#f4c8b2] bg-[#fff5ef] px-3 py-2">
-                    <div className="text-xs font-black text-slate-500">가장 가까운 목표</div>
-                    <div className="mt-1 text-sm font-black text-commerce-ink">{nearestAlert.partName}</div>
-                    <div className="mt-1 text-xs font-bold text-[#de6c2d]">{priceAlertDeltaText(nearestAlert)}</div>
-                  </div>
-                ) : null}
+                    {nearestAlert ? (
+                      <div className="rounded-md border border-[#f4c8b2] bg-[#fff5ef] px-3 py-2">
+                        <div className="text-xs font-black text-slate-500">가장 가까운 목표</div>
+                        <div className="mt-1 text-sm font-black text-commerce-ink">{nearestAlert.partName}</div>
+                        <div className="mt-1 text-xs font-bold text-[#de6c2d]">{priceAlertDeltaText(nearestAlert)}</div>
+                      </div>
+                    ) : null}
 
-                {createAlertMutation.isSuccess ? <div className="lg:col-span-full"><StateMessage type="success" title="알림 등록 완료" body="목표가 알림 목록에 반영했습니다." /></div> : null}
-                {createAlertMutation.isError ? <div className="lg:col-span-full"><StateMessage type="warn" title="알림 등록 실패" body="이미 같은 목표가 알림이 있거나 부품 ID가 유효하지 않습니다." /></div> : null}
-              </form>
-            </Panel>
-          </div>
-
-          <Panel
-            title="목표가 알림"
-            subtitle="현재가가 목표가에 얼마나 가까운지 차액과 진행률로 확인합니다."
-            className="order-3"
-            action={<span data-testid="my-quotes-achieved-count" className="text-xs font-black text-emerald-600">목표 달성 {achievedAlertCount}개</span>}
-          >
-            {alertsQuery.isLoading ? (
-              <AlertSkeleton />
-            ) : alertsQuery.isError ? (
-              <StateMessage type="warn" title="알림 조회 실패" body="등록된 목표가 알림을 불러오지 못했습니다. 잠시 후 다시 확인해 주세요." />
-            ) : alerts.length ? (
-              <div className="grid gap-3 lg:grid-cols-2">
-                {alerts.map((alert) => (
-                  <PriceAlertRow key={`${alert.partId}-${alert.targetPrice}`} alert={alert} />
-                ))}
+                    {createAlertMutation.isSuccess ? <div className="lg:col-span-full"><StateMessage type="success" title="알림 등록 완료" body="목표가 알림 목록에 반영했습니다." /></div> : null}
+                    {createAlertMutation.isError ? <div className="lg:col-span-full"><StateMessage type="warn" title="알림 등록 실패" body="이미 같은 목표가 알림이 있거나 부품 ID가 유효하지 않습니다." /></div> : null}
+                  </form>
+                </Panel>
               </div>
-            ) : (
-              <StateMessage type="info" title="등록된 알림 없음" body="저장 견적의 관심 부품을 선택하고 목표가를 등록해 보세요." />
-            )}
-          </Panel>
+
+              <Panel
+                title="목표가 알림"
+                subtitle="현재가가 목표가에 얼마나 가까운지 차액과 진행률로 확인합니다."
+                className="order-3"
+                action={<span data-testid="my-quotes-achieved-count" className="text-xs font-black text-emerald-600">목표 달성 {achievedAlertCount}개</span>}
+              >
+                {alertsQuery.isLoading ? (
+                  <AlertSkeleton />
+                ) : alertsQuery.isError ? (
+                  <StateMessage type="warn" title="알림 조회 실패" body="등록된 목표가 알림을 불러오지 못했습니다. 잠시 후 다시 확인해 주세요." />
+                ) : alerts.length ? (
+                  <div className="grid gap-3 lg:grid-cols-2">
+                    {alerts.map((alert) => (
+                      <PriceAlertRow key={`${alert.partId}-${alert.targetPrice}`} alert={alert} />
+                    ))}
+                  </div>
+                ) : (
+                  <StateMessage type="info" title="등록된 알림 없음" body="저장 견적의 관심 부품을 선택하고 목표가를 등록해 보세요." />
+                )}
+              </Panel>
+            </>
+          ) : null}
         </div>
       </div>
       {graphBuild ? (
@@ -325,6 +338,9 @@ export function MyQuotesPage() {
           isError={graphQuery.isError}
           onClose={() => setGraphBuild(null)}
         />
+      ) : null}
+      {detailBuild ? (
+        <SavedBuildPartsDialog build={detailBuild} onClose={() => setDetailBuild(null)} />
       ) : null}
     </Screen>
   );
@@ -353,6 +369,7 @@ function SavedBuildCard({
   onCheckout,
   onEditParts,
   onDuplicate,
+  onOpenDetails,
   onOpenGraph,
   onRename,
   onDelete,
@@ -368,6 +385,7 @@ function SavedBuildCard({
   onCheckout: (build: BuildSummary) => void;
   onEditParts: (build: BuildSummary) => void;
   onDuplicate: (build: BuildSummary) => void;
+  onOpenDetails: (build: BuildSummary) => void;
   onOpenGraph: (build: BuildSummary) => void;
   onRename: (name: string) => void;
   onDelete: () => void;
@@ -489,9 +507,13 @@ function SavedBuildCard({
         >
           <ShoppingBag size={14} /> {isPreparingCheckout ? '구매 준비 중' : '구매하기'}
         </button>
-        <Link to={`/builds/${build.id}`} className="inline-flex min-h-9 items-center gap-1.5 rounded-md border border-slate-300 bg-white px-3 text-xs font-black text-slate-700 hover:border-commerce-ink hover:text-commerce-ink">
+        <button
+          type="button"
+          onClick={() => onOpenDetails(build)}
+          className="inline-flex min-h-9 items-center gap-1.5 rounded-md border border-slate-300 bg-white px-3 text-xs font-black text-slate-700 hover:border-commerce-ink hover:text-commerce-ink focus:outline-none focus:ring-4 focus:ring-[#f4c8b2]"
+        >
           <FileText size={14} /> 견적 상세
-        </Link>
+        </button>
         <button
           type="button"
           disabled={!hasCheckoutItems || isPreparingSelfQuote}
@@ -500,14 +522,16 @@ function SavedBuildCard({
         >
           <PencilLine size={14} /> {isPreparingSelfQuote ? '이동 준비 중' : '부품 변경'}
         </button>
-        <button
-          type="button"
-          disabled={!hasAlertablePart}
-          onClick={() => onAlertSelect(build)}
-          className="inline-flex min-h-9 items-center gap-1.5 rounded-md border border-[#f4c8b2] bg-[#fff5ef] px-3 text-xs font-black text-[#de6c2d] hover:border-[#de6c2d] disabled:cursor-not-allowed disabled:border-slate-200 disabled:bg-slate-50 disabled:text-slate-400"
-        >
-          <Target size={14} /> 목표가 등록
-        </button>
+        {PRICE_ALERT_UI_ENABLED ? (
+          <button
+            type="button"
+            disabled={!hasAlertablePart}
+            onClick={() => onAlertSelect(build)}
+            className="inline-flex min-h-9 items-center gap-1.5 rounded-md border border-[#f4c8b2] bg-[#fff5ef] px-3 text-xs font-black text-[#de6c2d] hover:border-[#de6c2d] disabled:cursor-not-allowed disabled:border-slate-200 disabled:bg-slate-50 disabled:text-slate-400"
+          >
+            <Target size={14} /> 목표가 등록
+          </button>
+        ) : null}
         <div className="ml-auto flex flex-wrap items-center gap-2">
           <button
             type="button"
@@ -772,8 +796,6 @@ function SavedBuildComparisonResult({ columnA, columnB }: { columnA: ComparisonC
         <GamePerformanceDifferenceCard columnA={columnA} columnB={columnB} />
       </div>
 
-      <ScorePolicyNote columnA={columnA} columnB={columnB} />
-
       <div className="overflow-visible rounded-lg border border-slate-200 bg-white">
         <div className="hidden grid-cols-[minmax(0,1fr)_132px_76px_132px_minmax(0,1fr)] items-center rounded-t-lg border-b border-slate-200 bg-slate-50 px-4 py-2 text-center text-[11px] font-black text-slate-500 md:grid">
           <span>A 견적</span>
@@ -863,7 +885,7 @@ function PriceDifferenceCard({ columnA, columnB }: { columnA: ComparisonColumn; 
     <article className="flex min-h-[164px] flex-col rounded-lg border border-slate-200 bg-white px-4 py-4 text-center shadow-sm">
       <h3 className="text-sm font-black text-commerce-ink">가격 차이</h3>
       <div className="mt-2 flex flex-1 items-center justify-center gap-3">
-        <PriceTrendIcon aria-hidden="true" className="animate-bounce text-slate-500" size={28} strokeWidth={3} />
+        <PriceTrendIcon aria-hidden="true" className="text-slate-500" size={28} strokeWidth={3} />
         <div>
           <p title={`${recommendation.winner} 추천 견적 - 상대 견적`} className="text-xl font-black tracking-tight text-commerce-ink"><span className="text-red-600">{formatSignedDifference(signedDifference)}</span>원</p>
           <p data-testid="quote-compare-price-delta" className="mt-1 text-sm font-black text-commerce-ink">{cheaper ? `${cheaper}가 더 저렴` : '가격 동일'}</p>
@@ -988,16 +1010,6 @@ function FpsBar({ label, value, scale }: { label: 'A' | 'B'; value: number; scal
       </div>
       <span className={`mt-1 text-[10px] font-black ${label === 'A' ? 'text-[#DE6C2D]' : 'text-[#3576CA]'}`}>{label}</span>
     </div>
-  );
-}
-
-function ScorePolicyNote({ columnA, columnB }: { columnA: ComparisonColumn; columnB: ComparisonColumn }) {
-  const score = columnA.compositeScore ?? columnB.compositeScore;
-  const policyText = scorePolicyText(score);
-  return (
-    <p data-testid="quote-score-policy" className="rounded-md border border-slate-200 bg-slate-50 px-4 py-2.5 text-center text-[11px] font-semibold leading-5 text-slate-500">
-      {policyText}
-    </p>
   );
 }
 
@@ -1322,16 +1334,6 @@ function comparisonRecommendation(columnA: ComparisonColumn, columnB: Comparison
   return { winner, description };
 }
 
-function scorePolicyText(score: BuildCompositeScore | null) {
-  if (!score || !Array.isArray(score.components) || score.components.length === 0 || score.maxScore <= 0) {
-    return '종합 점수는 현재 부품 데이터와 호환성·성능 Tool 결과를 기준으로 산정됩니다.';
-  }
-  const components = score.components
-    .filter((component) => component.maxScore > 0)
-    .map((component) => `${component.label} ${Math.round((component.maxScore / score.maxScore) * 100)}%`);
-  return `종합 점수는 ${components.join(' · ')}를 반영하여 산정됩니다.`;
-}
-
 function relativeDifferencePercent(valueA: number, valueB: number) {
   if (valueA === valueB) return 0;
   const lower = Math.min(valueA, valueB);
@@ -1591,6 +1593,102 @@ function PriceAlertRow({ alert }: { alert: PriceAlert }) {
         <div className={`h-full rounded-full ${achieved ? 'bg-emerald-500' : 'bg-[#de6c2d]'}`} style={{ width: `${progress}%` }} />
       </div>
     </article>
+  );
+}
+
+function SavedBuildPartsDialog({ build, onClose }: { build: BuildSummary; onClose: () => void }) {
+  const items = build.items ?? [];
+
+  useEffect(() => {
+    const previousOverflow = document.body.style.overflow;
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        onClose();
+      }
+    };
+    document.body.style.overflow = 'hidden';
+    window.addEventListener('keydown', closeOnEscape);
+    return () => {
+      document.body.style.overflow = previousOverflow;
+      window.removeEventListener('keydown', closeOnEscape);
+    };
+  }, [onClose]);
+
+  return (
+    <div
+      className="fixed inset-0 z-[90] flex items-center justify-center bg-slate-950/50 p-3 sm:p-6"
+      role="presentation"
+      onMouseDown={(event) => {
+        if (event.target === event.currentTarget) {
+          onClose();
+        }
+      }}
+    >
+      <section
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="saved-build-parts-dialog-title"
+        className="flex max-h-[88vh] w-full max-w-5xl flex-col overflow-hidden rounded-lg bg-white shadow-2xl"
+      >
+        <header className="flex items-start justify-between gap-4 border-b border-commerce-line px-4 py-4 sm:px-5">
+          <div className="min-w-0">
+            <h2 id="saved-build-parts-dialog-title" className="truncate text-lg font-black text-commerce-ink" title={`${displayBuildName(build)} 구성 부품`}>
+              {displayBuildName(build)} 구성 부품
+            </h2>
+            <p className="mt-1 text-xs font-semibold text-slate-500">
+              저장된 견적의 부품 {items.length}개와 저장 가격을 확인합니다.
+            </p>
+          </div>
+          <button
+            type="button"
+            autoFocus
+            aria-label="견적 상세 닫기"
+            onClick={onClose}
+            className="grid h-9 w-9 shrink-0 place-items-center rounded-md border border-commerce-line bg-white text-slate-500 hover:border-slate-300 hover:text-commerce-ink focus:outline-none focus:ring-4 focus:ring-[#f4c8b2]"
+          >
+            <X size={18} aria-hidden="true" />
+          </button>
+        </header>
+
+        <div className="min-h-0 flex-1 overflow-y-auto p-4 sm:p-5">
+          {items.length > 0 ? (
+            <>
+              <div className="space-y-2 md:hidden">
+                {items.map((item) => (
+                  <article key={`${build.id}-${item.category}-${resolvePartId(item) ?? item.name}`} className="rounded-md border border-commerce-line bg-white p-3">
+                    <div className="flex items-center justify-between gap-3">
+                      <span className="text-xs font-black text-slate-500">{labelForCategory(item.category)}</span>
+                      <span className="whitespace-nowrap text-sm font-black text-[#de6c2d]">{item.price.toLocaleString()}원</span>
+                    </div>
+                    <div className="mt-2 text-sm font-black leading-5 text-commerce-ink">{item.name}</div>
+                    <div className="mt-1 text-xs font-semibold text-slate-500">{item.manufacturer ?? '-'}</div>
+                  </article>
+                ))}
+              </div>
+              <div className="hidden md:block">
+                <DataTable
+                  columns={['분류', '부품명', '제조사', '가격']}
+                  nowrapColumns={['분류', '제조사', '가격']}
+                  rows={items.map((item) => ({
+                    분류: labelForCategory(item.category),
+                    부품명: <span className="font-bold text-commerce-ink">{item.name}</span>,
+                    제조사: item.manufacturer ?? '-',
+                    가격: <span className="whitespace-nowrap font-black text-commerce-ink">{item.price.toLocaleString()}원</span>
+                  }))}
+                />
+              </div>
+            </>
+          ) : (
+            <StateMessage type="info" title="구성 부품 없음" body="이 저장 견적에는 표시할 부품 정보가 없습니다." />
+          )}
+        </div>
+
+        <footer className="flex items-center justify-between gap-4 border-t border-commerce-line bg-slate-50 px-4 py-3 sm:px-5">
+          <span className="text-xs font-black text-slate-500">견적 합계</span>
+          <span className="text-lg font-black text-[#de6c2d]">{build.totalPrice.toLocaleString()}원</span>
+        </footer>
+      </section>
+    </div>
   );
 }
 

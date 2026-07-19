@@ -441,6 +441,25 @@ function PerfPanelBody({
 
   // 셀프 견적의 한 화면 캔버스에서는 상세 카드 대신 결과 요약 바를 쓴다.
   // 점수·FPS·교체 선택·저장/구매 동작은 유지하고, 설명과 큰 게이지만 덜어 보드와 채팅 높이를 확보한다.
+  const resolutionPicker = (
+    <div className="flex shrink-0 gap-0.5 rounded-md border border-commerce-line bg-slate-50 p-0.5" role="group" aria-label="해상도 선택">
+      {FPS_RESOLUTIONS.map((res) => (
+        <button
+          key={res.key}
+          type="button"
+          data-testid={`fps-res-${res.key}`}
+          aria-pressed={resKey === res.key}
+          onClick={() => setResKey(res.key)}
+          className={`rounded px-2.5 py-1 text-xs font-black transition ${
+            resKey === res.key ? 'bg-white text-commerce-ink shadow-sm' : 'text-slate-400 hover:text-slate-600'
+          }`}
+        >
+          {res.label}
+        </button>
+      ))}
+    </div>
+  );
+
   if (compact) {
     const resultAvg = activeComparison && hasCompareAvg ? compareAvg : hasAvg ? animatedAvg : null;
     const resultLabel = activeComparison && hasCompareAvg ? '변경 예상' : '현재 예상';
@@ -450,11 +469,7 @@ function PerfPanelBody({
         data-testid="quote-performance-grid"
         className="rounded-lg border border-commerce-line bg-white px-3 py-2 lg:min-h-[106px]"
       >
-        <div className={`grid gap-3 lg:items-center ${
-          activeComparison
-            ? 'lg:grid-cols-[calc(clamp(256px,18vw,320px)-13px)_minmax(0,1fr)_auto]'
-            : 'lg:grid-cols-[calc(clamp(256px,18vw,320px)-13px)_minmax(0,1fr)]'
-        }`}>
+        <div className="grid gap-3 lg:grid-cols-[calc(clamp(256px,18vw,320px)-13px)_minmax(0,1fr)] lg:items-center">
           <div data-testid="quote-performance-score-column" className={`flex items-center justify-center border-b border-commerce-line pb-1.5 lg:border-b-0 lg:border-r lg:pb-0 lg:pr-2 ${
             activeComparison ? 'min-h-[88px]' : 'min-h-[80px]'
           }`}>
@@ -536,41 +551,9 @@ function PerfPanelBody({
                 </div>
               );
 
-              // 비교 모드: 헤더를 본문과 같은 두 칼럼 그리드로 정렬한다 —
-              // CPU|GPU 토글은 구분선 왼쪽(가격·성능 칼럼) 끝, 교체 후보 선택은 구분선 오른쪽(게임 칼럼) 시작에 온다.
+              // 비교 모드의 조작부는 아래 좌우 본문 섹션에서만 렌더링한다.
               if (activeComparison && hasWorkspace && onStartComparison) {
-                return (
-                  <div className="grid min-w-0 gap-2 xl:grid-cols-[minmax(230px,0.9fr)_minmax(260px,1.1fr)] xl:items-center">
-                    <div className="flex min-w-0 items-center justify-between gap-2">
-                      <span className="shrink-0 text-sm font-black text-slate-600">가격·성능 향상</span>
-                      <PerfCategoryToggle
-                        innerRef={compareToggleRef}
-                        category={compareCategory}
-                        compact
-                        onSelect={(pickerCategory) => {
-                          setCompareCategory(pickerCategory);
-                          if (activeComparison.category !== pickerCategory) {
-                            onClearComparison?.();
-                          }
-                        }}
-                      />
-                    </div>
-                    <div className="flex min-w-0 items-center justify-between gap-2 xl:pl-2">
-                      <CandidateCombo
-                        perfItems={perfItems}
-                        activeComparison={activeComparison}
-                        onStartComparison={onStartComparison}
-                        onClearComparison={onClearComparison}
-                        compact
-                        hideToggle
-                        category={compareCategory}
-                        onCategoryChange={setCompareCategory}
-                        keepOpenRef={compareToggleRef}
-                      />
-                      {resolutionPicker}
-                    </div>
-                  </div>
-                );
+                return null;
               }
 
               return (
@@ -616,8 +599,22 @@ function PerfPanelBody({
             })()}
 
             {activeComparison ? (
-              <div className="mt-1.5 grid min-w-0 gap-2 xl:grid-cols-[minmax(230px,0.9fr)_minmax(260px,1.1fr)]">
-                <div className="min-w-0">
+              <div className="mt-1.5 grid min-w-0 gap-2 lg:grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)]">
+                <section className="min-w-0">
+                  <div className="mb-1.5 flex min-w-0 items-center justify-between gap-2">
+                    <span className="shrink-0 text-sm font-black text-slate-600">가격·성능 향상</span>
+                    <PerfCategoryToggle
+                      innerRef={compareToggleRef}
+                      category={compareCategory}
+                      compact
+                      onSelect={(pickerCategory) => {
+                        setCompareCategory(pickerCategory);
+                        if (activeComparison.category !== pickerCategory) {
+                          onClearComparison?.();
+                        }
+                      }}
+                    />
+                  </div>
                   {isCompareReady ? (
                     <>
                       <div data-testid="cost-effect-block" className="perf-block-in rounded-md border border-commerce-line bg-slate-50/60 px-2 py-1.5">
@@ -646,9 +643,48 @@ function PerfPanelBody({
                       </div>
                     </div>
                   )}
-                </div>
+                </section>
 
-                <div className="min-w-0 border-t border-commerce-line pt-1.5 xl:border-l xl:border-t-0 xl:pl-2 xl:pt-0">
+                <section className="min-w-0 border-t border-commerce-line pt-1.5 lg:border-l lg:border-t-0 lg:pl-2 lg:pt-0">
+                  <div className="mb-1.5 flex min-w-0 flex-nowrap items-center justify-between gap-2">
+                    {onStartComparison ? (
+                      <CandidateCombo
+                        perfItems={perfItems}
+                        activeComparison={activeComparison}
+                        onStartComparison={onStartComparison}
+                        onClearComparison={onClearComparison}
+                        compact
+                        hideToggle
+                        category={compareCategory}
+                        onCategoryChange={setCompareCategory}
+                        keepOpenRef={compareToggleRef}
+                      />
+                    ) : null}
+                    {resolutionPicker}
+                    <div className="ml-auto flex shrink-0 items-center justify-end gap-1">
+                      {onApplyComparison ? (
+                        <button
+                          type="button"
+                          data-testid="perf-apply-replace"
+                          disabled={isApplying}
+                          onClick={() => void applyComparison()}
+                          className="whitespace-nowrap rounded bg-[#de6c2d] px-2 py-1.5 text-[10px] font-black text-white transition hover:bg-[#c45c22] disabled:cursor-not-allowed disabled:opacity-60"
+                        >
+                          {isApplying ? '교체 중…' : '교체해 담기'}
+                        </button>
+                      ) : null}
+                      {onClearComparison ? (
+                        <button
+                          type="button"
+                          data-testid="compare-clear"
+                          onClick={onClearComparison}
+                          className="whitespace-nowrap rounded border border-commerce-line bg-white px-2 py-1.5 text-[10px] font-black text-slate-600"
+                        >
+                          비교 해제
+                        </button>
+                      ) : null}
+                    </div>
+                  </div>
                   <div className="flex min-w-0 items-center gap-2">
                     <div className="flex shrink-0 gap-1" role="group" aria-label="게임 선택">
                       {FPS_GAMES.map((g) => (
@@ -701,7 +737,7 @@ function PerfPanelBody({
                       {isCompareLoading ? '비교 성능을 계산하고 있어요' : '변경 조합의 참고 자료가 없습니다'}
                     </div>
                   )}
-                </div>
+                </section>
               </div>
             ) : (
               <div className="mt-2 min-w-0">
@@ -733,39 +769,12 @@ function PerfPanelBody({
             )}
           </div>
 
-          {activeComparison || checkoutActions ? (
-          <div className="flex flex-wrap items-center justify-end gap-2 border-t border-commerce-line pt-1.5 lg:border-l lg:border-t-0 lg:pl-2 lg:pt-0">
-            {activeComparison ? (
-              <>
-                {onApplyComparison ? (
-                  <button
-                    type="button"
-                    data-testid="perf-apply-replace"
-                    disabled={isApplying}
-                    onClick={() => void applyComparison()}
-                    className="rounded bg-[#de6c2d] px-3 py-2 text-[11px] font-black text-white transition hover:bg-[#c45c22] disabled:cursor-not-allowed disabled:opacity-60"
-                  >
-                    {isApplying ? '교체 중…' : '교체해 담기'}
-                  </button>
-                ) : null}
-                {onClearComparison ? (
-                  <button
-                    type="button"
-                    data-testid="compare-clear"
-                    onClick={onClearComparison}
-                    className="rounded border border-commerce-line bg-white px-2.5 py-2 text-[11px] font-black text-slate-600"
-                  >
-                    비교 해제
-                  </button>
-                ) : null}
-              </>
-            ) : null}
-            {checkoutActions ? (
+          {checkoutActions ? (
+            <div className="flex flex-wrap items-center justify-end gap-2 border-t border-commerce-line pt-1.5 lg:border-l lg:border-t-0 lg:pl-2 lg:pt-0">
               <div data-testid="quote-checkout-actions" className="flex flex-wrap justify-end gap-2">
                 {checkoutActions}
               </div>
-            ) : null}
-          </div>
+            </div>
           ) : null}
         </div>
         {applyError ? (
@@ -1170,7 +1179,7 @@ function CandidateCombo({
 
   return (
     // 헤더 오른쪽 끝에 붙는다 — 좁은 화면에서 줄바꿈되면 자기 줄에서 오른쪽 정렬을 유지한다.
-    <div ref={comboRef} className="flex min-w-0 grow items-center justify-end gap-1.5 sm:grow-0">
+    <div ref={comboRef} className={`flex min-w-0 items-center justify-end gap-1.5 ${hideToggle ? 'flex-1' : 'grow sm:grow-0'}`}>
       {hideToggle ? null : (
         <PerfCategoryToggle
           category={category}
@@ -1183,7 +1192,7 @@ function CandidateCombo({
           }}
         />
       )}
-      <div className={`relative ${compact ? 'w-44 sm:w-52' : 'w-44 sm:w-56'}`}>
+      <div className={`relative ${hideToggle ? 'min-w-0 flex-1' : compact ? 'w-44 sm:w-52' : 'w-44 sm:w-56'}`}>
         <button
           type="button"
           data-testid="perf-candidate-select"

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import gzip
+import inspect
 import json
 import os
 import tempfile
@@ -12,6 +13,7 @@ from unittest.mock import MagicMock, patch
 
 import buildgraph_agent as agent
 from diagnosis_request_agent import DiagnosisRequest, DiagnosisSession
+from initial_metrics import ProviderSample
 
 
 def missing_gpu_counter() -> tuple[None, str]:
@@ -561,6 +563,143 @@ class AgentGoal1112Test(unittest.TestCase):
         ))
         self.assertEqual("danger", critical_screen.widgets[0].tone)
 
+    def test_disk_card_uses_activity_for_wave_and_labels_storage_separately(self) -> None:
+        first_payload = {
+            "cpuUsagePercent": 20.0,
+            "gpuUsagePercent": 30.0,
+            "memoryUsedPercent": 40.0,
+            "diskBusyEstimatePercent": 12.0,
+            "diskUsedPercent": 91.6,
+            "diskSmartStatus": "정상",
+        }
+        second_payload = dict(first_payload, diskBusyEstimatePercent=18.0)
+        first = agent.build_metric_snapshot(datetime.now(agent.KST), 0, agent.SYSTEM_METRIC_KIND, first_payload)
+        second = agent.build_metric_snapshot(datetime.now(agent.KST), 1, agent.SYSTEM_METRIC_KIND, second_payload)
+
+        screen = agent.build_symptom_screen_state(agent.SymptomScreenInput(
+            agent.hardware_sensor_snapshot(second, [first, second]), "디스크 상태 확인", None
+        ))
+        disk = screen.widgets[3]
+
+        self.assertEqual("저장 공간 91.6%", disk.primary)
+        self.assertEqual("활성 시간 18%", disk.details[1])
+        self.assertEqual((12.0, 18.0), disk.history)
+        self.assertEqual("주의", disk.status)
+        self.assertEqual("warning", disk.tone)
+
+    def test_disk_card_reports_high_activity_without_relabeling_storage(self) -> None:
+        payload = {
+            "cpuUsagePercent": 20.0,
+            "gpuUsagePercent": 30.0,
+            "memoryUsedPercent": 40.0,
+            "diskBusyEstimatePercent": 92.0,
+            "diskUsedPercent": 35.0,
+            "diskSmartStatus": "정상",
+        }
+        row = agent.build_metric_snapshot(datetime.now(agent.KST), 0, agent.SYSTEM_METRIC_KIND, payload)
+        disk = agent.build_symptom_screen_state(agent.SymptomScreenInput(
+            agent.hardware_sensor_snapshot(row, [row]), "디스크 상태 확인", None
+        )).widgets[3]
+
+        self.assertEqual("저장 공간 35%", disk.primary)
+        self.assertEqual("활성 시간 92%", disk.details[1])
+        self.assertEqual((92.0,), disk.history)
+        self.assertEqual("주의", disk.status)
+        self.assertEqual("warning", disk.tone)
+
+    def test_disk_card_distinguishes_zero_activity_from_missing_activity(self) -> None:
+        zero_payload = {
+            "cpuUsagePercent": 20.0,
+            "gpuUsagePercent": 30.0,
+            "memoryUsedPercent": 40.0,
+            "diskBusyEstimatePercent": 0.0,
+            "diskUsedPercent": 35.0,
+            "diskSmartStatus": "정상",
+        }
+        zero_row = agent.build_metric_snapshot(datetime.now(agent.KST), 0, agent.SYSTEM_METRIC_KIND, zero_payload)
+        zero_disk = agent.build_symptom_screen_state(agent.SymptomScreenInput(
+            agent.hardware_sensor_snapshot(zero_row, [zero_row]), "디스크 상태 확인", None
+        )).widgets[3]
+
+        self.assertEqual("저장 공간 35%", zero_disk.primary)
+        self.assertEqual("활성 시간 0%", zero_disk.details[1])
+        self.assertEqual((0.0,), zero_disk.history)
+        self.assertGreater(agent.usage_wave_target_amplitude(0.0), 0.0)
+        self.assertLess(agent.usage_wave_target_amplitude(0.0), 1.0)
+
+        failed_payload = dict(zero_payload)
+        failed_payload.pop("diskBusyEstimatePercent")
+        failed_payload["unavailableReason"] = {"diskBusyEstimatePercent": "disk activity query failed"}
+        failed_row = agent.build_metric_snapshot(datetime.now(agent.KST), 1, agent.SYSTEM_METRIC_KIND, failed_payload)
+        failed_disk = agent.build_symptom_screen_state(agent.SymptomScreenInput(
+            agent.hardware_sensor_snapshot(failed_row, [failed_row]), "디스크 상태 확인", None
+        )).widgets[3]
+        self.assertEqual("활성 시간 확인 실패", failed_disk.details[1])
+        self.assertEqual((), failed_disk.history)
+        self.assertEqual("정상", failed_disk.status)
+
+    def test_disk_card_never_uses_storage_capacity_as_wave_input(self) -> None:
+        payload = {
+            "cpuUsagePercent": 20.0,
+            "gpuUsagePercent": 30.0,
+            "memoryUsedPercent": 40.0,
+            "diskUsedPercent": 91.6,
+            "diskSmartStatus": "정상",
+            "unavailableReason": {"diskBusyEstimatePercent": "disk busy counter unavailable"},
+        }
+        previous_payload = dict(payload)
+        previous_payload.pop("unavailableReason")
+        previous_payload["diskBusyEstimatePercent"] = 63.0
+        previous = agent.build_metric_snapshot(
+            datetime.now(agent.KST) - timedelta(seconds=5), 0, agent.SYSTEM_METRIC_KIND, previous_payload
+        )
+        row = agent.build_metric_snapshot(datetime.now(agent.KST), 1, agent.SYSTEM_METRIC_KIND, payload)
+
+        screen = agent.build_symptom_screen_state(agent.SymptomScreenInput(
+            agent.hardware_sensor_snapshot(row, [previous, row]), "디스크 상태 확인", None
+        ))
+        disk = screen.widgets[3]
+
+        self.assertEqual("저장 공간 91.6%", disk.primary)
+        self.assertEqual("활성 시간 센서 미지원", disk.details[1])
+        self.assertEqual((), disk.history)
+        self.assertEqual("주의", disk.status)
+        self.assertEqual("warning", disk.tone)
+
+        previous_readings = agent.MetricsNormalizer().normalize(
+            ProviderSample(previous_payload, (datetime.now(timezone.utc) - timedelta(seconds=5)).isoformat(), "hardware")
+        )
+        current_readings = agent.MetricsNormalizer().normalize(
+            ProviderSample(payload, datetime.now(timezone.utc).isoformat(), "hardware")
+        )
+        metrics = agent.MetricsSnapshot(
+            "disk-storage-only",
+            "LIVE",
+            True,
+            (*previous_readings, *current_readings),
+        )
+        metrics_disk = agent.build_symptom_screen_state(
+            agent.metrics_snapshot_screen_input(metrics, "디스크 상태 확인", ("disk",))
+        ).widgets[3]
+        self.assertEqual("저장 공간 91.6%", metrics_disk.primary)
+        self.assertEqual((), metrics_disk.history)
+
+    def test_disk_storage_and_activity_fields_remain_available_to_metrics_and_logs(self) -> None:
+        payload = {
+            "diskBusyEstimatePercent": 7.5,
+            "diskUsedPercent": 62.5,
+            "diskSmartStatus": "정상",
+        }
+        row = agent.build_metric_snapshot(datetime.now(agent.KST), 0, agent.SYSTEM_METRIC_KIND, payload)
+        readings = agent.MetricsNormalizer().normalize(
+            ProviderSample(payload, datetime.now(timezone.utc).isoformat(), "hardware")
+        )
+
+        self.assertEqual(7.5, row["diskBusyEstimatePercent"])
+        self.assertEqual(62.5, row["diskUsedPercent"])
+        self.assertEqual(7.5, next(item.value for item in readings if item.component == "disk" and item.metric_type == "activity"))
+        self.assertEqual(62.5, next(item.value for item in readings if item.component == "disk" and item.metric_type == "usage"))
+
     def test_symptom_screen_distinguishes_zero_fan_unsupported_and_failed_sensor(self) -> None:
         zero_fan_payload = {
             "cpuUsagePercent": 20.0,
@@ -707,6 +846,260 @@ class AgentGoal1112Test(unittest.TestCase):
                 result_requested=True,
             ),
         )
+
+    def test_initial_metrics_auto_start_is_requested_only_without_an_active_session(self) -> None:
+        request = DiagnosisRequest(
+            diagnosis_id="diagnosis-existing",
+            device_id="device-1",
+            symptom="",
+            requested_checks=("cpu", "gpu", "memory", "disk"),
+            requested_at="2026-07-13T00:00:00Z",
+            expires_at="2026-07-13T00:02:00Z",
+            mode="LIVE",
+        )
+
+        self.assertTrue(agent.should_auto_start_initial_metrics(None, False))
+        self.assertFalse(agent.should_auto_start_initial_metrics(None, True))
+        self.assertFalse(agent.should_auto_start_initial_metrics(DiagnosisSession(request), False))
+
+    def test_go_home_resets_and_reschedules_initial_metrics_without_stale_callbacks(self) -> None:
+        source = inspect.getsource(agent.show_log_viewer)
+        go_home_source = source[source.index("def go_home"):source.index("def connect_as")]
+        cleanup_source = source[source.index("def cleanup_ui_resources"):source.index("def close_window")]
+
+        self.assertIn('callback_state["initialMetricsAfterId"] = None', source)
+        self.assertIn('callback_state["initialMetricsAfterId"] is not None', source)
+        self.assertIn("cancel_diagnosis_progress_tick()", go_home_source)
+        self.assertIn('ui["initialMetricsRequested"] = False', go_home_source)
+        self.assertIn("schedule_initial_metrics_start()", go_home_source)
+        self.assertIn('"initialMetricsAfterId",', cleanup_source)
+        self.assertNotIn("root.after(0, auto_start_initial_metrics)", source)
+
+    def test_metric_wave_uses_latest_real_usage_as_target_and_smooths_changes(self) -> None:
+        self.assertEqual(0.0, agent.usage_wave_target_amplitude(None))
+        self.assertEqual(0.65, agent.usage_wave_target_amplitude(0.0))
+        self.assertEqual(2.5, agent.usage_wave_target_amplitude(20.0))
+        self.assertEqual(7.0, agent.usage_wave_target_amplitude(50.0))
+        self.assertEqual(14.0, agent.usage_wave_target_amplitude(75.0))
+        self.assertEqual(22.0, agent.usage_wave_target_amplitude(92.0))
+        self.assertEqual(agent.METRIC_WAVE_MAX_AMPLITUDE, agent.usage_wave_target_amplitude(100.0))
+        self.assertEqual(agent.METRIC_WAVE_MAX_AMPLITUDE, agent.usage_wave_target_amplitude(140.0))
+
+        target = agent.usage_wave_target_amplitude(80.0)
+        first = agent.smooth_wave_amplitude(0.0, target)
+        second = agent.smooth_wave_amplitude(first, target)
+        self.assertGreater(first, 0.0)
+        self.assertGreater(second, first)
+        self.assertLess(second, target)
+
+        coordinates = agent.metric_wave_coordinates(10, 40, 100, second, 0.5, point_count=6)
+        self.assertEqual(12, len(coordinates))
+        self.assertEqual(10.0, coordinates[0])
+        self.assertEqual(110.0, coordinates[-2])
+
+    def test_log_viewer_defers_wave_bucket_generation_until_after_initial_render(self) -> None:
+        source = inspect.getsource(agent.show_log_viewer)
+
+        self.assertIn("DeferredFluidWaveCache(", source)
+        self.assertIn("if latest_value is None:", source)
+        self.assertIn("static_fluid_wave_photo(0)", source)
+        self.assertIn("fluid_wave_cache.request(bucket)", source)
+        self.assertIn("static_fluid_wave_photo(bucket)", source)
+        self.assertNotIn("build_fluid_wave_cache", source)
+
+    def test_log_viewer_filters_child_map_events_and_stops_ui_callbacks_while_hidden(self) -> None:
+        source = inspect.getsource(agent.show_log_viewer)
+
+        self.assertIn('root.bind("<Map>", handle_root_map', source)
+        self.assertIn('root.bind("<Unmap>", handle_root_unmap', source)
+        self.assertIn("WindowVisibilityState.is_root_event", source)
+        self.assertIn('pause_ui_animation("user_close")', source)
+        self.assertIn('(\"metricsAfterId\", \"renderAfterId\", \"diagnosisProgressAfterId\")', source)
+        self.assertIn("queue_ui_render()", source)
+
+    def test_pretendard_is_the_first_ui_font_candidate(self) -> None:
+        self.assertEqual("Pretendard", agent.UI_FONT_CANDIDATES[0])
+
+    def test_code43_demo_symptom_is_specific_and_does_not_overmatch_unrelated_text(self) -> None:
+        symptom = "게임 중 화면이 잠깐 꺼졌다가 다시 켜지고,\n이후 게임이 심하게 느려졌어요."
+
+        self.assertTrue(agent.is_supported_graphics_symptom(symptom))
+        self.assertFalse(agent.is_supported_graphics_symptom("게임 중 소리가 잠깐 끊겼다가 다시 들립니다."))
+        self.assertFalse(agent.is_supported_graphics_symptom("게임이 심하게 느려졌어요."))
+
+    def test_code43_fixture_is_selected_only_for_explicit_demo_scenario(self) -> None:
+        live_provider = MagicMock(return_value="live-snapshot")
+        demo_provider = MagicMock(return_value="demo-snapshot")
+        symptom = "게임 중 화면이 잠깐 꺼졌다가 다시 켜지고, 이후 게임이 심하게 느려졌어요."
+
+        def session(mode: str, current_symptom: str) -> DiagnosisSession:
+            return DiagnosisSession(DiagnosisRequest(
+                "diagnosis-demo", "device-1", current_symptom, ("gpu",),
+                "2026-07-13T00:00:00Z", "2026-07-13T00:02:00Z", mode,
+            ))
+
+        self.assertEqual(
+            "live-snapshot",
+            agent.collect_session_windows_graphics_snapshot(
+                session("LIVE", symptom), live_provider, demo_provider,
+            ),
+        )
+        self.assertEqual(
+            "live-snapshot",
+            agent.collect_session_windows_graphics_snapshot(
+                session("DEMO", "게임이 심하게 느려졌어요."), live_provider, demo_provider,
+            ),
+        )
+        self.assertEqual(
+            "demo-snapshot",
+            agent.collect_session_windows_graphics_snapshot(
+                session("DEMO", symptom), live_provider, demo_provider,
+            ),
+        )
+        self.assertEqual(2, live_provider.call_count)
+        demo_provider.assert_called_once_with()
+
+    def test_persisted_demo_session_is_discarded_but_live_session_is_preserved(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            for mode, expected_discarded in (("DEMO", True), ("LIVE", False)):
+                with self.subTest(mode=mode):
+                    suffix = mode.casefold()
+                    diagnosis_store = agent.DiagnosisSessionStore(root / f"session-{suffix}.json")
+                    request = DiagnosisRequest(
+                        f"diagnosis-{suffix}", "device-1", "증상", ("gpu",),
+                        "2026-07-13T00:00:00Z", "2026-07-13T00:02:00Z", mode,
+                    )
+                    diagnosis_store.accept(DiagnosisSession(request))
+                    metrics_store = agent.MetricsStore(root / f"metrics-{suffix}.json")
+                    metrics_store.begin(request.diagnosis_id, mode)
+                    diagnosis_log_store = agent.DiagnosisLogStore(root / f"progress-{suffix}.json")
+                    diagnosis_log_store.replace(agent.DiagnosisRunSnapshot(
+                        diagnosis_id=request.diagnosis_id,
+                        mode=mode,
+                        state="COLLECTING",
+                    ))
+                    result_store = agent.DiagnosisResultStore(root / f"result-{suffix}.json")
+
+                    discarded = agent.discard_persisted_demo_session(
+                        diagnosis_store,
+                        metrics_store,
+                        diagnosis_log_store,
+                        result_store,
+                    )
+
+                    self.assertEqual(expected_discarded, discarded)
+                    if expected_discarded:
+                        self.assertIsNone(diagnosis_store.session)
+                        self.assertIsNone(metrics_store.snapshot.diagnosis_id)
+                        self.assertIsNone(diagnosis_log_store.snapshot.diagnosis_id)
+                    else:
+                        self.assertEqual(request.diagnosis_id, diagnosis_store.session.request.diagnosis_id)
+                        self.assertEqual(request.diagnosis_id, metrics_store.snapshot.diagnosis_id)
+
+    def test_demo_scenario_metadata_remains_internal_without_large_page_badge(self) -> None:
+        source = inspect.getsource(agent.show_log_viewer)
+
+        self.assertNotIn("draw_demo_scenario_badge", source)
+        self.assertNotIn('f"DEMO · {scenario_id}"', source)
+        self.assertIn('measurement_label = "시연 데이터" if ui["demo"] else "실시간 측정"', source)
+
+    def test_log_viewer_uses_single_native_window_title_bar(self) -> None:
+        source = inspect.getsource(agent.show_log_viewer)
+
+        self.assertEqual("PC Agent", agent.WINDOW_TITLE)
+        self.assertIn("root.title(WINDOW_TITLE)", source)
+        self.assertIn("root.overrideredirect(False)", source)
+        self.assertIn('root.protocol("WM_DELETE_WINDOW", close_window)', source)
+        self.assertIn('canvas.move("all", 0, -PC_AGENT_REMOVED_HEADER_HEIGHT)', source)
+        self.assertNotIn("def draw_header", source)
+        self.assertNotIn('tags="window-min"', source)
+        self.assertNotIn('tags="window-max"', source)
+        self.assertNotIn('tags="window-close"', source)
+        self.assertNotIn("def start_drag", source)
+        self.assertNotIn("def drag_window", source)
+
+    def test_page_two_uses_shared_icons_and_updates_progress_without_full_rerender(self) -> None:
+        source = inspect.getsource(agent.show_log_viewer)
+        tick_source = source[source.index("def diagnosis_progress_tick"):source.index("def draw_diagnosing")]
+        diagnosing_source = source[source.index("def draw_diagnosing"):source.index("def draw_result_icon")]
+
+        self.assertIn("render_pillow_home_hardware_icon", source)
+        self.assertNotIn("create_arc", diagnosing_source)
+        self.assertIn('canvas.itemconfigure(items["ring"]', tick_source)
+        self.assertIn('canvas.itemconfigure(items["percent"]', tick_source)
+        self.assertNotIn("render()", tick_source)
+        self.assertTrue(tick_source.rstrip().endswith("schedule_diagnosis_progress_tick()"))
+        self.assertIn('callback_state["diagnosisProgressAfterId"]', source)
+        self.assertIn('round_rect(70, 180, 930, 296', diagnosing_source)
+        self.assertIn('text(148, 270, fitted_text(scope_text', diagnosing_source)
+        self.assertIn('cy = 550 + idx * 38', diagnosing_source)
+
+    def test_page_text_is_measured_and_action_columns_are_even(self) -> None:
+        measure = lambda value: len(value) * 10
+
+        self.assertEqual("12345\n6789…", agent.fit_measured_text("123456789012", 50, 2, measure))
+        self.assertEqual(((145, 382), (382, 618), (618, 855)), agent.result_action_columns(3))
+        self.assertEqual(((145, 500), (500, 855)), agent.result_action_columns(2))
+        self.assertEqual((580, 588), agent.result_action_vertical_layout("한 줄", 16))
+        self.assertEqual((572, 588), agent.result_action_vertical_layout("첫 줄\n둘째 줄", 16))
+
+        result_source = inspect.getsource(agent.show_log_viewer)
+        self.assertIn('render_number_badge(26, "#fff0ef")', result_source)
+        self.assertNotIn('canvas.create_oval(badge_x - 13', result_source)
+
+    def test_diagnosis_presentations_use_actual_task_and_evidence_status(self) -> None:
+        running = agent.DiagnosisTask("display_devices", "gpu", 20, status="RUNNING")
+        warning = agent.DiagnosisTask(
+            "display_drivers",
+            "gpu",
+            10,
+            status="COMPLETED",
+            evidence=({"status": "WARNING"},),
+        )
+        completed = agent.DiagnosisTask("current_system_status", "system", 15, status="COMPLETED")
+        completed_without_evidence = agent.DiagnosisTask(
+            "display_devices",
+            "gpu",
+            20,
+            status="COMPLETED",
+        )
+        completed_with_evidence = agent.DiagnosisTask(
+            "display_devices",
+            "gpu",
+            20,
+            status="COMPLETED",
+            evidence=({"status": "OK", "deviceCount": 1},),
+        )
+
+        self.assertEqual(
+            ("검사 중", "running"),
+            agent.diagnosis_component_presentation(agent.DiagnosisRunSnapshot(tasks=(running,)), "gpu"),
+        )
+        self.assertEqual(
+            ("주의", "warning"),
+            agent.diagnosis_component_presentation(agent.DiagnosisRunSnapshot(tasks=(warning,)), "gpu"),
+        )
+        self.assertEqual(
+            ("초기 상태 확인", "neutral"),
+            agent.diagnosis_component_presentation(agent.DiagnosisRunSnapshot(tasks=(completed,)), "cpu"),
+        )
+        self.assertEqual(
+            ("근거 없음", "neutral"),
+            agent.diagnosis_component_presentation(
+                agent.DiagnosisRunSnapshot(tasks=(completed_without_evidence,)),
+                "gpu",
+            ),
+        )
+        self.assertEqual(
+            ("정상", "success"),
+            agent.diagnosis_component_presentation(
+                agent.DiagnosisRunSnapshot(tasks=(completed_with_evidence,)),
+                "gpu",
+            ),
+        )
+        self.assertEqual(("시간 초과", "error"), agent.diagnosis_task_presentation("TIMED_OUT"))
+        self.assertEqual(("오류", "error"), agent.diagnosis_event_presentation("TASK_FAILED"))
 
     def test_symptom_display_preserves_web_input_and_uses_standalone_summary(self) -> None:
         web_symptoms = ("게임 A에서만 화면이 멈춥니다.", "영상 편집 중 GPU 부하가 증가합니다.")
@@ -915,6 +1308,7 @@ class AgentGoal1112Test(unittest.TestCase):
         screen = agent.build_symptom_screen_state(agent.metrics_snapshot_screen_input(metrics, ""))
         cpu_card = screen.widgets[0]
         self.assertEqual("사용률 42%", cpu_card.primary)
+        self.assertEqual((42.0,), cpu_card.history)
         self.assertEqual(("온도 센서 미지원",), cpu_card.details)
 
     def test_system_sensor_provider_keeps_web_symptom_and_suspected_component(self) -> None:
@@ -2815,6 +3209,30 @@ class AgentGoal1112Test(unittest.TestCase):
             self.assertIsNotNone(tray_image)
             self.assertEqual(tray_image.size, (64, 64))
 
+    def test_screen_logo_asset_is_transparent_and_drawn_without_moving_layout(self) -> None:
+        self.assertIsNotNone(agent.Image)
+        self.assertNotEqual(agent.SCREEN_LOGO_PNG, agent.AGENT_ICON_PNG)
+        logo_path = agent.app_asset_path(agent.SCREEN_LOGO_PNG)
+        self.assertTrue(logo_path.exists())
+        with agent.Image.open(logo_path) as logo:
+            self.assertEqual(logo.mode, "RGBA")
+            self.assertEqual(logo.size, (1254, 1254))
+            self.assertEqual(0, logo.getchannel("A").getpixel((0, 0)))
+            self.assertIsNotNone(logo.getchannel("A").getbbox())
+
+        rendered = agent.render_screen_logo_image()
+        self.assertEqual(rendered.mode, "RGBA")
+        self.assertEqual(rendered.size, agent.SCREEN_LOGO_DISPLAY_SIZE)
+        self.assertIsNotNone(rendered.getchannel("A").getbbox())
+
+        source = inspect.getsource(agent.show_log_viewer)
+        self.assertIn("draw_screen_logo()", source)
+        self.assertIn('canvas.create_image(*SCREEN_LOGO_POSITION, image=photo, anchor="center")', source)
+        self.assertIn('canvas.move("all", 0, -PC_AGENT_REMOVED_HEADER_HEIGHT)', source)
+
+        build_script = Path(agent.__file__).with_name("build-agent-exe.ps1").read_text(encoding="utf-8")
+        self.assertIn('$Args += "$Assets;assets"', build_script)
+
 
 class FakePulseWidget:
     """StatusPulse가 쓰는 위젯 표면(after/after_cancel/winfo_exists)만 흉내낸다."""
@@ -2911,16 +3329,14 @@ class SmoothedProgressTest(unittest.TestCase):
         self.assertEqual(smoother.update(90, 1.0), 55)
         self.assertEqual(smoother.update(90, 2.0), 90)
 
-    def test_stall_creeps_but_never_exceeds_headroom_or_ceiling(self) -> None:
+    def test_stall_never_moves_without_new_actual_progress(self) -> None:
         smoother = agent.SmoothedProgress()
         smoother.update(15, 0.0)
-        # 정체 60초: 크리핑은 실제+12(=27)에서 멈춘다.
-        self.assertEqual(smoother.update(15, 60.0), 27)
-        self.assertEqual(smoother.update(15, 120.0), 27)
-        # 실제 90 정체 장기화: 상한 96에서 멈춘다(거짓 100% 없음).
+        self.assertEqual(smoother.update(15, 60.0), 15)
+        self.assertEqual(smoother.update(15, 120.0), 15)
         smoother2 = agent.SmoothedProgress()
         smoother2.update(90, 0.0)
-        self.assertEqual(smoother2.update(90, 600.0), 96)
+        self.assertEqual(smoother2.update(90, 600.0), 90)
 
     def test_completion_sweeps_to_exactly_100(self) -> None:
         smoother = agent.SmoothedProgress()

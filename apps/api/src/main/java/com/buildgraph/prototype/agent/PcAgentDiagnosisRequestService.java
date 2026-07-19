@@ -74,7 +74,14 @@ public class PcAgentDiagnosisRequestService {
                 mode
         );
         storeRequest(user.internalId(), request);
-        PcAgentDiagnosisSocketBroker.AgentResponse response = broker.dispatchAndAwait(request);
+        PcAgentDiagnosisSocketBroker.AgentResponse response;
+        try {
+            response = broker.dispatchAndAwait(request);
+            markAgentResponse(request.diagnosisId(), response.status());
+        } catch (RuntimeException error) {
+            markDispatchFailed(request.diagnosisId(), error);
+            throw error;
+        }
         return MockData.map(
                 "diagnosisId", request.diagnosisId(),
                 "deviceId", request.deviceId(),
@@ -84,6 +91,37 @@ public class PcAgentDiagnosisRequestService {
                 "status", response.status(),
                 "message", response.message()
         );
+    }
+
+    private void markAgentResponse(String diagnosisId, String status) {
+        int updated = jdbcTemplate.update("""
+                UPDATE pc_agent_diagnosis_requests
+                SET request_status = ?,
+                    connection_status = 'CONNECTED',
+                    accepted_at = CASE
+                      WHEN ? IN ('ACCEPTED', 'DUPLICATE') THEN COALESCE(accepted_at, now())
+                      ELSE accepted_at
+                    END,
+                    updated_at = now()
+                WHERE diagnosis_id = ?::uuid
+                """, status, status, diagnosisId);
+        if (updated != 1) {
+            throw new IllegalStateException("Stored PC Agent diagnosis request was not found.");
+        }
+    }
+
+    private void markDispatchFailed(String diagnosisId, RuntimeException error) {
+        String connectionStatus = error instanceof ApiException apiError
+                && Set.of("AGENT_DISCONNECTED", "AGENT_CONNECTION_FAILED").contains(apiError.code())
+                ? "DISCONNECTED"
+                : "CONNECTED";
+        jdbcTemplate.update("""
+                UPDATE pc_agent_diagnosis_requests
+                SET request_status = 'DISPATCH_FAILED',
+                    connection_status = ?,
+                    updated_at = now()
+                WHERE diagnosis_id = ?::uuid
+                """, connectionStatus, diagnosisId);
     }
 
     private void storeRequest(Long userInternalId, PcAgentDiagnosisRequest request) {

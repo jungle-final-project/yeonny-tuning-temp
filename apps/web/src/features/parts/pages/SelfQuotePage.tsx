@@ -167,6 +167,20 @@ function SelfQuoteSlotBoardPage() {
     };
   }, []);
 
+  /**
+   * 교체해 담기 — 비교가 보여준 조합 그대로 담는다.
+   * AI 연계 변경안(예: 새 GPU에 필요한 파워)은 고스트 종합점수에 이미 포함돼 있으므로,
+   * 주 부품만 담으면 실제 견적이 "새 GPU + 옛 파워"가 되어 방금 보여준 점수와 반대로 전력 FAIL이 된다.
+   * 연계 부품을 먼저 담아 중간 상태에서도 전력이 모자라지 않게 한다.
+   */
+  const applyComparisonTarget = useCallback(async (target: PerfCompareTarget) => {
+    for (const linked of target.linkedChanges ?? []) {
+      if (!linked.partId || linked.category === target.category) continue;
+      await addMutation.mutateAsync({ partId: linked.partId, quantity: 1 });
+    }
+    return addMutation.mutateAsync({ partId: target.partId, quantity: 1 });
+  }, [addMutation]);
+
   // 성능 비교 시작: 비교 대상을 저장하고 성능 패널로 부드럽게 이동한다(패널은 그리드 아래에 있어 안 보일 수 있다).
   const startPerfComparison = useCallback((target: PerfCompareTarget) => {
     setPerfComparison(target);
@@ -364,7 +378,7 @@ function SelfQuoteSlotBoardPage() {
         ) : null}
 
         {/* 본문: 체크리스트(품목 지도) + 보드(보조 그래프) + AI 상담 패널. */}
-        <div className="grid min-w-0 gap-4 lg:min-h-0 lg:flex-1 lg:grid-cols-[clamp(256px,18vw,320px)_minmax(0,1fr)_clamp(460px,21vw,400px)] lg:grid-rows-[auto_minmax(0,1fr)_auto] lg:items-stretch lg:gap-2">
+        <div className="grid min-w-0 gap-4 lg:min-h-0 lg:flex-1 lg:grid-cols-[clamp(256px,18vw,320px)_minmax(0,1fr)_clamp(330px,21vw,400px)] lg:grid-rows-[auto_minmax(0,1fr)_auto] lg:items-stretch lg:gap-2">
           {/* 핵심 의사결정 지표: 체크리스트+관계도 폭에 맞추고 AI 열은 이 행부터 사용한다. */}
           <div ref={perfPanelRef} className="min-h-0 min-w-0 lg:col-span-2 lg:row-start-1">
             {draftItems.length === 0 ? (
@@ -404,7 +418,7 @@ function SelfQuoteSlotBoardPage() {
                 comparison={perfComparison}
                 onClearComparison={() => setPerfComparison(null)}
                 onStartComparison={startPerfComparison}
-                onApplyComparison={(target) => addMutation.mutateAsync({ partId: target.partId, quantity: 1 })}
+                onApplyComparison={applyComparisonTarget}
                 isLoading={graphQuery.isLoading || graphQuery.isFetching}
                 isError={graphQuery.isError}
                 onRetry={() => void graphQuery.refetch()}
@@ -415,6 +429,7 @@ function SelfQuoteSlotBoardPage() {
           </div>
           <QuoteChecklist
             draftItems={draftItems}
+            draftReady={Boolean(quoteDraft)}
             selectedCategory={selectedCategory}
             nextCategory={nextCategory}
             onSelect={selectSlot}
@@ -558,6 +573,7 @@ function writeSlotBoardVisualMode(mode: SlotBoardVisualMode) {
 
 function QuoteChecklist({
   draftItems,
+  draftReady,
   selectedCategory,
   nextCategory,
   onSelect,
@@ -567,6 +583,7 @@ function QuoteChecklist({
   statusByCategory
 }: {
   draftItems: QuoteDraftItem[];
+  draftReady: boolean;
   selectedCategory: PartCategory | null;
   nextCategory: PartCategory | null;
   onSelect: (category: PartCategory) => void;
@@ -575,6 +592,7 @@ function QuoteChecklist({
   isRemovePending: boolean;
   statusByCategory: Map<PartCategory, 'PASS' | 'WARN' | 'FAIL'>;
 }) {
+  const flashDelays = useChecklistFlashByCategory(draftItems, draftReady);
   const filledCount = RECOMMENDED_SLOT_ORDER.filter((category) => draftItems.some((item) => item.category === category)).length;
 
   const toggleCategory = (category: PartCategory) => {
@@ -622,7 +640,7 @@ function QuoteChecklist({
           ) : null}
         </span>
       </div>
-      <ol className="min-h-0 flex-1 space-y-1.5 overflow-y-auto pr-1">
+      <ol className="min-h-0 flex-1 space-y-1.5 overflow-x-hidden overflow-y-auto pr-1">
         {RECOMMENDED_SLOT_ORDER.map((category, index) => {
           const items = draftItems.filter((item) => item.category === category);
           const filled = items.length > 0;
@@ -633,6 +651,8 @@ function QuoteChecklist({
           const slotStatus = statusByCategory.get(category);
           const hasFail = filled && slotStatus === 'FAIL';
           const hasWarn = filled && slotStatus === 'WARN';
+          const flashDelay = flashDelays.get(category);
+          const isFlashing = flashDelay !== undefined;
           return (
             <li key={category}>
               <div
@@ -643,14 +663,18 @@ function QuoteChecklist({
                 data-testid={`checklist-${category}`}
                 data-filled={filled ? 'true' : 'false'}
                 data-next={isNext ? 'true' : 'false'}
+                data-flash={isFlashing ? 'true' : 'false'}
+                style={isFlashing ? { animationDelay: `${flashDelay}ms` } : undefined}
                 onClick={() => toggleCategory(category)}
                 onKeyDown={(event) => toggleCategoryFromKeyboard(event, category)}
                 className={`w-full rounded-md border px-2.5 py-2 text-left text-xs transition ${
-                  hasFail
-                    ? 'checklist-problem-fill-pulse'
-                    : hasWarn
-                      ? 'checklist-warning-fill-pulse'
-                      : ''
+                  isFlashing
+                    ? 'checklist-attach-flash'
+                    : hasFail
+                      ? 'checklist-problem-fill-pulse'
+                      : hasWarn
+                        ? 'checklist-warning-fill-pulse'
+                        : ''
                 } ${
                   isSelected
                     ? hasFail
@@ -665,7 +689,7 @@ function QuoteChecklist({
                           ? 'border-amber-200 bg-amber-50/50 hover:border-amber-400'
                           : 'border-emerald-100 bg-white hover:border-emerald-300'
                       : isNext
-                        ? 'slot-empty-pulse slot-hint-shimmer border-brand-blue bg-blue-50/50'
+                        ? `${isFlashing ? '' : 'slot-empty-pulse slot-hint-shimmer '}border-brand-blue bg-blue-50/50`
                         : 'border-dashed border-slate-300 bg-white hover:border-slate-400'
                 }`}
               >
@@ -725,6 +749,57 @@ function QuoteChecklist({
       </ol>
     </aside>
   );
+}
+
+const CHECKLIST_FLASH_BASE_MS = 900;
+const CHECKLIST_FLASH_STAGGER_MS = 80;
+
+// SlotBoard.useAttachFlashByCategory 변형: 제거된 카테고리도 감지하고,
+// 여러 행이 한 번에 바뀌면 권장 순서대로 계단식 재생하도록 카테고리별 지연(ms)을 돌려준다.
+// ready 게이트로 드래프트 첫 로드(진입 시점)는 기준선만 잡고 플래시하지 않는다.
+function useChecklistFlashByCategory(items: QuoteDraftItem[], ready: boolean) {
+  const signatures = new Map<string, string>();
+  for (const item of items) {
+    signatures.set(item.category, `${signatures.get(item.category) ?? ''}${item.partId}:${item.quantity}|`);
+  }
+  const signatureText = [...signatures.entries()].map(([category, value]) => `${category}=${value}`).sort().join(';');
+  const previousRef = useRef<Map<string, string> | null>(null);
+  const [flashDelays, setFlashDelays] = useState<Map<PartCategory, number>>(new Map());
+
+  useEffect(() => {
+    if (!ready) {
+      return;
+    }
+    const previous = previousRef.current;
+    previousRef.current = signatures;
+    if (previous === null) {
+      return;
+    }
+    const changed = new Set<PartCategory>();
+    for (const [category, signature] of signatures) {
+      if (previous.get(category) !== signature) {
+        changed.add(category as PartCategory);
+      }
+    }
+    for (const category of previous.keys()) {
+      if (!signatures.has(category)) {
+        changed.add(category as PartCategory);
+      }
+    }
+    if (changed.size === 0) {
+      return;
+    }
+    const ordered = RECOMMENDED_SLOT_ORDER.filter((category) => changed.has(category));
+    setFlashDelays(new Map(ordered.map((category, index) => [category, index * CHECKLIST_FLASH_STAGGER_MS])));
+    const timer = window.setTimeout(
+      () => setFlashDelays(new Map()),
+      CHECKLIST_FLASH_BASE_MS + (ordered.length - 1) * CHECKLIST_FLASH_STAGGER_MS
+    );
+    return () => window.clearTimeout(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [signatureText, ready]);
+
+  return flashDelays;
 }
 
 // 멘토 피드백: 지금까지 고른 부품을 엑셀 견적서처럼 — 그리드 아래 전폭 테이블 박스.
