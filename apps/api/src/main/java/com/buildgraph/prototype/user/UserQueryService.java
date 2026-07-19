@@ -10,6 +10,8 @@ import java.util.Locale;
 import java.util.Map;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
@@ -25,14 +27,17 @@ public class UserQueryService {
     private final CurrentUserService currentUserService;
     private final RefreshTokenService refreshTokenService;
     private final GoogleOAuthRuntimeStore googleOAuthRuntimeStore;
+    private final int maxActiveRefreshTokensPerUser;
 
+    @Autowired
     public UserQueryService(
             JdbcTemplate jdbcTemplate,
             PasswordService passwordService,
             JwtTokenService jwtTokenService,
             CurrentUserService currentUserService,
             RefreshTokenService refreshTokenService,
-            GoogleOAuthRuntimeStore googleOAuthRuntimeStore
+            GoogleOAuthRuntimeStore googleOAuthRuntimeStore,
+            @Value("${buildgraph.auth.refresh-token-cleanup.max-active-per-user:3}") int maxActiveRefreshTokensPerUser
     ) {
         this.jdbcTemplate = jdbcTemplate;
         this.passwordService = passwordService;
@@ -40,6 +45,26 @@ public class UserQueryService {
         this.currentUserService = currentUserService;
         this.refreshTokenService = refreshTokenService;
         this.googleOAuthRuntimeStore = googleOAuthRuntimeStore;
+        this.maxActiveRefreshTokensPerUser = Math.max(1, maxActiveRefreshTokensPerUser);
+    }
+
+    UserQueryService(
+            JdbcTemplate jdbcTemplate,
+            PasswordService passwordService,
+            JwtTokenService jwtTokenService,
+            CurrentUserService currentUserService,
+            RefreshTokenService refreshTokenService,
+            GoogleOAuthRuntimeStore googleOAuthRuntimeStore
+    ) {
+        this(
+                jdbcTemplate,
+                passwordService,
+                jwtTokenService,
+                currentUserService,
+                refreshTokenService,
+                googleOAuthRuntimeStore,
+                3
+        );
     }
 
     public Map<String, Object> login(String email, String password) {
@@ -337,14 +362,38 @@ public class UserQueryService {
     }
 
     private void storeRefreshToken(Map<String, Object> user, RefreshTokenService.IssuedRefreshToken refreshToken) {
+        Long userId = longValue(user, "internal_id");
         jdbcTemplate.update("""
                 INSERT INTO refresh_tokens (user_id, token_hash, expires_at)
                 VALUES (?, ?, ?)
                 """,
-                longValue(user, "internal_id"),
+                userId,
                 refreshToken.tokenHash(),
                 Timestamp.from(refreshToken.expiresAt())
         );
+        revokeExcessActiveRefreshTokensForUser(userId);
+    }
+
+    private int revokeExcessActiveRefreshTokensForUser(Long userId) {
+        return jdbcTemplate.update("""
+                WITH ranked AS (
+                  SELECT id,
+                         row_number() OVER (
+                           ORDER BY created_at DESC, id DESC
+                         ) AS active_rank
+                  FROM refresh_tokens
+                  WHERE user_id = ?
+                    AND revoked_at IS NULL
+                    AND expires_at > now()
+                )
+                UPDATE refresh_tokens
+                SET revoked_at = now()
+                WHERE id IN (
+                  SELECT id
+                  FROM ranked
+                  WHERE active_rank > ?
+                )
+                """, userId, maxActiveRefreshTokensPerUser);
     }
 
     private Map<String, Object> completeGoogleLogin(

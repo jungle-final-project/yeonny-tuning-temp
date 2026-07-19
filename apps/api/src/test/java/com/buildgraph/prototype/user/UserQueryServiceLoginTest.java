@@ -70,6 +70,11 @@ class UserQueryServiceLoginTest {
                 eq(refreshTokenService.hash(refreshToken)),
                 any(Timestamp.class)
         );
+        verify(jdbcTemplate).update(
+                org.mockito.ArgumentMatchers.contains("active_rank > ?"),
+                eq(1004L),
+                eq(3)
+        );
         assertThat(response.get("user")).isInstanceOf(Map.class);
         @SuppressWarnings("unchecked")
         Map<String, Object> user = (Map<String, Object>) response.get("user");

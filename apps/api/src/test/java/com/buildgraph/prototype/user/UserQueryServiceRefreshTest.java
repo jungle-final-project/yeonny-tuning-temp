@@ -77,6 +77,11 @@ class UserQueryServiceRefreshTest {
                 eq(refreshTokenService.hash(nextRefreshToken)),
                 any(Timestamp.class)
         );
+        verify(jdbcTemplate).update(
+                org.mockito.ArgumentMatchers.contains("active_rank > ?"),
+                eq(1004L),
+                eq(3)
+        );
     }
 
     @Test

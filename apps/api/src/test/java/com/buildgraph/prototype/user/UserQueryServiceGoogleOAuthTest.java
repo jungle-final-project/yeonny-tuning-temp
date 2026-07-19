@@ -110,6 +110,11 @@ class UserQueryServiceGoogleOAuthTest {
                 anyString(),
                 any(Timestamp.class)
         );
+        verify(jdbcTemplate).update(
+                org.mockito.ArgumentMatchers.contains("active_rank > ?"),
+                eq(1004L),
+                eq(3)
+        );
     }
 
     @Test
@@ -205,6 +210,11 @@ class UserQueryServiceGoogleOAuthTest {
                 eq(1004L),
                 anyString(),
                 any(Timestamp.class)
+        );
+        verify(jdbcTemplate).update(
+                org.mockito.ArgumentMatchers.contains("active_rank > ?"),
+                eq(1004L),
+                eq(3)
         );
     }
 

@@ -138,7 +138,7 @@ buildgraph:
       enabled: ${BUILDGRAPH_AUTH_REFRESH_TOKEN_CLEANUP_ENABLED:true}
       run-on-startup: ${BUILDGRAPH_AUTH_REFRESH_TOKEN_CLEANUP_RUN_ON_STARTUP:true}
       fixed-delay-ms: ${BUILDGRAPH_AUTH_REFRESH_TOKEN_CLEANUP_FIXED_DELAY_MS:3600000}
-      max-active-per-user: ${BUILDGRAPH_AUTH_REFRESH_TOKEN_MAX_ACTIVE_PER_USER:10}
+      max-active-per-user: ${BUILDGRAPH_AUTH_REFRESH_TOKEN_MAX_ACTIVE_PER_USER:3}
     google:
       client-id: ${GOOGLE_OAUTH_CLIENT_ID:}
       client-secret: ${GOOGLE_OAUTH_CLIENT_SECRET:}

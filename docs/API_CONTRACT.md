@@ -158,6 +158,8 @@ MVP 기준 결정값:
 
 `POST /api/auth/login`은 같은 IP 또는 같은 이메일 기준으로 짧은 시간 안에 반복 시도가 누적되면 비밀번호 검증 전에 `429 RATE_LIMITED`를 반환한다. 제한값은 `LOGIN_RATE_LIMIT_*` 환경변수로 조정한다.
 
+서비스 refresh token은 hash만 저장하며, 로그인·refresh로 새 토큰을 발급한 직후 사용자별 활성 refresh token을 최신 3개만 남기고 초과분은 `revoked_at`으로 폐기한다. 제한값은 `BUILDGRAPH_AUTH_REFRESH_TOKEN_MAX_ACTIVE_PER_USER` 환경변수로 조정한다.
+
 Auth/User 구현 owner는 1번이다. 5번은 `Authorization` header 전달, token 저장 helper, `RequireAdmin`, admin guard, security allowlist, 공통 `ErrorResponse` 정합성을 검토한다.
 
 회원가입 연락처/주소 규칙:
