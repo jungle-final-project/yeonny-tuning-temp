@@ -3202,6 +3202,16 @@ test('composite ghost for an AI linked GPU+PSU preview swaps both parts instead 
     return items.some((item) => item.partId === 'cand-gpu-5080') && items.some((item) => item.partId === 'part-psu-600');
   });
   expect(mismatchGhost).toBeUndefined();
+
+  // 회귀: 같은 시연을 반복해도 비교가 다시 켜져야 한다 — 서버가 같은 build.id를 돌려줘도
+  // 새 응답 메시지면 재발행한다(build.id 단독 중복 억제가 두 번째 시연부터 비교를 영구 차단하던 버그).
+  await panel.getByTestId('compare-clear').click();
+  await expect(panel.getByTestId('quote-composite-ghost-gauge')).toHaveCount(0);
+  await page.getByRole('textbox', { name: 'AI 챗봇에게 PC 사양 질문' }).fill('배그에서 4K 120FPS 이상 나오는 GPU로 변경해줘');
+  await page.getByRole('button', { name: '질문 보내기' }).click();
+  await expect(page.getByTestId('ai-chat-messages').getByText('파워까지 함께 바꾸는')).toHaveCount(2, { timeout: 10000 });
+  await expect(panel.getByTestId('quote-composite-ghost-gauge')).toBeVisible();
+  await expect(panel.getByTestId('quote-composite-compare-score')).toHaveText('745');
 });
 
 test('drives the candidate popover: open, dismiss without picking, pick WARN, and clear', async ({ page }) => {

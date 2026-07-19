@@ -1427,8 +1427,8 @@ const ChatMessage = memo(function ChatMessage({
               const key = `${message.id}-${build.id}`;
               const distinction = deriveBuildDistinction(build, message.builds ?? []);
               return animate
-                ? <FadeInBlock key={key}><CompactBuildCard build={build} onSelectBuild={onSelectBuild} applyingBuildId={applyingBuildId} size={size} reveal distinction={distinction} /></FadeInBlock>
-                : <CompactBuildCard key={key} build={build} onSelectBuild={onSelectBuild} applyingBuildId={applyingBuildId} size={size} distinction={distinction} />;
+                ? <FadeInBlock key={key}><CompactBuildCard build={build} messageId={message.id} onSelectBuild={onSelectBuild} applyingBuildId={applyingBuildId} size={size} reveal distinction={distinction} /></FadeInBlock>
+                : <CompactBuildCard key={key} build={build} messageId={message.id} onSelectBuild={onSelectBuild} applyingBuildId={applyingBuildId} size={size} distinction={distinction} />;
             })}
           </div>
         ) : null}
@@ -1822,9 +1822,11 @@ function MiniBar({ value, max, className, size = 'default' }: { value?: number |
   );
 }
 
-// 변경 미리보기 → 성능 패널 비교 연동을 이미 보낸 빌드 — 채팅을 다시 열어 과거 카드가
-// 재마운트될 때 옛 비교가 다시 켜지지 않도록 빌드 단위로 1회만 발행한다.
-const perfCompareNotifiedBuildIds = new Set<string>();
+// 변경 미리보기 → 성능 패널 비교 연동을 이미 보낸 (메시지, 빌드) 쌍 — 채팅을 다시 열어 과거 카드가
+// 재마운트될 때 옛 비교가 다시 켜지지 않도록 메시지 단위로 1회만 발행한다.
+// 키에 messageId가 들어가야 같은 시연을 반복할 때(서버 캐시로 같은 build.id가 다시 와도)
+// 새 응답 메시지에서는 비교가 다시 켜진다 — build.id 단독 키는 두 번째 시연부터 비교를 영구 억제했다.
+const perfCompareNotifiedKeys = new Set<string>();
 
 // 특이점에서 비교할 핵심 부품(성능 체감이 큰 순서)과, 짧은 설명에 쓸 한국어 명칭.
 const DISTINCTION_CATEGORY_ORDER: PartCategory[] = ['GPU', 'CPU', 'RAM', 'STORAGE'];
@@ -1872,6 +1874,7 @@ function deriveBuildDistinction(build: AiRecommendedBuild, builds: AiRecommended
 
 function CompactBuildCard({
   build,
+  messageId,
   onSelectBuild,
   applyingBuildId,
   size = 'default',
@@ -1879,6 +1882,7 @@ function CompactBuildCard({
   distinction
 }: {
   build: AiRecommendedBuild;
+  messageId: string;
   onSelectBuild: (build: AiRecommendedBuild) => void;
   applyingBuildId: string | null;
   size?: AiChatMessageSize;
@@ -1902,10 +1906,11 @@ function CompactBuildCard({
 
   // CPU/GPU 변경 미리보기가 그려지면 셀프견적 성능 패널의 교체 비교도 함께 켠다(이벤트 발행만 — 디자인 불변).
   useEffect(() => {
-    if (!isEditPreview || perfCompareNotifiedBuildIds.has(build.id)) return;
+    const notifiedKey = `${messageId}:${build.id}`;
+    if (!isEditPreview || perfCompareNotifiedKeys.has(notifiedKey)) return;
     const changed = changedItems.find((item) => (item.category === 'CPU' || item.category === 'GPU') && item.partId);
     if (!changed) return;
-    perfCompareNotifiedBuildIds.add(build.id);
+    perfCompareNotifiedKeys.add(notifiedKey);
     requestPerfCompare({
       category: changed.category as 'CPU' | 'GPU',
       partId: changed.partId,
@@ -1917,7 +1922,7 @@ function CompactBuildCard({
         .filter((item) => item !== changed && item.partId)
         .map((item) => ({ category: item.category, partId: item.partId, name: item.name, price: item.price }))
     });
-  }, [build.id, isEditPreview, changedItems]);
+  }, [messageId, build.id, isEditPreview, changedItems]);
   const primaryItems = isEditPreview && changedItems.length > 0 ? changedItems : build.items.slice(0, 5);
   const isLarge = size === 'large';
   // 이 카드가 적용 중이면 로딩 표시, 다른 카드가 적용 중이면 클릭이 조용히 무시되지 않도록 함께 비활성화한다.
