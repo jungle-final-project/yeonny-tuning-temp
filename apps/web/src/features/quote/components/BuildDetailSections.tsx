@@ -1,22 +1,27 @@
 import type { ReactNode } from 'react';
 import { Link } from 'react-router-dom';
 import { DataTable, MetricCard, Panel, StateMessage, StatusBadge } from '../../../components/ui';
-import type { AiAssistantSession, AiRecommendedBuild } from '../aiSelection';
-import type { BuildSummary, ToolResult, WarningDto } from '../types';
+import type { AiAssistantSession, AiRecommendedBuild, BuildGraphResolveResponse, BuildGraphStatus } from '../aiSelection';
+import type { BuildItem, BuildSummary, ToolResult, WarningDto } from '../types';
 
 export function BuildDetailSections({
   displayBuild,
+  compatibilityGraph,
+  compatibilityPending = false,
   conditionBody,
   summaryNotice,
   summaryActions
 }: {
   displayBuild: BuildSummary;
+  compatibilityGraph?: BuildGraphResolveResponse;
+  compatibilityPending?: boolean;
   conditionBody: string;
   summaryNotice?: ReactNode;
   summaryActions: ReactNode;
 }) {
   const toolResults = displayBuild.toolResults ?? [];
   const passCount = toolResults.filter((row) => row.status === 'PASS').length;
+  const compatibilityStatuses = compatibilityStatusIndex(compatibilityGraph);
 
   return (
     <div className="grid items-stretch gap-5 lg:grid-cols-[minmax(0,1fr)_320px]">
@@ -42,13 +47,16 @@ export function BuildDetailSections({
                 </div>
                 <div className="mt-2 flex items-center justify-between gap-3">
                   <span className="text-xs font-semibold text-slate-500">{item.manufacturer ?? '-'}</span>
-                  <PartStatus status={item.status} />
+                  <span className="flex items-center gap-2">
+                    <span className="text-[11px] font-bold text-slate-400">호환성</span>
+                    <CompatibilityStatus status={compatibilityStatus(item, compatibilityStatuses)} pending={compatibilityPending} />
+                  </span>
                 </div>
               </div>
             ))}
           </div>
           <div className="hidden md:block">
-            <DataTable columns={['분류', '부품명', '제조사', '상태', '가격']} nowrapColumns={['분류', '제조사', '상태', '가격']} rows={displayBuild.items.map((item) => ({
+            <DataTable columns={['분류', '부품명', '제조사', '호환성', '가격']} nowrapColumns={['분류', '제조사', '호환성', '가격']} rows={displayBuild.items.map((item) => ({
               분류: item.category,
               부품명: item.partId ? (
                 <Link to={`/parts/${item.partId}`} className="font-bold text-commerce-ink hover:text-[#de6c2d] hover:underline">{item.name}</Link>
@@ -56,7 +64,7 @@ export function BuildDetailSections({
                 item.name
               ),
               제조사: item.manufacturer ?? '-',
-              상태: <PartStatus status={item.status} />,
+              호환성: <CompatibilityStatus status={compatibilityStatus(item, compatibilityStatuses)} pending={compatibilityPending} />,
               가격: <span className="whitespace-nowrap font-black text-commerce-ink">{item.price.toLocaleString()}원</span>
             }))} />
           </div>
@@ -122,12 +130,78 @@ function warningDtos(warnings: string[]): WarningDto[] {
   return warnings.map((message) => ({ message, severity: 'WARN' }));
 }
 
-function PartStatus({ status }: { status?: string }) {
+function CompatibilityStatus({ status, pending }: { status?: BuildGraphStatus; pending: boolean }) {
+  if (pending && !status) {
+    return <span className="text-[11px] font-bold text-slate-400">검증 중</span>;
+  }
   return status ? (
     <StatusBadge status={status} />
   ) : (
-    <span className="text-[11px] font-bold text-slate-400">상태 정보 없음</span>
+    <span className="text-[11px] font-bold text-slate-400">검증 정보 없음</span>
   );
+}
+
+type CompatibilityStatusIndex = {
+  byPartId: Map<string, BuildGraphStatus>;
+  byCategory: Map<string, BuildGraphStatus>;
+};
+
+function compatibilityStatusIndex(graph?: BuildGraphResolveResponse): CompatibilityStatusIndex {
+  const byPartId = new Map<string, BuildGraphStatus>();
+  const byCategory = new Map<string, BuildGraphStatus>();
+  const partNodesById = new Map<string, BuildGraphResolveResponse['nodes'][number]>();
+
+  const promoteNode = (node: BuildGraphResolveResponse['nodes'][number] | undefined, status: BuildGraphStatus) => {
+    if (!node || node.type !== 'PART') {
+      return;
+    }
+    if (node.partId) {
+      promoteStatus(byPartId, node.partId, status);
+    }
+    if (node.category) {
+      promoteStatus(byCategory, node.category, status);
+    }
+  };
+
+  graph?.nodes.forEach((node) => {
+    if (node.type !== 'PART') {
+      return;
+    }
+    partNodesById.set(node.id, node);
+    promoteNode(node, node.status);
+  });
+  graph?.edges.forEach((edge) => {
+    if (edge.status === 'PASS') {
+      return;
+    }
+    promoteNode(partNodesById.get(edge.source), edge.status);
+    promoteNode(partNodesById.get(edge.target), edge.status);
+  });
+  graph?.insights.forEach((insight) => {
+    if (insight.status === 'PASS') {
+      return;
+    }
+    insight.relatedNodeIds.forEach((nodeId) => promoteNode(partNodesById.get(nodeId), insight.status));
+  });
+
+  return { byPartId, byCategory };
+}
+
+function compatibilityStatus(item: BuildItem, index: CompatibilityStatusIndex) {
+  return (item.partId ? index.byPartId.get(item.partId) : undefined) ?? index.byCategory.get(item.category);
+}
+
+function promoteStatus(map: Map<string, BuildGraphStatus>, key: string, status: BuildGraphStatus) {
+  const current = map.get(key);
+  if (!current || compatibilityStatusRank(status) > compatibilityStatusRank(current)) {
+    map.set(key, status);
+  }
+}
+
+function compatibilityStatusRank(status: BuildGraphStatus) {
+  if (status === 'FAIL') return 3;
+  if (status === 'WARN') return 2;
+  return 1;
 }
 
 function InlineVerificationSummary({ results, passCount }: { results: ToolResult[]; passCount: number }) {

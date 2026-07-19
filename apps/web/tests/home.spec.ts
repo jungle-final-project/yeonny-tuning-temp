@@ -1866,6 +1866,7 @@ test('renders a temporary chatbot build detail and saves it to a persisted build
   const latestBuilds = budgetBuilds(2_000_000);
   const temporaryBuild = latestBuilds[1];
   const saveRequests: unknown[] = [];
+  const buildGraphRequests = await mockBuildGraphApi(page);
   await page.route('**/api/builds/from-chat', async (route) => {
     const requestBody = JSON.parse(route.request().postData() ?? '{}');
     saveRequests.push(requestBody);
@@ -1912,8 +1913,19 @@ test('renders a temporary chatbot build detail and saves it to a persisted build
   await expect(page.getByText('저장 전 AI 챗봇 추천')).toBeVisible();
   await expect(page.getByRole('link', { name: temporaryBuild.items[0].name })).toBeVisible();
   const partsPanel = page.getByRole('heading', { name: '구성 부품' }).locator('..').locator('..').locator('..');
-  await expect(partsPanel.getByRole('columnheader', { name: '상태' })).toBeVisible();
-  await expect(partsPanel.getByRole('table').getByText('활성', { exact: true }).first()).toBeVisible();
+  const partsTable = partsPanel.getByRole('table');
+  await expect(partsTable.getByRole('columnheader', { name: '호환성' })).toBeVisible();
+  await expect(partsTable.getByText('활성', { exact: true })).toHaveCount(0);
+  const gpuItem = temporaryBuild.items.find((item) => item.category === 'GPU');
+  const gpuRow = partsTable.getByRole('row').filter({ hasText: gpuItem?.name ?? 'GPU' });
+  await expect(gpuRow.getByText('주의', { exact: true })).toBeVisible();
+  await expect.poll(() => buildGraphRequests.length).toBeGreaterThan(0);
+  expect(buildGraphRequests[0]).toMatchObject({
+    source: 'AI_BUILD',
+    items: expect.arrayContaining([
+      expect.objectContaining({ category: 'GPU', partId: gpuItem?.partId, quantity: gpuItem?.quantity })
+    ])
+  });
   await expect(page.getByRole('heading', { name: '검증 결과' })).toHaveCount(0);
   const summaryPanel = page.getByRole('heading', { name: '견적 요약 / 액션' }).locator('..').locator('..').locator('..');
   await expect(partsPanel.getByText('검증 요약', { exact: true })).toBeVisible();

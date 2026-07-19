@@ -3,8 +3,9 @@ import { Link, Navigate, useNavigate, useParams } from 'react-router-dom';
 import { Panel, Screen, StateMessage } from '../../../components/ui';
 import { BuildDetailSections, latestUserMessage, temporaryBuildToBuildSummary } from '../components/BuildDetailSections';
 import { QuoteCard } from '../components/QuoteCard';
-import { buildSaveErrorMessage, getBuild, saveBuildFromChat } from '../quoteApi';
-import { markAssistantBuildSaved, readAssistantSession, type AiRecommendedBuild } from '../aiSelection';
+import { buildSaveErrorMessage, getBuild, resolveBuildGraph, saveBuildFromChat } from '../quoteApi';
+import { markAssistantBuildSaved, readAssistantSession, type AiRecommendedBuild, type PartCategory } from '../aiSelection';
+import type { BuildItem, BuildSummary } from '../types';
 
 export function BuildResultPage() {
   const { buildId = '00000000-0000-4000-8000-000000002001' } = useParams();
@@ -16,6 +17,18 @@ export function BuildResultPage() {
     queryKey: ['build', buildId],
     queryFn: () => getBuild(buildId),
     enabled: !savedBuildId && !temporaryBuild
+  });
+  const displayBuild = temporaryBuild ? temporaryBuildToBuildSummary(temporaryBuild) : build;
+  const graphItems = buildGraphItems(displayBuild);
+  const graphQuery = useQuery({
+    queryKey: ['build-graph', 'build-detail', displayBuild?.id, buildGraphSignature(graphItems), displayBuild?.totalPrice],
+    queryFn: () => resolveBuildGraph({
+      source: 'AI_BUILD',
+      view: 'FULL',
+      items: graphItems,
+      budgetWon: displayBuild?.totalPrice
+    }),
+    enabled: Boolean(!savedBuildId && displayBuild && graphItems.length > 0)
   });
   const saveMutation = useMutation({
     mutationFn: (sourceBuild: AiRecommendedBuild) => saveBuildFromChat({
@@ -33,7 +46,6 @@ export function BuildResultPage() {
     return <Navigate to={`/builds/${savedBuildId}`} replace />;
   }
 
-  const displayBuild = temporaryBuild ? temporaryBuildToBuildSummary(temporaryBuild) : build;
   const isTemporaryBuild = Boolean(temporaryBuild);
 
   if (!temporaryBuild && isLoading) {
@@ -71,6 +83,8 @@ export function BuildResultPage() {
         </Panel>
         <BuildDetailSections
           displayBuild={displayBuild}
+          compatibilityGraph={graphQuery.data}
+          compatibilityPending={graphQuery.isFetching}
           conditionBody={isTemporaryBuild ? '저장 버튼을 누르면 서버에서 다시 검증한 뒤 견적으로 저장합니다.' : '현재 구성은 저장된 내부 자산 기준 자동 검증을 통과했습니다.'}
           summaryActions={isTemporaryBuild && temporaryBuild ? (
             <>
@@ -96,4 +110,37 @@ export function BuildResultPage() {
       </div>
     </Screen>
   );
+}
+
+const BUILD_GRAPH_CATEGORIES = new Set<PartCategory>(['CPU', 'MOTHERBOARD', 'RAM', 'GPU', 'STORAGE', 'PSU', 'CASE', 'COOLER']);
+
+function buildGraphItems(build?: BuildSummary) {
+  return (build?.items ?? []).flatMap((item) => {
+    if (!item.partId || !isPartCategory(item.category)) {
+      return [];
+    }
+    return [{
+      partId: item.partId,
+      category: item.category,
+      quantity: buildItemQuantity(item)
+    }];
+  });
+}
+
+function isPartCategory(category: string): category is PartCategory {
+  return BUILD_GRAPH_CATEGORIES.has(category as PartCategory);
+}
+
+function buildItemQuantity(item: BuildItem) {
+  const directQuantity = (item as BuildItem & { quantity?: unknown }).quantity;
+  const attributeQuantity = item.attributes?.quantity;
+  const quantity = typeof directQuantity === 'number' ? directQuantity : attributeQuantity;
+  return typeof quantity === 'number' && Number.isFinite(quantity) && quantity >= 1 ? Math.floor(quantity) : 1;
+}
+
+function buildGraphSignature(items: Array<{ partId: string; category: PartCategory; quantity: number }>) {
+  return items
+    .map((item) => `${item.category}:${item.partId}:${item.quantity}`)
+    .sort()
+    .join('|');
 }
