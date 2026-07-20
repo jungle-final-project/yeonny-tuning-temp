@@ -1,17 +1,42 @@
 import { getPcAgentConnectionStatus } from './supportApi';
 
 export const PC_AGENT_PROTOCOL_URL = 'buildgraph-pc-agent://open';
-export const PC_AGENT_CONNECTION_POLL_INTERVAL_MS = 500;
-export const PC_AGENT_CONNECTION_POLL_ATTEMPTS = 20;
+export const PC_AGENT_CONNECTION_TIMEOUT_MS = 45_000;
+export const PC_AGENT_CONNECTION_FAST_WINDOW_MS = 5_000;
+export const PC_AGENT_CONNECTION_FAST_POLL_INTERVAL_MS = 500;
+export const PC_AGENT_CONNECTION_SLOW_POLL_INTERVAL_MS = 1_000;
 
-export async function ensurePcAgentConnected(signal?: AbortSignal) {
-  if ((await getPcAgentConnectionStatus(signal)).connected) return true;
+export type PcAgentConnectionPhase = 'approval-required' | 'launching' | 'waiting' | 'connected' | 'timed-out';
 
-  launchInstalledPcAgent();
-  for (let attempt = 0; attempt < PC_AGENT_CONNECTION_POLL_ATTEMPTS; attempt += 1) {
-    await delay(PC_AGENT_CONNECTION_POLL_INTERVAL_MS, signal);
-    if ((await getPcAgentConnectionStatus(signal)).connected) return true;
+export async function ensurePcAgentConnected(
+  signal?: AbortSignal,
+  onPhaseChanged: (phase: PcAgentConnectionPhase) => void = () => undefined
+) {
+  if ((await getPcAgentConnectionStatus(signal)).connected) {
+    onPhaseChanged('connected');
+    return true;
   }
+
+  onPhaseChanged('approval-required');
+  launchInstalledPcAgent();
+  let elapsedMs = 0;
+  while (elapsedMs < PC_AGENT_CONNECTION_TIMEOUT_MS) {
+    const intervalMs = elapsedMs < PC_AGENT_CONNECTION_FAST_WINDOW_MS
+      ? PC_AGENT_CONNECTION_FAST_POLL_INTERVAL_MS
+      : PC_AGENT_CONNECTION_SLOW_POLL_INTERVAL_MS;
+    const remainingMs = PC_AGENT_CONNECTION_TIMEOUT_MS - elapsedMs;
+    const waitMs = Math.min(intervalMs, remainingMs);
+    await delay(waitMs, signal);
+    elapsedMs += waitMs;
+
+    if ((await getPcAgentConnectionStatus(signal)).connected) {
+      onPhaseChanged('connected');
+      return true;
+    }
+    onPhaseChanged(elapsedMs < PC_AGENT_CONNECTION_FAST_WINDOW_MS ? 'launching' : 'waiting');
+  }
+
+  onPhaseChanged('timed-out');
   return false;
 }
 

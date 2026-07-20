@@ -1402,6 +1402,154 @@ test('chatbot gives symptom-based possibilities and connects to the separate Age
 });
 
 // AI 대화창에서 말한 증상을 [PC Agent로 바로 접수]가 설치된 에이전트로 그대로 전달한다 (팀장 데모 시나리오 3번).
+async function openPcAgentGuidanceForConnectionTest(page: Page, symptomText = 'pc가 버벅여') {
+  await page.route('**/api/ai/build-chat', (route) => route.fulfill({
+    status: 200,
+    contentType: 'application/json',
+    body: JSON.stringify({
+      answerType: 'GENERAL',
+      message: '끊김 또는 성능 저하 증상으로 이해했습니다.',
+      builds: [],
+      warnings: [],
+      supportGuidance: {
+        type: 'PC_AGENT_DIAGNOSTIC_ENTRY',
+        scope: 'PRE_DIAGNOSIS',
+        symptomCategory: 'PERFORMANCE_STUTTER',
+        title: '끊김·성능 저하',
+        summary: '작업 부하 등이 원인 후보로 예상됩니다.',
+        possibleCauses: ['작업 부하'],
+        beforeDiagnosisChecks: ['증상 직후 PC Agent 진단을 실행해 주세요.'],
+        agentRecommendation: 'RECOMMENDED',
+        actions: [
+          { type: 'DOWNLOAD_PC_AGENT', label: 'PC Agent 다운로드' },
+          { type: 'OPEN_SUPPORT_NEW', label: 'AS 접수 화면 보기', route: '/support/new' }
+        ],
+        disclaimer: '입력한 증상만으로 예상한 가능성입니다.'
+      }
+    })
+  }));
+  await page.addInitScript(() => {
+    const originalClick = HTMLAnchorElement.prototype.click;
+    HTMLAnchorElement.prototype.click = function click() {
+      if (this.href.startsWith('buildgraph-pc-agent:')) {
+        const target = window as Window & { __pcAgentProtocolLaunches?: string[] };
+        target.__pcAgentProtocolLaunches = [...(target.__pcAgentProtocolLaunches ?? []), this.href];
+        return;
+      }
+      originalClick.call(this);
+    };
+  });
+  await openHomeAsUser(page);
+  await openDesktopAiAssistant(page);
+  await page.getByRole('textbox', { name: 'AI 챗봇에게 PC 사양 질문' }).fill(symptomText);
+  await page.getByRole('button', { name: '질문 보내기' }).click();
+  const guidance = page.getByTestId('ai-support-guidance');
+  await expect(guidance).toBeVisible();
+  return guidance;
+}
+
+async function advancePcAgentConnectionClock(page: Page, milliseconds: number) {
+  for (let elapsed = 0; elapsed < milliseconds; elapsed += 500) {
+    await page.clock.runFor(Math.min(500, milliseconds - elapsed));
+    await page.waitForTimeout(0);
+  }
+}
+
+test('connected PC Agent skips protocol launch and submits once', async ({ page }) => {
+  let diagnosisPosts = 0;
+  await page.route('**/api/users/me/agent-diagnosis-requests/connection', (route) => route.fulfill({
+    status: 200,
+    contentType: 'application/json',
+    body: JSON.stringify({ connected: true })
+  }));
+  await page.route('**/api/users/me/agent-diagnosis-requests', (route) => {
+    diagnosisPosts += 1;
+    return route.fulfill({
+      status: 201,
+      contentType: 'application/json',
+      body: JSON.stringify({ diagnosisId: 'connected-diag', deviceId: 'device-1', status: 'ACCEPTED' })
+    });
+  });
+  const guidance = await openPcAgentGuidanceForConnectionTest(page);
+
+  await guidance.getByTestId('ai-agent-diagnosis-request').click();
+  await expect(page).toHaveURL(/diagnosisId=connected-diag/);
+
+  expect(await page.evaluate(() => (window as Window & { __pcAgentProtocolLaunches?: string[] }).__pcAgentProtocolLaunches ?? [])).toEqual([]);
+  expect(diagnosisPosts).toBe(1);
+});
+
+for (const connectionDelayMs of [15_000, 30_000]) {
+  test(`waits for a PC Agent connected after ${connectionDelayMs / 1000} seconds without duplicate launch or diagnosis`, async ({ page }) => {
+    let connected = false;
+    let diagnosisPosts = 0;
+    await page.route('**/api/users/me/agent-diagnosis-requests/connection', (route) => route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({ connected })
+    }));
+    await page.route('**/api/users/me/agent-diagnosis-requests', (route) => {
+      diagnosisPosts += 1;
+      return route.fulfill({
+        status: 201,
+        contentType: 'application/json',
+        body: JSON.stringify({ diagnosisId: `delayed-${connectionDelayMs}`, deviceId: 'device-1', status: 'ACCEPTED' })
+      });
+    });
+    const guidance = await openPcAgentGuidanceForConnectionTest(page);
+    await page.clock.install();
+    const submit = guidance.getByTestId('ai-agent-diagnosis-request');
+
+    await submit.evaluate((button) => {
+      (button as HTMLButtonElement).click();
+      (button as HTMLButtonElement).click();
+    });
+    await expect(guidance.getByTestId('ai-agent-diagnosis-status')).toContainText('PCAgent 열기를 승인해 주세요.');
+    await page.clock.runFor(connectionDelayMs);
+    expect(diagnosisPosts).toBe(0);
+    connected = true;
+    await page.clock.runFor(1_000);
+    await expect(page).toHaveURL(new RegExp(`diagnosisId=delayed-${connectionDelayMs}`));
+
+    expect(await page.evaluate(() => (window as Window & { __pcAgentProtocolLaunches?: string[] }).__pcAgentProtocolLaunches)).toEqual([
+      'buildgraph-pc-agent://open'
+    ]);
+    expect(diagnosisPosts).toBe(1);
+  });
+}
+
+test('reports timeout only after 45 seconds and aborts polling when unmounted', async ({ page }) => {
+  let connectionChecks = 0;
+  let diagnosisPosts = 0;
+  await page.route('**/api/users/me/agent-diagnosis-requests/connection', (route) => {
+    connectionChecks += 1;
+    return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ connected: false }) });
+  });
+  await page.route('**/api/users/me/agent-diagnosis-requests', (route) => {
+    diagnosisPosts += 1;
+    return route.abort();
+  });
+  const guidance = await openPcAgentGuidanceForConnectionTest(page);
+  await page.clock.install();
+  await guidance.getByTestId('ai-agent-diagnosis-request').click();
+  await expect(guidance.getByTestId('ai-agent-diagnosis-status')).toContainText('PCAgent 열기를 승인해 주세요.');
+
+  await advancePcAgentConnectionClock(page, 44_000);
+  await expect(guidance.getByTestId('ai-agent-diagnosis-status')).not.toContainText('시간이 초과됐습니다');
+  expect(diagnosisPosts).toBe(0);
+  await advancePcAgentConnectionClock(page, 1_000);
+  await expect(guidance.getByTestId('ai-agent-diagnosis-status')).toContainText('PC Agent 연결 시간이 초과됐습니다.');
+  expect(diagnosisPosts).toBe(0);
+
+  await guidance.getByTestId('ai-agent-diagnosis-request').click();
+  await expect(guidance.getByTestId('ai-agent-diagnosis-status')).toContainText('PCAgent 열기를 승인해 주세요.');
+  const checksBeforeUnmount = connectionChecks;
+  await page.getByRole('button', { name: 'AI 견적 챗봇 닫기' }).click();
+  await page.clock.runFor(45_000);
+  expect(connectionChecks).toBe(checksBeforeUnmount);
+  expect(diagnosisPosts).toBe(0);
+});
+
 test('chatbot support guidance submits the spoken symptom to the installed PC Agent', async ({ page }) => {
   const symptomText = '게임 중 화면이 갑자기 검게 변하고 몇 초 뒤 다시 나옵니다.';
   const guidancePayload = {

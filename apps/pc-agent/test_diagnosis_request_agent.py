@@ -1,9 +1,10 @@
 import json
 import tempfile
+import threading
 import unittest
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 from diagnosis_request_agent import (
     AgentDiagnosisWebSocketClient,
@@ -123,6 +124,87 @@ class DiagnosisRequestProcessorTest(unittest.TestCase):
         self.assertEqual("ACCEPTED", decision.status)
         self.assertEqual(WEB_REQUEST, self.store.session.request.source)
 
+    def test_expired_request_received_is_replaced_without_losing_processed_ids(self):
+        replaced = []
+        processor = DiagnosisRequestProcessor(
+            self.store,
+            device_id="device-1",
+            now=lambda: NOW,
+            on_session_replaced=replaced.append,
+        )
+        expired = DiagnosisRequest.from_payload(
+            request_payload(diagnosis_id="expired-diagnosis", expires_at=NOW - timedelta(seconds=1)),
+        )
+        self.store.accept(DiagnosisSession(expired))
+
+        decision = processor.process(request_payload(diagnosis_id="replacement-diagnosis"), True)
+
+        self.assertEqual("ACCEPTED", decision.status)
+        self.assertEqual("replacement-diagnosis", self.store.session.request.diagnosis_id)
+        self.assertEqual("REQUEST_EXPIRED", replaced[0].reason)
+        self.assertTrue(self.store.contains("expired-diagnosis"))
+        self.assertTrue(self.store.contains("replacement-diagnosis"))
+
+    def test_unstarted_web_request_is_superseded_by_new_web_request(self):
+        replaced = []
+        processor = DiagnosisRequestProcessor(
+            self.store,
+            device_id="device-1",
+            now=lambda: NOW,
+            on_session_replaced=replaced.append,
+        )
+        self.assertEqual("ACCEPTED", processor.process(request_payload(diagnosis_id="pending-diagnosis"), True).status)
+
+        decision = processor.process(request_payload(diagnosis_id="new-diagnosis"), True)
+
+        self.assertEqual("ACCEPTED", decision.status)
+        self.assertEqual("new-diagnosis", self.store.session.request.diagnosis_id)
+        self.assertEqual("SUPERSEDED", replaced[0].reason)
+
+    def test_restart_cleanup_removes_stale_request_without_touching_sibling_files(self):
+        credential_path = Path(self.temporary.name) / "agent-credential.json"
+        config_path = Path(self.temporary.name) / "agent-config.json"
+        credential_path.write_text("credential", encoding="utf-8")
+        config_path.write_text("config", encoding="utf-8")
+        expired = DiagnosisRequest.from_payload(
+            request_payload(diagnosis_id="expired-after-restart", expires_at=NOW - timedelta(seconds=1)),
+        )
+        self.store.accept(DiagnosisSession(expired))
+
+        restarted_store = DiagnosisSessionStore(self.path)
+        replacement = restarted_store.expire_stale_request(NOW)
+        restarted = DiagnosisRequestProcessor(restarted_store, "device-1", now=lambda: NOW)
+        decision = restarted.process(request_payload(diagnosis_id="after-restart"), True)
+
+        self.assertEqual("REQUEST_EXPIRED", replacement.reason)
+        self.assertEqual("ACCEPTED", decision.status)
+        self.assertTrue(restarted_store.contains("expired-after-restart"))
+        self.assertEqual("credential", credential_path.read_text(encoding="utf-8"))
+        self.assertEqual("config", config_path.read_text(encoding="utf-8"))
+
+    def test_running_session_is_the_only_state_that_blocks_a_new_request(self):
+        self.assertEqual("ACCEPTED", self.processor.process(request_payload(diagnosis_id="running-diagnosis"), True).status)
+        self.store.update_state("RUNNING")
+
+        decision = self.processor.process(request_payload(diagnosis_id="blocked-diagnosis"), True)
+
+        self.assertEqual("BUSY", decision.status)
+        self.assertIn("running-diagnosis", decision.message)
+        self.assertEqual("running-diagnosis", self.store.session.request.diagnosis_id)
+
+    def test_terminal_states_allow_a_new_request(self):
+        for state in ("COMPLETED", "FAILED", "CANCELLED", "TIMED_OUT"):
+            with self.subTest(state=state), tempfile.TemporaryDirectory() as directory:
+                store = DiagnosisSessionStore(Path(directory) / "state.json")
+                processor = DiagnosisRequestProcessor(store, "device-1", now=lambda: NOW)
+                self.assertEqual("ACCEPTED", processor.process(request_payload(diagnosis_id=f"old-{state}"), True).status)
+                store.update_state(state)
+
+                decision = processor.process(request_payload(diagnosis_id=f"new-{state}"), True)
+
+                self.assertEqual("ACCEPTED", decision.status)
+                self.assertEqual(f"new-{state}", store.session.request.diagnosis_id)
+
     def test_rejects_auth_device_expiry_and_busy_cases(self):
         self.assertEqual("AUTH_FAILED", self.processor.process(request_payload(), authenticated=False).status)
         self.assertEqual("DEVICE_MISMATCH", self.processor.process(request_payload(device_id="other"), True).status)
@@ -131,6 +213,7 @@ class DiagnosisRequestProcessorTest(unittest.TestCase):
             self.processor.process(request_payload(expires_at=NOW - timedelta(seconds=1)), True).status,
         )
         self.assertEqual("ACCEPTED", self.processor.process(request_payload(), True).status)
+        self.store.update_state("RUNNING")
         self.assertEqual("BUSY", self.processor.process(request_payload(diagnosis_id="diagnosis-2"), True).status)
 
     def test_duplicate_is_detected_before_busy_and_after_restart(self):
@@ -162,11 +245,24 @@ class ViewerRequestSignalTest(unittest.TestCase):
                 return original_replace(source, target)
 
             with patch.object(Path, "replace", autospec=True, side_effect=flaky_replace):
-                signal.signal()
+                signal.signal(reconnect=True)
 
             self.assertEqual(2, attempts)
             self.assertEqual([path], restricted)
-            self.assertIn("requestId", json.loads(path.read_text(encoding="utf-8")))
+            payload = json.loads(path.read_text(encoding="utf-8"))
+            self.assertIn("requestId", payload)
+            self.assertTrue(payload["reconnect"])
+
+    def test_monitor_forwards_reconnect_request_to_existing_controller(self):
+        runtime = MagicMock(running=True)
+        controller = MagicMock()
+        signal = ViewerRequestSignal(Path("show-viewer-request.json"), lambda path: None)
+        with patch.object(Path, "exists", return_value=True), \
+                patch.object(Path, "read_text", side_effect=["{}", '{"requestId":"next","reconnect":true}']), \
+                patch("diagnosis_request_agent.time.sleep", side_effect=lambda seconds: setattr(runtime, "running", False)):
+            signal.monitor(runtime, controller)
+
+        controller.show.assert_called_once_with(reconnect=True)
 
 
 class FakeSocket:
@@ -190,6 +286,59 @@ class FailingSocket(FakeSocket):
 
 
 class AgentDiagnosisWebSocketClientTest(unittest.TestCase):
+    def test_protocol_reconnect_is_a_noop_while_authenticated(self):
+        with tempfile.TemporaryDirectory() as directory:
+            client = AgentDiagnosisWebSocketClient(
+                "http://localhost:8080",
+                "secret",
+                DiagnosisRequestProcessor(DiagnosisSessionStore(Path(directory) / "state.json")),
+                websocket_factory=lambda *args, **kwargs: None,
+            )
+            socket = FakeSocket()
+            client._socket = socket
+            client.authenticated = True
+
+            self.assertFalse(client.request_reconnect())
+            self.assertFalse(socket.closed)
+            self.assertFalse(client.reconnect_event.is_set())
+
+    def test_protocol_reconnect_closes_disconnected_socket_and_wakes_backoff(self):
+        with tempfile.TemporaryDirectory() as directory:
+            wait_started = threading.Event()
+            sockets = []
+
+            class ObservableReconnectEvent(threading.Event):
+                def wait(self, timeout=None):
+                    wait_started.set()
+                    return super().wait(timeout)
+
+            class BackoffSocket(FakeSocket):
+                def run_forever(self, **kwargs):
+                    if len(sockets) >= 2:
+                        client.stop_event.set()
+
+            def socket_factory(*args, **kwargs):
+                socket = BackoffSocket()
+                sockets.append(socket)
+                return socket
+
+            client = AgentDiagnosisWebSocketClient(
+                "http://localhost:8080",
+                "secret",
+                DiagnosisRequestProcessor(DiagnosisSessionStore(Path(directory) / "state.json")),
+                websocket_factory=socket_factory,
+            )
+            client.BACKOFF_SECONDS = (30,)
+            client.reconnect_event = ObservableReconnectEvent()
+            client.start()
+            self.assertTrue(wait_started.wait(1))
+
+            self.assertTrue(client.request_reconnect())
+            client._thread.join(1)
+
+            self.assertGreaterEqual(len(sockets), 2)
+            self.assertTrue(sockets[0].closed)
+
     def test_ready_authenticates_and_request_gets_real_response(self):
         with tempfile.TemporaryDirectory() as directory:
             states = []
@@ -334,6 +483,29 @@ class AgentDiagnosisWebSocketClientTest(unittest.TestCase):
 
 
 class BackgroundViewerControllerTest(unittest.TestCase):
+    def test_show_requests_reconnect_and_reuses_hidden_viewer(self):
+        events = []
+        controller = BackgroundViewerController(
+            Path("agent-config.json"),
+            diagnosis_session_provider=lambda: None,
+            connection_state_provider=lambda: "DISCONNECTED",
+            show_viewer=lambda *args, **kwargs: events.append("new-root"),
+            request_reconnect=lambda: events.append("reconnect") or True,
+        )
+        controller._on_window_ready(
+            lambda: events.append("focus"),
+            lambda session: events.append(("session", session)),
+            lambda: None,
+            lambda: None,
+            lambda: None,
+        )
+        events.clear()
+
+        controller.show(reconnect=True)
+
+        self.assertEqual(["reconnect", ("session", None), "focus"], events)
+        self.assertIsNone(controller._thread)
+
     def test_show_reuses_ready_root_and_only_requests_apply_and_focus(self):
         events = []
         controller = BackgroundViewerController(

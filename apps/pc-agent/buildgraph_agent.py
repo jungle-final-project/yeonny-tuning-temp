@@ -33,6 +33,7 @@ from diagnosis_request_agent import (
     BackgroundViewerController,
     DiagnosisRequest,
     DiagnosisSession,
+    DiagnosisSessionReplacement,
     DiagnosisSessionStore,
     DiagnosisRequestProcessor,
     STANDALONE,
@@ -202,7 +203,7 @@ SCREEN_LOGO_DISPLAY_SIZE = (46, 46)
 SCREEN_LOGO_POSITION = (76, 86)
 BACKGROUND_INSTANCE_MUTEX_NAME = r"Local\SpecUpPcAgentBackground"
 VIEWER_INSTANCE_MUTEX_NAME = r"Local\SpecUpPcAgentViewer"
-DEFAULT_AGENT_VERSION = "0.1.18"
+DEFAULT_AGENT_VERSION = "0.1.19"
 DEFAULT_POLICY_VERSION = "policy-v1"
 
 
@@ -470,7 +471,7 @@ def diagnosis_event_presentation(event_type: str) -> tuple[str, str]:
 
 ACTIVE_VIEWER_AGENT_STATES = {"REQUEST_RECEIVED", "RUNNING"}
 ACTIVE_VIEWER_DIAGNOSIS_STATES = {"COLLECTING", "DIAGNOSING", "EVALUATING"}
-TERMINAL_VIEWER_AGENT_STATES = {"COMPLETED", "FAILED"}
+TERMINAL_VIEWER_AGENT_STATES = {"COMPLETED", "FAILED", "CANCELLED", "TIMED_OUT"}
 TERMINAL_VIEWER_DIAGNOSIS_STATES = {
     "COMPLETED",
     "PARTIALLY_COMPLETED",
@@ -687,6 +688,31 @@ def diagnosis_event_sync_detail(
     if scenario_id:
         detail["scenarioId"] = scenario_id
     return detail
+
+
+def diagnosis_session_replacement_sync_detail(
+    replacement: DiagnosisSessionReplacement,
+    occurred_at: datetime | None = None,
+) -> dict[str, Any]:
+    timestamp = (occurred_at or datetime.now(timezone.utc)).astimezone(timezone.utc).isoformat()
+    message = (
+        "만료된 미시작 진단 요청을 정리했습니다."
+        if replacement.reason == "REQUEST_EXPIRED"
+        else "새 진단 요청이 접수되어 이전 미시작 요청을 취소했습니다."
+    )
+    return {
+        "diagnosisId": replacement.session.request.diagnosis_id,
+        "eventId": str(uuid.uuid4()),
+        "taskId": "diagnosis-request-lifecycle",
+        "eventType": "DIAGNOSIS_CANCELLED",
+        "status": "CANCELLED",
+        "sessionState": "CANCELLED",
+        "progress": 0,
+        "progressPercent": 0,
+        "message": message,
+        "occurredAt": timestamp,
+        "metadata": {"reason": replacement.reason},
+    }
 
 
 def graphics_diagnosis_task_handlers(
@@ -8267,7 +8293,7 @@ def run_background(
             ViewerRequestSignal(
                 app_data_dir() / "show-viewer-request.json",
                 restrict_file_to_current_user,
-            ).signal()
+            ).signal(reconnect=True)
         return 0
     try:
         path = ensure_default_config(config_path or default_background_config_path())
@@ -8292,6 +8318,10 @@ def run_background(
         metrics_store = MetricsStore(app_data_dir() / "diagnosis-metrics-state.json")
         diagnosis_log_store = DiagnosisLogStore(app_data_dir() / "diagnosis-progress-state.json")
         diagnosis_result_store = DiagnosisResultStore(app_data_dir() / "diagnosis-result-state.json")
+        pending_replacement_statuses: list[dict[str, Any]] = []
+        stale_replacement = diagnosis_store.expire_stale_request()
+        if stale_replacement is not None and stale_replacement.session.request.source == WEB_REQUEST:
+            pending_replacement_statuses.append(diagnosis_session_replacement_sync_detail(stale_replacement))
         move_terminal_session_to_idle(diagnosis_store, diagnosis_log_store.snapshot)
         diagnosis_rule_engine = DiagnosisRuleEngine()
         diagnosis_orchestrator_holder: dict[str, DiagnosisOrchestrator] = {}
@@ -8312,6 +8342,8 @@ def run_background(
             retry_diagnosis=lambda: diagnosis_orchestrator_holder["value"].retry()
             if "value" in diagnosis_orchestrator_holder else False,
             finish_diagnosis_session=lambda: finish_current_diagnosis_session(),
+            request_reconnect=lambda: diagnosis_client_holder["value"].request_reconnect()
+            if "value" in diagnosis_client_holder else False,
         )
 
         def on_connection_state_changed(state: str) -> None:
@@ -8359,7 +8391,7 @@ def run_background(
                 except (OSError, TypeError, ValueError):
                     diagnosis_store.update_state("FAILED")
             elif snapshot.state in {"FAILED", "TIMED_OUT", "CANCELLED"}:
-                diagnosis_store.update_state("FAILED")
+                diagnosis_store.update_state(snapshot.state)
             viewer_controller.refresh_metrics()
 
         windows_graphics_provider = WindowsGraphicsDiagnosticsProvider(
@@ -8451,6 +8483,15 @@ def run_background(
             viewer_controller.show(session)
             begin_initial_metrics(session, session.request.mode)
 
+        def on_session_replaced(replacement: DiagnosisSessionReplacement) -> None:
+            initial_metrics_coordinator.stop()
+            if replacement.session.request.source != WEB_REQUEST:
+                return
+            detail = diagnosis_session_replacement_sync_detail(replacement)
+            client = diagnosis_client_holder.get("value")
+            if client is None or not client.send_diagnosis_status(detail):
+                pending_replacement_statuses.append(detail)
+
         try:
             current_config = load_config(path)
         except ConfigError:
@@ -8459,6 +8500,7 @@ def run_background(
             diagnosis_store,
             device_id=current_config.device_id if current_config else None,
             on_request=on_diagnosis_request,
+            on_session_replaced=on_session_replaced,
         )
         existing_session = diagnosis_store.session
         existing_metrics = metrics_store.snapshot
@@ -8493,6 +8535,11 @@ def run_background(
         diagnosis_client = None
         if current_config and current_config.agent_token:
             def sync_diagnosis_state() -> None:
+                client = diagnosis_client_holder.get("value")
+                if client is not None:
+                    for detail in tuple(pending_replacement_statuses):
+                        if client.send_diagnosis_status(detail):
+                            pending_replacement_statuses.remove(detail)
                 sync_diagnosis_events(diagnosis_log_store.snapshot)
                 sync_diagnosis_result()
 

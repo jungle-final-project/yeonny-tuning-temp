@@ -9,7 +9,7 @@ import { AI_BUILD_ASSISTANT_CLOSE_EVENT, AI_BUILD_ASSISTANT_OPEN_EVENT, AI_BUILD
 import { applyAiBuildToQuoteDraft, getCurrentQuoteDraft, putQuoteDraftItem } from '../../parts/partsApi';
 import type { QuoteDraft } from '../../parts/types';
 import { downloadPcAgentForCurrentUser } from '../../support/agentDownload';
-import { ensurePcAgentConnected } from '../../support/pcAgentLauncher';
+import { ensurePcAgentConnected, type PcAgentConnectionPhase } from '../../support/pcAgentLauncher';
 import { requestPcAgentDiagnosis } from '../../support/supportApi';
 import { AiChatPendingBubble } from './AiChatPendingBubble';
 import { applicationKindForBuild, startAiDraftApplicationFeedback } from './AiDraftApplicationFeedbackCoordinator';
@@ -1658,10 +1658,14 @@ function SupportGuidanceCard({
     const controller = new AbortController();
     diagnosisConnectionController.current = controller;
     try {
-      const connected = await ensurePcAgentConnected(controller.signal);
+      const connected = await ensurePcAgentConnected(controller.signal, (phase) => {
+        if (!controller.signal.aborted) {
+          setDiagnosisMessage(pcAgentConnectionMessage(phase));
+        }
+      });
       if (!connected) {
         setDiagnosisState('error');
-        setDiagnosisMessage('설치된 PC Agent를 실행했지만 연결되지 않았습니다. 실행 상태를 확인한 뒤 다시 시도해 주세요.');
+        setDiagnosisMessage('PC Agent 연결 시간이 초과됐습니다. 실행 상태를 확인한 뒤 다시 시도해 주세요.');
         return;
       }
       const response = await requestPcAgentDiagnosis({
@@ -1832,7 +1836,7 @@ function SupportGuidanceCard({
         <p
           aria-live="polite"
           data-testid="ai-agent-diagnosis-status"
-          className={`${isLarge ? 'mt-3 text-sm' : 'mt-2 text-[11px]'} font-bold ${diagnosisState === 'accepted' ? 'text-emerald-700' : 'text-red-600'}`}
+          className={`${isLarge ? 'mt-3 text-sm' : 'mt-2 text-[11px]'} font-bold ${diagnosisState === 'accepted' ? 'text-emerald-700' : diagnosisState === 'error' || diagnosisState === 'rejected' ? 'text-red-600' : 'text-cyan-700'}`}
         >
           {diagnosisMessage}
         </p>
@@ -1850,6 +1854,16 @@ function SupportGuidanceCard({
       <p className={`${isLarge ? 'mt-4 text-xs text-white/60' : 'mt-3 text-[10px] text-slate-500'} break-keep`}>{guidance.disclaimer}</p>
     </section>
   );
+}
+
+function pcAgentConnectionMessage(phase: PcAgentConnectionPhase) {
+  return {
+    'approval-required': '브라우저에서 PCAgent 열기를 승인해 주세요.',
+    launching: 'PC Agent를 실행하고 있습니다.',
+    waiting: 'PC Agent 연결을 기다리고 있습니다.',
+    connected: 'PC Agent 연결이 완료됐습니다.',
+    'timed-out': 'PC Agent 연결 시간이 초과됐습니다.'
+  }[phase];
 }
 
 function BuildAssessmentCard({ assessment, size = 'default' }: { assessment: AiBuildAssessment; size?: AiChatMessageSize }) {

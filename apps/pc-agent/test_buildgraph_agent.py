@@ -1275,6 +1275,8 @@ class AgentGoal1112Test(unittest.TestCase):
         cases = (
             ("COMPLETED", "COMPLETED"),
             ("RUNNING", "PARTIALLY_COMPLETED"),
+            ("CANCELLED", "CANCELLED"),
+            ("TIMED_OUT", "TIMED_OUT"),
         )
         for agent_state, diagnosis_state in cases:
             with self.subTest(agent_state=agent_state, diagnosis_state=diagnosis_state):
@@ -1326,6 +1328,29 @@ class AgentGoal1112Test(unittest.TestCase):
         self.assertEqual("사용률 42%", cpu_card.primary)
         self.assertEqual((42.0,), cpu_card.history)
         self.assertEqual(("온도 센서 미지원",), cpu_card.details)
+
+    def test_session_replacement_status_preserves_reason_for_server_sync(self) -> None:
+        request = DiagnosisRequest(
+            diagnosis_id="diagnosis-replaced",
+            device_id="device-1",
+            symptom="화면 멈춤",
+            requested_checks=("gpu",),
+            requested_at="2026-07-13T00:00:00Z",
+            expires_at="2026-07-13T00:02:00Z",
+            mode="LIVE",
+        )
+        replacement = agent.DiagnosisSessionReplacement(DiagnosisSession(request), "SUPERSEDED")
+
+        detail = agent.diagnosis_session_replacement_sync_detail(
+            replacement,
+            datetime(2026, 7, 13, tzinfo=timezone.utc),
+        )
+
+        self.assertEqual("diagnosis-replaced", detail["diagnosisId"])
+        self.assertEqual("DIAGNOSIS_CANCELLED", detail["eventType"])
+        self.assertEqual("CANCELLED", detail["sessionState"])
+        self.assertEqual({"reason": "SUPERSEDED"}, detail["metadata"])
+        self.assertEqual("2026-07-13T00:00:00+00:00", detail["occurredAt"])
 
     def test_system_sensor_provider_keeps_web_symptom_and_suspected_component(self) -> None:
         class Collector:
@@ -3166,7 +3191,7 @@ class AgentGoal1112Test(unittest.TestCase):
         self.assertEqual(exit_code, 0)
         acquire_lock.assert_called_once_with(agent.BACKGROUND_INSTANCE_MUTEX_NAME)
         ensure_default_config.assert_not_called()
-        viewer_request_signal.return_value.signal.assert_called_once_with()
+        viewer_request_signal.return_value.signal.assert_called_once_with(reconnect=True)
         show_log_viewer.assert_not_called()
 
     def test_run_background_releases_instance_lock_after_shutdown(self) -> None:
