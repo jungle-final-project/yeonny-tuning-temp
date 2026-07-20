@@ -180,15 +180,12 @@ export function SlotBoard({
     >
       <div data-testid="slot-board-body-stage" className="relative flex min-h-0 flex-1 flex-col overflow-hidden">
         {/* 헤더 밴드 제거 리디자인: 제목 칸을 없애고 판 전체를 시각화에 쓴다.
-            컨트롤은 판 위 플로팅 — 좌: 문제 칩(클릭=모달)·다음 가이드·AI 강조, 우: 3D 정보 스위치·보기 전환.
+            컨트롤은 판 위 플로팅 — 좌: 다음 가이드·AI 강조, 가운데: 문제 칩(클릭=모달), 우: 3D 정보 스위치·보기 전환.
             모바일은 카드 목록을 가리지 않게 정적 행으로 폴백. */}
-        <div className="z-50 flex items-start justify-between gap-2 px-3 py-2 lg:pointer-events-none lg:absolute lg:inset-x-0 lg:top-0 lg:z-[60] lg:py-0 lg:pt-3">
+        {/* 문제 칩은 판 가운데(좌우 기준)에 둔다 — 좌상단에 있으면 다른 컨트롤에 묻혀 그냥 지나친다.
+            양쪽 칸을 1fr로 같게 준 3열 그리드라, 좌우 컨트롤 개수가 달라져도 가운데 칸은 정확히 가운데다. */}
+        <div className="z-50 grid grid-cols-[1fr_auto_1fr] items-start gap-2 px-3 py-2 lg:pointer-events-none lg:absolute lg:inset-x-0 lg:top-0 lg:z-[60] lg:py-0 lg:pt-3">
           <div className="flex min-w-0 flex-wrap items-center gap-2 lg:pointer-events-auto">
-            <SlotBoardProblemChip
-              problems={boardProblems}
-              onExplain={(problem) => explainIssue(undefined, problem.tool)}
-              onJumpToSlot={(category) => onSlotSelect(category)}
-            />
             {nextCategory && !hasAiFocus ? (
               <button
                 type="button"
@@ -218,7 +215,14 @@ export function SlotBoard({
               </span>
             ) : null}
           </div>
-          <div className="flex shrink-0 items-center gap-2 lg:pointer-events-auto">
+          <div className="flex min-w-0 justify-center lg:pointer-events-auto">
+            <SlotBoardProblemChip
+              problems={boardProblems}
+              onExplain={(problem) => explainIssue(undefined, problem.tool)}
+              onJumpToSlot={(category) => onSlotSelect(category)}
+            />
+          </div>
+          <div className="flex shrink-0 items-center justify-end gap-2 lg:pointer-events-auto">
             {isIsometric ? (
               <SlotBoardDisplaySwitch
                 label="보드 정보 표시"
@@ -2109,15 +2113,17 @@ function SlotBoardProblemChip({
         aria-expanded={isOpen}
         onClick={() => setIsOpen(true)}
         className={[
-          'flex items-center gap-2 rounded-lg border bg-white px-3 py-1.5 text-[11px] font-black transition focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-2',
+          // 호환 문제는 이 화면에서 가장 먼저 눈에 들어와야 하는 신호다 — 주변 컨트롤(text-xs)보다
+          // 한 단 크게, 테두리도 두 배로 준다. 작게 두면 판 위 다른 칩들과 구분이 안 된다.
+          'flex items-center gap-2 rounded-xl border-2 bg-white px-4 py-2.5 text-sm font-black transition focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-2',
           overallStatus === 'FAIL'
-            ? 'slot-board-fail-banner-pulse border-red-400 text-red-600 shadow-[0_10px_20px_rgba(239,68,68,0.24)] hover:border-red-500 hover:bg-red-50 focus-visible:ring-red-300'
-            : 'border-amber-400 text-amber-700 shadow-[0_10px_20px_rgba(245,158,11,0.18)] hover:border-amber-500 hover:bg-amber-50 focus-visible:ring-amber-300'
+            ? 'slot-board-fail-banner-pulse border-red-500 text-red-600 shadow-[0_12px_26px_rgba(239,68,68,0.28)] hover:border-red-600 hover:bg-red-50 focus-visible:ring-red-300'
+            : 'border-amber-500 text-amber-700 shadow-[0_12px_26px_rgba(245,158,11,0.22)] hover:border-amber-600 hover:bg-amber-50 focus-visible:ring-amber-300'
         ].join(' ')}
       >
         {overallStatus === 'FAIL'
-          ? <CircleX size={15} aria-hidden="true" className="shrink-0" />
-          : <AlertTriangle size={15} aria-hidden="true" className="shrink-0" />}
+          ? <CircleX size={19} aria-hidden="true" className="shrink-0" />
+          : <AlertTriangle size={19} aria-hidden="true" className="shrink-0" />}
         {countsLabel}
       </button>
       {isOpen ? (
