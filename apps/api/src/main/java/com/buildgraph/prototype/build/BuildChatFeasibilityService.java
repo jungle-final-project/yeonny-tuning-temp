@@ -46,7 +46,13 @@ public class BuildChatFeasibilityService {
             Integer maxBudgetWon,
             String coolingType,
             Integer pcieGeneration,
-            Boolean airflowFocused
+            Boolean airflowFocused,
+            /**
+             * 예산을 어떻게 읽어야 하는지 — TARGET("150만원 정도")이면 그 가격대를 겨냥하고,
+             * MAX("100만원 이하")면 상한이다. 이 값이 없으면 종전대로 상한으로 본다.
+             * 전체 견적 추천에는 이미 있던 구분인데 부품 추천 경로에서만 버려지고 있었다.
+             */
+            String budgetMode
     ) {
         // 기존 6-인자 호출부(용량·VRAM·와트 위주)를 위한 편의 생성자 — 속성은 비운다.
         public SpecConstraint(
@@ -57,7 +63,28 @@ public class BuildChatFeasibilityService {
                 Integer quantity,
                 Integer maxBudgetWon
         ) {
-            this(category, minCapacityGb, minVramGb, minWattageW, quantity, maxBudgetWon, null, null, null);
+            this(category, minCapacityGb, minVramGb, minWattageW, quantity, maxBudgetWon, null, null, null, null);
+        }
+
+        /** 9-인자 기존 호출부 호환 — 예산 모드는 비운다(상한 해석). */
+        public SpecConstraint(
+                String category,
+                Integer minCapacityGb,
+                Integer minVramGb,
+                Integer minWattageW,
+                Integer quantity,
+                Integer maxBudgetWon,
+                String coolingType,
+                Integer pcieGeneration,
+                Boolean airflowFocused
+        ) {
+            this(category, minCapacityGb, minVramGb, minWattageW, quantity, maxBudgetWon,
+                    coolingType, pcieGeneration, airflowFocused, null);
+        }
+
+        /** "150만원 정도"처럼 그 가격대를 겨냥한 예산인가. */
+        public boolean targetsBudgetBand() {
+            return maxBudgetWon != null && "TARGET".equals(budgetMode);
         }
 
         public static SpecConstraint fromMap(Map<String, Object> source) {
@@ -77,7 +104,8 @@ public class BuildChatFeasibilityService {
                     intValue(source.get("maxBudgetWon")),
                     stringValue(source.get("coolingType")),
                     intValue(source.get("pcieGeneration")),
-                    boolValue(source.get("airflowFocused"))
+                    boolValue(source.get("airflowFocused")),
+                    stringValue(source.get("budgetMode"))
             );
         }
 
@@ -176,22 +204,64 @@ public class BuildChatFeasibilityService {
         return bestUnderBudget(category, maxTotalWon, quantity, 1).stream().findFirst();
     }
 
+    /**
+     * 부품 하나의 벤치마크 점수. 점수는 카테고리 안에서만 비교 가능하다(scoreScope=CATEGORY_LOCAL_ONLY)
+     * — CPU 점수와 GPU 점수를 섞어 비교하면 안 된다. 성능 정렬과 가성비 정렬이 같은 식을 쓰도록 한곳에 둔다.
+     */
+    static final String BENCHMARK_SCORE_EXPRESSION =
+            "coalesce((SELECT max(bs.score) FROM benchmark_summaries bs "
+                    + "WHERE bs.part_id = p.id AND bs.deleted_at IS NULL), 0)";
+
+    // 전체 견적 추천이 쓰는 target 예산 밴드와 같은 폭 — 두 곳이 갈라지면 같은 문장이 화면마다 다르게 답한다.
+    private static final double TARGET_BUDGET_BAND_LOWER = 0.875;
+    private static final double TARGET_BUDGET_BAND_UPPER = 1.125;
+
+    /**
+     * "예산 안에서 가장 좋은 것" 정렬. CPU·GPU는 벤치마크 점수로 줄 세운다 — VRAM만 보면
+     * 같은 16GB 안에서 가격 오름차순이 되어 5060 Ti가 "최상"으로 올라온다.
+     * 점수가 없는 상품은 0으로 떨어지고 기존 스펙·가격 기준이 뒤를 받친다.
+     */
+    private static String benchmarkAwareSpecOrder(String category) {
+        return switch (category) {
+            case "RAM", "STORAGE" -> numericAttribute("capacityGb", "kitCapacityGb", "memoryGb") + " DESC, price ASC";
+            case "CPU", "GPU" -> BENCHMARK_SCORE_EXPRESSION + " DESC, "
+                    + numericAttribute("vramGb") + " DESC, price ASC";
+            case "PSU" -> numericAttribute("wattage", "capacityW") + " DESC, price ASC";
+            default -> "price DESC, name ASC";
+        };
+    }
+
     /** 예산 내 최상 스펙 TOP-N — "예산만 준 부품 추천"(10만원짜리 램) 나열용. */
     public List<PartOption> bestUnderBudget(String category, int maxTotalWon, int quantity, int limit) {
         if (category == null || maxTotalWon <= 0) {
             return List.of();
         }
         int unitBudget = maxTotalWon / Math.max(1, quantity);
-        String specOrder = switch (category) {
-            case "RAM", "STORAGE" -> numericAttribute("capacityGb", "kitCapacityGb", "memoryGb") + " DESC, price ASC";
-            case "GPU" -> numericAttribute("vramGb") + " DESC, price ASC";
-            case "PSU" -> numericAttribute("wattage", "capacityW") + " DESC, price ASC";
-            default -> "price DESC, name ASC";
-        };
+        String specOrder = benchmarkAwareSpecOrder(category);
         List<Object> params = new ArrayList<>();
         params.add(category);
         params.add(unitBudget);
         return queryOptions(" AND price <= ?", specOrder, params, limit);
+    }
+
+    /**
+     * "150만원 정도"처럼 그 가격대를 겨냥한 예산용. 전체 견적 추천이 쓰는 밴드(±12.5%)와 같은 폭으로
+     * 아래위를 함께 막는다 — 상한만 걸면 150만원을 달래도 92만원짜리가 "예산 안"이라며 올라온다.
+     * 밴드 안에 후보가 없으면 빈 목록을 돌려주고, 호출부가 상한 조회로 폴백한다.
+     */
+    public List<PartOption> bestWithinBudgetBand(String category, int targetTotalWon, int quantity, int limit) {
+        if (category == null || targetTotalWon <= 0) {
+            return List.of();
+        }
+        int unitTarget = targetTotalWon / Math.max(1, quantity);
+        int lower = (int) Math.floor(unitTarget * TARGET_BUDGET_BAND_LOWER);
+        int upper = (int) Math.ceil(unitTarget * TARGET_BUDGET_BAND_UPPER);
+        String specOrder = benchmarkAwareSpecOrder(category);
+        List<Object> params = new ArrayList<>();
+        params.add(category);
+        params.add(lower);
+        params.add(upper);
+        return queryOptions(" AND price >= ? AND price <= ?", specOrder, params, limit);
     }
 
     /**
@@ -204,9 +274,8 @@ public class BuildChatFeasibilityService {
             return List.of();
         }
         String valueOrder = switch (category) {
-            case "CPU", "GPU" -> "(coalesce((SELECT max(bs.score) FROM benchmark_summaries bs "
-                    + "WHERE bs.part_id = p.id AND bs.deleted_at IS NULL), 0)::numeric "
-                    + "/ greatest(p.price, 1)) DESC, price ASC, name ASC";
+            case "CPU", "GPU" -> "(" + BENCHMARK_SCORE_EXPRESSION
+                    + "::numeric / greatest(p.price, 1)) DESC, price ASC, name ASC";
             case "RAM", "STORAGE" -> "(" + numericAttribute("capacityGb", "kitCapacityGb", "memoryGb")
                     + "::numeric / greatest(p.price, 1)) DESC, price ASC, name ASC";
             case "PSU" -> "(" + numericAttribute("wattage", "capacityW")

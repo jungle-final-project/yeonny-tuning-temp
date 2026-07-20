@@ -528,7 +528,7 @@ test('AI part location focus spotlights all 8 categories across fused, motherboa
   expect(draftMutationMethods).toHaveLength(0);
   expect(buildChatBodies).toHaveLength(focusCases.length + 1);
   for (const body of buildChatBodies) {
-    expect(body.uiContext).toEqual({ surface: 'SELF_QUOTE', capabilities: ['BOARD_PART_FOCUS'] });
+    expect(body.uiContext).toEqual({ surface: 'SELF_QUOTE', capabilities: ['BOARD_PART_FOCUS', 'PART_CANDIDATE_PANEL'] });
   }
 
   await page.getByTestId('slot-board-ai-focus-clear').click();
@@ -1821,10 +1821,17 @@ test('keeps desktop candidate results scrollable and compact at a 150 percent zo
   const candidateList = panel.getByTestId('slot-candidate-list');
   await expect(panel).toBeVisible();
   await expect(panel).toHaveCSS('position', 'fixed');
-  await expect(panel.getByTestId('candidate-panel-description')).toBeHidden();
+  // 제목 아래 설명문은 없앴다 — 검색이 제목 바로 밑에 붙어야 후보가 위로 올라온다.
+  await expect(panel.getByTestId('candidate-panel-description')).toHaveCount(0);
+  // 필터는 기본 접힘 — 펼치기 전에는 컨트롤이 화면에 없다.
+  await expect(panel.getByTestId('candidate-manufacturer')).toBeHidden();
   await expect(panel.getByTestId('slot-candidate-panel-handle')).toHaveCSS('padding-top', '8px');
   await expect(panel.getByTestId('candidate-panel-search')).toHaveCSS('padding-top', '6px');
+  // 필터 행은 접혀 있으면 아예 없다(토글은 헤더의 정렬 옆) — 펼쳤을 때의 여백을 본다.
+  await expect(panel.getByTestId('candidate-panel-filters')).toHaveCount(0);
+  await panel.getByTestId('candidate-filters-toggle').click();
   await expect(panel.getByTestId('candidate-panel-filters')).toHaveCSS('padding-top', '6px');
+  await panel.getByTestId('candidate-filters-toggle').click();
   await expect(panel.getByTestId('candidate-panel-selected')).toHaveCSS('padding-top', '6px');
 
   const metrics = await candidateList.evaluate((element) => {
@@ -3814,8 +3821,9 @@ test('opens the candidate panel from a slot and requests QUOTE_DRAFT_CURRENT com
   await expect(failCard.getByText('장착 불가', { exact: true })).toBeVisible();
   await expect(failCard.getByText('파워 용량이 부족합니다.')).toBeVisible();
   // 담기 버튼은 활성 — 비호환도 담아서 왜 안 되는지 보드에서 확인하는 UX.
-  await expect(panel.getByRole('button', { name: /실패 GPU 후보 담기/ })).toBeEnabled();
-  await expect(panel.getByText('장착 불가 후보도 담아서 사유를 확인할 수 있어요')).toBeVisible();
+  // "장착 불가여도 담을 수 있다"는 안내문을 헤더에서 뺐다(제목 아래를 검색에 내줬다) —
+  // 그 사실은 이제 문장이 아니라 동작이 말한다: FAIL 카드에 사유가 붙고 담기 버튼이 살아 있다(윗줄).
+  await expect(panel.getByText('장착 불가 후보도 담아서 사유를 확인할 수 있어요')).toHaveCount(0);
 
   await page.keyboard.press('Escape');
   await expect(page.getByTestId('slot-candidate-panel')).toHaveCount(0);
@@ -3908,6 +3916,9 @@ test('filters candidates by manufacturer, price range, and hides incompatible', 
   await expect(panel).toBeVisible();
   await expect(panel.locator('[data-compat="FAIL"]')).toHaveCount(1);
 
+  // 필터는 기본 접힘 — 조작하려면 먼저 펼친다.
+  await panel.getByTestId('candidate-filters-toggle').click();
+
   // 장착 불가 숨기기(client-side): FAIL 후보만 사라지고, 다시 끄면 돌아온다.
   await panel.getByTestId('candidate-hide-fail').check();
   await expect(panel.locator('[data-compat="FAIL"]')).toHaveCount(0);
@@ -3968,7 +3979,8 @@ test('opens candidate quick view and wishlists a candidate', async ({ page }) =>
   await expect(page.getByTestId('part-quick-view')).toHaveCount(0);
   await expect(firstCard.getByTestId('candidate-wishlist')).toHaveAttribute('aria-pressed', 'true');
 
-  // '찜만' 필터: 찜한 후보만 남는다.
+  // '찜만' 필터: 찜한 후보만 남는다. 필터는 기본 접힘이라 먼저 펼친다.
+  await panel.getByTestId('candidate-filters-toggle').click();
   await panel.getByTestId('candidate-only-wishlist').check();
   await expect(panel.getByText('지포스 RTX 5070')).toBeVisible();
   await expect(panel.getByText('라데온 RX 9070')).toHaveCount(0);
@@ -4494,6 +4506,271 @@ test('opens the candidate panel from the category deep link', async ({ page }) =
   await panel.getByRole('button', { name: '후보 패널 닫기' }).click();
   await expect(page.getByTestId('slot-candidate-panel')).toHaveCount(0);
   await expect(page).toHaveURL('/self-quote');
+});
+
+// 챗봇에 "케이스 추천해줘" → 서버가 partRecommendation을 내려주면 그 카테고리 부품 목록이 열리고,
+// AI가 고른 순서가 목록 맨 위에 온다. 상품 나열은 말풍선이 아니라 이 패널이 맡는다.
+test('챗봇 부품 추천은 부품 목록 패널을 열고 추천 순서를 맨 위에 올린다', async ({ page }) => {
+  await loginAsUser(page);
+  // 챗봇은 authUser로 대화 저장소 주인을 정한다 — 없으면 보내기 자체가 막힌다.
+  await page.addInitScript(() => {
+    localStorage.setItem('buildgraph.authUser', JSON.stringify({
+      id: 'user-part-recommend', email: 'user@example.com', name: 'Part Recommend User', role: 'USER'
+    }));
+  });
+
+  await page.route('**/api/quote-drafts/current**', async (route) => {
+    await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(fullDraft) });
+  });
+  await page.route('**/api/parts**', async (route) => {
+    // 서버 정렬은 가격순이라 추천 2순위가 목록 3번째로 온다 — 프론트가 다시 올려야 한다.
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        items: [
+          candidatePart('case-other', 'CASE', '무관한 케이스'),
+          candidatePart('case-pick-1', 'CASE', '추천 케이스 1'),
+          candidatePart('case-pick-2', 'CASE', '추천 케이스 2')
+        ],
+        page: 0,
+        size: 20,
+        total: 3
+      })
+    });
+  });
+  await page.route('**/api/ai/build-chat', async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        answerType: 'PART',
+        message: '내부 자산 기준으로 고른 케이스 추천 2개를 부품 목록에 띄웠어요.',
+        builds: [],
+        warnings: [],
+        partRecommendation: {
+          category: 'CASE',
+          options: [
+            { partId: 'case-pick-1', name: '추천 케이스 1', price: 90000 },
+            { partId: 'case-pick-2', name: '추천 케이스 2', price: 120000 }
+          ]
+        }
+      })
+    });
+  });
+
+  await page.goto('/self-quote');
+  await page.getByRole('textbox', { name: 'AI 챗봇에게 PC 사양 질문' }).fill('케이스 추천해줘');
+  await page.getByRole('button', { name: '질문 보내기' }).click();
+
+  // 패널이 그 카테고리로 열린다 — 사용자가 슬롯을 누르지 않았는데도.
+  const panel = page.getByTestId('slot-candidate-panel');
+  await expect(panel).toBeVisible();
+  await expect(panel.getByRole('heading', { name: '케이스 부품 목록' })).toBeVisible();
+  await expect(page).toHaveURL('/self-quote?category=CASE');
+
+  // 추천만 보인다 — 전체 카탈로그가 함께 깔리면 "추천 창"이 아니라 "부품 목록 창"으로 읽힌다.
+  const names = panel.getByTestId('slot-candidate-list').locator('[data-testid="slot-candidate-card"]');
+  await expect(panel.getByTestId('candidate-ai-picks-banner')).toContainText('추천 2개');
+  await expect(names).toHaveCount(2);
+  await expect(names.nth(0)).toContainText('추천 케이스 1');
+  await expect(names.nth(1)).toContainText('추천 케이스 2');
+
+  // 전체 목록은 눌러야 펼쳐지고, 그때도 추천은 맨 위에 남는다.
+  await panel.getByTestId('candidate-toggle-all').click();
+  await expect(names).toHaveCount(3);
+  await expect(names.first()).toContainText('추천 케이스 1');
+  await expect(panel.getByText('무관한 케이스')).toBeVisible();
+
+  // 검색을 시작하면 추천 고정을 그만둔다 — 그때부터 목록의 주인은 사용자다.
+  await panel.getByTestId('candidate-search').fill('무관한');
+  await expect(panel.getByTestId('candidate-ai-picks-banner')).toHaveCount(0);
+  await expect(panel.getByText('무관한 케이스')).toBeVisible();
+});
+
+// 목록은 가격순 20건씩 실린다 — 비싼 추천은 첫 장에 없다. 그대로 두면 챗봇이
+// "부품 목록에 띄웠어요"라고 말해 놓고 화면엔 없다. 실릴 때까지 다음 장을 당겨 와야 한다.
+test('첫 장에 없는 비싼 추천도 목록에 실어 맨 위로 올린다', async ({ page }) => {
+  await loginAsUser(page);
+  await page.addInitScript(() => {
+    localStorage.setItem('buildgraph.authUser', JSON.stringify({
+      id: 'user-deep-pick', email: 'user@example.com', name: 'Deep Pick User', role: 'USER'
+    }));
+  });
+  await page.route('**/api/quote-drafts/current**', async (route) => {
+    await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(fullDraft) });
+  });
+
+  // 3장짜리 목록. 추천 부품은 마지막 장에만 있다(현실의 최고가 GPU 위치).
+  const requestedPages: number[] = [];
+  await page.route('**/api/parts**', async (route) => {
+    const url = new URL(route.request().url());
+    const pageParam = Number(url.searchParams.get('page') ?? '0');
+    requestedPages.push(pageParam);
+    const items = pageParam === 2
+      ? [candidatePart('gpu-top-pick', 'GPU', '최고가 추천 GPU'), candidatePart('gpu-c', 'GPU', '평범한 GPU C')]
+      : [candidatePart(`gpu-${pageParam}-a`, 'GPU', `저가 GPU ${pageParam}A`), candidatePart(`gpu-${pageParam}-b`, 'GPU', `저가 GPU ${pageParam}B`)];
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({ items, page: pageParam, size: 2, total: 6 })
+    });
+  });
+  await page.route('**/api/ai/build-chat', async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        answerType: 'PART',
+        message: '내부 자산 기준으로 고른 그래픽카드 추천 1개를 부품 목록에 띄웠어요.',
+        builds: [],
+        warnings: [],
+        partRecommendation: { category: 'GPU', options: [{ partId: 'gpu-top-pick', name: '최고가 추천 GPU', price: 7168120 }] }
+      })
+    });
+  });
+
+  await page.goto('/self-quote');
+  await page.getByRole('textbox', { name: 'AI 챗봇에게 PC 사양 질문' }).fill('GPU 추천해줘');
+  await page.getByRole('button', { name: '질문 보내기' }).click();
+
+  const panel = page.getByTestId('slot-candidate-panel');
+  await expect(panel).toBeVisible();
+  // 추천이 실린 장까지 스스로 당겨 오고, 추천만 보여준다.
+  const names = panel.getByTestId('slot-candidate-list').locator('[data-testid="slot-candidate-card"]');
+  await expect(names).toHaveCount(1);
+  await expect(names.first()).toContainText('최고가 추천 GPU');
+  expect(requestedPages).toContain(2);
+});
+
+// 이미 그 카테고리 패널이 열려 있으면 주소가 안 바뀐다 — 리마운트도 카테고리 변경도 없어서
+// 신호가 없으면 "띄웠어요"라고 말해 놓고 목록은 한 글자도 안 바뀐다.
+test('패널이 열려 있는 채로 다시 추천해도 새 추천 순서를 반영한다', async ({ page }) => {
+  await loginAsUser(page);
+  await page.addInitScript(() => {
+    localStorage.setItem('buildgraph.authUser', JSON.stringify({
+      id: 'user-repeat-pick', email: 'user@example.com', name: 'Repeat Pick User', role: 'USER'
+    }));
+  });
+  await page.route('**/api/quote-drafts/current**', async (route) => {
+    await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(fullDraft) });
+  });
+  await page.route('**/api/parts**', async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        items: [
+          candidatePart('case-a', 'CASE', '케이스 A'),
+          candidatePart('case-b', 'CASE', '케이스 B'),
+          candidatePart('case-c', 'CASE', '케이스 C')
+        ],
+        page: 0,
+        size: 20,
+        total: 3
+      })
+    });
+  });
+  let turn = 0;
+  await page.route('**/api/ai/build-chat', async (route) => {
+    turn += 1;
+    const partId = turn === 1 ? 'case-b' : 'case-c';
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        answerType: 'PART',
+        message: `내부 자산 기준으로 고른 케이스 추천 1개를 부품 목록에 띄웠어요. (${turn})`,
+        builds: [],
+        warnings: [],
+        partRecommendation: { category: 'CASE', options: [{ partId, name: partId, price: 90000 }] }
+      })
+    });
+  });
+
+  // 사용자가 슬롯을 직접 눌러 패널을 먼저 열어 둔 상태에서 묻는 동선이다.
+  await page.goto('/self-quote?category=CASE');
+  const panel = page.getByTestId('slot-candidate-panel');
+  await expect(panel).toBeVisible();
+  const names = panel.getByTestId('slot-candidate-list').locator('[data-testid="slot-candidate-card"]');
+  await expect(names.first()).toContainText('케이스 A');
+
+  const input = page.getByRole('textbox', { name: 'AI 챗봇에게 PC 사양 질문' });
+  const send = page.getByRole('button', { name: '질문 보내기' });
+  await input.fill('케이스 추천해줘');
+  await send.click();
+  await expect(names.first()).toContainText('케이스 B');
+
+  // 조건을 바꿔 다시 묻는 것이 가장 흔한 후속 동작이다 — 이때도 갱신돼야 한다.
+  await input.fill('다른 케이스로 추천해줘');
+  await send.click();
+  await expect(names.first()).toContainText('케이스 C');
+
+  // 사용자가 정렬을 직접 바꾸면 목록의 주인은 사용자다 — AI 고정을 놓는다.
+  await panel.getByRole('combobox', { name: '후보 정렬 기준' }).selectOption('price_desc');
+  await expect(names.first()).toContainText('케이스 A');
+});
+
+// 부품 목록 패널은 "가져다 놓고 쓰는 창"이다 — 옮기고 키운 자리를 새로고침 뒤에도,
+// 다른 부품 카테고리로 열어도 그대로 지켜야 매번 다시 맞추지 않는다.
+test('부품 목록 패널의 자리와 크기는 새로고침과 카테고리 전환을 넘어 남는다', async ({ page }) => {
+  await loginAsUser(page);
+  await page.route('**/api/quote-drafts/current**', async (route) => {
+    await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(fullDraft) });
+  });
+  await page.route('**/api/parts**', async (route) => {
+    await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ items: [], page: 0, size: 20, total: 0 }) });
+  });
+
+  await page.goto('/self-quote?category=CPU');
+  const panel = page.getByTestId('slot-candidate-panel');
+  await expect(panel).toBeVisible();
+  const before = await panel.boundingBox();
+  if (!before) throw new Error('패널 위치를 잴 수 없습니다');
+
+  // 헤더를 잡아 옮긴다.
+  const handle = page.getByTestId('slot-candidate-panel-handle');
+  const grip = await handle.boundingBox();
+  if (!grip) throw new Error('패널 핸들 위치를 잴 수 없습니다');
+  await page.mouse.move(grip.x + grip.width / 2, grip.y + 8);
+  await page.mouse.down();
+  await page.mouse.move(grip.x + grip.width / 2 + 140, grip.y + 8 + 60, { steps: 8 });
+  await page.mouse.up();
+
+  // 네이티브 [resize:both] 모서리는 스크립트로 끌 수 없다 — 인라인 크기를 바꿔
+  // 같은 경로(ResizeObserver)를 태운다. 관찰 후 저장까지 디바운스 200ms를 기다린다.
+  await panel.evaluate((el) => {
+    (el as HTMLElement).style.width = '520px';
+    (el as HTMLElement).style.height = '600px';
+  });
+  await expect.poll(async () => (await panel.boundingBox())?.width).toBe(520);
+  await page.waitForTimeout(400);
+
+  const moved = await panel.boundingBox();
+  if (!moved) throw new Error('옮긴 뒤 패널 위치를 잴 수 없습니다');
+  expect(Math.round(moved.x - before.x)).toBeGreaterThan(100);
+
+  // 새로고침해도, 다른 부품으로 열어도 그 자리 그 크기다.
+  await page.goto('/self-quote?category=CASE');
+  await expect(panel).toBeVisible();
+  await expect(panel.getByRole('heading', { name: '케이스 부품 목록' })).toBeVisible();
+  // 등장 애니메이션이 끝난 뒤의 자리를 본다.
+  await expect.poll(async () => {
+    const box = await panel.boundingBox();
+    return box ? [Math.round(box.x), Math.round(box.y), Math.round(box.width), Math.round(box.height)] : null;
+  }).toEqual([Math.round(moved.x), Math.round(moved.y), 520, 600]);
+
+  // 핸들 더블클릭 = 기억을 버리고 기본 자리·기본 크기로.
+  await handle.dblclick();
+  await expect.poll(async () => Math.round(((await panel.boundingBox())?.width) ?? 0)).not.toBe(520);
+
+  // 되돌리기가 만드는 크기 변화도 ResizeObserver에 배달된다 — 그걸 사용자 리사이즈로 오해하면
+  // 200ms 뒤 방금 지운 자리를 되살려 써서, 유일한 수동 해제 수단이 새로고침을 못 넘긴다.
+  await page.waitForTimeout(500);
+  expect(await page.evaluate(() => localStorage.getItem('buildgraph.boardPlacement.slot-candidate-panel'))).toBeNull();
+  await page.goto('/self-quote?category=CASE');
+  await expect(panel).toBeVisible();
+  await expect.poll(async () => Math.round(((await panel.boundingBox())?.width) ?? 0)).not.toBe(520);
 });
 
 test('redirects logged-out slot board access to login', async ({ page }) => {

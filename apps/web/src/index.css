@@ -78,10 +78,6 @@ html.page-scrollbar-hidden body::-webkit-scrollbar {
     padding: 8px 12px;
   }
 
-  .slot-candidate-panel__description {
-    display: none;
-  }
-
   .slot-candidate-panel__search,
   .slot-candidate-panel__filters,
   .slot-candidate-panel__selected {

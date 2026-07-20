@@ -335,7 +335,12 @@ export type AiBuildChatRequest = {
   currentQuoteDraft?: QuoteDraft;
   uiContext?: {
     surface: 'HOME' | 'SELF_QUOTE';
-    capabilities: Array<'BOARD_PART_FOCUS'>;
+    /**
+     * 이 클라이언트가 처리할 수 있는 것. 서버는 이걸 보고 응답 모양을 정한다.
+     * - BOARD_PART_FOCUS: 보드에서 부품 위치를 강조할 수 있다
+     * - PART_CANDIDATE_PANEL: 부품 목록 패널을 띄울 수 있다(상품 나열을 말풍선 대신 패널이 맡는다)
+     */
+    capabilities: Array<'BOARD_PART_FOCUS' | 'PART_CANDIDATE_PANEL'>;
   };
   assessmentContext?: AiAssessmentContext;
   /** 직전 되묻기(clarification)에 대한 답변임을 알리는 에코 — 서버가 원 요청과 합성한다. */
@@ -369,6 +374,8 @@ export type AiBuildChatResponse = {
   builds: AiRecommendedBuild[];
   /** 화면 이동 명령. 이게 없으면 답변 문구가 이동을 약속해도 아무 일도 일어나지 않는다. */
   actions?: AiChatNavigationAction[];
+  /** 부품 추천 결과. 이게 있으면 부품 목록 패널을 그 카테고리로 연다(문장 안 상품명은 파싱할 수 없다). */
+  partRecommendation?: AiPartRecommendation | null;
   simulation?: AiPerformanceSimulation | null;
   buildAssessment?: AiBuildAssessment | null;
   supportGuidance?: AiSupportGuidance | null;
@@ -396,6 +403,93 @@ export function navigationRouteFrom(response: AiBuildChatResponse): string | nul
   if (typeof route !== 'string') return null;
   const trimmed = route.trim();
   return trimmed.startsWith('/') && !trimmed.startsWith('//') ? trimmed : null;
+}
+
+export type AiPartRecommendationOption = {
+  partId: string;
+  name: string;
+  price: number;
+};
+
+/** 챗봇이 고른 부품 후보. 부품 목록 패널이 이 순서대로 위에 올린다. */
+export type AiPartRecommendation = {
+  category: PartCategory;
+  options: AiPartRecommendationOption[];
+};
+
+const AI_PART_PICKS_KEY = 'buildgraph.aiPartPicks';
+/** 추천 순서가 바뀌었다는 신호. 패널이 이미 그 카테고리로 열려 있으면 주소가 안 바뀌어 이 신호로만 안다. */
+export const AI_PART_PICKS_CHANGED_EVENT = 'buildgraph:ai-part-picks-changed';
+
+/** 답변에 실려 온 추천 결과를 꺼낸다. 카테고리가 우리가 아는 8개가 아니면 버린다. */
+export function partRecommendationFrom(response: AiBuildChatResponse): AiPartRecommendation | null {
+  const raw = response.partRecommendation;
+  if (!raw || typeof raw !== 'object') return null;
+  const category = raw.category;
+  if (!category || !(category in PART_CATEGORY_LABELS)) return null;
+  const options = (Array.isArray(raw.options) ? raw.options : [])
+    .filter((option): option is AiPartRecommendationOption => typeof option?.partId === 'string' && option.partId.length > 0);
+  return options.length > 0 ? { category, options } : null;
+}
+
+/**
+ * 추천 순서를 화면 이동 너머로 넘긴다. 홈에서 물으면 셀프견적으로 옮겨 가며 챗봇이 언마운트되므로
+ * 메모리로는 전달할 수 없다. URL에 UUID를 나열하면 주소가 100자를 넘어 지저분해진다.
+ * sessionStorage는 이 저장소가 이미 챗봇→화면 전달에 쓰는 방식이다(견적 비교 패널).
+ */
+export function rememberAiPartPicks(
+  recommendation: AiPartRecommendation,
+  ownerKey: string | null = getAiStorageOwnerKey()
+) {
+  // 이 순서는 "이 사용자의 현재 견적 기준으로 고른 결과"다 — 같은 탭에서 계정이 바뀌면
+  // 남의 견적으로 뽑힌 순서가 된다. 다른 AI 저장소와 같이 소유자별로 쪼갠다.
+  const storageKey = getScopedAiStorageKey(AI_PART_PICKS_KEY, ownerKey);
+  if (!storageKey) return;
+  try {
+    sessionStorage.setItem(storageKey, JSON.stringify({
+      category: recommendation.category,
+      partIds: recommendation.options.map((option) => option.partId)
+    }));
+  } catch {
+    // sessionStorage 접근 불가(프라이빗 모드 등)면 추천 순서만 포기한다 — 패널은 그대로 열린다.
+    return;
+  }
+  // 패널이 이미 그 카테고리로 열려 있으면 주소가 안 바뀌어 리마운트도 이펙트도 없다.
+  // 이 신호가 없으면 챗봇은 "띄웠어요"라고 말하는데 목록은 한 글자도 안 바뀐다.
+  window.dispatchEvent(new Event(AI_PART_PICKS_CHANGED_EVENT));
+}
+
+/** 그 카테고리로 남겨 둔 추천 순서. 다른 카테고리를 열었으면 빈 배열이다. */
+export function readAiPartPicks(
+  category: PartCategory,
+  ownerKey: string | null = getAiStorageOwnerKey()
+): string[] {
+  const storageKey = getScopedAiStorageKey(AI_PART_PICKS_KEY, ownerKey);
+  if (!storageKey) return [];
+  try {
+    const raw = sessionStorage.getItem(storageKey);
+    if (!raw) return [];
+    const parsed = JSON.parse(raw) as { category?: string; partIds?: unknown };
+    if (parsed.category !== category || !Array.isArray(parsed.partIds)) return [];
+    return parsed.partIds.filter((id): id is string => typeof id === 'string');
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * 추천 고정을 푼다. 사용자가 정렬을 직접 바꾸면 목록의 주인은 사용자다 —
+ * 지우지 않으면 다시 열 때 이미 지나간 추천이 조용히 되살아난다.
+ */
+export function clearAiPartPicks(ownerKey: string | null = getAiStorageOwnerKey()) {
+  const storageKey = getScopedAiStorageKey(AI_PART_PICKS_KEY, ownerKey);
+  if (!storageKey) return;
+  try {
+    sessionStorage.removeItem(storageKey);
+  } catch {
+    return;
+  }
+  window.dispatchEvent(new Event(AI_PART_PICKS_CHANGED_EVENT));
 }
 
 export const PART_CATEGORY_LABELS: Record<PartCategory, string> = {
