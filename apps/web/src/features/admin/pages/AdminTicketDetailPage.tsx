@@ -1,8 +1,8 @@
-import { FormEvent, useEffect, useState } from 'react';
+import { FormEvent, ReactNode, useEffect, useState } from 'react';
 import { ChevronDown } from 'lucide-react';
 import { Link, useParams } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { AdminShell, DataTable, Panel, StateMessage, StatusBadge, statusLabel } from '../../../components/ui';
+import { AdminShell, Panel, StateMessage, StatusBadge, statusLabel } from '../../../components/ui';
 import { formatSeoulDateTime } from '../../../lib/dateTime';
 import {
   approveAdminTicketRemoteSupport,
@@ -165,28 +165,33 @@ export function AdminTicketDetailPage() {
 
   return (
     <AdminShell title="AS 티켓 상세">
-      <div className="grid min-w-0 gap-5 min-[1000px]:grid-cols-[minmax(0,1fr)_420px]">
-        <div data-testid="admin-as-ticket-overview" className="min-w-0 space-y-4">
-          <TicketIssueSpotlight ticket={ticket} />
-          <Panel title="접수 정보" subtitle={ticket.id}>
-            <DataTable columns={['항목', '내용']} rows={receiptRows(ticket)} minWidth={0} nowrapColumns={['항목']} />
+      <div className="grid min-w-0 gap-4 min-[1100px]:grid-cols-[minmax(0,1.25fr)_minmax(460px,0.95fr)]">
+        <div data-testid="admin-as-ticket-overview" className="min-w-0 space-y-3">
+          <Panel title="접수 정보" subtitle={ticket.id} className="shadow-sm">
+            <div data-testid="admin-ticket-receipt" className="min-w-0">
+              <div className="mb-4 grid gap-3 sm:grid-cols-2">
+                <TicketInsightCard label="추정 원인" value={primaryCauseLabel(ticket)} tone="warning" />
+                <TicketInsightCard label="권장 처리" value={recommendedSupportLabel(ticket)} tone="action" />
+              </div>
+              <TicketDetailList rows={receiptRows(ticket)} />
+            </div>
           </Panel>
-          <Panel title="사용자 요청" subtitle="사용자가 접수한 증상과 요청 내용을 확인합니다.">
-            <DataTable columns={['항목', '내용']} rows={userRequestRows(ticket)} minWidth={0} nowrapColumns={['항목']} />
+          <Panel title="사용자 요청" subtitle="사용자가 접수한 증상과 요청 내용을 확인합니다." className="shadow-sm">
+            <TicketDetailList rows={userRequestRows(ticket)} />
           </Panel>
-          <Panel title="Agent 진단" subtitle="PC Agent가 저장한 진단 결과를 그대로 표시합니다.">
-            <DataTable columns={['항목', '내용']} rows={agentDiagnosisRows(ticket)} minWidth={0} nowrapColumns={['항목']} />
+          <Panel title="Agent 진단" subtitle="PC Agent가 저장한 진단 결과를 그대로 표시합니다." className="shadow-sm">
+            <TicketDetailList rows={agentDiagnosisRows(ticket)} />
           </Panel>
-          <Panel title="판단 근거" subtitle="핵심 진단 요약을 먼저 확인하고 원시 데이터는 필요할 때만 펼쳐봅니다.">
-            <DataTable columns={['항목', '내용']} rows={evidenceRows(ticket)} minWidth={0} nowrapColumns={['항목']} />
-            <div className="mt-4 border-t border-slate-100 pt-4">
+          <Panel title="판단 근거" subtitle="핵심 진단 요약을 먼저 확인하고 원시 데이터는 필요할 때만 펼쳐봅니다." className="shadow-sm">
+            <div className="mb-4 border-b border-slate-100 pb-4">
               <AgentLogSamplesToggle ticket={ticket} />
             </div>
+            <TicketDetailList rows={evidenceRows(ticket)} />
           </Panel>
           <Link className="inline-block text-sm font-bold text-brand-blue" to="/admin/as-tickets">목록으로 돌아가기</Link>
         </div>
 
-        <div className="min-w-0 space-y-4">
+        <div className="min-w-0 space-y-3">
           <AdminTicketSupportChat
             ticketId={ticketId}
             remoteSupport={remoteSupportApproved || (!reviewCompleted && remoteApprovalAvailable) ? {
@@ -197,14 +202,29 @@ export function AdminTicketDetailPage() {
               isPending: reviewMutation.isPending,
               onRequest: requestRemoteSupportFromChat
             } : undefined}
+            remoteSupportPanel={remoteSupportApproved ? (
+              <div id="admin-ticket-remote-support" className="scroll-mt-4">
+                <AdminRemoteSupportPanel
+                  state={remoteSupportQuery.data}
+                  isLoading={remoteSupportQuery.isLoading}
+                  isError={remoteSupportQuery.isError}
+                  notice={remoteSupportNotice}
+                  isCopying={copyAccessCodeMutation.isPending}
+                  isUpdating={remoteSupportMutation.isPending}
+                  onCopy={() => copyAccessCodeMutation.mutate()}
+                  onStart={() => remoteSupportMutation.mutate('START')}
+                  onComplete={() => remoteSupportMutation.mutate('COMPLETE')}
+                />
+              </div>
+            ) : undefined}
           />
           <div>
             <Panel title={reviewCompleted ? '처리 결과' : '관리자 검토'} subtitle={reviewCompleted ? '완료된 검토 결과입니다.' : '필요한 업무 행동만 선택해 처리합니다.'}>
             {reviewCompleted ? (
-              <DataTable columns={['항목', '내용']} rows={reviewResultRows(ticket)} nowrapColumns={['항목']} />
+              <TicketDetailList rows={reviewResultRows(ticket)} />
             ) : (
               <div className="space-y-4">
-                <DataTable columns={['항목', '현재 값']} rows={reviewReadOnlyRows(ticket)} nowrapColumns={['항목']} />
+                <TicketDetailList rows={reviewReadOnlyRows(ticket)} valueColumn="현재 값" />
                 <div>
                   <label htmlFor="admin-ticket-note" className="mb-1 block text-xs font-bold text-slate-600">관리자 메모</label>
                   <textarea
@@ -236,21 +256,6 @@ export function AdminTicketDetailPage() {
             )}
             </Panel>
           </div>
-          {remoteSupportApproved ? (
-            <div id="admin-ticket-remote-support" className="scroll-mt-4">
-              <AdminRemoteSupportPanel
-                state={remoteSupportQuery.data}
-                isLoading={remoteSupportQuery.isLoading}
-                isError={remoteSupportQuery.isError}
-                notice={remoteSupportNotice}
-                isCopying={copyAccessCodeMutation.isPending}
-                isUpdating={remoteSupportMutation.isPending}
-                onCopy={() => copyAccessCodeMutation.mutate()}
-                onStart={() => remoteSupportMutation.mutate('START')}
-                onComplete={() => remoteSupportMutation.mutate('COMPLETE')}
-              />
-            </div>
-          ) : null}
         </div>
 
         <div className="min-w-0 min-[1000px]:col-span-2">
@@ -374,7 +379,11 @@ function AdminRemoteSupportPanel({
   onComplete: () => void;
 }) {
   return (
-    <Panel title="원격 지원 연결" subtitle="실제 연결과 화면 공유 승인은 Chrome Remote Desktop에서 수행합니다.">
+    <section className="rounded-lg border border-blue-200 bg-blue-50/60 p-4" aria-labelledby="admin-remote-support-title">
+      <div className="mb-3">
+        <h3 id="admin-remote-support-title" className="text-base font-black text-slate-950">원격 지원 연결</h3>
+        <p className="mt-1 text-xs font-semibold leading-5 text-slate-600">실제 연결과 화면 공유 승인은 Chrome Remote Desktop에서 수행합니다.</p>
+      </div>
       {isLoading ? <StateMessage type="info" title="연결 상태 확인 중" body="사용자의 지원 코드 등록 상태를 불러오고 있습니다." /> : null}
       {isError ? <StateMessage type="warn" title="연결 상태 조회 실패" body="담당 관리자 배정과 티켓 상태를 확인해 주세요." /> : null}
       {!isLoading && !isError && state?.status ? (
@@ -418,7 +427,7 @@ function AdminRemoteSupportPanel({
           {notice ? <p role="status" className="rounded bg-slate-100 px-3 py-2 text-xs font-semibold text-slate-700">{notice}</p> : null}
         </div>
       ) : null}
-    </Panel>
+    </section>
   );
 }
 
@@ -436,30 +445,33 @@ function adminRemoteSupportDescription(status?: string | null) {
   return '사용자가 일회용 지원 코드를 등록하기를 기다리고 있습니다.';
 }
 
-function TicketIssueSpotlight({ ticket }: { ticket: AdminAsTicket }) {
-  const headline = ticket.title ?? ticket.diagnosisTitle ?? firstLine(ticket.symptom);
-  const diagnosis = ticket.diagnosisSummary ?? ticket.description ?? ticket.detailDescription ?? ticket.symptom;
+function TicketInsightCard({ label, value, tone }: { label: string; value: ReactNode; tone: 'warning' | 'action' }) {
+  const toneClass = tone === 'action'
+    ? 'border-blue-200 bg-blue-50 text-blue-950'
+    : 'border-amber-200 bg-amber-50 text-amber-950';
   return (
-    <section data-testid="admin-ticket-issue-spotlight" className="overflow-hidden rounded-lg border border-slate-800 bg-slate-950 p-5 text-white shadow-sm">
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div className="min-w-0">
-          <p className="text-xs font-black uppercase tracking-[0.18em] text-blue-300">문제 핵심</p>
-          <h2 className="mt-2 break-words text-xl font-black leading-8 sm:text-2xl">{headline}</h2>
+    <div className={`min-w-0 rounded-lg border px-4 py-3.5 ${toneClass}`}>
+      <p className="text-xs font-black tracking-wide opacity-70">{label}</p>
+      <div className="mt-1.5 break-words text-[15px] font-black leading-6 [overflow-wrap:anywhere]">{value}</div>
+    </div>
+  );
+}
+
+function TicketDetailList({ rows, valueColumn = '내용' }: { rows: Record<string, ReactNode>[]; valueColumn?: string }) {
+  return (
+    <dl className="min-w-0 overflow-hidden rounded-lg border border-slate-200 bg-white">
+      {rows.map((row, index) => (
+        <div
+          key={`${String(row['항목'])}-${index}`}
+          className="grid min-w-0 gap-1 border-b border-slate-100 px-4 py-3.5 last:border-b-0 sm:grid-cols-[150px_minmax(0,1fr)] sm:gap-4"
+        >
+          <dt className="text-xs font-black leading-6 text-slate-500">{row['항목']}</dt>
+          <dd className="min-w-0 break-words text-sm font-semibold leading-6 text-slate-900 [overflow-wrap:anywhere]">
+            {row[valueColumn] ?? '-'}
+          </dd>
         </div>
-        {ticket.riskLevel ? <StatusBadge status={ticket.riskLevel} /> : null}
-      </div>
-      <p className="mt-3 break-words text-sm font-semibold leading-6 text-slate-200">{diagnosis}</p>
-      <div className="mt-4 grid gap-2 sm:grid-cols-2">
-        <div className="rounded-md border border-white/10 bg-white/5 p-3">
-          <p className="text-[11px] font-black uppercase tracking-wide text-slate-400">추정 원인</p>
-          <p className="mt-1 break-words text-sm font-extrabold leading-6 text-white">{primaryCauseLabel(ticket)}</p>
-        </div>
-        <div className="rounded-md border border-blue-400/30 bg-blue-400/10 p-3">
-          <p className="text-[11px] font-black uppercase tracking-wide text-blue-200">권장 처리</p>
-          <p className="mt-1 text-sm font-extrabold leading-6 text-white">{recommendedSupportLabel(ticket)}</p>
-        </div>
-      </div>
-    </section>
+      ))}
+    </dl>
   );
 }
 
@@ -492,12 +504,17 @@ function agentDiagnosisRows(ticket: AdminAsTicket) {
 }
 
 function evidenceRows(ticket: AdminAsTicket) {
+  const diagnosisResult = objectValue(ticket.diagnosisResult);
+  const routing = objectValue(ticket.supportRouting);
   return [
     { '항목': '장치 근거', '내용': diagnosisDeviceEvidenceSummary(ticket) },
     { '항목': '진단 제목', '내용': ticket.diagnosisTitle ?? '-' },
     { '항목': '진단 요약', '내용': ticket.diagnosisSummary ?? '-' },
     { '항목': '위험도', '내용': ticket.riskLevel ? <StatusBadge status={ticket.riskLevel} /> : '-' },
-    { '항목': '시스템 권장 처리', '내용': diagnosisRecommendedActionSummary(ticket) }
+    { '항목': '추정 원인 후보', '내용': structuredList(valueList(diagnosisResult?.suspectedCauses).length > 0 ? valueList(diagnosisResult?.suspectedCauses) : ticket.causeCandidates, '수집된 근거만으로 확정 가능한 원인 후보가 없습니다.') },
+    { '항목': '시스템 권장 처리', '내용': diagnosisRecommendedActionSummary(ticket) },
+    { '항목': '권장 조치', '내용': structuredList(valueList(diagnosisResult?.recommendedActions).length > 0 ? valueList(diagnosisResult?.recommendedActions) : valueList(routing?.recommendedActions)) },
+    { '항목': '확인하지 못한 항목', '내용': structuredList(valueList(diagnosisResult?.unsupportedChecks)) }
   ];
 }
 
@@ -840,6 +857,49 @@ function reviewActionLabel(action: ReviewAction | null) {
 
 function valueList(value: unknown): unknown[] {
   return Array.isArray(value) ? value : [];
+}
+
+function structuredList(items: unknown[], emptyText = '-') {
+  if (items.length === 0) {
+    return emptyText;
+  }
+  return (
+    <ul className="min-w-0 space-y-2" data-testid="structured-evidence-list">
+      {items.map((item, index) => {
+        const formatted = structuredJson(item);
+        return (
+          <li key={`${textValue(item) ?? compactValue(item)}-${index}`} className="min-w-0">
+            {formatted ? (
+              <pre className="max-h-56 max-w-full overflow-auto rounded-md border border-slate-700 bg-slate-950 p-3 text-xs leading-5 text-slate-100"><code>{formatted}</code></pre>
+            ) : (
+              <p className="break-words text-sm leading-6 text-slate-700">
+                <span aria-hidden="true" className="mr-2 text-slate-400">•</span>
+                {textValue(item) ?? compactValue(item)}
+              </p>
+            )}
+          </li>
+        );
+      })}
+    </ul>
+  );
+}
+
+function structuredJson(value: unknown) {
+  if (value && typeof value === 'object') {
+    return prettyJson(value);
+  }
+  if (typeof value !== 'string') {
+    return null;
+  }
+  const candidate = value.trim();
+  if (!(candidate.startsWith('{') || candidate.startsWith('['))) {
+    return null;
+  }
+  try {
+    return prettyJson(JSON.parse(candidate));
+  } catch {
+    return null;
+  }
 }
 
 function compactValue(value: unknown) {

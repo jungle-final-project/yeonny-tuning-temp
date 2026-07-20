@@ -24,10 +24,10 @@ export function AdminShell({ children, title, exportRows = [], exportFileName = 
   return (
     <div className="screen-shell flex bg-slate-100 font-['Noto_Sans_KR']">
       <AdminSidebar />
-      <div className="min-w-[1024px] flex-1">
-        <div className="flex h-16 items-center justify-between border-b border-slate-200 bg-white px-7">
-          <h1 className="text-lg font-bold text-brand-navy">{title}</h1>
-          <div className="flex gap-2">
+      <div className="min-w-0 flex-1">
+        <div className="flex min-h-16 items-center justify-between gap-3 border-b border-slate-200 bg-white px-4 py-3 sm:px-5 lg:px-6 xl:px-7">
+          <h1 className="min-w-0 text-lg font-bold text-brand-navy">{title}</h1>
+          <div className="flex shrink-0 gap-2">
             <Link
               to="/"
               className="inline-flex items-center gap-1 rounded border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-brand-navy hover:bg-slate-50"
@@ -59,7 +59,7 @@ export function AdminShell({ children, title, exportRows = [], exportFileName = 
             ) : null}
           </div>
         </div>
-        <main className="p-7">{children}</main>
+        <main className="min-w-0 p-4 sm:p-5 lg:p-6 xl:p-7">{children}</main>
       </div>
     </div>
   );
@@ -97,8 +97,8 @@ function AdminSidebar() {
   ];
 
   return (
-    <aside className="w-60 bg-brand-navy px-4 py-6 text-white">
-      <div data-testid="admin-brand" className="mb-8 text-xl font-bold">Dazzajo<br />관리자</div>
+    <aside className="w-44 shrink-0 bg-brand-navy px-3 py-5 text-white lg:w-52 lg:px-4 xl:w-60 xl:py-6">
+      <div data-testid="admin-brand" className="mb-7 text-lg font-bold xl:mb-8 xl:text-xl">Dazzajo<br />관리자</div>
       <nav aria-label="관리자 메뉴" className="space-y-5">
         {groups.map((group) => (
           <div key={group.heading}>
@@ -107,7 +107,7 @@ function AdminSidebar() {
               {group.items.map(({ to, label, Icon, match }) => {
                 const isActive = match(pathname);
                 return (
-                  <Link key={to} to={to} aria-current={isActive ? 'page' : undefined} className={`flex h-10 items-center gap-2 rounded px-3 text-sm font-semibold ${isActive ? 'bg-brand-blue text-white' : 'text-slate-300 hover:bg-white/10'}`}>
+                  <Link key={to} to={to} aria-current={isActive ? 'page' : undefined} className={`flex min-h-10 items-center gap-2 rounded px-3 py-2 text-xs font-semibold leading-5 lg:text-sm ${isActive ? 'bg-brand-blue text-white' : 'text-slate-300 hover:bg-white/10'}`}>
                     <Icon size={16} />
                     {label}
                   </Link>

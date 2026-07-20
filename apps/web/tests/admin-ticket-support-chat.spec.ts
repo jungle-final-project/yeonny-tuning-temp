@@ -249,6 +249,28 @@ test('ticket detail embeds the support chat in place of the decision form and se
   await expect(chat.getByPlaceholder('관리자 답변을 입력하세요')).toHaveValue('');
 });
 
+test('keeps the ticket detail readable without page-level horizontal scrolling', async ({ page }) => {
+  await page.setViewportSize({ width: 625, height: 800 });
+  await mockAdmin(page);
+  await mockTicket(page);
+  await mockChat(page, {
+    room: chatRoom(),
+    messages: baseMessages()
+  });
+
+  await page.goto(`/admin/as-tickets/${TICKET_ID}`);
+
+  await expect(page.getByTestId('admin-ticket-issue-spotlight')).toHaveCount(0);
+  await expect(page.getByTestId('admin-ticket-receipt')).toContainText('권장 처리');
+  await expect(page.getByTestId('admin-ticket-support-chat')).toBeVisible();
+  const pageHasHorizontalOverflow = await page.evaluate(() => document.documentElement.scrollWidth > document.documentElement.clientWidth);
+  expect(pageHasHorizontalOverflow).toBe(false);
+  const chatMessage = page.getByText('게임 실행 후 온도가 95도까지 올라갑니다.', { exact: true });
+  await expect(chatMessage).toBeVisible();
+  const chatFontSize = await chatMessage.evaluate((element) => Number.parseFloat(window.getComputedStyle(element).fontSize));
+  expect(chatFontSize).toBeGreaterThanOrEqual(15);
+});
+
 test('starts the existing Chrome remote support flow from chat and sends the official link', async ({ page }) => {
   let postedMessage: Record<string, unknown> | undefined;
   await mockAdmin(page);
@@ -261,14 +283,21 @@ test('starts the existing Chrome remote support flow from chat and sends the off
 
   await page.goto(`/admin/as-tickets/${TICKET_ID}`);
   const chat = page.getByTestId('admin-ticket-support-chat');
+  const remoteGuideToggle = chat.getByRole('button', { name: 'Chrome 원격 지원 안내 보기' });
+  await expect(remoteGuideToggle).toBeVisible();
+  await expect(chat.getByText('지원 받기 → 코드 생성')).toHaveCount(0);
+  await remoteGuideToggle.click();
   const remoteButton = chat.getByRole('button', { name: 'Chrome 원격지원 안내 보내기' });
   await expect(remoteButton).toBeVisible();
+  await expect(chat).toContainText('지원 받기 → 코드 생성');
+  await expect(chat).toContainText('표시된 관리자 이메일을 확인하고 「공유」');
   await remoteButton.click();
 
   await expect.poll(() => postedMessage?.content).toContain('https://remotedesktop.google.com/support');
-  await expect(chat.getByRole('link', { name: 'Chrome Remote Desktop 열기' })).toHaveAttribute('href', 'https://remotedesktop.google.com/support');
+  const remoteStatusPanel = chat.getByTestId('admin-remote-support-panel');
+  await expect(remoteStatusPanel.getByRole('link', { name: 'Chrome Remote Desktop 열기' })).toHaveAttribute('href', 'https://remotedesktop.google.com/support');
   await expect(chat).toContainText('원격지원 승인과 사용자 안내 전송을 완료했습니다.');
-  await expect(page.getByTestId('admin-remote-support-panel')).toContainText('지원 코드 등록 대기');
+  await expect(remoteStatusPanel).toContainText('지원 코드 등록 대기');
 });
 
 test('shows an empty state when the ticket has no chat session yet', async ({ page }) => {

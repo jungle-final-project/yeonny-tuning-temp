@@ -607,14 +607,14 @@ export function AdminChatBubble({ message }: { message: SupportChatMessage }) {
   const isSystem = message.role === 'SYSTEM';
   return (
     <div className={`flex ${isAdmin ? 'justify-end' : 'justify-start'}`}>
-      <div className={`max-w-[82%] rounded-md border px-3 py-2 text-sm leading-6 shadow-sm ${
+      <div className={`max-w-[88%] rounded-lg border px-4 py-3 text-[15px] font-semibold leading-6 shadow-sm ${
         isAdmin
           ? 'bg-brand-blue text-white'
           : isSystem
             ? 'border-slate-200 bg-white text-slate-600'
             : 'border-slate-200 bg-white text-slate-900'
       }`}>
-        <div className="mb-1 flex items-center justify-between gap-2 text-[11px] font-bold opacity-75">
+        <div className="mb-1.5 flex items-center justify-between gap-3 text-xs font-bold opacity-80">
           <span>{messageLabel(message)}</span>
           <time className="font-normal opacity-75" dateTime={message.createdAt ?? undefined}>
             {formatDateTime(message.createdAt)}

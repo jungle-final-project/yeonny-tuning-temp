@@ -1,6 +1,6 @@
-import { FormEvent, useEffect, useRef, useState } from 'react';
+import { FormEvent, ReactNode, useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { MonitorUp, Send } from 'lucide-react';
+import { ChevronDown, MonitorUp, Send } from 'lucide-react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Panel, StateMessage } from '../../../components/ui';
 import {
@@ -16,8 +16,11 @@ import { AdminChatBubble, connectionClass, socketStatusLabel, type SocketStatus 
 const DEFAULT_POLL_MS = 5000;
 const SOCKET_RECONNECT_DELAYS_MS = [1000, 2000, 5000, 10000];
 const REMOTE_SUPPORT_GUIDE_MESSAGE = [
-  'Chrome 원격 지원을 시작하겠습니다.',
-  '아래 페이지에서 일회용 지원 코드를 만든 뒤 AS 요청 상세 화면에 등록해 주세요.',
+  'Chrome 원격 지원을 준비하겠습니다.',
+  '1. 아래 페이지를 열고 「지원 받기」에서 Chrome Remote Desktop을 설치해 주세요.',
+  '2. 「코드 생성」을 누른 뒤 표시되는 일회용 코드를 AS 요청 상세 화면에 등록해 주세요.',
+  '3. 관리자가 코드를 입력하면 표시되는 관리자 이메일을 확인하고 「공유」를 눌러 주세요.',
+  '지원 코드는 한 번만 사용할 수 있으며, 공유를 승인하기 전에는 연결되지 않습니다.',
   'https://remotedesktop.google.com/support'
 ].join('\n');
 
@@ -31,7 +34,15 @@ type RemoteSupportAction = {
 // AS 티켓 상세에 박는 상담방 채팅(메시지 + 입력만). 방문 예약·상담방 삭제 같은 관리 기능은
 // /admin/support-chat-sessions가 담당하고, 여기서는 이 티켓의 대화 확인·답변 전송만 한다.
 // 실시간 방식은 상담방 관리 페이지와 동일: WebSocket 수신 + 재연결 사다리 + 폴링 폴백.
-export function AdminTicketSupportChat({ ticketId, remoteSupport }: { ticketId: string; remoteSupport?: RemoteSupportAction }) {
+export function AdminTicketSupportChat({
+  ticketId,
+  remoteSupport,
+  remoteSupportPanel
+}: {
+  ticketId: string;
+  remoteSupport?: RemoteSupportAction;
+  remoteSupportPanel?: ReactNode;
+}) {
   const queryClient = useQueryClient();
   const socketRef = useRef<SupportChatSocket | null>(null);
   const messagesRef = useRef<HTMLDivElement | null>(null);
@@ -40,6 +51,7 @@ export function AdminTicketSupportChat({ ticketId, remoteSupport }: { ticketId: 
   const [message, setMessage] = useState('');
   const [sendError, setSendError] = useState<string | null>(null);
   const [socketStatus, setSocketStatus] = useState<SocketStatus>('polling');
+  const [remoteGuideExpanded, setRemoteGuideExpanded] = useState(false);
 
   // 티켓→상담방 조회 API가 없어 목록에서 asTicketId로 찾는다. 방이 아직 없으면 목록만
   // 폴링해 생기는 즉시 붙고, 찾은 뒤에는 상세 폴링/WS가 갱신을 담당한다.
@@ -220,9 +232,10 @@ export function AdminTicketSupportChat({ ticketId, remoteSupport }: { ticketId: 
       <Panel
         title="상담방"
         subtitle="이 AS 티켓의 사용자 상담방입니다. 방문 예약과 상담방 삭제는 상담방 관리에서 처리합니다."
+        className="shadow-sm"
         action={(
           <div className="flex flex-wrap items-center justify-end gap-2">
-            <Link className="shrink-0 text-xs font-bold text-brand-blue hover:underline" to="/admin/support-chat-sessions">상담방 관리로 이동</Link>
+            <Link className="shrink-0 text-sm font-bold text-brand-blue hover:underline" to="/admin/support-chat-sessions">상담방 관리로 이동</Link>
           </div>
         )}
       >
@@ -236,15 +249,15 @@ export function AdminTicketSupportChat({ ticketId, remoteSupport }: { ticketId: 
         {sessionId && detailQuery.data ? (
           <>
             <div className="mb-2 flex items-center justify-end">
-              <span className={`rounded-full border px-2 py-0.5 text-[11px] font-black ${connectionClass(socketStatus)}`}>
+              <span className={`rounded-full border px-2.5 py-1 text-xs font-black ${connectionClass(socketStatus)}`}>
                 {socketStatusLabel(socketStatus)}
               </span>
             </div>
-            <div className="h-[340px] overflow-hidden rounded-md border border-slate-200 bg-slate-50 sm:h-[380px] lg:h-[440px]">
+            <div className="h-[380px] overflow-hidden rounded-lg border border-slate-200 bg-slate-50 sm:h-[420px] xl:h-[500px]">
               <div
                 ref={messagesRef}
                 data-testid="admin-ticket-support-chat-messages"
-                className="h-full overflow-y-auto p-4"
+                className="h-full overflow-y-auto p-4 sm:p-5"
                 onScroll={(event) => {
                   wasAtBottomRef.current = isNearBottom(event.currentTarget);
                 }}
@@ -265,7 +278,7 @@ export function AdminTicketSupportChat({ ticketId, remoteSupport }: { ticketId: 
                 <div className="space-y-2">
                   <div className="flex gap-2">
                     <input
-                      className="h-11 min-w-0 flex-1 rounded-md border border-slate-300 px-3 text-sm focus:border-brand-blue focus:outline-none focus:ring-4 focus:ring-blue-100"
+                      className="h-12 min-w-0 flex-1 rounded-md border border-slate-300 px-4 text-base font-semibold focus:border-brand-blue focus:outline-none focus:ring-4 focus:ring-blue-100"
                       placeholder="관리자 답변을 입력하세요"
                       value={message}
                       maxLength={2000}
@@ -277,13 +290,13 @@ export function AdminTicketSupportChat({ ticketId, remoteSupport }: { ticketId: 
                     <button
                       type="submit"
                       disabled={!canSend}
-                      className="inline-flex h-11 min-w-28 shrink-0 items-center justify-center gap-1 rounded-md bg-brand-blue px-4 text-sm font-black text-white transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-slate-400"
+                      className="inline-flex h-12 min-w-28 shrink-0 items-center justify-center gap-1.5 rounded-md bg-brand-blue px-4 text-sm font-black text-white transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-slate-400"
                     >
                       <Send size={14} />
                       {sendMutation.isPending ? '전송 중' : '답변 전송'}
                     </button>
                   </div>
-                  <div className="flex items-center justify-between text-[11px]">
+                  <div className="flex flex-wrap items-center justify-between gap-1 text-xs leading-5">
                     <span className={`font-bold ${sendError ? 'text-rose-700' : 'text-slate-500'}`} role={sendError ? 'alert' : undefined}>
                       {sendError ?? 'Enter 키로 즉시 전송합니다. 전송 후 입력창은 자동으로 비워집니다.'}
                     </span>
@@ -292,19 +305,40 @@ export function AdminTicketSupportChat({ ticketId, remoteSupport }: { ticketId: 
                 </div>
               )}
             </form>
-            {remoteSupport ? (
-              <div className="mt-4 rounded-lg border border-blue-200 bg-gradient-to-r from-blue-50 to-indigo-50 p-4 shadow-sm">
-                <div className="flex items-start gap-3">
-                  <span className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-brand-blue text-white shadow-sm">
-                    <MonitorUp aria-hidden="true" size={20} />
-                  </span>
-                  <div className="min-w-0 flex-1">
-                    <p className="text-sm font-black text-slate-950">Chrome 원격 지원</p>
-                    <p className="mt-1 text-xs font-semibold leading-5 text-slate-600">
-                      {remoteSupportStatusDescription(remoteSupport.status, remoteSupport.canRequest)}
-                    </p>
+          </>
+        ) : null}
+        {remoteSupport ? (
+          <div className="mt-4">
+            <button
+              type="button"
+              aria-expanded={remoteGuideExpanded}
+              aria-controls="admin-ticket-remote-guide"
+              onClick={() => setRemoteGuideExpanded((current) => !current)}
+              className="flex w-full items-center gap-3 rounded-lg border border-blue-200 bg-blue-50 px-4 py-3 text-left text-brand-blue transition hover:bg-blue-100 focus:outline-none focus:ring-4 focus:ring-blue-100"
+            >
+              <MonitorUp aria-hidden="true" className="shrink-0" size={20} />
+              <span className="min-w-0 flex-1 text-sm font-black">
+                {remoteGuideExpanded ? 'Chrome 원격 지원 안내 닫기' : 'Chrome 원격 지원 안내 보기'}
+              </span>
+              <ChevronDown aria-hidden="true" className={`h-4 w-4 shrink-0 transition-transform ${remoteGuideExpanded ? 'rotate-180' : ''}`} />
+            </button>
+            {remoteGuideExpanded ? (
+              <div id="admin-ticket-remote-guide" className="mt-2 rounded-lg border border-blue-200 bg-gradient-to-r from-blue-50 to-indigo-50 p-4 shadow-sm">
+                <p className="text-sm font-semibold leading-6 text-slate-700">
+                  {remoteSupportStatusDescription(remoteSupport.status, remoteSupport.canRequest)}
+                </p>
+                {remoteSupport.status !== 'COMPLETED' ? (
+                  <div className="mt-3 rounded-lg border border-blue-100 bg-white/90 p-3">
+                    <p className="text-xs font-black text-slate-950">연결 방법</p>
+                    <ol className="mt-2 space-y-2 text-xs font-semibold leading-5 text-slate-700">
+                      <li><strong className="text-brand-blue">1. 사용자</strong> 안내 링크를 열고 「지원 받기 → 코드 생성」을 선택합니다.</li>
+                      <li><strong className="text-brand-blue">2. 사용자</strong> 발급된 일회용 코드를 자신의 AS 상세 화면에 등록합니다.</li>
+                      <li><strong className="text-brand-blue">3. 관리자</strong> 코드 등록 완료 후 아래 원격 지원 영역에서 코드를 복사해 「지원 제공」에 입력합니다.</li>
+                      <li><strong className="text-brand-blue">4. 사용자</strong> 표시된 관리자 이메일을 확인하고 「공유」를 눌러야 실제 연결이 시작됩니다.</li>
+                    </ol>
+                    <p className="mt-2 text-[11px] font-bold leading-5 text-rose-700">일회용 코드는 한 번만 사용할 수 있으며, 사용자가 공유를 승인하기 전에는 PC 화면이 보이지 않습니다.</p>
                   </div>
-                </div>
+                ) : null}
                 {remoteSupport.status === 'CODE_READY' || remoteSupport.status === 'IN_PROGRESS' || remoteSupport.status === 'COMPLETED' ? (
                   <a
                     className="mt-3 inline-flex w-full items-center justify-center rounded-md border border-brand-blue bg-white px-4 py-2.5 text-sm font-black text-brand-blue hover:bg-blue-50"
@@ -331,8 +365,9 @@ export function AdminTicketSupportChat({ ticketId, remoteSupport }: { ticketId: 
                 ) : null}
               </div>
             ) : null}
-          </>
+          </div>
         ) : null}
+        {remoteSupportPanel ? <div className="mt-4 border-t border-slate-200 pt-4">{remoteSupportPanel}</div> : null}
       </Panel>
     </div>
   );
