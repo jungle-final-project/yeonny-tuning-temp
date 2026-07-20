@@ -124,6 +124,87 @@ class DiagnosisRequestProcessorTest(unittest.TestCase):
         self.assertEqual("ACCEPTED", decision.status)
         self.assertEqual(WEB_REQUEST, self.store.session.request.source)
 
+    def test_expired_request_received_is_replaced_without_losing_processed_ids(self):
+        replaced = []
+        processor = DiagnosisRequestProcessor(
+            self.store,
+            device_id="device-1",
+            now=lambda: NOW,
+            on_session_replaced=replaced.append,
+        )
+        expired = DiagnosisRequest.from_payload(
+            request_payload(diagnosis_id="expired-diagnosis", expires_at=NOW - timedelta(seconds=1)),
+        )
+        self.store.accept(DiagnosisSession(expired))
+
+        decision = processor.process(request_payload(diagnosis_id="replacement-diagnosis"), True)
+
+        self.assertEqual("ACCEPTED", decision.status)
+        self.assertEqual("replacement-diagnosis", self.store.session.request.diagnosis_id)
+        self.assertEqual("REQUEST_EXPIRED", replaced[0].reason)
+        self.assertTrue(self.store.contains("expired-diagnosis"))
+        self.assertTrue(self.store.contains("replacement-diagnosis"))
+
+    def test_unstarted_web_request_is_superseded_by_new_web_request(self):
+        replaced = []
+        processor = DiagnosisRequestProcessor(
+            self.store,
+            device_id="device-1",
+            now=lambda: NOW,
+            on_session_replaced=replaced.append,
+        )
+        self.assertEqual("ACCEPTED", processor.process(request_payload(diagnosis_id="pending-diagnosis"), True).status)
+
+        decision = processor.process(request_payload(diagnosis_id="new-diagnosis"), True)
+
+        self.assertEqual("ACCEPTED", decision.status)
+        self.assertEqual("new-diagnosis", self.store.session.request.diagnosis_id)
+        self.assertEqual("SUPERSEDED", replaced[0].reason)
+
+    def test_restart_cleanup_removes_stale_request_without_touching_sibling_files(self):
+        credential_path = Path(self.temporary.name) / "agent-credential.json"
+        config_path = Path(self.temporary.name) / "agent-config.json"
+        credential_path.write_text("credential", encoding="utf-8")
+        config_path.write_text("config", encoding="utf-8")
+        expired = DiagnosisRequest.from_payload(
+            request_payload(diagnosis_id="expired-after-restart", expires_at=NOW - timedelta(seconds=1)),
+        )
+        self.store.accept(DiagnosisSession(expired))
+
+        restarted_store = DiagnosisSessionStore(self.path)
+        replacement = restarted_store.expire_stale_request(NOW)
+        restarted = DiagnosisRequestProcessor(restarted_store, "device-1", now=lambda: NOW)
+        decision = restarted.process(request_payload(diagnosis_id="after-restart"), True)
+
+        self.assertEqual("REQUEST_EXPIRED", replacement.reason)
+        self.assertEqual("ACCEPTED", decision.status)
+        self.assertTrue(restarted_store.contains("expired-after-restart"))
+        self.assertEqual("credential", credential_path.read_text(encoding="utf-8"))
+        self.assertEqual("config", config_path.read_text(encoding="utf-8"))
+
+    def test_running_session_is_the_only_state_that_blocks_a_new_request(self):
+        self.assertEqual("ACCEPTED", self.processor.process(request_payload(diagnosis_id="running-diagnosis"), True).status)
+        self.store.update_state("RUNNING")
+
+        decision = self.processor.process(request_payload(diagnosis_id="blocked-diagnosis"), True)
+
+        self.assertEqual("BUSY", decision.status)
+        self.assertIn("running-diagnosis", decision.message)
+        self.assertEqual("running-diagnosis", self.store.session.request.diagnosis_id)
+
+    def test_terminal_states_allow_a_new_request(self):
+        for state in ("COMPLETED", "FAILED", "CANCELLED", "TIMED_OUT"):
+            with self.subTest(state=state), tempfile.TemporaryDirectory() as directory:
+                store = DiagnosisSessionStore(Path(directory) / "state.json")
+                processor = DiagnosisRequestProcessor(store, "device-1", now=lambda: NOW)
+                self.assertEqual("ACCEPTED", processor.process(request_payload(diagnosis_id=f"old-{state}"), True).status)
+                store.update_state(state)
+
+                decision = processor.process(request_payload(diagnosis_id=f"new-{state}"), True)
+
+                self.assertEqual("ACCEPTED", decision.status)
+                self.assertEqual(f"new-{state}", store.session.request.diagnosis_id)
+
     def test_rejects_auth_device_expiry_and_busy_cases(self):
         self.assertEqual("AUTH_FAILED", self.processor.process(request_payload(), authenticated=False).status)
         self.assertEqual("DEVICE_MISMATCH", self.processor.process(request_payload(device_id="other"), True).status)
@@ -132,6 +213,7 @@ class DiagnosisRequestProcessorTest(unittest.TestCase):
             self.processor.process(request_payload(expires_at=NOW - timedelta(seconds=1)), True).status,
         )
         self.assertEqual("ACCEPTED", self.processor.process(request_payload(), True).status)
+        self.store.update_state("RUNNING")
         self.assertEqual("BUSY", self.processor.process(request_payload(diagnosis_id="diagnosis-2"), True).status)
 
     def test_duplicate_is_detected_before_busy_and_after_restart(self):
