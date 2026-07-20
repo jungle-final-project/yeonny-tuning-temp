@@ -158,7 +158,8 @@ async function authenticatePage(page: Page, login: Awaited<ReturnType<typeof log
     sessionStorage.clear();
   }, login);
   await page.goto('/');
-  await expect(page.getByText(`로그인됨 · ${userEmail} · USER`)).toBeVisible();
+  await expect(page).not.toHaveURL(/\/login(?:\?|$)/);
+  await expect.poll(async () => page.evaluate(() => localStorage.getItem('buildgraph.token'))).toBeTruthy();
 }
 
 async function runScenario(

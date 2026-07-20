@@ -1,6 +1,7 @@
 import { useQueries, useQuery } from '@tanstack/react-query';
 import { Link, useParams } from 'react-router-dom';
 import { AdminShell, DataTable, Panel, StateMessage } from '../../../components/ui';
+import { formatKstDateTime } from '../../../lib/dateTime';
 import { getAgentSession, getRagEvidence } from '../adminApi';
 import { KoreanStatusBadge, koreanStatusLabel, koreanToolLabel } from '../adminDisplay';
 import type { AgentSessionDetail, LlmGeneration, RagEvidenceDetail, ToolInvocation } from '../adminApi';
@@ -101,7 +102,7 @@ function timelineRows(session: AgentSessionDetail) {
     전이: `${koreanStatusLabel(item.from)} -> ${koreanStatusLabel(item.to)}`,
     상태: <KoreanStatusBadge status={item.to} />,
     '실행 주체': item.actor,
-    시각: formatDateTime(item.at),
+    시각: formatKstDateTime(item.at),
     사유: item.reason ?? '-'
   }));
 }
@@ -144,10 +145,6 @@ function evidenceRows(evidenceIds: string[], evidenceItems: Array<RagEvidenceDet
 
 function shortId(id: string) {
   return id.length <= 12 ? id : `${id.slice(0, 8)}...${id.slice(-4)}`;
-}
-
-function formatDateTime(value?: string) {
-  return value ? value.replace('T', ' ').slice(0, 19) : '-';
 }
 
 function formatScore(value?: string | number | null) {

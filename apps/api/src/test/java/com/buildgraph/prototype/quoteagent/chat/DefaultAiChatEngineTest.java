@@ -3,71 +3,63 @@ package com.buildgraph.prototype.quoteagent.chat;
 import com.buildgraph.prototype.opsagent.profile.AiProfileConfigTest;
 import com.buildgraph.prototype.opsagent.profile.LlmProvider;
 import com.buildgraph.prototype.opsagent.profile.LLMresponseDto;
+import com.buildgraph.prototype.quoteagent.chat.dto.AiChatRequestDto;
+import com.buildgraph.prototype.quoteagent.chat.dto.AiChatResponseDto;
 import com.buildgraph.prototype.quoteagent.llm.AiChatClient;
 import com.buildgraph.prototype.quoteagent.query.AiChatSessionState;
 import com.buildgraph.prototype.quoteagent.query.AiChatSessionQuery;
 import com.buildgraph.prototype.quoteagent.tools.PartReplacementRanker;
+import com.buildgraph.prototype.recommender.matching.PartMatchService;
 import java.util.List;
 import java.util.Map;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.http.HttpStatus;
-import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.web.server.ResponseStatusException;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
-import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 class DefaultAiChatEngineTest {
-    private JdbcTemplate jdbcTemplate;
     private AiChatClient openAiResponsesClient;
     private AiChatSessionQuery aiChatSessionStore;
+    private PartMatchService partMatchService;
     private AiChatEngine engine;
 
     @BeforeEach
     void setUp() {
-        jdbcTemplate = mock(JdbcTemplate.class);
         openAiResponsesClient = mock(AiChatClient.class);
         aiChatSessionStore = mock(AiChatSessionQuery.class);
+        partMatchService = mock(PartMatchService.class);
+        when(partMatchService.matchFullBuild(any())).thenReturn(matchedPartRows());
         when(aiChatSessionStore.findOrCreate(any())).thenReturn(new AiChatSessionState("session-5090", Map.of()));
         engine = new AiChatEngine(
-                jdbcTemplate,
                 openAiResponsesClient,
                 AiProfileConfigTest.config("AS_CHAT_FAST", "BUILD_CHAT_FAST"),
                 new PartReplacementRanker(),
-                aiChatSessionStore
+                aiChatSessionStore,
+                partMatchService
         );
 
-        doAnswer(invocation -> {
-                    Object category = invocation.getArgument(1);
-                    int limit = invocation.getArgument(2);
-                    return partRows(String.valueOf(category)).stream().limit(limit).toList();
-                })
-                .when(jdbcTemplate)
-                .queryForList(anyString(), anyString(), anyInt());
     }
 
     @Test
     void llmRequiredBuildChatFailsWhenOpenAiKeyIsMissing() {
         when(openAiResponsesClient.isConfigured()).thenReturn(false);
 
-        assertThatThrownBy(() -> engine.respondLlmRequired(new AiChatRequestDto(
+        assertThatThrownBy(() -> engine.LLMorchestrator(new AiChatRequestDto(
                 "200만원 QHD 게임용 PC 추천해줘",
                 "session-1"
         ), null))
                 .isInstanceOf(ResponseStatusException.class)
                 .extracting(error -> ((ResponseStatusException) error).getStatusCode())
                 .isEqualTo(HttpStatus.PRECONDITION_REQUIRED);
-        verifyNoJdbcWrites();
     }
 
     @Test
@@ -88,66 +80,87 @@ class DefaultAiChatEngineTest {
                           "replyMessage": "RTX 5090 조건을 유지해 추천 조합을 만들겠습니다.",
                           "action": {
                             "type": "FULL_BUILD_RECOMMEND",
+                            "selectedCategory": null,
                             "ragQuery": {
-                              "requiredGpuClasses": ["RTX_5090"]
+                              "performance": 0.8,
+                              "value": 0.2
                             }
                           },
                           "contextPatch": {
-                            "budget": null,
-                            "usageTags": ["GAMING"],
-                            "missingSlots": []
+                            "budget": 2000000,
+                            "usageTags": ["GAMING"]
                           }
                         }
                         """, LlmProvider.OPENAI, "gpt-5.5", "low", 1234));
 
-        AiChatResponseDto response = engine.respondLlmRequired(new AiChatRequestDto(
+        AiChatResponseDto response = engine.LLMorchestrator(new AiChatRequestDto(
                 "5090 글카가 들어간 PC 추천해줘",
                 "session-5090"
         ), null);
 
         assertThat(response.respondType()).isEqualTo(AiChatIntent.FULL_BUILD_RECOMMEND.name());
-        assertThat(response.replyMessage()).contains("추천 PC 3개");
+        assertThat(response.replyMessage()).isEqualTo("RTX 5090 조건을 유지해 추천 조합을 만들겠습니다.");
         assertThat(response.sessionId()).isEqualTo("session-5090");
-        assertThat(response.recommendations()).hasSize(3);
-        verifyNoJdbcWrites();
+        assertThat(response.recommendations()).hasSize(1);
+        assertThat(response.recommendations().get(0).items()).hasSize(8);
+        assertThat(response.recommendations().get(0).estimatedTotalPrice()).isEqualTo(960_000);
     }
 
-    private void verifyNoJdbcWrites() {
-        verify(jdbcTemplate, never()).update(anyString(), any(Object[].class));
-    }
+    @Test
+    void firstConversationUsesCreatedSessionIdWhenRequestSessionIdIsNull() {
+        when(openAiResponsesClient.isConfigured()).thenReturn(true);
+        when(openAiResponsesClient.generateLLMresponse(
+                anyString(),
+                anyString(),
+                eq("buildgraph_ai_build_chat_plan"),
+                any(),
+                eq("gpt-5.5"),
+                eq("low"),
+                eq(900)
+        )).thenReturn(new LLMresponseDto("""
+                {
+                  "conversationMode": true,
+                  "replyMessage": "예산과 용도를 조금 더 알려주세요.",
+                  "action": null,
+                  "contextPatch": {
+                    "budget": 2000000,
+                    "usageTags": ["GAMING"]
+                  }
+                }
+                """, LlmProvider.OPENAI, "gpt-5.5", "low", 1234));
 
-    private static List<Map<String, Object>> partRows(String category) {
-        if ("GPU".equals(category)) {
-            return List.of(
-                    partRow(category, "gpu-5090", "GeForce RTX 5090 32GB", 5_000_000, Map.of("toolReady", true, "gpuClass", "RTX_5090")),
-                    partRow(category, "gpu-5080", "GeForce RTX 5080 16GB", 2_300_000, Map.of("toolReady", true, "gpuClass", "RTX_5080")),
-                    partRow(category, "gpu-4070s", "GeForce RTX 4070 Super", 950_000, Map.of("toolReady", true, "gpuClass", "RTX_4070_SUPER"))
-            );
-        }
-        if ("CPU".equals(category)) {
-            return List.of(
-                    partRow(category, "cpu-high", "CPU High", 500_000, Map.of("toolReady", true, "socket", "AM5")),
-                    partRow(category, "cpu-mid", "CPU Mid", 300_000, Map.of("toolReady", true, "socket", "AM5"))
-            );
-        }
-        if ("MOTHERBOARD".equals(category)) {
-            return List.of(partRow(category, "motherboard-am5", "AM5 Board", 240_000, Map.of("toolReady", true, "socket", "AM5")));
-        }
-        return List.of(partRow(category, category.toLowerCase() + "-default", category + " Default", 120_000));
-    }
+        AiChatResponseDto response = engine.LLMorchestrator(
+                new AiChatRequestDto("게이밍 PC가 필요해", null),
+                null
+        );
 
-    private static Map<String, Object> partRow(String category, String id, String name, int price) {
-        return partRow(category, id, name, price, Map.of("toolReady", true));
-    }
-
-    private static Map<String, Object> partRow(String category, String id, String name, int price, Map<String, Object> attributes) {
-        return Map.of(
-                "public_id", id,
-                "category", category,
-                "name", name,
-                "manufacturer", "테스트",
-                "price", price,
-                "attributes", attributes
+        assertThat(response.sessionId()).isEqualTo("session-5090");
+        assertThat(response.respondType()).isEqualTo("CONVERSATION");
+        verify(aiChatSessionStore).findOrCreate(null);
+        verify(aiChatSessionStore).updateSession(
+                "session-5090",
+                Map.of(
+                        "budget", 2000000,
+                        "usageTags", List.of("GAMING")
+                )
         );
     }
+
+    private static List<Map<String, Object>> matchedPartRows() {
+        return List.of(
+                "CPU", "MOTHERBOARD", "RAM", "GPU", "STORAGE", "PSU", "CASE", "COOLER"
+        ).stream()
+                .map(category -> Map.<String, Object>of(
+                        "id", category.toLowerCase() + "-id",
+                        "category", category,
+                        "name", category + " 추천 부품",
+                        "manufacturer", "테스트",
+                        "price", 120_000,
+                        "performance_score", 0.8,
+                        "value_score", 0.7,
+                        "match_score", 0.78
+                ))
+                .toList();
+    }
+
 }

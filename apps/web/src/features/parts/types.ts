@@ -23,6 +23,14 @@ export type PartRow = {
   } | null;
   score?: number;
   compatibility?: PartCompatibility | null;
+  recommendation?: PartRecommendation | null;
+};
+
+export type PartRecommendation = {
+  recommended: true;
+  rank: number;
+  score: number;
+  reasons: string[];
 };
 
 export type PartCompatibility = {
@@ -52,6 +60,10 @@ export type HomeRecommendedPartsResponse = {
   items: HomeRecommendedPart[];
   generatedAt: string;
   fallbackUsed: boolean;
+};
+export type PublicHomeResponse = {
+  categoryParts: Partial<Record<string, PartRow[]>>;
+  recommendedParts: HomeRecommendedPartsResponse;
 };
 
 export type RecommendationEventRequest = {

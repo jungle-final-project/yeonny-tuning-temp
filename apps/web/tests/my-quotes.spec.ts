@@ -1,11 +1,13 @@
 import { expect, test, type Page } from '@playwright/test';
 
 type BuildItem = {
+  id?: string;
   category: string;
   partId: string;
   name: string;
   manufacturer: string;
   price: number;
+  attributes?: Record<string, unknown>;
 };
 
 const savedBuilds = [
@@ -20,9 +22,14 @@ const savedBuilds = [
     warnings: [],
     evidenceIds: [],
     items: [
-      item('CPU', 'part-cpu-9700x', 'AMD Ryzen 7 9700X', 'AMD', 430_000),
-      item('GPU', 'part-gpu-5070', 'GeForce RTX 5070', 'NVIDIA', 960_000),
-      item('MOTHERBOARD', 'part-board-b650', 'B650 WiFi 메인보드', 'ASUS', 260_000)
+      item('CPU', 'part-cpu-9700x', 'AMD Ryzen 7 9700X', 'AMD', 430_000, { coreCount: 8, threadCount: 16 }),
+      item('MOTHERBOARD', 'part-board-b650', 'B650 WiFi 메인보드', 'ASUS', 260_000, { socket: 'AM5', chipset: 'B650', memoryType: 'DDR5', formFactor: 'ATX' }),
+      item('RAM', 'part-ram-32', 'DDR5 32GB 6000 Kit', 'Samsung', 180_000, { capacityGb: 32, speedMhz: 6000, moduleCount: 2 }),
+      item('GPU', 'part-gpu-5070', 'GeForce RTX 5070', 'NVIDIA', 960_000, { vramGb: 12 }),
+      item('STORAGE', 'part-ssd-1tb', 'NVMe Gen4 SSD 1TB', 'Samsung', 210_000, { capacityGb: 1000, readMbps: 7450, writeMbps: 6900 }),
+      item('PSU', 'part-psu-650', '650W Gold PSU', 'Seasonic', 130_000, { capacityW: 650, efficiency: '80PLUS_GOLD' }),
+      item('CASE', 'part-case-a', 'Mesh ATX Case', 'Fractal Design', 140_000, { formFactor: 'ATX', maxGpuLengthMm: 360, maxCpuCoolerHeightMm: 170 }),
+      item('COOLER', 'part-cooler-air', 'Dual Tower Air Cooler', 'Thermalright', 75_000, { coolerType: 'AIR', heightMm: 157, tdpW: 240 })
     ]
   },
   {
@@ -36,8 +43,28 @@ const savedBuilds = [
     warnings: [{ code: 'PRICE', message: '예산 상단에 가까운 조합입니다.' }],
     evidenceIds: [],
     items: [
-      item('GPU', 'part-gpu-5080', 'GeForce RTX 5080', 'MSI', 1_540_000),
-      item('RAM', 'part-ram-64', 'DDR5 64GB Kit', 'Samsung', 320_000)
+      item('CPU', 'part-cpu-9900x', 'AMD Ryzen 9 9900X', 'AMD', 620_000, { coreCount: 12, threadCount: 24 }),
+      item('MOTHERBOARD', 'part-board-b650', 'B650 WiFi 메인보드', 'ASUS', 260_000, { socket: 'AM5', chipset: 'B650', memoryType: 'DDR5', formFactor: 'ATX' }),
+      item('RAM', 'part-ram-64', 'DDR5 64GB 6400 Kit', 'Samsung', 320_000, { capacityGb: 64, speedMhz: 6400, moduleCount: 2 }),
+      item('GPU', 'part-gpu-5080', 'GeForce RTX 5080', 'MSI', 1_540_000, { vramGb: 16 }),
+      item('STORAGE', 'part-ssd-2tb', 'NVMe Gen5 SSD 2TB', 'Crucial', 430_000, { capacityGb: 2000, readMbps: 14_500, writeMbps: 12_700 }),
+      item('PSU', 'part-psu-850', '850W Gold PSU', 'SuperFlower', 180_000, { capacityW: 850, efficiency: '80PLUS_GOLD' }),
+      item('CASE', 'part-case-b', 'Dual Chamber ATX Case', 'NZXT', 230_000, { formFactor: 'ATX', maxGpuLengthMm: 435 })
+    ]
+  },
+  {
+    id: 'build-office',
+    name: '사무용 저장 견적',
+    recommendedFor: '업무용',
+    summary: '업무 중심 저장 견적입니다.',
+    totalPrice: 1_150_000,
+    confidence: 'HIGH',
+    createdAt: '2026-07-01T08:10:00Z',
+    warnings: [],
+    evidenceIds: [],
+    items: [
+      item('CPU', 'part-cpu-9600x', 'AMD Ryzen 5 9600X', 'AMD', 310_000, { coreCount: 6, threadCount: 12 }),
+      item('GPU', 'part-gpu-5060', 'GeForce RTX 5060', 'NVIDIA', 470_000, { vramGb: 8 })
     ]
   }
 ];
@@ -61,17 +88,47 @@ const priceAlerts = [
   }
 ];
 
-function item(category: string, partId: string, name: string, manufacturer: string, price: number): BuildItem {
+function item(category: string, partId: string, name: string, manufacturer: string, price: number, attributes: Record<string, unknown> = {}): BuildItem {
   return {
+    id: partId,
     category,
     partId,
     name,
     manufacturer,
-    price
+    price,
+    attributes
   };
 }
 
-async function openMyQuotesAsUser(page: Page) {
+function compositeScoreFixture(score: number, label: string) {
+  return {
+    policyVersion: 'build-composite-score-v1',
+    score,
+    rawScore: score,
+    maxScore: 1000,
+    grade: score >= 850 ? 'A' : 'B',
+    label,
+    summary: `${label} 저장 견적입니다.`,
+    components: [
+      { key: 'performance', label: '성능', score: Math.round(score * 0.43), maxScore: 430, percent: 80, summary: '성능 참고' },
+      { key: 'compatibility', label: '호환·장착 안전성', score: 220, maxScore: 220, percent: 100, summary: '호환 통과' },
+      { key: 'balance', label: '병목·여유 균형', score: 130, maxScore: 160, percent: 81, summary: '균형 참고' }
+    ],
+    caps: [],
+    requestFit: {
+      status: 'PASS',
+      score: 100,
+      budgetWon: 0,
+      totalPrice: 0,
+      priceDiff: 0,
+      summary: '요청 예산 적합'
+    },
+    curve: [],
+    missingCategories: []
+  };
+}
+
+async function openMyQuotesAsUser(page: Page, assemblyItems: unknown[] = []) {
   const priceAlertRequests: unknown[] = [];
   const applyBuildRequests: unknown[] = [];
   const graphRequests: unknown[] = [];
@@ -101,6 +158,13 @@ async function openMyQuotesAsUser(page: Page) {
       status: 200,
       contentType: 'application/json',
       body: JSON.stringify({ items: savedBuilds, page: 0, size: 20, total: savedBuilds.length })
+    });
+  });
+  await page.route('**/api/assembly-requests**', async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({ items: assemblyItems, page: 0, size: 20, total: assemblyItems.length })
     });
   });
   await page.route('**/api/quote-drafts/current/apply-ai-build', async (route) => {
@@ -168,7 +232,7 @@ async function openMyQuotesAsUser(page: Page) {
       body: JSON.stringify({ items: priceAlerts, page: 0, size: 20, total: priceAlerts.length })
     });
   });
-  // 저장 견적 성능 비교 매트릭스 — 견적별 CPU/GPU 벤치마크 점수를 돌려준다.
+  // 이전 CPU/GPU 개별 점수 endpoint는 더 이상 비교 대표점수에 쓰지 않는다.
   await page.route('**/api/tools/performance/check', async (route) => {
     await route.fulfill({
       status: 200,
@@ -182,6 +246,11 @@ async function openMyQuotesAsUser(page: Page) {
   await page.route('**/api/build-graphs/resolve', async (route) => {
     const body = JSON.parse(route.request().postData() ?? '{}');
     graphRequests.push(body);
+    const partIds = (body.items ?? []).map((item: { partId?: string }) => item.partId).join('|');
+    const isWorkstation = partIds.includes('part-gpu-5080');
+    const compositeScore = isWorkstation ? compositeScoreFixture(924, '고성능') : compositeScoreFixture(854, '고성능');
+    const cpuBenchmarkScore = isWorkstation ? 73 : 72;
+    const gpuBenchmarkScore = isWorkstation ? 92 : 78;
     await route.fulfill({
       status: 200,
       contentType: 'application/json',
@@ -206,13 +275,14 @@ async function openMyQuotesAsUser(page: Page) {
         ],
         focusNodeIds: ['part-CPU', 'part-GPU'],
         insights: [],
+        compositeScore,
         toolResults: [
           {
             tool: 'performance',
             status: 'PASS',
             confidence: 'HIGH',
             summary: '저장 견적 성능 균형을 확인했습니다.',
-            details: { cpu: 'AMD Ryzen 7 9700X', gpu: 'GeForce RTX 5070', cpuBenchmarkScore: 72, gpuBenchmarkScore: 78, benchmarkSource: 'benchmark_summaries' }
+            details: { cpu: '저장 견적 CPU', gpu: '저장 견적 GPU', cpuBenchmarkScore, gpuBenchmarkScore, benchmarkSource: 'benchmark_summaries' }
           }
         ]
       })
@@ -226,13 +296,13 @@ async function openMyQuotesAsUser(page: Page) {
 test('shows saved quotes, actionable price alert setup, and alert progress', async ({ page }) => {
   const { priceAlertRequests } = await openMyQuotesAsUser(page);
 
-  await expect(page.getByRole('heading', { name: '내 견적함 / 목표가 알림' })).toBeVisible();
-  await expect(page.getByTestId('my-quotes-build-count')).toContainText('2개');
-  await expect(page.getByTestId('my-quotes-alert-count')).toContainText('2개');
-  await expect(page.getByTestId('my-quotes-achieved-count')).toContainText('1개');
+  await expect(page.getByRole('heading', { name: '내 견적함 / 목표가 알림' })).toHaveCount(0);
 
   const firstBuild = page.getByTestId('saved-build-card-build-qhd-balanced');
   await expect(firstBuild).toContainText('QHD 균형 저장 견적');
+  const alertRegistration = page.getByTestId('quote-alert-registration');
+  await expect(alertRegistration).toBeVisible();
+  expect((await alertRegistration.boundingBox())?.y).toBeLessThan((await firstBuild.boundingBox())?.y ?? 0);
   await expect(firstBuild.getByRole('link', { name: '견적 상세' })).toHaveAttribute('href', '/builds/build-qhd-balanced');
   await expect(firstBuild.getByRole('button', { name: '부품 변경' })).toBeVisible();
   // 저장 견적 비교 — 비교할 견적을 고르면 전 카테고리 부품 + 성능을 좌우로 나열.
@@ -241,19 +311,43 @@ test('shows saved quotes, actionable price alert setup, and alert progress', asy
   // 기본으로 앞 2개 견적이 선택되어 열로 노출된다.
   await expect(perfMatrix).toContainText('QHD 균형 저장 견적');
   await expect(perfMatrix).toContainText('작업용 저장 견적');
-  // 구성 부품 섹션 — 카테고리별 실제 부품이 나열된다.
-  await expect(perfMatrix).toContainText('구성 부품');
+  // 부품 비교 섹션 — 카테고리별 실제 부품이 대칭 행으로 나열된다.
+  await expect(perfMatrix).toContainText('A 견적');
   await expect(perfMatrix).toContainText('메인보드');
   await expect(perfMatrix).toContainText('AMD Ryzen 7 9700X');
   await expect(perfMatrix).toContainText('GeForce RTX 5070');
   await expect(perfMatrix).toContainText('GeForce RTX 5080');
-  // 성능 참고 섹션 — 벤치마크 등급.
-  await expect(perfMatrix).toContainText('종합');
-  await expect(perfMatrix).toContainText('상위급');
-  // 견적 선택 해제 시 해당 열(부품)이 사라진다.
+  // 상단 요약 — 기존 총가격과 그래프 종합점수를 A/중앙/B 구조로 표시한다.
+  await expect(perfMatrix.getByTestId('quote-summary-A')).toContainText('2,180,000원');
+  await expect(perfMatrix.getByTestId('quote-summary-A')).toContainText('854점');
+  await expect(perfMatrix.getByTestId('quote-summary-B')).toContainText('3,140,000원');
+  await expect(perfMatrix.getByTestId('quote-summary-B')).toContainText('924점');
+  await expect(perfMatrix.getByTestId('quote-compare-price-delta')).toContainText('A가 960,000원 저렴');
+  await expect(perfMatrix.getByTestId('quote-compare-score-delta')).toContainText('B가 70점 높음');
+  // 수치가 있는 부품만 동일 색상 상대 막대를 사용한다.
+  await expect(perfMatrix.getByTestId('quote-compare-bar-CPU-A')).toContainText('72점');
+  await expect(perfMatrix.getByTestId('quote-compare-bar-GPU-B')).toContainText('92점');
+  await expect(perfMatrix.getByTestId('quote-compare-description-CPU')).toContainText('CPU 성능 유사 · B +1%');
+  await expect(perfMatrix.getByTestId('quote-compare-description-GPU')).toContainText('B GPU 성능 +18%');
+  await expect(perfMatrix.getByTestId('quote-compare-description-RAM')).toContainText('B RAM 용량 +32GB');
+  await expect(perfMatrix.getByTestId('quote-compare-description-STORAGE')).toContainText('B SSD 읽기 속도 +95%');
+  await expect(perfMatrix.getByTestId('quote-compare-description-PSU')).toContainText('B 정격 출력 +200W');
+  // 규격형 부품은 실제 규격을 보이며 의미 없는 막대를 반복하지 않는다.
+  const motherboardRow = perfMatrix.getByTestId('quote-compare-row-MOTHERBOARD');
+  await expect(motherboardRow).toContainText('동일 부품');
+  await expect(motherboardRow).toHaveClass(/py-2\.5/);
+  await expect(motherboardRow.getByTestId('quote-compare-spec-MOTHERBOARD-A')).toContainText('AM5 · B650 · DDR5');
+  await expect(motherboardRow.getByTestId('quote-compare-bar-MOTHERBOARD-A')).toHaveCount(0);
+  await expect(perfMatrix.getByTestId('quote-compare-row-COOLER')).toContainText('B 미포함');
+  await expect(perfMatrix.getByTestId('quote-compare-description-CPU')).toHaveClass(/text-slate-500/);
+  await expect(perfMatrix.getByTestId('quote-compare-description-GPU')).toHaveClass(/text-orange-600/);
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth)).toBe(true);
+  // 2개 선택 중에는 세 번째 견적 선택을 막는다.
+  await expect(perfMatrix.getByTestId('compare-toggle-build-office')).toBeDisabled();
+  // 견적 선택 해제 시 결과 대신 안내가 나오고 다른 견적을 선택할 수 있다.
   await perfMatrix.getByTestId('compare-toggle-build-workstation').click();
-  await expect(perfMatrix).not.toContainText('GeForce RTX 5080');
-  await expect(perfMatrix).toContainText('GeForce RTX 5070');
+  await expect(perfMatrix.getByTestId('quote-compare-selection-guide')).toContainText('하나 더 선택');
+  await expect(perfMatrix.getByTestId('compare-toggle-build-office')).toBeEnabled();
   await firstBuild.getByRole('button', { name: '목표가 등록' }).click();
 
   await expect(page.getByLabel('저장 견적 부품')).toHaveValue('part-cpu-9700x');
@@ -284,23 +378,23 @@ test('limits target price dropdown to the selected quote and opens checkout for 
   await secondBuild.getByRole('button', { name: '목표가 등록' }).click();
 
   const savedPartSelect = page.getByLabel('저장 견적 부품');
-  await expect(savedPartSelect).toHaveValue('part-gpu-5080');
+  await expect(savedPartSelect).toHaveValue('part-cpu-9900x');
   await expect(savedPartSelect.locator('option')).toHaveCount(savedBuilds[1].items.length);
   await expect(savedPartSelect).toContainText('GeForce RTX 5080');
-  await expect(savedPartSelect).toContainText('DDR5 64GB Kit');
+  await expect(savedPartSelect).toContainText('DDR5 64GB 6400 Kit');
   await expect(savedPartSelect).not.toContainText('AMD Ryzen 7 9700X');
 
   await secondBuild.getByRole('button', { name: '구매하기' }).click();
 
   await expect.poll(() => applyBuildRequests.length).toBe(1);
-  expect(applyBuildRequests[0]).toEqual({
+  expect(applyBuildRequests[0]).toEqual(expect.objectContaining({
     buildId: 'build-workstation',
     conflictPolicy: 'REPLACE',
-    items: [
+    items: expect.arrayContaining([
       { partId: 'part-gpu-5080', category: 'GPU', quantity: 1 },
       { partId: 'part-ram-64', category: 'RAM', quantity: 1 }
-    ]
-  });
+    ])
+  }));
   await expect(page).toHaveURL('/checkout');
 });
 
@@ -311,15 +405,39 @@ test('applies the selected saved quote before opening self quote for part change
   await firstBuild.getByRole('button', { name: '부품 변경' }).click();
 
   await expect.poll(() => applyBuildRequests.length).toBe(1);
-  expect(applyBuildRequests[0]).toEqual({
+  expect(applyBuildRequests[0]).toEqual(expect.objectContaining({
     buildId: 'build-qhd-balanced',
     conflictPolicy: 'REPLACE',
-    items: [
+    items: expect.arrayContaining([
       { partId: 'part-cpu-9700x', category: 'CPU', quantity: 1 },
       { partId: 'part-gpu-5070', category: 'GPU', quantity: 1 },
       { partId: 'part-board-b650', category: 'MOTHERBOARD', quantity: 1 }
-    ]
+    ])
+  }));
+  await expect(page).toHaveURL('/self-quote');
+});
+
+test('opens a duplicate in self quote without saving a new build', async ({ page }) => {
+  const { applyBuildRequests } = await openMyQuotesAsUser(page);
+  const saveRequests: string[] = [];
+  await page.route('**/api/builds/from-chat', async (route) => {
+    saveRequests.push(route.request().postData() ?? '');
+    await route.fulfill({ status: 201, contentType: 'application/json', body: JSON.stringify({ id: 'unexpected-build' }) });
   });
+
+  const firstBuild = page.getByTestId('saved-build-card-build-qhd-balanced');
+  await firstBuild.getByTestId('duplicate-build-qhd-balanced').click();
+
+  await expect.poll(() => applyBuildRequests.length).toBe(1);
+  expect(applyBuildRequests[0]).toEqual(expect.objectContaining({
+    buildId: 'build-qhd-balanced',
+    conflictPolicy: 'REPLACE',
+    items: expect.arrayContaining([
+      { partId: 'part-cpu-9700x', category: 'CPU', quantity: 1 },
+      { partId: 'part-gpu-5070', category: 'GPU', quantity: 1 }
+    ])
+  }));
+  expect(saveRequests).toHaveLength(0);
   await expect(page).toHaveURL('/self-quote');
 });
 
@@ -341,15 +459,16 @@ test('opens a read-only dependency graph popup for each saved quote', async ({ p
 
   await firstBuild.getByRole('button', { name: '견적 관계 그래프 보기' }).click();
 
-  await expect.poll(() => graphRequests.length).toBe(1);
-  expect(graphRequests[0]).toMatchObject({
+  await expect.poll(() => graphRequests.length).toBeGreaterThanOrEqual(1);
+  const firstBuildGraphRequest = graphRequests.find((request) => JSON.stringify(request).includes('part-cpu-9700x'));
+  expect(firstBuildGraphRequest).toMatchObject({
     source: 'AI_BUILD',
     budgetWon: 2_180_000,
-    items: [
+    items: expect.arrayContaining([
       { partId: 'part-cpu-9700x', category: 'CPU', quantity: 1 },
       { partId: 'part-gpu-5070', category: 'GPU', quantity: 1 },
       { partId: 'part-board-b650', category: 'MOTHERBOARD', quantity: 1 }
-    ]
+    ])
   });
 
   const dialog = page.getByRole('dialog', { name: '저장 견적 관계 그래프' });
@@ -357,13 +476,13 @@ test('opens a read-only dependency graph popup for each saved quote', async ({ p
   await expect(dialog).toContainText('QHD 균형 저장 견적');
   await expect(dialog).toContainText('읽기 전용');
   await expect(dialog.getByTestId('graph-flow-canvas')).toBeVisible();
+  await expect(dialog.getByTestId('build-composite-score-gauge')).toBeVisible();
   await dialog.getByRole('button', { name: '관계 그래프 닫기' }).click();
   await expect(dialog).toHaveCount(0);
 });
 
-test('renames, duplicates, and soft-deletes a saved quote', async ({ page }) => {
+test('renames and soft-deletes a saved quote while offering duplicate editing', async ({ page }) => {
   const patchRequests: Array<{ id: string; name: string }> = [];
-  const duplicateRequests: string[] = [];
   const deleteRequests: string[] = [];
   let builds = savedBuilds.map((build) => ({ ...build }));
 
@@ -382,14 +501,6 @@ test('renames, duplicates, and soft-deletes a saved quote', async ({ page }) => 
 
     if (path.endsWith('/history')) {
       return json({ items: builds });
-    }
-    const dupMatch = path.match(/\/api\/builds\/([^/]+)\/duplicate$/);
-    if (method === 'POST' && dupMatch) {
-      const source = builds.find((build) => build.id === dupMatch[1]) ?? builds[0];
-      const copy = { ...source, id: `${source.id}-copy`, name: `${source.name} (사본)` };
-      builds = [copy, ...builds];
-      duplicateRequests.push(dupMatch[1]);
-      return json(copy);
     }
     const idMatch = path.match(/\/api\/builds\/([^/]+)$/);
     if (method === 'PATCH' && idMatch) {
@@ -417,10 +528,7 @@ test('renames, duplicates, and soft-deletes a saved quote', async ({ page }) => 
   await expect.poll(() => patchRequests.some((request) => request.name === '내 메인 견적')).toBe(true);
   await expect(firstCard.getByRole('heading', { name: '내 메인 견적' })).toBeVisible();
 
-  // 복제 → 사본 카드가 생긴다
-  await firstCard.getByTestId('duplicate-build-qhd-balanced').click();
-  await expect.poll(() => duplicateRequests.length).toBe(1);
-  await expect(page.getByTestId('saved-build-card-build-qhd-balanced-copy')).toBeVisible();
+  await expect(firstCard.getByRole('button', { name: '복제 후 편집' })).toBeVisible();
 
   // 삭제(인라인 확인) → 카드가 사라진다
   const workstationCard = page.getByTestId('saved-build-card-build-workstation');

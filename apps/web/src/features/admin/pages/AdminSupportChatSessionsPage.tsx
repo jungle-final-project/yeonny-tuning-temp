@@ -586,7 +586,7 @@ export function AdminSupportChatSessionsPage() {
                     </div>
                     <div className="flex items-center justify-between text-[11px]">
                       <span className={`font-bold ${sendError ? 'text-rose-700' : 'text-slate-500'}`} role={sendError ? 'alert' : undefined}>
-                        {sendError ?? 'Enter 키로 즉시 전송합니다. 메시지 입력을 지우지 않으려면 전송 후 바로 다시 입력하세요.'}
+                        {sendError ?? 'Enter 키로 즉시 전송합니다. 전송 후 입력창은 자동으로 비워집니다.'}
                       </span>
                       <span className="text-slate-500">문자 수 {message.length} / 2000</span>
                     </div>
@@ -870,7 +870,7 @@ function seoulDateTimeText(date: Date) {
 }
 
 function errorMessage(error: unknown) {
-  return error instanceof Error && error.message ? error.message : '메시지를 전송하지 못했습니다.';
+  return error instanceof Error && error.message ? error.message : '요청을 처리하지 못했습니다.';
 }
 
 function pollingInterval(detail?: { pollingIntervalMs?: number }) {

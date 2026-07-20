@@ -3,13 +3,16 @@ import { existsSync, readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 
 const apiBaseUrl = process.env.MVP_API_BASE_URL ?? 'http://127.0.0.1:8080';
-const userEmail = process.env.MVP_USER_EMAIL ?? 'user@example.com';
+const userEmail = process.env.MVP_USER_EMAIL ?? `mvp-e2e-${Date.now()}@example.com`;
 const adminEmail = process.env.MVP_ADMIN_EMAIL ?? 'admin@example.com';
 const password = process.env.MVP_PASSWORD ?? 'passw0rd!';
 
 test('MVP E2E: login, recommendation, alert, AS, admin worker views', async ({ page, request }) => {
+  console.log('[MVP] preflight');
   await preflight(request);
+  await ensureUser(request, userEmail);
 
+  console.log('[MVP] user login and Build Chat');
   await login(page, userEmail, password, 'USER');
   const userToken = await accessToken(page);
 
@@ -20,46 +23,52 @@ test('MVP E2E: login, recommendation, alert, AS, admin worker views', async ({ p
   expect(buildChatResponse.status(), 'OPENAI_API_KEY가 없으면 build chat은 428이어야 하며 MVP E2E는 실패합니다.').not.toBe(428);
   expect(buildChatResponse.ok(), await buildChatResponse.text()).toBeTruthy();
 
+  console.log('[MVP] requirement recommendation');
   const recommendation = await createRecommendation(page);
   await page.getByRole('link', { name: '상세 보기' }).first().click();
   await expect(page).toHaveURL(new RegExp(`/builds/${recommendation.buildId}`));
-  await expect(page.getByText('추천 Build 결과')).toBeVisible();
-  await page.getByRole('link', { name: '견적 저장' }).click();
+  await expect(page.getByRole('heading', { name: /추천 견적 결과/ })).toBeVisible();
+  await page.getByRole('link', { name: '내 견적함 보기' }).click();
 
+  console.log('[MVP] saved quote and price alert');
   await expect(page).toHaveURL('/my/quotes');
   await expect(page.getByText('내 견적함')).toBeVisible();
   await page.getByLabel('목표가').fill(String(430_000 + uniqueNumber()));
   await page.getByRole('button', { name: '알림 등록' }).click();
   await expect(page.getByText('알림 등록 완료')).toBeVisible();
 
+  console.log('[MVP] support intake');
   const ticketId = await createSupportTicket(page);
   await expect(page).toHaveURL(new RegExp(`/support/${ticketId}`));
   await expect(page.getByText('AS 티켓 #')).toBeVisible();
 
+  console.log('[MVP] admin ticket review');
   await page.evaluate(() => localStorage.clear());
   await login(page, adminEmail, password, 'ADMIN');
 
   await page.goto(`/admin/as-tickets/${ticketId}`);
-  await expect(page.getByText('AS 티켓 상세')).toBeVisible();
-  await expect(page.getByText(ticketId)).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'AS 티켓 상세' })).toBeVisible();
+  await expect(page.getByText(ticketId, { exact: true }).first()).toBeVisible();
   await page.getByRole('button', { name: '담당자 배정' }).click();
-  await page.getByRole('button', { name: '상태 저장' }).click();
-  await expect(page.getByText('저장 완료')).toBeVisible();
+  await page.getByRole('button', { name: '결정 저장' }).click();
+  await expect(page.getByText('결정 저장 완료')).toBeVisible();
   await page.getByLabel('상태', { exact: true }).selectOption('IN_PROGRESS');
   await page.getByLabel('관리자 메모').fill('MVP E2E 담당자 배정 및 상태 전이 확인');
-  await page.getByRole('button', { name: '상태 저장' }).click();
-  await expect(page.getByText('저장 완료')).toBeVisible();
+  await page.getByRole('button', { name: '결정 저장' }).click();
+  await expect(page.getByText('결정 저장 완료')).toBeVisible();
 
+  console.log('[MVP] agent trace');
   await page.goto(`/admin/agent-sessions/${recommendation.agentSessionId}`);
-  await expect(page.getByText('Agent 실행 Trace')).toBeVisible();
-  await expect(page.getByText(/현재 상태: (SUCCEEDED|FAILED|RUNNING|QUEUED)/)).toBeVisible();
-  await expect(page.getByText('Tool 호출 이력')).toBeVisible();
-  await expect(page.getByRole('heading', { name: 'RAG Evidence' })).toBeVisible();
-  await expect(page.getByRole('heading', { name: 'LLM 생성 기록' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: '에이전트 실행 이력', exact: true })).toBeVisible();
+  await expect(page.getByText(/현재 상태:/)).toBeVisible();
+  await expect(page.getByRole('heading', { name: '도구 호출 이력', exact: true })).toBeVisible();
+  await expect(page.getByRole('heading', { name: '검색 근거', exact: true })).toBeVisible();
+  await expect(page.getByRole('heading', { name: '언어모델 생성 기록', exact: true })).toBeVisible();
 
+  console.log('[MVP] price job');
   await page.goto('/admin/price-jobs');
-  await expect(page.getByText('가격 Job 관리자')).toBeVisible();
-  const runButton = page.getByRole('button', { name: /가격 Job 실행|실행 중인 Job 있음|실행 요청 중/ });
+  await expect(page.getByRole('heading', { name: '가격 작업 관리자' })).toBeVisible();
+  const runButton = page.getByRole('button', { name: /가격 작업 실행|실행 중인 작업 있음|실행 요청 중/ }).last();
   if (await runButton.isEnabled()) {
     const runResponse = page.waitForResponse((response) =>
       response.url().includes('/api/admin/price-jobs/run') && response.request().method() === 'POST'
@@ -68,10 +77,11 @@ test('MVP E2E: login, recommendation, alert, AS, admin worker views', async ({ p
     const response = await runResponse;
     expect(response.ok(), await response.text()).toBeTruthy();
     await expect(page.getByText('실행 요청 완료')).toBeVisible();
-    await expect(page.getByText(/^(QUEUED|RUNNING|SUCCEEDED|FAILED)$/).first()).toBeVisible();
+    await expect(page.getByText(/^(대기|실행 중|성공|실패)$/).first()).toBeVisible();
   } else {
-    await expect(page.getByText('실행 중인 Job 있음')).toBeVisible();
+    await expect(page.getByText('실행 중인 작업 있음').first()).toBeVisible();
   }
+  console.log('[MVP] complete');
 });
 
 async function preflight(request: APIRequestContext) {
@@ -82,12 +92,33 @@ async function preflight(request: APIRequestContext) {
   expect(apiHealth.ok(), `API health check failed: ${apiHealth.status()}`).toBeTruthy();
 }
 
+async function ensureUser(request: APIRequestContext, email: string) {
+  const existing = await request.post(`${apiBaseUrl}/api/auth/login`, { data: { email, password } });
+  if (existing.ok()) return;
+  const suffix = String(Date.now()).slice(-7);
+  const created = await request.post(`${apiBaseUrl}/api/users`, { data: {
+    email,
+    password,
+    name: 'MVP E2E User',
+    phoneNumber: `010-${suffix.slice(0, 3)}-${suffix.slice(3)}`,
+    postalCode: '06236',
+    addressLine1: '서울특별시 강남구 테헤란로 1',
+    addressLine2: 'QA',
+    termsAccepted: true,
+    marketingAccepted: false
+  } });
+  expect(created.ok(), await created.text()).toBeTruthy();
+}
+
 async function login(page: Page, email: string, loginPassword: string, role: 'USER' | 'ADMIN') {
   await page.goto('/login');
   await page.getByLabel('이메일').fill(email);
   await page.getByLabel('비밀번호').fill(loginPassword);
   await page.getByRole('button', { name: '로그인' }).click();
-  await expect(page.getByText(`로그인됨 · ${email} · ${role}`)).toBeVisible();
+  await expect(page).not.toHaveURL(/\/login(?:\?|$)/);
+  await expect.poll(async () => page.evaluate(() => localStorage.getItem('buildgraph.token'))).toBeTruthy();
+  const storedUser = await page.evaluate(() => localStorage.getItem('buildgraph.authUser'));
+  expect(storedUser).toContain(`\"role\":\"${role}\"`);
 }
 
 async function accessToken(page: Page) {
@@ -126,7 +157,7 @@ async function createRecommendation(page: Page) {
   const agentSessionId = body.agentSessionId ?? body.recommendations?.[0]?.agentSessionId;
   expect(buildId).toBeTruthy();
   expect(agentSessionId).toBeTruthy();
-  await expect(page.getByText('추천 빌드 3개')).toBeVisible();
+  await expect(page.getByRole('heading', { name: /추천 조합 [1-3]개/ })).toBeVisible();
   return { buildId: buildId as string, agentSessionId: agentSessionId as string };
 }
 
@@ -145,7 +176,7 @@ async function createSupportTicket(page: Page) {
       event: 'frame_drop'
     }) + '\n')
   });
-  await page.getByLabel('최근 30분 로그 업로드와 30일 보관 후 삭제 정책에 동의합니다.').check();
+  await page.getByLabel('선택한 구간의 로그 업로드와 30일 보관 후 삭제 정책에 동의합니다.').check();
   await page.getByRole('button', { name: 'AS 접수하기' }).click();
   await expect(page).toHaveURL(/\/support\/[0-9a-f-]+/);
   const match = page.url().match(/\/support\/([0-9a-f-]+)$/);

@@ -3,7 +3,7 @@ import { Link, Navigate, useNavigate, useParams } from 'react-router-dom';
 import { Panel, Screen, StateMessage } from '../../../components/ui';
 import { BuildDetailSections, latestUserMessage, temporaryBuildToBuildSummary } from '../components/BuildDetailSections';
 import { QuoteCard } from '../components/QuoteCard';
-import { getBuild, saveBuildFromChat } from '../quoteApi';
+import { buildSaveErrorMessage, getBuild, saveBuildFromChat } from '../quoteApi';
 import { markAssistantBuildSaved, readAssistantSession, type AiRecommendedBuild } from '../aiSelection';
 
 export function BuildResultPage() {
@@ -39,8 +39,8 @@ export function BuildResultPage() {
   if (!temporaryBuild && isLoading) {
     return (
       <Screen>
-        <Panel title="추천 Build 결과">
-          <StateMessage type="info" title="Build 로딩 중" body="추천 build 상세와 Tool 검증 결과를 불러오고 있습니다." />
+        <Panel title="추천 견적 결과">
+          <StateMessage type="info" title="견적 로딩 중" body="추천 견적 상세와 검증 결과를 불러오고 있습니다." />
         </Panel>
       </Screen>
     );
@@ -49,8 +49,8 @@ export function BuildResultPage() {
   if (!displayBuild || (!temporaryBuild && isError)) {
     return (
       <Screen>
-        <Panel title="추천 Build 결과">
-          <StateMessage type="warn" title="Build 조회 실패" body="선택한 추천 build를 불러오지 못했습니다." />
+        <Panel title="추천 견적 결과">
+          <StateMessage type="warn" title="견적 조회 실패" body="선택한 추천 견적을 불러오지 못했습니다." />
         </Panel>
       </Screen>
     );
@@ -59,9 +59,9 @@ export function BuildResultPage() {
   return (
     <Screen>
       <div className="space-y-5">
-        <Panel title={`추천 Build 결과 / ${displayBuild.name}`} subtitle={isTemporaryBuild ? `임시 추천 ID ${displayBuild.id.slice(0, 8)}` : `견적 ID ${displayBuild.id.slice(0, 8)}`}>
+        <Panel title={`추천 견적 결과 / ${displayBuild.name}`} subtitle={isTemporaryBuild ? `임시 추천 ID ${displayBuild.id.slice(0, 8)}` : `견적 ID ${displayBuild.id.slice(0, 8)}`}>
           {isTemporaryBuild ? (
-            <div className="mb-3 rounded-md border border-blue-100 bg-blue-50 px-4 py-3 text-sm font-bold text-brand-blue">
+            <div className="mb-3 rounded-md border border-[#f4c8b2] bg-[#fff5ef] px-4 py-3 text-sm font-bold text-[#de6c2d]">
               저장 전 AI 챗봇 추천
             </div>
           ) : null}
@@ -71,24 +71,24 @@ export function BuildResultPage() {
         </Panel>
         <BuildDetailSections
           displayBuild={displayBuild}
-          conditionBody={isTemporaryBuild ? '저장 버튼을 누르면 서버에서 다시 Tool 검증 후 견적으로 저장합니다.' : '현재 구성은 저장된 내부 자산 기준 Tool 검증을 통과했습니다.'}
+          conditionBody={isTemporaryBuild ? '저장 버튼을 누르면 서버에서 다시 검증한 뒤 견적으로 저장합니다.' : '현재 구성은 저장된 내부 자산 기준 자동 검증을 통과했습니다.'}
           summaryActions={isTemporaryBuild && temporaryBuild ? (
             <>
               <button
                 type="button"
                 onClick={() => saveMutation.mutate(temporaryBuild)}
                 disabled={saveMutation.isPending}
-                className="block w-full rounded bg-brand-blue px-4 py-3 text-center text-sm font-bold text-white hover:bg-blue-700 disabled:cursor-wait disabled:bg-slate-400"
+                className="block w-full rounded bg-[#de6c2d] px-4 py-3 text-center text-sm font-bold text-white hover:bg-[#c45c22] disabled:cursor-wait disabled:bg-slate-400 disabled:hover:bg-slate-400"
               >
                 {saveMutation.isPending ? '저장 중' : '견적 저장'}
               </button>
               {saveMutation.isError ? (
-                <StateMessage type="warn" title="견적 저장 실패" body="AI 챗봇 추천 견적을 저장하지 못했습니다. 잠시 후 다시 시도해 주세요." />
+                <StateMessage type="warn" title="견적 저장 실패" body={buildSaveErrorMessage(saveMutation.error)} />
               ) : null}
             </>
           ) : (
             <>
-              <Link to="/my/quotes" className="block rounded bg-brand-blue px-4 py-3 text-center text-sm font-bold text-white hover:bg-blue-700">내 견적함 보기</Link>
+              <Link to="/my/quotes" className="block rounded bg-[#de6c2d] px-4 py-3 text-center text-sm font-bold text-white hover:bg-[#c45c22]">내 견적함 보기</Link>
               <Link to={`/builds/${displayBuild.id}/change-part`} className="block rounded border border-slate-300 px-4 py-3 text-center text-sm font-bold hover:border-commerce-ink">부품 변경 비교</Link>
             </>
           )}

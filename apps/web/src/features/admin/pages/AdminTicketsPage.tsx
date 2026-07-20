@@ -15,8 +15,8 @@ export function AdminTicketsPage() {
   const ticketRows = tickets.map((ticket) => ({
     '티켓': <Link className="font-bold text-brand-blue" to={`/admin/as-tickets/${ticket.id}`}>{shortId(ticket.id)}</Link>,
     '상태': <StatusBadge status={ticket.status} />,
-    '검수': ticket.reviewStatus ? <StatusBadge status={ticket.reviewStatus} /> : '-',
-    '판정': ticket.supportDecision ? <StatusBadge status={ticket.supportDecision} /> : '-',
+    '검토': ticket.reviewStatus ? <StatusBadge status={ticket.reviewStatus} /> : '-',
+    '결정': ticket.supportDecision ? <StatusBadge status={ticket.supportDecision} /> : '-',
     '추천 서비스': recommendedSupportLabel(ticket),
     '증상': <Link className="font-bold text-slate-800 hover:text-brand-blue" to={`/admin/as-tickets/${ticket.id}`}>{ticket.title ?? firstLine(ticket.symptom)}</Link>,
     '사용자': userLabel(ticket),
@@ -36,7 +36,7 @@ export function AdminTicketsPage() {
             <StateMessage type="info" title="AS 티켓 없음" body="표시할 관리자 AS 티켓이 없습니다." />
           ) : null}
           {!isLoading && !isError && ticketRows.length > 0 ? (
-            <DataTable columns={['티켓', '상태', '검수', '판정', '추천 서비스', '증상', '사용자', '접수 시간', '담당자']} rows={ticketRows} />
+            <DataTable columns={['티켓', '상태', '검토', '결정', '추천 서비스', '증상', '사용자', '접수 시간', '담당자']} rows={ticketRows} />
           ) : null}
         </Panel>
 
@@ -47,8 +47,8 @@ export function AdminTicketsPage() {
                 { 필드: 'ticketId', 값: selected.id },
                 { 필드: '상태', 값: <StatusBadge status={selected.status} /> },
                 { 필드: '분석 상태', 값: selected.analysisStatus ?? '-' },
-                { 필드: '검수 상태', 값: selected.reviewStatus ?? '-' },
-                { 필드: '지원 판정', 값: selected.supportDecision ?? '-' },
+                { 필드: '검토 상태', 값: selected.reviewStatus ?? '-' },
+                { 필드: '지원 결정', 값: selected.supportDecision ?? '-' },
                 { 필드: '로그 업로드', 값: selected.logUploadId ?? '-' },
                 { 필드: '원인 후보', 값: `${selected.causeCandidates.length}건` },
                 { 필드: '추천 조치', 값: `${selected.upgradeCandidates.length}건` }

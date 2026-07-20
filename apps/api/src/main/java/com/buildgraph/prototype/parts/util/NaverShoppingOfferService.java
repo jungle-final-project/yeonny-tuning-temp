@@ -1171,7 +1171,13 @@ public class NaverShoppingOfferService {
                     && !upperTitle.contains("피규어")
                     && !upperTitle.contains("장식")
                     && !upperTitle.contains("모형")
-                    && !upperTitle.contains("수집 가능한 모델");
+                    && !upperTitle.contains("수집 가능한 모델")
+                    && !upperTitle.contains("워터 블럭")
+                    && !upperTitle.contains("워터블럭")
+                    && !upperTitle.contains("WATER BLOCK")
+                    && !upperTitle.contains("WATERBLOCK")
+                    && !upperTitle.contains("백플레이트")
+                    && !upperTitle.contains("브라켓");
         }
         return true;
     }

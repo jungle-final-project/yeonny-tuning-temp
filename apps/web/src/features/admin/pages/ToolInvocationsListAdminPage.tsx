@@ -1,6 +1,7 @@
 import { useQuery } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
 import { AdminShell, DataTable, Panel, StateMessage } from '../../../components/ui';
+import { formatKstDateTime } from '../../../lib/dateTime';
 import { getAdminToolInvocations } from '../adminApi';
 import { KoreanStatusBadge, koreanToolLabel } from '../adminDisplay';
 
@@ -18,7 +19,7 @@ export function ToolInvocationsListAdminPage() {
     도구: koreanToolLabel(invocation.toolName),
     상태: <KoreanStatusBadge status={invocation.status} />,
     '근거 수준': <KoreanStatusBadge status={invocation.confidence} />,
-    '생성 시간': formatDateTime(invocation.createdAt)
+    '생성 시간': formatKstDateTime(invocation.createdAt)
   }));
   const exportRows = invocations.map((invocation) => ({
     id: invocation.id,
@@ -26,7 +27,7 @@ export function ToolInvocationsListAdminPage() {
     toolName: invocation.toolName,
     status: invocation.status,
     confidence: invocation.confidence,
-    createdAt: formatDateTime(invocation.createdAt)
+    createdAt: formatKstDateTime(invocation.createdAt)
   }));
 
   return (
@@ -44,8 +45,4 @@ export function ToolInvocationsListAdminPage() {
       </Panel>
     </AdminShell>
   );
-}
-
-function formatDateTime(value?: string) {
-  return value ? value.replace('T', ' ').slice(0, 19) : '-';
 }

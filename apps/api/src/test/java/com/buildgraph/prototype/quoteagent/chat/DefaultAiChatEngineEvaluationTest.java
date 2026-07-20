@@ -2,6 +2,8 @@ package com.buildgraph.prototype.quoteagent.chat;
 
 import org.junit.jupiter.api.Test;
 
+import com.buildgraph.prototype.quoteagent.chat.dto.AiChatRequestDto;
+
 import static org.assertj.core.api.Assertions.assertThat;
 
 class DefaultAiChatEngineEvaluationTest {

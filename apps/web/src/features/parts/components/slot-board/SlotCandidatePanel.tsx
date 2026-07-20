@@ -1,27 +1,51 @@
 import { useInfiniteQuery } from '@tanstack/react-query';
 import { Eye, Heart, Search, X } from 'lucide-react';
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { Link } from 'react-router-dom';
 import { handlePartImageError, partImageUrl, specRows } from '../../partDisplay';
 import { listParts } from '../../partsApi';
 import type { PartRow, PartSearchParams, QuoteDraftItem } from '../../types';
 import { openAiAssistant } from '../../../../lib/events';
+import { DraftQuantityStepper } from './DraftQuantityStepper';
 import { isMultiItemCategory, type SlotConfig } from './slotBoardConfig';
+import { useBoardDrag, useIsDesktop } from './useBoardDrag';
 
 // CPU·GPU만 벤치마크 점수가 있어 교체 성능 비교가 의미 있다 — 그 외 카테고리는 버튼을 숨긴다.
 const PERF_COMPARABLE = new Set(['CPU', 'GPU']);
 
 const CANDIDATE_PAGE_SIZE = 20;
 
+// 데스크톱 패널 초기 위치·크기: 보드 스테이지 좌측에 12px 여백으로 떠 있던 기존 배치를 그대로 재현한다.
+// 포탈(document.body) + position:fixed라 보드 밖으로도 드래그할 수 있다.
+function panelInitialRect() {
+  const fallback = { left: 24, top: 96, width: 420, height: 560 };
+  if (typeof document === 'undefined') {
+    return fallback;
+  }
+  const stage = document.querySelector('[data-testid="slot-board-body-stage"]')
+    ?? document.querySelector('[data-testid="slot-board"]');
+  const rect = stage?.getBoundingClientRect();
+  if (!rect || rect.width === 0) {
+    return fallback;
+  }
+  return {
+    left: rect.left + 12,
+    top: rect.top + 12,
+    width: Math.min(Math.min(520, Math.max(360, rect.width * 0.52)), rect.width) - 24,
+    height: Math.max(320, rect.height - 24)
+  };
+}
+
 type SlotCandidatePanelProps = {
   slot: SlotConfig;
   draftItems: QuoteDraftItem[];
   onClose: () => void;
-  onAddPart: (part: PartRow) => void;
-  onReplacePart: (removePartId: string, part: PartRow) => void;
+  onAddPart: (part: PartRow) => Promise<unknown>;
   onRemoveItem: (partId: string) => void;
   onUpdateQuantity: (partId: string, quantity: number) => void;
   isMutating: boolean;
+  placement?: 'board-overlay';
 };
 
 export function SlotCandidatePanel({
@@ -29,10 +53,10 @@ export function SlotCandidatePanel({
   draftItems,
   onClose,
   onAddPart,
-  onReplacePart,
   onRemoveItem,
   onUpdateQuantity,
-  isMutating
+  isMutating,
+  placement = 'board-overlay'
 }: SlotCandidatePanelProps) {
   const [sort, setSort] = useState<PartSearchParams['sort']>('price_asc');
   const [searchInput, setSearchInput] = useState('');
@@ -45,9 +69,41 @@ export function SlotCandidatePanel({
   const [maxPrice, setMaxPrice] = useState<number | undefined>(undefined);
   const [hideFail, setHideFail] = useState(false);
   const [onlyWishlist, setOnlyWishlist] = useState(false);
+  // 데스크톱 패널: 포탈+fixed로 띄워 헤더 드래그(보드 밖 허용, 화면 이탈만 방지)·꼭지점 리사이즈.
+  // 모바일 바텀시트는 고정. 더블클릭·슬롯 전환 시 초기 위치·크기로 복귀.
+  const isDesktop = useIsDesktop();
+  const {
+    targetRef: panelRef,
+    dragStyle,
+    isDragging,
+    startDrag: startPanelDrag,
+    resetDrag
+  } = useBoardDrag<HTMLElement>({ resetKey: slot.category });
+  const [initialRect, setInitialRect] = useState(() => panelInitialRect());
+  // URL로 페이지와 함께 마운트되면 첫 렌더 시점엔 보드가 아직 DOM에 없다 —
+  // 커밋 직후(페인트 전) 실제 스테이지 위치로 다시 잰다.
+  useLayoutEffect(() => {
+    setInitialRect(panelInitialRect());
+  }, []);
+  const applyInitialSize = () => {
+    const el = panelRef.current;
+    if (el && typeof window !== 'undefined' && window.matchMedia('(min-width: 1024px)').matches) {
+      el.style.width = `${initialRect.width}px`;
+      el.style.height = `${initialRect.height}px`;
+    }
+  };
+  const resetPanelPlacement = () => {
+    resetDrag();
+    applyInitialSize();
+  };
+  // 슬롯 전환 시 훅의 resetDrag가 인라인 크기를 지우므로, 초기 크기를 다시 입힌다.
+  useEffect(() => {
+    applyInitialSize();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [slot.category]);
   const [wishlist, setWishlist] = useState<Set<string>>(() => readWishlist());
   const [quickViewPart, setQuickViewPart] = useState<PartRow | null>(null);
-  const [replaceTargetId, setReplaceTargetId] = useState<string | null>(null);
+  const [commitError, setCommitError] = useState<string | null>(null);
 
   function toggleWishlist(partId: string) {
     setWishlist((prev) => {
@@ -98,6 +154,7 @@ export function SlotCandidatePanel({
     setHideFail(false);
     setOnlyWishlist(false);
     setQuickViewPart(null);
+    setCommitError(null);
   }, [slot.category]);
   const isMulti = isMultiItemCategory(slot.category);
   const selectedPartIds = new Set(draftItems.map((item) => item.partId));
@@ -105,12 +162,10 @@ export function SlotCandidatePanel({
   const currentPart = draftItems[0];
   const canComparePerf = PERF_COMPARABLE.has(slot.category) && Boolean(currentPart);
 
-  // 평가 의미론: 교체 대상을 지정하면 그 행만 빼고(REPLACE+target), RAM/SSD처럼 여러 개 담는
-  // 카테고리는 담기 기준(ADD — 기존 구성 유지+후보 합산)으로 평가한다. 단일 슬롯은 서버 기본
-  // (REPLACE = 교체-전체)이 담기/교체 실행과 의미가 같아 파라미터를 생략한다.
-  const compatibilityMode = replaceTargetId ? undefined : isMulti ? 'ADD' as const : undefined;
+  // RAM/SSD는 기존 구성에 후보를 더하는 ADD 기준, 단일 슬롯은 서버 기본 REPLACE 기준으로 평가한다.
+  const compatibilityMode = isMulti ? 'ADD' as const : undefined;
   const { data, isLoading, isError, isFetchingNextPage, hasNextPage, fetchNextPage } = useInfiniteQuery({
-    queryKey: ['parts', 'slot-candidates', slot.category, sort, q, manufacturer, minPrice, maxPrice, compatibilityMode ?? 'REPLACE', replaceTargetId],
+    queryKey: ['parts', 'slot-candidates', slot.category, sort, q, manufacturer, minPrice, maxPrice, compatibilityMode ?? 'REPLACE'],
     queryFn: ({ pageParam }) => listParts({
       category: slot.category,
       page: pageParam,
@@ -121,8 +176,7 @@ export function SlotCandidatePanel({
       minPrice,
       maxPrice,
       compatibilitySource: 'QUOTE_DRAFT_CURRENT',
-      compatibilityMode,
-      replaceTargetPartId: replaceTargetId ?? undefined
+      compatibilityMode
     }),
     initialPageParam: 0,
     getNextPageParam: (lastPage) => (lastPage.page + 1) * lastPage.size < lastPage.total ? lastPage.page + 1 : undefined
@@ -169,13 +223,6 @@ export function SlotCandidatePanel({
     return () => window.removeEventListener('keydown', onKeyDown);
   }, [onClose]);
 
-  // 교체 대상은 현재 항목 목록이 바뀌면 초기화한다.
-  useEffect(() => {
-    if (replaceTargetId && !draftItems.some((item) => item.partId === replaceTargetId)) {
-      setReplaceTargetId(null);
-    }
-  }, [draftItems, replaceTargetId]);
-
   const sentinelRef = useRef<HTMLDivElement | null>(null);
   useEffect(() => {
     const sentinel = sentinelRef.current;
@@ -191,18 +238,36 @@ export function SlotCandidatePanel({
     return () => observer.disconnect();
   }, [hasNextPage, isFetchingNextPage, fetchNextPage]);
 
-  const replaceTarget = draftItems.find((item) => item.partId === replaceTargetId) ?? null;
+  const commitPart = async (part: PartRow) => {
+    setCommitError(null);
+    try {
+      await onAddPart(part);
+    } catch {
+      setCommitError('부품을 견적에 반영하지 못했습니다. 잠시 후 다시 시도해 주세요.');
+    }
+  };
 
-  return (
+  const panelContent = (
     <>
       <div aria-hidden="true" onClick={onClose} className="fixed inset-0 z-30 bg-slate-900/40 lg:hidden" />
       <section
-      data-testid="slot-candidate-panel"
-      role="dialog"
-      aria-label={`${slot.label} 부품 목록`}
-      className="panel slot-panel-in fixed inset-x-0 bottom-0 z-40 flex max-h-[72vh] flex-col overflow-hidden rounded-t-xl border-t border-commerce-line shadow-2xl lg:static lg:z-auto lg:h-0 lg:max-h-none lg:min-h-full lg:rounded-lg lg:border lg:shadow-none"
-    >
-      <div className="flex items-start justify-between gap-3 border-b border-commerce-line px-4 py-3">
+        ref={panelRef}
+        data-testid="slot-candidate-panel"
+        data-placement={placement}
+        role="dialog"
+        aria-label={`${slot.label} 부품 목록`}
+        style={isDesktop
+          ? { left: initialRect.left, top: initialRect.top, width: initialRect.width, height: initialRect.height, ...dragStyle }
+          : dragStyle}
+        className="panel slot-panel-in fixed inset-x-0 bottom-0 z-40 flex max-h-[72vh] flex-col overflow-hidden rounded-t-xl border-t border-commerce-line shadow-2xl lg:inset-auto lg:z-[55] lg:max-h-[92vh] lg:min-h-[280px] lg:w-auto lg:min-w-[320px] lg:max-w-[92vw] lg:rounded-xl lg:border lg:border-commerce-line lg:shadow-xl lg:[resize:both]"
+      >
+      <div
+        data-testid="slot-candidate-panel-handle"
+        title="드래그해서 옮기고, 더블클릭하면 원래 자리로 돌아옵니다"
+        onPointerDown={startPanelDrag}
+        onDoubleClick={resetPanelPlacement}
+        className={`flex items-start justify-between gap-3 border-b border-commerce-line px-4 py-3 ${isDragging ? 'lg:cursor-grabbing' : 'lg:cursor-grab'} select-none lg:touch-none`}
+      >
         <div className="min-w-0">
           <h2 className="text-base font-black text-commerce-ink">{slot.label} 부품 목록</h2>
           <p className="mt-0.5 text-[11px] font-bold text-slate-500">현재 견적 기준 호환 검사 · 장착 불가 후보도 담아서 사유를 확인할 수 있어요</p>
@@ -320,8 +385,7 @@ export function SlotCandidatePanel({
         </div>
       </div>
 
-      {/* 담은 부품: 별도 정보 박스(가격추이·스펙 뱃지) 대신, 후보 리스트 상단에 얇은 관리 행으로 —
-          부품별 수량 ±·교체 지정·제거를 인라인으로 조작한다. 후보 피드와 독립 렌더라 필터/페이지와 무관하게 항상 보인다. */}
+      {/* 담은 부품은 후보 피드와 독립된 관리 행으로 유지한다. RAM/SSD 수량과 제거를 여기서 바로 조작한다. */}
       {draftItems.length > 0 ? (
         <div className="shrink-0 border-b border-commerce-line px-4 py-3">
           <div className="mb-1.5 text-[11px] font-black text-slate-500">담은 {slot.label} {draftItems.length}개</div>
@@ -334,22 +398,7 @@ export function SlotCandidatePanel({
                 </div>
                 <div className="flex shrink-0 items-center gap-1.5">
                   {isMulti ? (
-                    <>
-                      <QuantityStepper item={item} disabled={isMutating} onChange={onUpdateQuantity} />
-                      <button
-                        type="button"
-                        aria-label={`${item.name} 교체 대상 선택`}
-                        aria-pressed={replaceTargetId === item.partId}
-                        onClick={() => setReplaceTargetId((current) => current === item.partId ? null : item.partId)}
-                        className={`rounded-md border px-2 py-1 font-black ${
-                          replaceTargetId === item.partId
-                            ? 'border-brand-blue bg-blue-50 text-brand-blue'
-                            : 'border-commerce-line bg-white text-slate-600 hover:border-commerce-ink'
-                        }`}
-                      >
-                        교체
-                      </button>
-                    </>
+                    <DraftQuantityStepper item={item} disabled={isMutating} onChange={onUpdateQuantity} />
                   ) : null}
                   <button
                     type="button"
@@ -364,14 +413,16 @@ export function SlotCandidatePanel({
               </div>
             ))}
           </div>
-          {replaceTarget ? (
-            <div className="mt-1.5 text-[11px] font-bold text-brand-blue">아래 후보를 선택하면 {replaceTarget.name}와(과) 교체합니다.</div>
-          ) : null}
         </div>
       ) : null}
 
-      {/* 후보 목록만 스크롤 영역: 데스크톱은 카드 약 6개 분량 높이로 제한한다. 데이터는 20개 페이지 로드를 유지. */}
-      {/* lg: 패널이 h-0+min-h-full로 보드(구성 관계도) 높이를 따라가므로 목록도 그 안에서 스크롤된다. */}
+      {commitError ? (
+        <div data-testid="candidate-commit-error" className="mx-4 mt-3 shrink-0 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-xs font-bold text-red-700">
+          {commitError}
+        </div>
+      ) : null}
+
+      {/* 후보 목록만 스크롤하고 보드 자체의 크기에는 영향을 주지 않는다. */}
       <div data-testid="slot-candidate-list" className="scrollbar-hidden min-h-0 flex-1 overflow-y-auto p-4">
         {isLoading ? (
           <div className="rounded-md border border-commerce-line p-4 text-sm text-slate-500">후보 목록을 불러오는 중입니다.</div>
@@ -388,16 +439,13 @@ export function SlotCandidatePanel({
             const failReason = isFail
               ? part.compatibility?.summary || part.compatibility?.statusLabel || '현재 견적과 호환되지 않습니다'
               : null;
-            const actionLabel = replaceTarget
-              ? `${part.name}(으)로 교체`
-              : isMulti || draftItems.length === 0
-                ? `${part.name} 담기`
-                : `${part.name} 교체`;
-            const actionText = replaceTarget ? '이걸로 교체' : isMulti || draftItems.length === 0 ? '담기' : '교체';
+            const actionLabel = isMulti || draftItems.length === 0 ? `${part.name} 담기` : `${part.name} 교체`;
+            const actionText = isMulti || draftItems.length === 0 ? '담기' : '교체';
             return (
               <article
                 key={part.id}
                 data-compat={part.compatibility?.status ?? 'NONE'}
+                data-recommended={part.recommendation?.recommended ? 'true' : 'false'}
                 className={`flex items-center gap-3 rounded-md border p-2.5 ${
                   isFail ? 'border-red-200 bg-red-50/40' : 'border-commerce-line bg-white'
                 }`}
@@ -405,10 +453,13 @@ export function SlotCandidatePanel({
                 {/* 제품 사진·이름을 누르면 상세 페이지로 이동한다(담기와 구분되는 진입점 — 살아있던 상세 페이지 재연결). */}
                 <Link to={`/parts/${part.id}`} aria-label={`${part.name} 상세 페이지 보기`} className="shrink-0">
                   <img
+                    data-testid="candidate-part-image"
                     src={partImageUrl(part)}
                     alt={`${part.name} 제품 사진`}
+                    loading="lazy"
+                    decoding="async"
                     onError={(event) => handlePartImageError(event, part.category)}
-                    className="h-12 w-12 rounded-md border border-commerce-line bg-slate-100 object-cover transition hover:opacity-90"
+                    className="h-[72px] w-[72px] rounded-md border border-commerce-line bg-slate-50 object-contain p-1 transition hover:opacity-90"
                   />
                 </Link>
                 <div className="min-w-0 flex-1 text-xs">
@@ -420,6 +471,14 @@ export function SlotCandidatePanel({
                     {part.externalOffer?.supplierName ? ` · ${part.externalOffer.supplierName}` : ''}
                   </div>
                   <div className="mt-1 flex flex-wrap items-center gap-1.5">
+                    {part.recommendation?.recommended ? (
+                      <span
+                        data-testid="candidate-recommendation-badge"
+                        className="rounded-full border border-orange-200 bg-orange-50 px-1.5 py-0.5 text-[10px] font-black text-orange-700"
+                      >
+                        추천 {part.recommendation.rank}
+                      </span>
+                    ) : null}
                     <span className="font-black text-commerce-ink">{part.price.toLocaleString()}원</span>
                     {part.compatibility?.status === 'WARN' ? (
                       <span className="rounded border border-amber-100 bg-amber-50 px-1.5 py-0.5 text-[10px] font-black text-amber-700">간섭 주의</span>
@@ -428,6 +487,11 @@ export function SlotCandidatePanel({
                       <span className="rounded border border-red-200 bg-red-50 px-1.5 py-0.5 text-[10px] font-black text-red-700">장착 불가</span>
                     ) : null}
                   </div>
+                  {part.recommendation?.recommended && part.recommendation.reasons[0] ? (
+                    <div data-testid="candidate-recommendation-reason" className="mt-0.5 line-clamp-1 text-[10px] font-semibold text-orange-700">
+                      {part.recommendation.reasons[0]}
+                    </div>
+                  ) : null}
                   {part.compatibility?.status === 'WARN' && part.compatibility.summary ? (
                     <div className="mt-0.5 line-clamp-1 text-[10px] text-slate-500">{part.compatibility.summary}</div>
                   ) : null}
@@ -465,7 +529,7 @@ export function SlotCandidatePanel({
                     type="button"
                     aria-label={isFail ? `${actionLabel} (장착 불가 — 담아서 확인)` : actionLabel}
                     disabled={isMutating || isSelected}
-                    onClick={() => replaceTarget ? onReplacePart(replaceTarget.partId, part) : onAddPart(part)}
+                    onClick={() => void commitPart(part)}
                     className={`rounded-md px-2.5 py-2 text-xs font-black transition disabled:cursor-not-allowed ${
                       isSelected
                         ? 'border border-commerce-line bg-slate-50 text-slate-400 disabled:opacity-60'
@@ -532,6 +596,9 @@ export function SlotCandidatePanel({
       ) : null}
     </>
   );
+
+  // 데스크톱은 body 포탈 — overflow-hidden인 보드 스테이지를 벗어나 화면 어디로든 옮길 수 있다.
+  return isDesktop ? createPortal(panelContent, document.body) : panelContent;
 }
 
 const WISHLIST_KEY = 'buildgraph.wishlist';
@@ -596,16 +663,15 @@ function PartQuickView({
           </button>
         </div>
         <div className="mt-3 flex gap-3">
-          <img src={partImageUrl(part)} alt={`${part.name} 제품 사진`} onError={(event) => handlePartImageError(event, part.category)} className="h-20 w-20 shrink-0 rounded-md border border-commerce-line bg-slate-100 object-cover" />
+          <img src={partImageUrl(part)} alt={`${part.name} 제품 사진`} onError={(event) => handlePartImageError(event, part.category)} className="h-20 w-20 shrink-0 rounded-md border border-commerce-line bg-slate-50 object-contain p-1" />
           <div className="min-w-0 flex-1 text-xs">
             <div className="text-[11px] font-bold text-slate-500">{part.manufacturer ?? '-'}</div>
             <div className="mt-1 text-lg font-black text-commerce-ink">{part.price.toLocaleString()}원</div>
             <div className="mt-1 flex flex-wrap items-center gap-1.5">
-              {status === 'PASS' ? <span className="rounded border border-emerald-100 bg-emerald-50 px-1.5 py-0.5 text-[10px] font-black text-emerald-700">호환 가능</span> : null}
               {status === 'WARN' ? <span className="rounded border border-amber-100 bg-amber-50 px-1.5 py-0.5 text-[10px] font-black text-amber-700">간섭 주의</span> : null}
               {status === 'FAIL' ? <span className="rounded border border-red-200 bg-red-50 px-1.5 py-0.5 text-[10px] font-black text-red-700">장착 불가</span> : null}
             </div>
-            {part.compatibility?.summary ? (
+            {status !== 'PASS' && part.compatibility?.summary ? (
               <div className="mt-1 text-[11px] leading-4 text-slate-500">{part.compatibility.summary}</div>
             ) : null}
           </div>
@@ -629,7 +695,7 @@ function PartQuickView({
             aria-pressed={isWishlisted}
             onClick={onToggleWishlist}
             className={`inline-flex min-h-9 flex-1 items-center justify-center gap-1.5 rounded-md border px-3 text-xs font-black transition ${
-              isWishlisted ? 'border-rose-200 bg-rose-50 text-rose-600' : 'border-commerce-line bg-white text-slate-700 hover:text-rose-500'
+              isWishlisted ? 'border-rose-200 bg-rose-50 text-rose-700' : 'border-commerce-line bg-white text-slate-700 hover:text-rose-600'
             }`}
           >
             <Heart size={14} className={isWishlisted ? 'fill-rose-500 text-rose-500' : ''} /> {isWishlisted ? '찜 해제' : '찜하기'}
@@ -646,32 +712,6 @@ function PartQuickView({
           ) : null}
         </div>
       </div>
-    </div>
-  );
-}
-
-function QuantityStepper({ item, disabled, onChange }: { item: QuoteDraftItem; disabled: boolean; onChange: (partId: string, quantity: number) => void }) {
-  return (
-    <div className="flex h-7 overflow-hidden rounded border border-slate-300" aria-label={`${item.name} 수량 선택`}>
-      <button
-        type="button"
-        aria-label={`${item.name} 수량 감소`}
-        disabled={disabled || item.quantity <= 1}
-        onClick={() => onChange(item.partId, item.quantity - 1)}
-        className="w-7 bg-slate-50 text-sm font-bold text-slate-600 disabled:text-slate-300"
-      >
-        -
-      </button>
-      <div className="flex w-8 items-center justify-center border-x border-slate-300 text-[11px] font-bold text-slate-900">{item.quantity}</div>
-      <button
-        type="button"
-        aria-label={`${item.name} 수량 증가`}
-        disabled={disabled || item.quantity >= 9}
-        onClick={() => onChange(item.partId, item.quantity + 1)}
-        className="w-7 bg-slate-50 text-sm font-bold text-slate-600 disabled:text-slate-300"
-      >
-        +
-      </button>
     </div>
   );
 }

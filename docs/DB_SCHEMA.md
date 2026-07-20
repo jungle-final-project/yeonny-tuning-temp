@@ -35,6 +35,7 @@
 - `requirements`
 - `builds`
 - `parts`
+- `part_vectors`
 - `price_jobs`
 - `agent_sessions`
 - `tool_invocations`
@@ -188,6 +189,7 @@ parts
   ├─ price_snapshots
   ├─ part_external_offers
   ├─ part_catalog_candidates
+  ├─ part_vectors
   ├─ build_items
   ├─ price_alerts
   ├─ compatibility_rules
@@ -437,6 +439,24 @@ Index:
 - 필수 스펙이 부족하면 `ACTIVE` 전환은 `400 VALIDATION_ERROR`로 실패하고, `missingRequiredFields`를 관리자 DTO에 표시한다.
 - `DELETE /api/admin/parts/{id}`는 `deleted_at`만 채우는 soft delete다. soft delete된 row는 사용자 `/api/parts`, 추천, Tool 대상에서 제외한다.
 - `POST /api/admin/parts/{id}/restore`는 `deleted_at = NULL`, `status = 'INACTIVE'`로 복구한다.
+
+### part_vectors
+
+목적: 추천 점수 계산에 사용하는 부품별 성능·가성비 벡터를 저장한다.
+
+주 owner: 3번  
+협업자: 2번
+
+| 컬럼명 | 타입 | nullable | FK | 설명 |
+|---|---|---:|---|---|
+| `part_id` | `BIGINT` | no | `parts.id` | 부품. PK이며 부품별 벡터는 하나만 저장한다. |
+| `performance_score` | `NUMERIC(5,4)` | no | - | 성능 점수 |
+| `value_score` | `NUMERIC(5,4)` | no | - | 가성비 점수 |
+| `calculated_at` | `TIMESTAMPTZ` | no | - | 벡터 점수 계산 시각 |
+
+Index:
+
+- primary key: `part_vectors.part_id`
 
 ### price_snapshots
 

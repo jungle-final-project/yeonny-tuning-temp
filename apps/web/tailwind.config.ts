@@ -17,7 +17,8 @@ export default {
           sale: '#ef3f3f',
           coral: '#ff6b4a',
           green: '#16a34a',
-          amber: '#f59e0b'
+          amber: '#f59e0b',
+          point: '#de6c2d'
         }
       },
       boxShadow: {

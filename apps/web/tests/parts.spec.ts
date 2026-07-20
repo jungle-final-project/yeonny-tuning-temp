@@ -141,6 +141,85 @@ test('renders the all parts page and keeps filter state in the /parts URL', asyn
   await expect.poll(() => partRequests[partRequests.length - 1]?.searchParams.get('q')).toBe('RTX');
 });
 
+test('uses one horizontal action style for add, replace, and remove while marking the active primary navigation item', async ({ page }) => {
+  await loginAsUser(page);
+  const currentGpuPart = {
+    ...gpuPart,
+    id: 'part-current-gpu',
+    name: 'Current Build GPU'
+  };
+  const currentGpu = draftItem(currentGpuPart);
+
+  await page.route('**/api/quote-drafts/current**', async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify(draft([currentGpu]))
+    });
+  });
+  await page.route('**/api/parts**', async (route) => {
+    const url = new URL(route.request().url());
+    if (url.pathname !== '/api/parts') {
+      await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ items: [], summary: { sampleCount: 0 } }) });
+      return;
+    }
+    const items = url.searchParams.get('category') === 'GPU'
+      ? [currentGpuPart, gpuPart]
+      : [currentGpuPart, gpuPart, ramPart];
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({ items, page: 0, size: 20, total: items.length })
+    });
+  });
+
+  await page.goto('/parts');
+
+  const tableActionButtons = [
+    page.getByRole('row').filter({ hasText: 'Current Build GPU' }).getByRole('button', { name: 'Current Build GPU 견적에서 제거' }),
+    page.getByRole('row').filter({ hasText: 'AllParts RTX GPU' }).getByRole('button', { name: 'AllParts RTX GPU 견적 교체' }),
+    page.getByRole('row').filter({ hasText: 'AllParts DDR5 RAM' }).getByRole('button', { name: 'AllParts DDR5 RAM 견적 담기' })
+  ];
+  await expect(tableActionButtons[0]).toHaveText('빼기');
+  await expect(tableActionButtons[1]).toHaveText('교체');
+  await expect(tableActionButtons[2]).toHaveText('담기');
+  await expect(tableActionButtons[0]).toHaveCSS('background-color', 'rgb(255, 255, 255)');
+  await expect(tableActionButtons[0]).toHaveCSS('color', 'rgb(17, 24, 39)');
+  await expect(tableActionButtons[0]).toHaveCSS('border-color', 'rgb(17, 24, 39)');
+  for (const actionButton of tableActionButtons.slice(1)) {
+    await expect(actionButton).toHaveCSS('background-color', 'rgb(222, 108, 45)');
+    await expect(actionButton).toHaveCSS('color', 'rgb(255, 255, 255)');
+  }
+  for (const actionButton of tableActionButtons) {
+    await expect(actionButton).toHaveCSS('white-space', 'nowrap');
+    await expect.poll(async () => (await actionButton.boundingBox())?.width ?? 0).toBeGreaterThanOrEqual(64);
+  }
+  const cartRemoveButton = page.locator('aside').getByRole('button', { name: 'Current Build GPU 견적에서 제거' });
+  await expect(cartRemoveButton).toHaveCSS('background-color', 'rgb(255, 255, 255)');
+  await expect(cartRemoveButton).toHaveCSS('border-color', 'rgb(203, 213, 225)');
+  await expect(cartRemoveButton).toHaveCSS('color', 'rgb(71, 85, 105)');
+
+  const navigation = page.getByRole('navigation', { name: '견적 및 PC 부품 카테고리' });
+  const gpuLink = navigation.getByRole('link', { name: 'GPU', exact: true });
+  await gpuLink.click();
+  await expect(page).toHaveURL('/parts?category=GPU');
+  await expect(gpuLink).toHaveAttribute('aria-current', 'page');
+  await expect(gpuLink).toHaveCSS('background-color', 'rgb(255, 255, 255)');
+  await expect.poll(() => gpuLink.evaluate((element) => getComputedStyle(element, '::after').backgroundColor)).toBe('rgb(222, 108, 45)');
+
+  const allPartsLink = navigation.getByRole('link', { name: '전체 부품' });
+  await allPartsLink.click();
+  await expect(page).toHaveURL('/parts');
+  await expect(allPartsLink).toHaveAttribute('aria-current', 'page');
+  await expect(gpuLink).not.toHaveAttribute('aria-current', 'page');
+
+  const aiQuoteButton = navigation.getByRole('button', { name: 'AI 견적' });
+  await expect(aiQuoteButton).toHaveAttribute('aria-pressed', 'false');
+  await aiQuoteButton.click();
+  await expect(page.getByTestId('ai-chatbot-panel')).toBeVisible();
+  await expect(aiQuoteButton).toHaveAttribute('aria-pressed', 'true');
+});
+
 test('adds, updates, and removes quote draft items from the all parts page', async ({ page }) => {
   await loginAsUser(page);
   let currentDraft = draft([draftItem(ramPart)]);

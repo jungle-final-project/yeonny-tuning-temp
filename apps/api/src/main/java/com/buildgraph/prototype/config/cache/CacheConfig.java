@@ -37,11 +37,11 @@ public class CacheConfig {
         matchIfMissing = true
     )
     /* 설정: 캐시 생명(10분), 저장크기(1,000개) */
- 	public Caffeine<Object, Object> caffeineCacheBuilder() {
-		return Caffeine.newBuilder()
-			.expireAfterWrite(10, TimeUnit.MINUTES)
-			.maximumSize(1000);
-	}  
+     public Caffeine<Object, Object> caffeineCacheBuilder() {
+        return Caffeine.newBuilder()
+            .expireAfterWrite(10, TimeUnit.MINUTES)
+            .maximumSize(1000);
+    }
     
     @Bean
     @ConditionalOnProperty(

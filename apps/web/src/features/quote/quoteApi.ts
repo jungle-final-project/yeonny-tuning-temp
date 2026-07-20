@@ -1,4 +1,4 @@
-import { api } from '../../lib/api';
+import { api, ApiError } from '../../lib/api';
 import type { AiBuildChatRequest, AiBuildChatResponse, AiRecommendedBuild, BuildGraphResolveRequest, BuildGraphResolveResponse } from './aiSelection';
 import type { BuildSummary, ChangePartResponse, ParseRequirementPayload, ParsedRequirement, RecommendBuildResponse } from './types';
 
@@ -47,12 +47,6 @@ export function renameBuild(buildId: string, name: string) {
   });
 }
 
-export function duplicateBuild(buildId: string) {
-  return api<BuildSummary>(`/api/builds/${buildId}/duplicate`, {
-    method: 'POST'
-  });
-}
-
 export function deleteBuild(buildId: string) {
   return api<{ id: string; deleted: boolean }>(`/api/builds/${buildId}`, {
     method: 'DELETE'
@@ -70,6 +64,13 @@ export function saveBuildFromChat(payload: SaveBuildFromChatPayload) {
     method: 'POST',
     body: JSON.stringify(payload)
   });
+}
+
+export function buildSaveErrorMessage(error: unknown) {
+  if (error instanceof ApiError && error.status === 409) {
+    return '이미 저장되었습니다.';
+  }
+  return '견적을 저장하지 못했습니다. 잠시 후 다시 시도해 주세요.';
 }
 
 export function getPriceAlerts() {
@@ -95,6 +96,16 @@ export function buildChat(payload: AiBuildChatRequest) {
     method: 'POST',
     body: JSON.stringify(payload)
   });
+}
+
+export type HomeRecommendedBuildsResponse = {
+  items: AiRecommendedBuild[];
+  generatedAt: string;
+  fallbackUsed: boolean;
+};
+
+export function listHomeRecommendedBuilds() {
+  return api<HomeRecommendedBuildsResponse>('/api/recommendations/home-builds');
 }
 
 export function resolveBuildGraph(payload: BuildGraphResolveRequest) {

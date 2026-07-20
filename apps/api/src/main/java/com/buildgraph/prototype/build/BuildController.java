@@ -1,5 +1,7 @@
 package com.buildgraph.prototype.build;
 
+import com.buildgraph.prototype.build.dto.BuildChatResponseDto;
+
 import com.buildgraph.prototype.user.CurrentUserService;
 import java.util.Map;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -67,7 +69,7 @@ public class BuildController {
     }
 
     @PostMapping("/ai/build-chat")
-    Map<String, Object> buildChat(
+    BuildChatResponseDto buildChat(
             @RequestBody(required = false) Map<String, Object> request,
             @RequestHeader(value = "Authorization", required = false) String authorization,
             @RequestHeader(value = "X-BuildGraph-AI-Profile", required = false) String aiProfile

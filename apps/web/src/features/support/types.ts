@@ -81,6 +81,20 @@ export type UpgradeCandidate = {
   estimatedPrice?: number;
 };
 
+export type AgentDiagnosisEvidenceDto = {
+  component?: string;
+  metricType?: string;
+  value?: string | number | boolean | null;
+  unit?: string;
+  availability?: string;
+  status?: string;
+  source?: string;
+  sampledAt?: string;
+  label?: string;
+  summary?: string;
+  [key: string]: unknown;
+};
+
 export type AsTicketDto = {
   id: string;
   status: string;
@@ -96,6 +110,13 @@ export type AsTicketDto = {
   feedbackCreatedAt?: string | null;
   diagnosticAccuracy?: string | null;
   symptom: string;
+  requestNumber?: string | null;
+  requestType?: string | null;
+  diagnosisMode?: string | null;
+  diagnosisTitle?: string | null;
+  diagnosisSummary?: string | null;
+  diagnosisEvidence?: AgentDiagnosisEvidenceDto[] | null;
+  diagnosedAt?: string | null;
   logUploadId?: string | null;
   supportChatRoomId?: string | null;
   supportChatUserUnreadCount?: number;

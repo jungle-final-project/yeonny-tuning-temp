@@ -1,6 +1,6 @@
 package com.buildgraph.prototype.quoteagent.tools;
 
-import com.buildgraph.prototype.quoteagent.chat.*;
+import com.buildgraph.prototype.quoteagent.chat.dto.AiChatResponseDto;
 
 import java.util.ArrayList;
 import java.util.Comparator;

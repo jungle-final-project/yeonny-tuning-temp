@@ -28,7 +28,7 @@ import {
   type BuildGraphResolveResponse,
   type BuildGraphStatus
 } from '../aiSelection';
-import { resolveBuildGraph, saveBuildFromChat } from '../quoteApi';
+import { buildSaveErrorMessage, resolveBuildGraph, saveBuildFromChat } from '../quoteApi';
 
 type RecommendationFilter = 'all' | AiBuildTier;
 type CompactGraphNodeData = {
@@ -250,7 +250,7 @@ export function LatestBuildResultPage() {
                 title="AI 챗봇에게 먼저 추천을 받아보세요"
                 body="홈 AI 챗봇에서 예산이나 용도를 말하면 추천 결과가 이곳에 임시로 표시됩니다."
               />
-              <Link to="/" className="inline-flex min-h-10 items-center justify-center rounded-md bg-brand-blue px-4 text-sm font-bold text-white hover:bg-blue-700 focus:outline-none focus:ring-4 focus:ring-blue-100">
+              <Link to="/?assistant=open" className="inline-flex min-h-10 items-center justify-center rounded-md bg-brand-blue px-4 text-sm font-bold text-white hover:bg-blue-700 focus:outline-none focus:ring-4 focus:ring-blue-100">
                 홈에서 AI 챗봇 열기
               </Link>
             </div>
@@ -261,7 +261,9 @@ export function LatestBuildResultPage() {
             build={selectedBuild}
             savedBuildId={selectedSavedBuildId}
             isSaving={saveMutation.isPending && saveMutation.variables?.key === selectedEntry?.key}
-            saveError={saveMutation.isError && saveMutation.variables?.key === selectedEntry?.key}
+            saveErrorMessage={saveMutation.isError && saveMutation.variables?.key === selectedEntry?.key
+              ? buildSaveErrorMessage(saveMutation.error)
+              : undefined}
             onSave={() => selectedEntry ? saveMutation.mutate(selectedEntry) : undefined}
             onGraphCardClick={() => openSelfQuoteFromGraph(selectedBuild)}
             onClose={closeDetail}
@@ -284,7 +286,7 @@ function LatestBuildDetailDrawer({
   build,
   savedBuildId,
   isSaving,
-  saveError,
+  saveErrorMessage,
   onSave,
   onGraphCardClick,
   onClose
@@ -292,7 +294,7 @@ function LatestBuildDetailDrawer({
   build: AiRecommendedBuild;
   savedBuildId?: string;
   isSaving: boolean;
-  saveError: boolean;
+  saveErrorMessage?: string;
   onSave: () => void;
   onGraphCardClick: () => void;
   onClose: () => void;
@@ -337,7 +339,7 @@ function LatestBuildDetailDrawer({
           displayBuild={displayBuild}
           savedBuildId={savedBuildId}
           isSaving={isSaving}
-          saveError={saveError}
+          saveErrorMessage={saveErrorMessage}
           onSave={onSave}
           onGraphCardClick={onGraphCardClick}
           onClose={onClose}
@@ -352,7 +354,7 @@ function LatestBuildDetailPanelContent({
   displayBuild,
   savedBuildId,
   isSaving,
-  saveError,
+  saveErrorMessage,
   onSave,
   onGraphCardClick,
   onClose
@@ -361,7 +363,7 @@ function LatestBuildDetailPanelContent({
   displayBuild: ReturnType<typeof temporaryBuildToBuildSummary>;
   savedBuildId?: string;
   isSaving: boolean;
-  saveError: boolean;
+  saveErrorMessage?: string;
   onSave: () => void;
   onGraphCardClick: () => void;
   onClose: () => void;
@@ -378,7 +380,7 @@ function LatestBuildDetailPanelContent({
             선택한 추천 조합 / {build.title}
           </h2>
           <p className="mt-1 text-xs font-semibold leading-5 text-slate-500">
-            구성 부품, Tool 검증 결과, 저장 액션을 같은 자리에서 확인합니다.
+            구성 부품, 검증 결과, 저장 액션을 같은 자리에서 확인합니다.
           </p>
         </div>
         <button
@@ -427,7 +429,7 @@ function LatestBuildDetailPanelContent({
 
         <section className="rounded-md border border-commerce-line bg-white">
           <div className="border-b border-commerce-line px-4 py-3">
-            <h3 className="text-sm font-black text-commerce-ink">Tool 검증 결과</h3>
+            <h3 className="text-sm font-black text-commerce-ink">검증 결과</h3>
           </div>
           <div className="space-y-3 p-4">
             {toolResults.length > 0 ? (
@@ -459,7 +461,7 @@ function LatestBuildDetailPanelContent({
                 <p className="break-keep text-[11px] font-bold leading-5 text-slate-500">{BENCHMARK_REFERENCE_NOTICE}</p>
               </>
             ) : (
-              <StateMessage type="info" title="검증 결과 없음" body="저장 버튼을 누르면 서버에서 다시 Tool 검증 후 견적으로 저장합니다." />
+              <StateMessage type="info" title="검증 결과 없음" body="저장 버튼을 누르면 서버에서 다시 검증한 뒤 견적으로 저장합니다." />
             )}
           </div>
         </section>
@@ -486,7 +488,7 @@ function LatestBuildDetailPanelContent({
             <StateMessage
               type={displayBuild.warnings.length > 0 ? 'warn' : 'success'}
               title={displayBuild.warnings.length > 0 ? '확인 필요' : '주요 조건 충족'}
-              body={displayBuild.warnings[0]?.message ?? '저장 버튼을 누르면 서버에서 다시 Tool 검증 후 견적으로 저장합니다.'}
+              body={displayBuild.warnings[0]?.message ?? '저장 버튼을 누르면 서버에서 다시 검증한 뒤 견적으로 저장합니다.'}
             />
             {savedBuildId ? (
               <div className="space-y-2">
@@ -510,8 +512,8 @@ function LatestBuildDetailPanelContent({
                 >
                   {isSaving ? '저장 중' : '견적 저장'}
                 </button>
-                {saveError ? (
-                  <StateMessage type="warn" title="견적 저장 실패" body="AI 챗봇 추천 견적을 저장하지 못했습니다. 잠시 후 다시 시도해 주세요." />
+                {saveErrorMessage ? (
+                  <StateMessage type="warn" title="견적 저장 실패" body={saveErrorMessage} />
                 ) : null}
               </div>
             )}
@@ -609,7 +611,7 @@ function TemporaryBuildCard({
         </div>
         <div className="mt-4 text-2xl font-black text-brand-blue">{build.totalPrice.toLocaleString()}원</div>
         <div className="mt-2 text-xs font-semibold text-slate-500">
-          {primaryWarning ?? '저장 전 서버에서 다시 Tool 검증합니다.'}
+          {primaryWarning ?? '저장 전 서버에서 다시 자동 검증합니다.'}
         </div>
         <div className="mt-4 space-y-2">
           {mainItems.map((item) => (
@@ -861,7 +863,7 @@ function GraphToolSummary({ graph }: { graph?: BuildGraphResolveResponse }) {
   return (
     <section className="rounded-md border border-commerce-line bg-white p-4">
       <div className="flex items-center justify-between gap-3">
-        <h3 className="text-sm font-black text-commerce-ink">Tool 검증 요약</h3>
+        <h3 className="text-sm font-black text-commerce-ink">검증 요약</h3>
         <span className="text-xs font-black text-slate-500">{passCount}/{toolResults.length} 통과</span>
       </div>
       <div className="mt-3 flex flex-wrap gap-2">
@@ -1045,7 +1047,7 @@ function compactStatusLabel(status: BuildGraphStatus) {
     case 'WARN':
       return '주의';
     default:
-      return '호환됨';
+      return '호환 가능';
   }
 }
 

@@ -406,7 +406,7 @@ export function AdminDashboardPage() {
     retireModelMutation.isError;
   const operatingTasks = [
     {
-      작업: '가격 Job',
+      작업: '가격 작업',
       상태: <StatusBadge status={dashboard.priceJobsRunning > 0 ? 'RUNNING' : 'READY'} />,
       owner: '2번',
       이동: <Link className="font-bold text-brand-blue" to="/admin/price-jobs">Job 확인</Link>
@@ -471,7 +471,7 @@ export function AdminDashboardPage() {
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <MetricCard label="진행 중 Agent" value={countLabel(dashboard.agentRunning)} tone="orange" />
         <MetricCard label="미해결 AS" value={countLabel(dashboard.openTickets)} tone="orange" />
-        <MetricCard label="실행 중 Price Job" value={countLabel(dashboard.priceJobsRunning)} tone="blue" />
+        <MetricCard label="실행 중 가격 작업" value={countLabel(dashboard.priceJobsRunning)} tone="blue" />
         <MetricCard label="운영 상태" value={statusLabel} tone={dashboard.degraded ? 'orange' : 'green'} />
       </div>
       <div className="mt-5 grid grid-cols-1 gap-5 xl:grid-cols-[1fr_420px]">

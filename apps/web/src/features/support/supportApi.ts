@@ -22,6 +22,22 @@ export type SupportFeedbackRequest = {
   comment?: string;
 };
 
+export type PcAgentDiagnosisRequestCreate = {
+  symptom: string;
+  requestedChecks: Array<'cpu' | 'gpu' | 'memory' | 'disk' | 'cooling'>;
+  mode: 'LIVE' | 'DEMO';
+};
+
+export type PcAgentDiagnosisRequestDto = {
+  diagnosisId: string;
+  deviceId: string;
+  requestedAt: string;
+  expiresAt: string;
+  mode: 'LIVE' | 'DEMO';
+  status: 'ACCEPTED' | 'DUPLICATE' | 'EXPIRED' | 'DEVICE_MISMATCH' | 'AUTH_FAILED' | 'BUSY' | 'REJECTED';
+  message?: string;
+};
+
 export function uploadAgentLog(rangeMinutes: number, consentAccepted: boolean, file: File, metadata: UploadAgentLogMetadata = {}) {
   const body = new FormData();
   body.append('file', file);
@@ -43,6 +59,13 @@ export function issueAgentActivationToken() {
   return api<AgentActivationTokenDto>('/api/users/me/agent-activation-token', {
     method: 'POST',
     body: JSON.stringify({})
+  });
+}
+
+export function requestPcAgentDiagnosis(request: PcAgentDiagnosisRequestCreate) {
+  return api<PcAgentDiagnosisRequestDto>('/api/users/me/agent-diagnosis-requests', {
+    method: 'POST',
+    body: JSON.stringify(request)
   });
 }
 

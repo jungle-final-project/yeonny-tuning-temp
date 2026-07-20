@@ -1,7 +1,8 @@
 package com.buildgraph.prototype.build;
 
+import com.buildgraph.prototype.build.dto.BuildChatResponseDto;
+
 import com.buildgraph.prototype.opsagent.profile.AiProfileConfig;
-import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
@@ -25,8 +26,6 @@ import org.springframework.stereotype.Service;
 public class BuildChatCacheService {
     private static final Logger log = LoggerFactory.getLogger(BuildChatCacheService.class);
     private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
-    private static final TypeReference<Map<String, Object>> MAP_TYPE = new TypeReference<>() {
-    };
 
     private final ObjectProvider<StringRedisTemplate> redisTemplateProvider;
     private final JdbcTemplate jdbcTemplate;
@@ -62,11 +61,11 @@ public class BuildChatCacheService {
         return new BuildChatCacheService();
     }
 
-    public Optional<Map<String, Object>> lookup(Map<String, Object> request, String requestedAiProfile) {
+    public Optional<BuildChatResponseDto> lookup(Map<String, Object> request, String requestedAiProfile) {
         return lookup(request, requestedAiProfile, null);
     }
 
-    public Optional<Map<String, Object>> lookup(Map<String, Object> request, String requestedAiProfile, Long userId) {
+    public Optional<BuildChatResponseDto> lookup(Map<String, Object> request, String requestedAiProfile, Long userId) {
         log.debug("Build Chat cache lookup entered: enabled={}, userId={}, requestedAiProfile={}", enabled, userId, requestedAiProfile);
         if (!enabled) {
             log.info("Build Chat cache lookup skipped: disabled");
@@ -85,24 +84,24 @@ public class BuildChatCacheService {
                 return Optional.empty();
             }
             log.info("Build Chat cache hit: {}", key);
-            return Optional.of(cacheableResponse(OBJECT_MAPPER.readValue(cached, MAP_TYPE)));
+            return Optional.of(OBJECT_MAPPER.readValue(cached, BuildChatResponseDto.class));
         } catch (Exception error) {
             log.warn("Build Chat cache lookup failed; bypassing cache: {}", error.getMessage());
             return Optional.empty();
         }
     }
 
-    public void store(Map<String, Object> request, String requestedAiProfile, Map<String, Object> response) {
+    public void store(Map<String, Object> request, String requestedAiProfile, BuildChatResponseDto response) {
         store(request, requestedAiProfile, null, response);
     }
 
-    public void store(Map<String, Object> request, String requestedAiProfile, Long userId, Map<String, Object> response) {
+    public void store(Map<String, Object> request, String requestedAiProfile, Long userId, BuildChatResponseDto response) {
         log.debug("Build Chat cache store entered: enabled={}, userId={}, requestedAiProfile={}", enabled, userId, requestedAiProfile);
         if (!enabled) {
             log.info("Build Chat cache store skipped: disabled");
             return;
         }
-        if (response == null || response.isEmpty()) {
+        if (response == null) {
             log.debug("Build Chat cache store skipped: empty response");
             return;
         }
@@ -131,7 +130,7 @@ public class BuildChatCacheService {
         fingerprint.put("appliedPartPreferences", request.get("appliedPartPreferences"));
         fingerprint.put("versions", dataVersions());
         String json = OBJECT_MAPPER.writeValueAsString(fingerprint);
-        return "buildgraph:build-chat:v1:" + sha256(json);
+        return "buildgraph:build-chat:v2:" + sha256(json);
     }
 
     private String effectiveProfile(String requestedAiProfile) {
@@ -176,38 +175,15 @@ public class BuildChatCacheService {
         }
     }
 
-    @SuppressWarnings("unchecked")
-    private static Map<String, Object> cacheableResponse(Map<String, Object> response) {
-        Object stripped = stripVolatileTrace(response);
-        if (stripped instanceof Map<?, ?> map) {
-            Map<String, Object> result = new LinkedHashMap<>();
-            map.forEach((key, value) -> result.put(String.valueOf(key), value));
-            return result;
-        }
-        return Map.of();
+    private static BuildChatResponseDto cacheableResponse(BuildChatResponseDto response) {
+        return new BuildChatResponseDto(
+                response.outputType(),
+                response.message(),
+                response.build(),
+                response.part(),
+                null
+        );
     }
-
-    private static Object stripVolatileTrace(Object value) {
-        if (value instanceof Map<?, ?> map) {
-            Map<String, Object> result = new LinkedHashMap<>();
-            map.forEach((key, mapValue) -> {
-                String textKey = String.valueOf(key);
-                if ("agentSessionId".equals(textKey)) {
-                    result.put(textKey, null);
-                } else if ("evidenceIds".equals(textKey) || "toolInvocationIds".equals(textKey)) {
-                    result.put(textKey, List.of());
-                } else {
-                    result.put(textKey, stripVolatileTrace(mapValue));
-                }
-            });
-            return result;
-        }
-        if (value instanceof List<?> list) {
-            return list.stream().map(BuildChatCacheService::stripVolatileTrace).toList();
-        }
-        return value;
-    }
-
     private static String sha256(String value) throws Exception {
         MessageDigest digest = MessageDigest.getInstance("SHA-256");
         byte[] hash = digest.digest(value.getBytes(StandardCharsets.UTF_8));

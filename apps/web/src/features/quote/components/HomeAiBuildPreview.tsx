@@ -157,7 +157,7 @@ function AiPreviewCard({
           />
         ) : (
           <div className="home-featured-preview-thumb home-featured-preview-thumb--empty">
-            준비중
+            준비 중
           </div>
         )}
       </div>

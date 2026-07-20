@@ -1,26 +1,12 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { ExternalLink } from 'lucide-react';
-import { useEffect, useMemo, useRef, useState, type SyntheticEvent } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useLocation, useNavigate, useParams } from 'react-router-dom';
 import { Panel, Screen, StateMessage } from '../../../components/ui';
 import { getToken } from '../../../lib/api';
-import { partImageUrl, partShortSpec, specRows } from '../partDisplay';
+import { handlePartImageError, partImageUrl, partShortSpec, specRows } from '../partDisplay';
 import { getPart, getPartPriceHistory, putQuoteDraftItem, recordRecommendationEvent } from '../partsApi';
 import type { PartPriceHistory, PartPriceHistoryPoint } from '../types';
-
-// 부품 이미지 로드 실패 시 보여줄 대체 이미지(partImageUrl의 placeholder SVG와 동일 톤).
-const PART_IMAGE_PLACEHOLDER = `data:image/svg+xml;utf8,${encodeURIComponent(
-  '<svg xmlns="http://www.w3.org/2000/svg" width="112" height="112" viewBox="0 0 112 112"><rect width="112" height="112" rx="14" fill="#f8fafc"/><rect x="12" y="20" width="88" height="56" rx="10" fill="#334155" opacity="0.92"/><rect x="20" y="28" width="72" height="40" rx="6" fill="#ffffff" opacity="0.16"/><text x="56" y="54" text-anchor="middle" font-family="Arial, sans-serif" font-size="16" font-weight="700" fill="#ffffff">NO IMAGE</text><rect x="24" y="84" width="64" height="6" rx="3" fill="#cbd5e1"/></svg>'
-)}`;
-
-// onError 재귀 방지 가드: 대체 이미지 자체가 실패해도 무한 루프를 돌지 않도록 dataset으로 1회만 교체한다.
-function handlePartImageError(event: SyntheticEvent<HTMLImageElement>) {
-  const target = event.currentTarget;
-  if (!target.dataset.fallback) {
-    target.dataset.fallback = '1';
-    target.src = PART_IMAGE_PLACEHOLDER;
-  }
-}
 
 export function PartDetailPage() {
   const { partId = '' } = useParams();
@@ -109,7 +95,7 @@ export function PartDetailPage() {
   if (isError || !part) {
     return (
       <Screen>
-        <StateMessage type="warn" title="상품 상세 조회 실패" body="GET /api/parts/{id} 응답을 확인해야 합니다." />
+        <StateMessage type="warn" title="상품 상세 조회 실패" body="상품 정보를 불러오지 못했습니다. 잠시 후 다시 시도해 주세요." />
       </Screen>
     );
   }
@@ -128,7 +114,7 @@ export function PartDetailPage() {
 
       <div className="grid gap-6 lg:grid-cols-[minmax(0,620px)_minmax(0,1fr)]">
         <section className="rounded border border-slate-200 bg-white p-6">
-          <img src={partImageUrl(part)} alt={`${part.name} 제품 사진`} onError={handlePartImageError} className="h-[320px] w-full object-contain sm:h-[420px] lg:h-[520px]" />
+          <img src={partImageUrl(part)} alt={`${part.name} 제품 사진`} onError={(event) => handlePartImageError(event, part.category)} className="h-[320px] w-full object-contain sm:h-[420px] lg:h-[520px]" />
         </section>
 
         <section className="rounded border border-slate-200 bg-white p-6">
@@ -192,13 +178,13 @@ export function PartDetailPage() {
             )}
           </div>
 
-          {added ? <div className="mt-4 rounded border border-emerald-200 bg-emerald-50 p-3 text-sm font-bold text-emerald-700">내 견적초안에 저장했습니다.</div> : null}
-          {addMutation.isError ? <div className="mt-4 rounded border border-orange-200 bg-orange-50 p-3 text-sm font-bold text-orange-700">견적초안 저장에 실패했습니다.</div> : null}
+          {added ? <div className="mt-4 rounded border border-emerald-200 bg-emerald-50 p-3 text-sm font-bold text-emerald-700">내 견적 장바구니에 저장했습니다.</div> : null}
+          {addMutation.isError ? <div className="mt-4 rounded border border-orange-200 bg-orange-50 p-3 text-sm font-bold text-orange-700">견적 장바구니 저장에 실패했습니다.</div> : null}
         </section>
       </div>
 
       <div className="mt-6 grid gap-6 lg:grid-cols-[minmax(280px,420px)_minmax(0,1fr)]">
-        <Panel title="주요 스펙" subtitle="내부 자산 attributes 기준 · 성능 관련 수치는 참고용이며 실제 성능은 사용 환경에 따라 달라질 수 있습니다">
+        <Panel title="주요 스펙" subtitle="등록된 상품 정보 기준 · 성능 관련 수치는 참고용이며 실제 성능은 사용 환경에 따라 달라질 수 있습니다">
           {rows.length === 0 ? (
             <div className="rounded border border-dashed border-slate-300 p-5 text-sm text-slate-500">표시할 세부 스펙이 없습니다.</div>
           ) : (
@@ -234,7 +220,7 @@ function priceDiffLabel(current: number, min: number) {
   }
   const sign = diff > 0 ? '+' : '';
   const percent = (diff / min) * 100;
-  return `${sign}${diff.toLocaleString()}원 (${sign}${percent.toFixed(1)}%)`;
+  return `${sign}${diff.toLocaleString()}원 (${sign}${percent.toFixed(2)}%)`;
 }
 
 function readRecommendationContext(search: string) {
@@ -427,7 +413,7 @@ function PriceTrendChart({
       </svg>
       <div className="mt-2 flex items-center justify-between text-[11px] font-bold text-slate-500">
         <span>월별 대표 최저가</span>
-        <span>점에 마우스를 올리면 가격정보를 확인할 수 있습니다.</span>
+        <span>점에 마우스를 올리면 가격 정보를 확인할 수 있습니다.</span>
       </div>
     </div>
   );
@@ -472,21 +458,40 @@ function normalizePriceTrendPoints(points: PartPriceHistoryPoint[], currentPrice
   ];
 }
 
-function monthKey(value: string) {
+// 월별 추이 데이터는 'KST 기준 월' 의미라, 브라우저 타임존과 무관하게 한국 시간으로 버킷·라벨을 계산한다.
+const seoulYearMonthFormat = new Intl.DateTimeFormat('ko-KR', {
+  timeZone: 'Asia/Seoul',
+  year: 'numeric',
+  month: '2-digit'
+});
+
+function seoulYearMonth(value: string) {
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) {
+    return null;
+  }
+  const parts = seoulYearMonthFormat.formatToParts(date);
+  const year = parts.find((part) => part.type === 'year')?.value;
+  const month = parts.find((part) => part.type === 'month')?.value;
+  // ko-KR ICU가 month '2-digit' 요청에도 한 자리('6')를 돌려줄 수 있어 직접 패딩한다.
+  return year && month ? { year, month: month.padStart(2, '0') } : null;
+}
+
+function monthKey(value: string) {
+  const parsed = seoulYearMonth(value);
+  if (!parsed) {
     return value.slice(0, 7);
   }
-  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+  return `${parsed.year}-${parsed.month}`;
 }
 
 function formatMonthLabel(value: string) {
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) {
+  const parsed = seoulYearMonth(value);
+  if (!parsed) {
     const [year, month] = value.split('-');
     return year && month ? `${year.slice(-2)}.${month}` : value;
   }
-  return `${String(date.getFullYear()).slice(-2)}.${String(date.getMonth() + 1).padStart(2, '0')}`;
+  return `${parsed.year.slice(-2)}.${parsed.month}`;
 }
 
 function formatCompactPrice(value: number) {

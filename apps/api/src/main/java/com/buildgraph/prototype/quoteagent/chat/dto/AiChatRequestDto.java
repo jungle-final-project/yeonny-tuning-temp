@@ -1,4 +1,4 @@
-package com.buildgraph.prototype.quoteagent.chat;
+package com.buildgraph.prototype.quoteagent.chat.dto;
 
 public record AiChatRequestDto(
         String message,

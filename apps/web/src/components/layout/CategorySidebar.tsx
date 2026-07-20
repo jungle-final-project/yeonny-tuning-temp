@@ -47,7 +47,7 @@ export function CategorySidebar({
                 key={label}
                 type="button"
                 onClick={() => onSelect(value)}
-                className={`block min-h-11 w-full rounded-md border px-3 py-2 text-left text-sm transition hover:border-commerce-ink hover:bg-white ${active ? 'border-commerce-ink bg-commerce-ink font-black text-white' : 'border-commerce-line bg-slate-50 font-bold text-slate-800'}`}
+                className={`block min-h-11 w-full rounded-md border px-3 py-2 text-left text-sm transition hover:border-commerce-ink hover:bg-white ${active ? 'border-[#de6c2d] bg-[#de6c2d] font-black text-white' : 'border-commerce-line bg-slate-50 font-bold text-slate-800'}`}
               >
                 {label}
               </button>

@@ -1,6 +1,7 @@
 import { useQuery } from '@tanstack/react-query';
 import { Link, useParams } from 'react-router-dom';
 import { AdminShell, DataTable, Panel, StateMessage } from '../../../components/ui';
+import { formatKstDateTime } from '../../../lib/dateTime';
 import { getToolInvocation } from '../adminApi';
 import { KoreanStatusBadge, koreanStatusLabel, koreanToolLabel } from '../adminDisplay';
 import type { ToolInvocation } from '../adminApi';
@@ -72,7 +73,7 @@ function detailRows(invocation: ToolInvocation) {
       필드: '세션 식별자',
       값: <Link className="font-bold text-brand-blue" to={`/admin/agent-sessions/${invocation.agentSessionId}`}>{invocation.agentSessionId}</Link>
     },
-    { 필드: '생성 시간', 값: formatDateTime(invocation.createdAt) }
+    { 필드: '생성 시간', 값: formatKstDateTime(invocation.createdAt) }
   ];
 }
 
@@ -82,8 +83,4 @@ function JsonBlock({ value }: { value: unknown }) {
       {JSON.stringify(value, null, 2)}
     </pre>
   );
-}
-
-function formatDateTime(value?: string) {
-  return value ? value.replace('T', ' ').slice(0, 19) : '-';
 }

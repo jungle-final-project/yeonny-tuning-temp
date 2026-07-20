@@ -1,6 +1,7 @@
 import { useQuery } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
 import { AdminShell, DataTable, Panel, StateMessage } from '../../../components/ui';
+import { formatKstDateTime } from '../../../lib/dateTime';
 import { getAdminAgentSessions } from '../adminApi';
 import { KoreanStatusBadge } from '../adminDisplay';
 
@@ -14,13 +15,13 @@ export function AgentSessionsListAdminPage() {
     식별자: <Link className="font-bold text-brand-blue" to={`/admin/agent-sessions/${session.id}`}>{session.id}</Link>,
     상태: <KoreanStatusBadge status={session.status} />,
     사용자: session.userId ?? '-',
-    '생성 시간': formatDateTime(session.createdAt)
+    '생성 시간': formatKstDateTime(session.createdAt)
   }));
   const exportRows = sessions.map((session) => ({
     id: session.id,
     status: session.status,
     userId: session.userId ?? '',
-    createdAt: formatDateTime(session.createdAt)
+    createdAt: formatKstDateTime(session.createdAt)
   }));
 
   return (
@@ -38,8 +39,4 @@ export function AgentSessionsListAdminPage() {
       </Panel>
     </AdminShell>
   );
-}
-
-function formatDateTime(value?: string) {
-  return value ? value.replace('T', ' ').slice(0, 19) : '-';
 }

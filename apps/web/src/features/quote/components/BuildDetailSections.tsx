@@ -28,11 +28,11 @@ export function BuildDetailSections({
               <div key={`${displayBuild.id}-${item.category}`} className="rounded-md border border-commerce-line bg-white p-3">
                 <div className="flex items-center justify-between gap-3">
                   <span className="text-xs font-black text-slate-500">{item.category}</span>
-                  <span className="whitespace-nowrap text-sm font-black text-brand-blue">{item.price.toLocaleString()}원</span>
+                  <span className="whitespace-nowrap text-sm font-black text-[#de6c2d]">{item.price.toLocaleString()}원</span>
                 </div>
                 <div className="mt-2 text-sm font-black leading-5 text-commerce-ink">
                   {item.partId ? (
-                    <Link to={`/parts/${item.partId}`} className="hover:text-brand-blue hover:underline">{item.name}</Link>
+                    <Link to={`/parts/${item.partId}`} className="hover:text-[#de6c2d] hover:underline">{item.name}</Link>
                   ) : (
                     item.name
                   )}
@@ -45,7 +45,7 @@ export function BuildDetailSections({
             <DataTable columns={['분류', '부품명', '제조사', '가격']} rows={displayBuild.items.map((item) => ({
               분류: item.category,
               부품명: item.partId ? (
-                <Link to={`/parts/${item.partId}`} className="font-bold text-commerce-ink hover:text-brand-blue hover:underline">{item.name}</Link>
+                <Link to={`/parts/${item.partId}`} className="font-bold text-commerce-ink hover:text-[#de6c2d] hover:underline">{item.name}</Link>
               ) : (
                 item.name
               ),
@@ -54,7 +54,7 @@ export function BuildDetailSections({
             }))} />
           </div>
         </Panel>
-        <Panel title="Tool 검증 결과">
+        <Panel title="검증 결과">
           {toolResults.length > 0 ? (
             <div className={`mb-3 rounded-md border px-4 py-3 text-sm font-black ${passCount === toolResults.length ? 'border-emerald-100 bg-emerald-50 text-emerald-700' : 'border-amber-100 bg-amber-50 text-amber-700'}`}>
               {passCount === toolResults.length
@@ -84,7 +84,12 @@ export function BuildDetailSections({
       </div>
       <Panel title="견적 요약 / 액션">
         <div className="space-y-4">
-          <MetricCard label="총액" value={`${displayBuild.totalPrice.toLocaleString()}원`} />
+          <div className="rounded-md border border-commerce-line bg-white p-4 shadow-sm">
+            <div className="text-xs font-bold text-slate-500">총액</div>
+            <div className="mt-2 text-2xl font-black tracking-tight text-[#de6c2d]">
+              {displayBuild.totalPrice.toLocaleString()}원
+            </div>
+          </div>
           <div className="grid grid-cols-2 gap-3">
             <MetricCard label="부품 수" value={`${displayBuild.items.length}개`} />
             <MetricCard label="경고" value={displayBuild.warnings.length > 0 ? `${displayBuild.warnings.length}건` : '없음'} />

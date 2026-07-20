@@ -219,7 +219,7 @@ export function AdminTicketDetailPage() {
             </div>
 
             <div>
-              <label htmlFor="admin-ticket-remote-link" className="mb-1 block text-xs font-bold text-slate-600">원격 지원 링크</label>
+              <label htmlFor="admin-ticket-remote-link" className="mb-1 block text-xs font-bold text-slate-600">원격지원 링크</label>
               <input
                 id="admin-ticket-remote-link"
                 className="h-11 w-full rounded border border-slate-300 px-3 text-sm"

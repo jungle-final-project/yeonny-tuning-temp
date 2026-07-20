@@ -1,4 +1,4 @@
-package com.buildgraph.prototype.quoteagent.chat;
+package com.buildgraph.prototype.quoteagent.chat.dto;
 
 import java.util.List;
 import java.util.Map;
@@ -11,11 +11,8 @@ public record AiChatResponseDto(
         List<PartRecommendation> partRecommendations
 ) {
     public record BuildRecommendation(
-            String name,
             String recommendedFor,
-            String summary,
             int estimatedTotalPrice,
-            String confidence,
             List<PartRecommendation> items
     ) {
     }

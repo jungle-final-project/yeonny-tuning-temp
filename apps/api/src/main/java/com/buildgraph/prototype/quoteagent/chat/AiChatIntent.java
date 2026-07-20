@@ -3,6 +3,5 @@ package com.buildgraph.prototype.quoteagent.chat;
 public enum AiChatIntent {
     FULL_BUILD_RECOMMEND,
     PART_RECOMMEND,
-    BUILD_MODIFY,
-    PRICE_ALERT_HELP
+    BUILD_MODIFY
 }

@@ -127,28 +127,28 @@ export function RequirementPage() {
         </div>
 
         {recommendMutation.isPending ? (
-          <Panel title="추천 결과 생성 중" subtitle="내부 자산 조합과 Tool 검증을 실행하고 있습니다.">
-            <StateMessage type="info" title="Build 생성 중" body="parts DB에서 후보를 선택하고 compatibility, power, size, performance, price 검증을 수행합니다." />
+          <Panel title="추천 결과 생성 중" subtitle="내부 자산 조합과 자동 검증을 실행하고 있습니다.">
+            <StateMessage type="info" title="견적 생성 중" body="내부 부품 데이터에서 후보를 선택하고 호환성, 전력, 규격, 성능, 가격 검증을 수행합니다." />
           </Panel>
         ) : null}
 
         {recommendMutation.isError ? (
           <Panel title="추천 결과 오류">
-            <StateMessage type="warn" title="추천 생성 실패" body="내부 자산 또는 Agent 실행 결과를 불러오지 못했습니다." />
+            <StateMessage type="warn" title="추천 생성 실패" body="내부 자산 또는 AI 실행 결과를 불러오지 못했습니다." />
           </Panel>
         ) : null}
 
         {recommendations.length > 0 ? (
           <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_420px]">
             <div className="space-y-5">
-              <Panel title="추천 빌드 3개" subtitle="내부 자산, 저장된 현재가, Tool 검증 결과를 기반으로 생성">
+              <Panel title={`추천 조합 ${recommendations.length}개`} subtitle="내부 자산, 저장된 현재가, 검증 결과를 기반으로 생성">
                 <div className="flex gap-4 overflow-x-auto pb-1">
                   {recommendations.map((build) => (
                     <QuoteCard key={build.id} build={build} selected={build.id === selectedBuild?.id} onSelect={(nextBuild) => setSelectedBuildId(nextBuild.id)} />
                   ))}
                 </div>
               </Panel>
-              <Panel title="Tool 검증 결과" subtitle={selectedBuild ? `${selectedBuild.name} 기준` : undefined}>
+              <Panel title="검증 결과" subtitle={selectedBuild ? `${selectedBuild.name} 기준` : undefined}>
                 <DataTable columns={['검증 항목', '상태', '신뢰도', '요약']} rows={toolRows(selectedBuild?.toolResults ?? [])} />
               </Panel>
             </div>
@@ -211,10 +211,18 @@ function splitText(value: string) {
   return value.split(',').map((item) => item.trim()).filter(Boolean);
 }
 
+// '200만' / '200만원' / '1억' 같은 한국식 표기를 원 단위 숫자로 해석한다.
+// parseInt만 쓰면 '200만'이 200(원)으로 조용히 오해석되어 서버에 전송된다.
 function numberOrUndefined(value: string) {
-  const normalized = value.replace(/,/g, '').trim();
+  const normalized = value.replace(/,/g, '').replace(/원/g, '').trim();
   if (!normalized) {
     return undefined;
+  }
+  const unitMatch = normalized.match(/^(\d+(?:\.\d+)?)\s*(억|만)$/);
+  if (unitMatch) {
+    const amount = Number.parseFloat(unitMatch[1]);
+    const multiplier = unitMatch[2] === '억' ? 100_000_000 : 10_000;
+    return Number.isFinite(amount) ? Math.round(amount * multiplier) : undefined;
   }
   const parsed = Number.parseInt(normalized, 10);
   return Number.isFinite(parsed) ? parsed : undefined;

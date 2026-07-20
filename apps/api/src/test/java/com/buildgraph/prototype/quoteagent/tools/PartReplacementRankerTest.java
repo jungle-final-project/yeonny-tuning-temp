@@ -1,6 +1,7 @@
 package com.buildgraph.prototype.quoteagent.tools;
 
 import com.buildgraph.prototype.quoteagent.chat.*;
+import com.buildgraph.prototype.quoteagent.chat.dto.AiChatResponseDto;
 import com.buildgraph.prototype.quoteagent.retrieval.*;
 import com.buildgraph.prototype.quoteagent.tools.*;
 import com.buildgraph.prototype.opsagent.as.*;

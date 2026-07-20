@@ -178,7 +178,7 @@ async function mockRecommendationModelSummary(page: Page) {
   });
 }
 
-test('shows permission screen without calling auth/me when token is missing', async ({ page }) => {
+test('redirects to admin login without calling auth/me when token is missing', async ({ page }) => {
   let authMeCalls = 0;
   await page.route('**/api/auth/me', async (route) => {
     authMeCalls += 1;
@@ -187,8 +187,8 @@ test('shows permission screen without calling auth/me when token is missing', as
 
   await page.goto('/admin');
 
-  await expect(page.getByRole('heading', { name: '관리자 권한이 필요합니다' })).toBeVisible();
-  await expect(page.getByText('관리자 화면을 보려면 먼저 로그인해야 합니다.')).toBeVisible();
+  await expect(page.getByRole('heading', { name: '관리자 로그인' })).toBeVisible();
+  await expect(page).toHaveURL(/\/admin\/login\?redirect=%2Fadmin/);
   await page.waitForTimeout(100);
   expect(authMeCalls).toBe(0);
 });
@@ -197,17 +197,17 @@ for (const route of adminRoutes) {
   test(`guards ${route} when token is missing`, async ({ page }) => {
     await page.goto(route);
 
-    await expect(page.getByRole('heading', { name: '관리자 권한이 필요합니다' })).toBeVisible();
-    await expect(page.getByText('관리자 화면을 보려면 먼저 로그인해야 합니다.')).toBeVisible();
-    await expect(page.getByRole('link', { name: '로그인으로 이동' })).toBeVisible();
-    await expect(page.getByRole('link', { name: '홈으로 이동' })).toBeVisible();
+    await expect(page.getByRole('heading', { name: '관리자 로그인' })).toBeVisible();
+    const url = new URL(page.url());
+    expect(url.pathname).toBe('/admin/login');
+    expect(url.searchParams.get('redirect')).toBe(route);
   });
 }
 
 test('does not expose protected admin page content without admin permission', async ({ page }) => {
   await page.goto('/admin/parts');
 
-  await expect(page.getByRole('heading', { name: '관리자 권한이 필요합니다' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: '관리자 로그인' })).toBeVisible();
   await expect(page.locator('main')).not.toContainText('부품 DB');
   await expect(page.locator('main')).not.toContainText('가격 Job 상태');
 });
@@ -249,8 +249,8 @@ test('shows login-needed message when auth/me returns 401', async ({ page }) => 
 
   await page.goto('/admin');
 
-  await expect(page.getByRole('heading', { name: '관리자 권한이 필요합니다' })).toBeVisible();
-  await expect(page.getByText('관리자 화면을 보려면 먼저 로그인해야 합니다.')).toBeVisible();
+  await expect(page.getByRole('heading', { name: '관리자 로그인' })).toBeVisible();
+  await expect(page).toHaveURL(/\/admin\/login\?redirect=%2Fadmin/);
   expect(authMeCalls).toBeGreaterThan(0);
 });
 
@@ -837,8 +837,8 @@ test('renders manufacturer release demo intake on admin parts page', async ({ pa
   await expect(page.locator('main')).toContainText('Source 수정');
 
   await page.getByRole('button', { name: '전체 scan' }).click();
-  expect(scanAllCalls).toBe(1);
   await expect(page.locator('main')).toContainText('전체 scan 완료');
+  expect(scanAllCalls).toBe(1);
 
   await page.getByRole('button', { name: 'scan', exact: true }).click();
   expect(scanCalls).toBe(1);
@@ -873,7 +873,7 @@ test('renders manufacturer release demo intake on admin parts page', async ({ pa
   await expect(page.locator('main')).toContainText('INACTIVE 초안 생성');
 });
 
-test('renders ten admin shell navigation entries for ADMIN role', async ({ page }) => {
+test('renders all admin shell navigation entries for ADMIN role', async ({ page }) => {
   await page.addInitScript(() => {
     localStorage.setItem('buildgraph.token', 'jwt-admin-token');
   });
@@ -909,12 +909,13 @@ test('renders ten admin shell navigation entries for ADMIN role', async ({ page 
   await page.goto('/admin');
 
   const navigation = page.getByRole('navigation', { name: '관리자 메뉴' });
-  await expect(navigation.getByRole('link')).toHaveCount(10);
+  await expect(navigation.getByRole('link')).toHaveCount(11);
   await expect(navigation.getByRole('link', { name: '대시보드' })).toHaveAttribute('href', '/admin');
   await expect(navigation.getByRole('link', { name: '에이전트 세션' })).toHaveAttribute('href', '/admin/agent-sessions');
   await expect(navigation.getByRole('link', { name: '도구 이력' })).toHaveAttribute('href', '/admin/tool-invocations');
   await expect(navigation.getByRole('link', { name: '검색 근거' })).toHaveAttribute('href', '/admin/rag-evidence');
   await expect(navigation.getByRole('link', { name: '부품/가격' })).toHaveAttribute('href', '/admin/parts');
+  await expect(navigation.getByRole('link', { name: '조립 중개' })).toHaveAttribute('href', '/admin/assembly');
   await expect(navigation.getByRole('link', { name: 'AS 티켓' })).toHaveAttribute('href', '/admin/as-tickets');
   await expect(navigation.getByRole('link', { name: '상담방' })).toHaveAttribute('href', '/admin/support-chat-sessions');
   await expect(navigation.getByRole('link', { name: '가격 작업' })).toHaveAttribute('href', '/admin/price-jobs');
@@ -1015,7 +1016,7 @@ test('admin can drag self quote slot cards and save the fixed board layout', asy
   await page.mouse.up();
 
   await expect(page.getByText('저장되지 않은 변경')).toBeVisible();
-  await page.getByRole('button', { name: '고정하기' }).click();
+  await page.getByRole('button', { name: '저장하기' }).click();
   await expect.poll(() => savedPayload?.positions?.GPU?.x ?? 0).toBeGreaterThan(41);
   // 클램프 상한 = 100 - 카드 폭. 허브 방사형 좌표에서 GPU 카드 폭이 21%라 상한은 79다.
   await expect.poll(() => savedPayload?.positions?.GPU?.x ?? 999).toBeLessThanOrEqual(60);
@@ -1128,7 +1129,7 @@ test('renders admin dashboard with ADMIN role and dashboard API response', async
   await expect(page.getByRole('heading', { name: '관리자 권한이 필요합니다' })).toBeHidden();
   await expect(page.locator('main')).toContainText('진행 중 Agent');
   await expect(page.locator('main')).toContainText('미해결 AS');
-  await expect(page.locator('main')).toContainText('실행 중 Price Job');
+  await expect(page.locator('main')).toContainText('실행 중 가격 작업');
   await expect(page.locator('main')).toContainText('운영 상태');
   await expect(page.locator('main')).toContainText('1건');
   await expect(page.locator('main')).toContainText('3건');
@@ -1159,7 +1160,7 @@ test('renders admin dashboard with ADMIN role and dashboard API response', async
   await expect(page.locator('main')).toContainText('as_tickets');
   await expect(page.locator('main')).toContainText('4aef8ef7-1dc7-45d1-bfc2-bb0cfdaf7f8a');
   await expect(page.locator('main')).toContainText('2026-06-29T10:45:00Z');
-  await expect(page.locator('main')).toContainText('가격 Job');
+  await expect(page.locator('main')).toContainText('가격 작업');
   await expect(page.locator('main')).toContainText('Mailpit');
   await expect(page.locator('main')).toContainText('Mock Worker');
   await expect(page.locator('main')).toContainText('k6 Smoke');

@@ -7,14 +7,14 @@ export function QuoteCard({ build, selected = false, showActions = true, onSelec
   const primaryWarning = warnings[0]?.message;
   const mainItems = (build.items ?? []).slice(0, 5);
   return (
-    <div className={`panel w-[300px] p-4 ${selected ? 'border-brand-blue ring-2 ring-blue-100' : ''}`}>
+    <div className={`panel w-[300px] p-4 ${selected ? 'border-[#de6c2d] ring-2 ring-[#f4c8b2]' : ''}`}>
       <button type="button" onClick={() => onSelect?.(build)} className="block w-full text-left">
         <div className="mb-3 rounded border border-slate-200 bg-slate-50 p-3">
-          <div className="text-xs font-bold text-brand-blue">{build.recommendedFor ?? '맞춤 추천'}</div>
+          <div className="text-xs font-bold text-[#de6c2d]">{build.recommendedFor ?? '맞춤 추천'}</div>
           <div className="mt-1 text-lg font-bold text-slate-950">{build.name}</div>
           <div className="mt-1 min-h-8 text-xs leading-4 text-slate-500">{build.summary ?? '내부 자산과 저장된 현재가 기준으로 구성했습니다.'}</div>
         </div>
-        <div className="text-2xl font-bold text-brand-blue">{build.totalPrice.toLocaleString()}원</div>
+        <div className="text-2xl font-bold text-[#de6c2d]">{build.totalPrice.toLocaleString()}원</div>
         <div className="mt-3 flex items-center gap-2">
           <StatusBadge status={build.confidence} />
           {primaryWarning ? <span className="truncate text-xs text-orange-600">{primaryWarning}</span> : <span className="text-xs text-emerald-700">주요 조건 충족</span>}
@@ -30,7 +30,7 @@ export function QuoteCard({ build, selected = false, showActions = true, onSelec
       </button>
       {showActions ? (
         <div className="mt-4 flex gap-2">
-          <Link to={`/builds/${build.id}`} className="rounded bg-brand-blue px-3 py-2 text-xs font-semibold text-white">상세 보기</Link>
+          <Link to={`/builds/${build.id}`} className="rounded bg-[#de6c2d] px-3 py-2 text-xs font-semibold text-white hover:bg-[#c45c22]">상세 보기</Link>
           <Link to={`/builds/${build.id}/change-part`} className="rounded border border-slate-300 px-3 py-2 text-xs font-semibold">부품 변경</Link>
         </div>
       ) : null}

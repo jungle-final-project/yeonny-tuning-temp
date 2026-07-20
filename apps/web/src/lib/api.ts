@@ -255,6 +255,11 @@ export function saveAuthTokens(accessToken: string, refreshToken: string, user?:
   dispatchAuthChanged({ user });
 }
 
+export function saveAuthUser(user: unknown) {
+  storeAuthUser(user);
+  dispatchAuthChanged({ user });
+}
+
 export function saveToken(token: string) {
   localStorage.setItem(ACCESS_TOKEN_KEY, token);
   localStorage.removeItem(AUTH_USER_KEY);

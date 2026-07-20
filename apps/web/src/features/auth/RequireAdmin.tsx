@@ -1,5 +1,5 @@
 import { ReactNode, useEffect, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, Navigate, useLocation } from 'react-router-dom';
 import { ShieldAlert } from 'lucide-react';
 import { Screen, StateMessage } from '../../components/ui';
 import { AUTH_CHANGED_EVENT, ApiError, getToken } from '../../lib/api';
@@ -8,6 +8,7 @@ import { getCurrentUser } from './authApi';
 type AdminCheckState = 'checking' | 'missing-token' | 'unauthorized' | 'forbidden' | 'allowed';
 
 export function RequireAdmin({ children }: { children: ReactNode }) {
+  const location = useLocation();
   const [state, setState] = useState<AdminCheckState>('checking');
 
   useEffect(() => {
@@ -52,13 +53,18 @@ export function RequireAdmin({ children }: { children: ReactNode }) {
     return <>{children}</>;
   }
 
+  if (state === 'missing-token' || state === 'unauthorized') {
+    const redirect = encodeURIComponent(`${location.pathname}${location.search}`);
+    return <Navigate to={`/admin/login?redirect=${redirect}`} replace />;
+  }
+
   return <AdminPermissionRequiredPage reason={state} />;
 }
 
 function AdminPermissionCheckingPage() {
   return (
     <Screen>
-      <div className="mx-auto mt-24 w-[520px] panel p-8">
+      <div className="mx-auto mt-20 w-full max-w-[520px] panel p-6 sm:mt-24 sm:p-8">
         <div className="text-xs font-bold uppercase text-slate-500">Admin access</div>
         <h1 className="mt-2 text-xl font-bold text-brand-navy">관리자 권한 확인 중</h1>
         <p className="mt-3 text-sm leading-6 text-slate-600">
@@ -76,7 +82,7 @@ function AdminPermissionRequiredPage({ reason }: { reason: Exclude<AdminCheckSta
 
   return (
     <Screen>
-      <div className="mx-auto mt-20 grid w-[760px] grid-cols-[88px_1fr] gap-6 panel p-8">
+      <div className="mx-auto mt-16 grid w-full max-w-[760px] grid-cols-1 gap-5 panel p-6 sm:mt-20 sm:grid-cols-[88px_1fr] sm:gap-6 sm:p-8">
         <div className="grid h-20 w-20 place-items-center rounded bg-brand-pale text-brand-blue">
           <ShieldAlert size={34} />
         </div>
@@ -90,7 +96,7 @@ function AdminPermissionRequiredPage({ reason }: { reason: Exclude<AdminCheckSta
             <StateMessage type="info" title="현재 세션 확인" body="브라우저에 관리자 권한이 확인되지 않아 관리자 화면을 표시하지 않았습니다." />
           </div>
           <div className="mt-6 flex gap-3">
-            <Link to="/login" className="rounded bg-brand-blue px-5 py-3 text-sm font-bold text-white">로그인으로 이동</Link>
+            <Link to="/admin/login" className="rounded bg-brand-blue px-5 py-3 text-sm font-bold text-white">관리자 로그인으로 이동</Link>
             <Link to="/" className="rounded border border-slate-300 px-5 py-3 text-sm font-bold">홈으로 이동</Link>
           </div>
         </div>

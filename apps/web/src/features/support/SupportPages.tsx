@@ -2,35 +2,25 @@ import { ChangeEvent, FormEvent, useEffect, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { DataTable, Panel, Screen, StateMessage, StatusBadge, statusLabel } from '../../components/ui';
-import { API_BASE_URL, ApiError, getCachedAuthUser } from '../../lib/api';
+import { ApiError, getCachedAuthUser } from '../../lib/api';
 import { formatSeoulTime } from '../../lib/dateTime';
-import { AS_CHAT_DEFAULT_TICKET_ID, getAsChat, sendAsChat, streamAsChat } from './asChatApi';
+import { getAsChat, sendAsChat, streamAsChat } from './asChatApi';
 import type { AsChatEvidence, AsChatResponse, AsChatToolResult } from './asChatApi';
+import { downloadAgentPackage } from './agentDownload';
 import { prepareSupportLogFile } from './logFileProcessing';
-import { createSupportTicket, getSupportDraft, getSupportTicket, issueAgentActivationToken, previewAgentLogRag, requestRemoteSupport, submitSupportFeedback, uploadAgentLog } from './supportApi';
+import { createSupportTicket, getSupportDraft, getSupportTicket, issueAgentActivationToken, previewAgentLogRag, requestPcAgentDiagnosis, requestRemoteSupport, submitSupportFeedback, uploadAgentLog } from './supportApi';
 import { getCurrentSupportChat } from './supportChatApi';
 import type { AsRagAnalysisDto, AsTicketDraftDto, AsTicketDto, CauseCandidate, SupportChatContact } from './types';
 
 type SubmitState = 'default' | 'validation_error' | 'consent_required' | 'uploading' | 'upload_error' | 'ticket_error' | 'ticket_created';
 type AgentDownloadState = 'idle' | 'issuing' | 'done' | 'error';
+type AgentDiagnosisRequestState = 'idle' | 'requesting' | 'accepted' | 'rejected' | 'error';
 type AsRagPreviewState = 'idle' | 'loading' | 'ready' | 'error';
 type SupportRequestKind = 'DIAGNOSIS_ONLY' | 'REMOTE_REQUESTED' | 'VISIT_REQUESTED';
 type BlockingSupportChat = {
   asTicketId: string;
   supportChatRoomId?: string | null;
 };
-type ZipEntryInput = {
-  name: string;
-  data: Uint8Array<ArrayBuffer>;
-};
-type AgentDownloadManifest = {
-  version: string;
-  downloadUrl: string;
-  sha256?: string;
-};
-
-const crc32Table = createCrc32Table();
-
 const remoteSymptomTypes = new Set([
   'REMOTE_AGENT',
   'REMOTE_DRIVER_OS',
@@ -59,22 +49,44 @@ const symptomTypeOptions = [
   ['VISIT_DISK_FAILURE', '디스크 장애 의심'],
   ['VISIT_WHEA_BSOD', 'WHEA/블루스크린 반복'],
   ['VISIT_POWER_SHUTDOWN', '부하 시 전원 꺼짐'],
-  ['VISIT_FAN_THERMAL', '팬/과열/thermal shutdown']
+  ['VISIT_FAN_THERMAL', '팬/과열/열로 인한 강제 종료']
 ];
 
 export function AsChatPage() {
   const [searchParams] = useSearchParams();
-  const initialTicketId = searchParams.get('asTicketId')?.trim() || AS_CHAT_DEFAULT_TICKET_ID;
-  const [ticketId, setTicketId] = useState(initialTicketId);
+  const requestedTicketId = searchParams.get('asTicketId')?.trim() ?? '';
+  const [ticketId, setTicketId] = useState(requestedTicketId);
   const [message, setMessage] = useState('게임 20분 뒤 프레임이 급락하고 GPU 온도가 95도까지 올라가요.');
   const [latestResponse, setLatestResponse] = useState<AsChatResponse | null>(null);
   const [error, setError] = useState('');
   const [progressMessage, setProgressMessage] = useState('');
   const [progressSteps, setProgressSteps] = useState<string[]>([]);
 
+  // 티켓 번호를 타이핑하는 글자마다 조회가 나가지 않도록, 입력이 멈춘 뒤(300ms) 확정값으로만 조회한다.
+  const [committedTicketId, setCommittedTicketId] = useState(requestedTicketId);
+  useEffect(() => {
+    const timer = setTimeout(() => setCommittedTicketId(ticketId.trim()), 300);
+    return () => clearTimeout(timer);
+  }, [ticketId]);
+
+  const currentSupportQuery = useQuery({
+    queryKey: ['support-chat-current', 'as-ai-entry'],
+    queryFn: () => getCurrentSupportChat(),
+    enabled: requestedTicketId.length === 0
+  });
+
+  useEffect(() => {
+    const currentTicketId = currentSupportQuery.data?.contact?.asTicketId?.trim();
+    if (!ticketId.trim() && currentTicketId) {
+      setTicketId(currentTicketId);
+      setCommittedTicketId(currentTicketId);
+    }
+  }, [currentSupportQuery.data?.contact?.asTicketId, ticketId]);
+
   const chatQuery = useQuery({
-    queryKey: ['as-chat', ticketId],
-    queryFn: () => getAsChat(ticketId)
+    queryKey: ['as-chat', committedTicketId],
+    queryFn: () => getAsChat(committedTicketId),
+    enabled: committedTicketId.length > 0
   });
 
   const sendMutation = useMutation({
@@ -109,7 +121,7 @@ export function AsChatPage() {
     onError: (cause) => {
       setProgressMessage('');
       if (cause instanceof ApiError && cause.status === 428) {
-        setError('서버에 OPENAI_API_KEY가 필요합니다. API 컨테이너 환경 변수 설정 후 다시 실행해 주세요.');
+        setError('AI 상담 기능이 아직 준비되지 않았습니다. 잠시 후 다시 시도하거나 담당자에게 문의해 주세요.');
         return;
       }
       if (cause instanceof ApiError && cause.status === 404) {
@@ -126,12 +138,17 @@ export function AsChatPage() {
 
   const chat = latestResponse?.asTicketId === ticketId ? latestResponse : chatQuery.data;
   const isBusy = sendMutation.isPending;
-  const canSend = Boolean(message.trim()) && !isBusy;
+  const hasTicket = Boolean(ticketId.trim());
+  const canSend = Boolean(ticketId.trim() && message.trim()) && !isBusy;
 
   function submitTicket(event: FormEvent) {
     event.preventDefault();
     setLatestResponse(null);
     setError('');
+    if (!ticketId.trim()) {
+      setError('먼저 AS 접수를 생성하거나 티켓 번호를 입력해 주세요.');
+      return;
+    }
     void chatQuery.refetch();
   }
 
@@ -144,28 +161,41 @@ export function AsChatPage() {
 
   return (
     <Screen>
-      <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_430px]">
-        <Panel title="AS AI 챗봇" subtitle="AS 접수 후 티켓 증상, RAG 근거, Tool 결과를 사용해 1차 상담 답변을 생성합니다.">
-          <form onSubmit={submitTicket} className="mb-4 flex gap-3">
+      <div className="grid min-w-0 gap-5 xl:grid-cols-[minmax(0,1fr)_430px]">
+        <div className="min-w-0 max-w-full">
+        <Panel title="AS AI 챗봇" subtitle="AS 접수 후 티켓 증상과 검증 근거를 사용해 1차 상담 답변을 생성합니다.">
+          <form onSubmit={submitTicket} className="mb-4 flex min-w-0 flex-col gap-3 sm:flex-row">
             <input
-              className="h-11 flex-1 rounded border border-slate-300 px-3 text-sm"
+              className="h-11 min-w-0 w-full flex-1 rounded border border-slate-300 px-3 text-sm"
               value={ticketId}
               onChange={(event) => setTicketId(event.target.value)}
-              aria-label="AS ticket id"
+              aria-label="AS 티켓 번호"
             />
-            <button className="rounded border border-slate-300 px-4 py-2 text-sm font-bold">티켓 불러오기</button>
+            <button className="w-full rounded border border-slate-300 px-4 py-2 text-sm font-bold sm:w-auto">티켓 불러오기</button>
           </form>
 
+          {currentSupportQuery.isLoading ? <StateMessage type="info" title="최근 AS 접수 확인 중" body="현재 사용자에게 연결된 AS 티켓을 확인하고 있습니다." /> : null}
+          {currentSupportQuery.isError ? <StateMessage type="warn" title="최근 AS 접수 확인 실패" body="티켓 번호를 직접 입력하거나 AS 접수 화면에서 새 접수를 만들어 주세요." /> : null}
           {chatQuery.isLoading ? <StateMessage type="info" title="챗봇 세션 조회 중" body="AS 티켓과 기존 대화 이력을 불러오고 있습니다." /> : null}
-          {chatQuery.isError ? <StateMessage type="warn" title="챗봇 세션 조회 실패" body="GET /api/ai/as-chat 응답을 불러오지 못했습니다." /> : null}
+          {chatQuery.isError ? <StateMessage type="warn" title="챗봇 세션 조회 실패" body="대화 이력을 불러오지 못했습니다. 잠시 후 다시 시도해 주세요." /> : null}
           {error ? <div className="mb-4"><StateMessage type="warn" title="AS AI 확인 필요" body={error} /></div> : null}
 
           <div className="h-[560px] overflow-y-auto rounded border border-slate-200 bg-slate-50 p-4">
-            {chat?.messages.length ? (
+            {!hasTicket && !currentSupportQuery.isLoading ? (
+              <div className="flex h-full flex-col items-center justify-center gap-4 px-4 text-center">
+                <StateMessage type="info" title="연결된 AS 접수가 없습니다" body="AS 접수를 먼저 생성하면 해당 티켓의 증상과 진단 근거로 AI 상담을 이어갈 수 있습니다." />
+                <Link
+                  to={currentSupportQuery.data?.supportNewPath ?? '/support/new'}
+                  className="rounded bg-brand-blue px-4 py-2 text-sm font-black text-white"
+                >
+                  AS 접수 시작하기
+                </Link>
+              </div>
+            ) : chat?.messages.length ? (
               <div className="space-y-3">
                 {chat.messages.map((item) => (
                   <div key={item.id} className={`flex ${item.role === 'USER' ? 'justify-end' : 'justify-start'}`}>
-                    <div className={`max-w-[72%] rounded px-4 py-3 text-sm leading-6 shadow-sm ${item.role === 'USER' ? 'bg-brand-blue text-white' : 'border border-slate-200 bg-white text-slate-800'}`}>
+                    <div className={`max-w-[88%] break-words rounded px-4 py-3 text-sm leading-6 shadow-sm sm:max-w-[72%] ${item.role === 'USER' ? 'bg-brand-blue text-white' : 'border border-slate-200 bg-white text-slate-800'}`}>
                       <div className="mb-1 text-[11px] font-bold opacity-75">{item.role === 'USER' ? '사용자' : 'AI 상담'}</div>
                       <p className="whitespace-pre-wrap">{item.content}</p>
                     </div>
@@ -179,7 +209,7 @@ export function AsChatPage() {
             )}
             {isBusy ? (
               <div className="mt-3 rounded border border-blue-100 bg-blue-50 p-3 text-sm text-brand-blue">
-                <div className="font-bold">{progressMessage || 'AI가 RAG 근거와 Tool 결과를 확인하고 있습니다...'}</div>
+                <div className="font-bold">{progressMessage || 'AI가 근거 자료와 검증 결과를 확인하고 있습니다...'}</div>
                 {progressSteps.length ? (
                   <div className="mt-2 flex flex-wrap gap-2 text-xs text-slate-600">
                     {progressSteps.map((step, index) => (
@@ -191,23 +221,24 @@ export function AsChatPage() {
             ) : null}
           </div>
 
-          <form onSubmit={submitMessage} className="mt-4 flex gap-3">
+          <form onSubmit={submitMessage} className="mt-4 flex min-w-0 flex-col gap-3 sm:flex-row">
             <textarea
-              className="h-24 flex-1 rounded border border-slate-300 p-3 text-sm"
+              className="h-24 min-w-0 w-full flex-1 rounded border border-slate-300 p-3 text-sm"
               placeholder="예: 게임 20분 뒤 프레임이 급락하고 GPU 온도가 95도까지 올라가요."
               value={message}
               onChange={(event) => setMessage(event.target.value)}
             />
-            <button disabled={!canSend} className="w-32 rounded bg-brand-blue text-sm font-bold text-white disabled:cursor-not-allowed disabled:bg-slate-400">
+            <button disabled={!canSend} className="h-11 w-full rounded bg-brand-blue text-sm font-bold text-white disabled:cursor-not-allowed disabled:bg-slate-400 sm:h-auto sm:w-32">
               {isBusy ? '전송 중' : '전송'}
             </button>
           </form>
         </Panel>
+        </div>
 
-        <div className="space-y-5">
+        <div className="min-w-0 max-w-full space-y-5">
           <Panel title="티켓 / 모델">
             <div className="space-y-3 text-sm">
-              <InfoRow label="AS 티켓" value={chat?.asTicketId ?? ticketId} />
+              <InfoRow label="AS 티켓" value={(chat?.asTicketId ?? ticketId) || '-'} />
               <InfoRow label="모델" value={chat?.model ?? '-'} />
               <InfoRow label="Agent 세션" value={chat?.agentSessionId ?? '-'} />
               <InfoRow label="상태" value={chat?.ticket.status ?? '-'} />
@@ -218,7 +249,7 @@ export function AsChatPage() {
             </div>
           </Panel>
 
-          <Panel title="LLM 구조화 결과">
+          <Panel title="AI 분석 결과">
             {chat?.assistantMessage ? (
               <div className="space-y-4">
                 <div>
@@ -232,19 +263,19 @@ export function AsChatPage() {
                 <StateMessage
                   type={chat.escalation?.required ? 'warn' : 'info'}
                   title={chat.escalation?.required ? '상담원 연결 필요' : 'AI 1차 조치 가능'}
-                  body={chat.escalation?.reason ?? 'LLM escalation 결과가 아직 없습니다.'}
+                  body={chat.escalation?.reason ?? '상담원 연결 판단 결과가 아직 없습니다.'}
                 />
               </div>
             ) : (
-              <StateMessage type="info" title="답변 대기" body="메시지를 보내면 LLM 구조화 결과가 여기에 표시됩니다." />
+              <StateMessage type="info" title="답변 대기" body="메시지를 보내면 AI 분석 결과가 여기에 표시됩니다." />
             )}
           </Panel>
 
-          <Panel title="Tool 결과">
-            <DataTable columns={['Tool', '판정', '요약']} rows={toolRows(chat?.toolResults ?? [])} />
+          <Panel title="검증 결과">
+            <DataTable columns={['검증 항목', '판정', '요약']} rows={toolRows(chat?.toolResults ?? [])} />
           </Panel>
 
-          <Panel title="RAG 근거">
+          <Panel title="근거 자료">
             <DataTable columns={['근거', '점수', '요약']} rows={evidenceRows(chat?.evidence ?? [])} />
           </Panel>
         </div>
@@ -256,7 +287,7 @@ export function AsChatPage() {
 function progressLabel(eventName: string) {
   if (eventName === 'STARTED') return 'AS 티켓과 사용자 세션을 확인하고 있습니다.';
   if (eventName === 'RAG_READY') return '관련 AS 근거를 찾았습니다.';
-  if (eventName === 'TOOLS_READY') return 'Tool 검증 결과를 정리했습니다.';
+  if (eventName === 'TOOLS_READY') return '검증 결과를 정리했습니다.';
   if (eventName === 'LLM_RUNNING') return 'AI 답변을 생성하고 있습니다.';
   return 'AS AI 처리를 진행하고 있습니다.';
 }
@@ -290,6 +321,8 @@ export function SupportNewPage() {
   const [submitState, setSubmitState] = useState<SubmitState>('default');
   const [agentDownloadState, setAgentDownloadState] = useState<AgentDownloadState>('idle');
   const [agentDownloadMessage, setAgentDownloadMessage] = useState('');
+  const [agentDiagnosisState, setAgentDiagnosisState] = useState<AgentDiagnosisRequestState>('idle');
+  const [agentDiagnosisMessage, setAgentDiagnosisMessage] = useState('');
   const [error, setError] = useState('');
   const [conflictChat, setConflictChat] = useState<BlockingSupportChat | null>(null);
   const authScope = authScopeKey(getCachedAuthUser());
@@ -399,7 +432,11 @@ export function SupportNewPage() {
     setAgentDownloadMessage('');
     try {
       const activation = await issueAgentActivationToken();
-      await downloadAgentPackage(activation.activationToken);
+      await downloadAgentPackage(
+        activation.activationToken,
+        symptomDetail.trim() || symptomTitle.trim(),
+        symptomType
+      );
       setAgentDownloadState('done');
       setAgentDownloadMessage('PCAgent.zip을 내려받았습니다. 압축을 풀고 PCAgent.exe를 실행하면 자동 등록됩니다.');
     } catch (cause) {
@@ -407,6 +444,40 @@ export function SupportNewPage() {
       setAgentDownloadMessage(cause instanceof ApiError && cause.status === 401
         ? '로그인 후 PCAgent를 다운로드해 주세요.'
         : 'Agent 등록 토큰 발급에 실패했습니다. 잠시 후 다시 시도해 주세요.');
+    }
+  }
+
+  async function diagnoseWithPcAgent() {
+    const symptom = symptomDetail.trim() || symptomTitle.trim();
+    if (!symptom) {
+      setAgentDiagnosisState('error');
+      setAgentDiagnosisMessage('PC Agent에 전달할 증상을 먼저 입력해 주세요.');
+      return;
+    }
+    setAgentDiagnosisState('requesting');
+    setAgentDiagnosisMessage('');
+    try {
+      const response = await requestPcAgentDiagnosis({
+        symptom,
+        requestedChecks: ['cpu', 'gpu', 'memory', 'disk', 'cooling'],
+        mode: 'LIVE'
+      });
+      if (response.status === 'ACCEPTED') {
+        setAgentDiagnosisState('accepted');
+        setAgentDiagnosisMessage(`PC Agent가 진단 요청을 수신했습니다. (${response.diagnosisId})`);
+      } else {
+        setAgentDiagnosisState('rejected');
+        setAgentDiagnosisMessage(response.message || `PC Agent가 요청을 처리하지 않았습니다. (${response.status})`);
+      }
+    } catch (cause) {
+      setAgentDiagnosisState('error');
+      if (cause instanceof ApiError && cause.code === 'AGENT_DISCONNECTED') {
+        setAgentDiagnosisMessage('연결된 PC Agent가 없습니다. PC Agent 실행 상태를 확인해 주세요.');
+      } else if (cause instanceof ApiError && cause.code === 'AGENT_RESPONSE_TIMEOUT') {
+        setAgentDiagnosisMessage('PC Agent 응답 시간이 초과되었습니다. 연결 상태를 확인해 주세요.');
+      } else {
+        setAgentDiagnosisMessage('PC Agent 진단 요청에 실패했습니다. 잠시 후 다시 시도해 주세요.');
+      }
     }
   }
 
@@ -524,7 +595,7 @@ export function SupportNewPage() {
               <input
                 id="support-symptom-title"
                 aria-label="증상 제목"
-                className="h-11 w-full rounded border border-slate-300 px-3 text-sm"
+                className="h-11 w-full rounded border border-slate-300 px-3 text-sm focus:border-[#de6c2d] focus:outline-none focus:ring-4 focus:ring-[#f4c8b2]"
                 placeholder="예: 게임 중 프레임 드랍"
                 value={symptomTitle}
                 onChange={(event) => setSymptomTitle(event.target.value)}
@@ -534,7 +605,7 @@ export function SupportNewPage() {
               <div>
                 <label className="mb-1 block text-xs font-bold text-slate-600">증상 유형</label>
                 <select
-                  className="h-11 w-full rounded border border-slate-300 bg-white px-3 text-sm"
+                  className="h-11 w-full rounded border border-slate-300 bg-white px-3 text-sm focus:border-[#de6c2d] focus:outline-none focus:ring-4 focus:ring-[#f4c8b2]"
                   value={symptomType}
                   onChange={(event) => {
                     const next = event.target.value;
@@ -551,7 +622,7 @@ export function SupportNewPage() {
                 <label className="mb-1 block text-xs font-bold text-slate-600">증상 발생 시각</label>
                 <input
                   type="datetime-local"
-                  className="h-11 w-full rounded border border-slate-300 px-3 text-sm"
+                  className="h-11 w-full rounded border border-slate-300 px-3 text-sm focus:border-[#de6c2d] focus:outline-none focus:ring-4 focus:ring-[#f4c8b2]"
                   value={detectedAt}
                   onChange={(event) => {
                     setDetectedAt(event.target.value);
@@ -565,7 +636,7 @@ export function SupportNewPage() {
               <textarea
                 id="support-symptom-detail"
                 aria-label="증상 상세"
-                className="h-36 w-full rounded border border-slate-300 p-4 text-sm"
+                className="h-36 w-full rounded border border-slate-300 p-4 text-sm focus:border-[#de6c2d] focus:outline-none focus:ring-4 focus:ring-[#f4c8b2]"
                 placeholder="언제부터 발생했는지, 어떤 작업 중 재현되는지 입력해 주세요."
                 value={symptomDetail}
                 onChange={(event) => setSymptomDetail(event.target.value)}
@@ -590,7 +661,7 @@ export function SupportNewPage() {
                   <label className="mb-1 block text-xs font-bold text-slate-600">시작 시각</label>
                   <input
                     type="datetime-local"
-                    className="h-11 w-full rounded border border-slate-300 px-3 text-sm"
+                    className="h-11 w-full rounded border border-slate-300 px-3 text-sm focus:border-[#de6c2d] focus:outline-none focus:ring-4 focus:ring-[#f4c8b2]"
                     value={windowStartedAt}
                     onChange={(event) => setWindowStartedAt(event.target.value)}
                   />
@@ -599,7 +670,7 @@ export function SupportNewPage() {
                   <label className="mb-1 block text-xs font-bold text-slate-600">종료 시각</label>
                   <input
                     type="datetime-local"
-                    className="h-11 w-full rounded border border-slate-300 px-3 text-sm"
+                    className="h-11 w-full rounded border border-slate-300 px-3 text-sm focus:border-[#de6c2d] focus:outline-none focus:ring-4 focus:ring-[#f4c8b2]"
                     value={windowEndedAt}
                     onChange={(event) => setWindowEndedAt(event.target.value)}
                   />
@@ -611,9 +682,10 @@ export function SupportNewPage() {
               <label className="mb-2 block text-xs font-bold text-slate-600">지원 신청 방식</label>
               <div className="grid gap-2 md:grid-cols-3">
                 {(['DIAGNOSIS_ONLY', 'REMOTE_REQUESTED', 'VISIT_REQUESTED'] as SupportRequestKind[]).map((kind) => (
-                  <label key={kind} className="flex min-h-12 items-center gap-2 rounded border border-slate-200 px-3 py-2 text-sm font-bold text-slate-700">
+                  <label key={kind} className={`flex min-h-12 items-center gap-2 rounded border px-3 py-2 text-sm font-bold transition ${supportRequestKind === kind ? 'border-[#de6c2d] bg-[#fff5ef] text-[#7a3215]' : 'border-slate-200 text-slate-700 hover:border-[#f4c8b2]'}`}>
                     <input
                       type="radio"
+                      className="accent-[#de6c2d]"
                       checked={supportRequestKind === kind}
                       onChange={() => setSupportRequestKind(kind)}
                     />
@@ -627,11 +699,19 @@ export function SupportNewPage() {
               <div className="mb-2 flex flex-wrap gap-2">
                 <button
                   type="button"
-                  className="rounded border border-brand-blue px-3 py-2 text-xs font-bold text-brand-blue"
+                  className="rounded border border-[#de6c2d] px-3 py-2 text-xs font-bold text-[#de6c2d] hover:bg-[#fff5ef] disabled:cursor-not-allowed disabled:border-slate-300 disabled:text-slate-400"
                   onClick={downloadPcAgent}
                   disabled={agentDownloadState === 'issuing'}
                 >
                   {agentDownloadState === 'issuing' ? '등록 토큰 발급 중...' : 'PCAgent 다운로드'}
+                </button>
+                <button
+                  type="button"
+                  className="rounded border border-[#de6c2d] bg-[#de6c2d] px-3 py-2 text-xs font-bold text-white hover:bg-[#c45c22] disabled:cursor-not-allowed disabled:border-slate-300 disabled:bg-slate-400"
+                  onClick={diagnoseWithPcAgent}
+                  disabled={agentDiagnosisState === 'requesting'}
+                >
+                  {agentDiagnosisState === 'requesting' ? 'Agent 응답 대기 중...' : 'PC Agent로 진단'}
                 </button>
                 <a
                   className="rounded border border-slate-300 px-3 py-2 text-xs font-bold"
@@ -658,16 +738,21 @@ export function SupportNewPage() {
                   {agentDownloadMessage}
                 </p>
               ) : null}
+              {agentDiagnosisMessage ? (
+                <p className={`mb-2 text-xs font-semibold ${agentDiagnosisState === 'accepted' ? 'text-emerald-700' : 'text-red-600'}`}>
+                  {agentDiagnosisMessage}
+                </p>
+              ) : null}
               <input
                 id="support-log-file"
-                className="block w-full rounded border border-slate-300 p-3 text-sm file:mr-4 file:rounded file:border-0 file:bg-brand-blue file:px-4 file:py-2 file:text-sm file:font-bold file:text-white"
+                className="block w-full rounded border border-slate-300 p-3 text-sm focus:border-[#de6c2d] focus:outline-none focus:ring-4 focus:ring-[#f4c8b2] file:mr-4 file:rounded file:border-0 file:bg-[#de6c2d] file:px-4 file:py-2 file:text-sm file:font-bold file:text-white hover:file:bg-[#c45c22]"
                 type="file"
                 accept=".jsonl,.ndjson,application/x-ndjson,application/json,text/plain"
                 onChange={handleFileChange}
               />
               {selectedFile ? <p className="mt-2 text-xs text-slate-500">{selectedFile.name} · {selectedFile.size.toLocaleString()} bytes</p> : null}
               {logFileNotice ? <p className="mt-2 text-xs font-semibold text-emerald-700">{logFileNotice}</p> : null}
-              {draftLogUploadId && !selectedFile ? <p className="mt-2 text-xs font-semibold text-brand-blue">Agent 업로드 로그 ID: {draftLogUploadId}</p> : null}
+              {draftLogUploadId && !selectedFile ? <p className="mt-2 text-xs font-semibold text-[#de6c2d]">Agent 업로드 로그 ID: {draftLogUploadId}</p> : null}
             </div>
             {asRagPreviewState === 'loading' ? <StateMessage type="info" title="AS RAG 분석 중" body="업로드한 로그를 바탕으로 적절한 지원 방식을 찾고 있습니다." /> : null}
             {asRagPreviewState === 'error' ? <StateMessage type="warn" title="AS RAG 추천 실패" body={asRagPreviewError || '추천 결과를 불러오지 못했습니다. AS 접수는 계속 진행할 수 있습니다.'} /> : null}
@@ -678,7 +763,7 @@ export function SupportNewPage() {
             </label>
             {error ? <StateMessage type="warn" title="AS 접수 확인 필요" body={error} /> : null}
             {submitState === 'ticket_created' ? <StateMessage type="success" title="AS 티켓 생성 완료" body="생성된 티켓 상세 화면으로 이동합니다." /> : null}
-            <button disabled={isSubmitDisabled} className="rounded bg-brand-blue px-5 py-3 text-sm font-bold text-white disabled:cursor-not-allowed disabled:bg-slate-400">
+            <button disabled={isSubmitDisabled} className="rounded bg-[#de6c2d] px-5 py-3 text-sm font-bold text-white hover:bg-[#c45c22] disabled:cursor-not-allowed disabled:bg-slate-400 disabled:hover:bg-slate-400">
               {isUploading ? '로그 업로드 및 티켓 생성 중...' : 'AS 접수하기'}
             </button>
           </div>
@@ -709,7 +794,7 @@ function ActiveSupportChatNotice({ chat }: { chat: BlockingSupportChat }) {
       />
       <Link
         to={`/support/${chat.asTicketId}?chat=1`}
-        className="inline-flex rounded bg-brand-blue px-4 py-3 text-sm font-bold text-white hover:bg-blue-700"
+        className="inline-flex rounded bg-[#de6c2d] px-4 py-3 text-sm font-bold text-white hover:bg-[#c45c22]"
       >
         진행 중인 상담방으로 이동
       </Link>
@@ -751,18 +836,18 @@ function authScopeKey(user: unknown) {
 
 function AsRagRecommendation({ analysis }: { analysis: AsRagAnalysisDto }) {
   return (
-    <div className="rounded border border-blue-200 bg-blue-50 p-4">
+    <div className="rounded border border-[#f4c8b2] bg-[#fff5ef] p-4">
       <div className="flex flex-wrap items-center gap-2">
-        <span className="text-sm font-bold text-blue-950">추천 서비스</span>
+        <span className="text-sm font-bold text-[#7a3215]">추천 서비스</span>
         <StatusBadge status={analysis.supportDecision ?? 'NEEDS_MORE_INFO'} />
         {analysis.confidence ? <StatusBadge status={analysis.confidence} /> : null}
       </div>
-      <p className="mt-2 text-base font-bold text-blue-950">
+      <p className="mt-2 text-base font-bold text-[#7a3215]">
         {analysis.recommendationMessage ?? `이 증상은 ${analysis.recommendedServiceLabel ?? '우선 진단만 받기'} 서비스를 받는 것이 좋습니다.`}
       </p>
-      {analysis.summaryText ? <p className="mt-2 text-sm leading-6 text-blue-900">{analysis.summaryText}</p> : null}
+      {analysis.summaryText ? <p className="mt-2 text-sm leading-6 text-[#7a3215]">{analysis.summaryText}</p> : null}
       {analysis.evidence?.length ? (
-        <div className="mt-3 space-y-1 text-xs leading-5 text-blue-800">
+        <div className="mt-3 space-y-1 text-xs leading-5 text-[#9a431d]">
           {analysis.evidence.slice(0, 2).map((item, index) => (
             <p key={`${String(item.sourceId ?? index)}`}>근거 {index + 1}. {String(item.summary ?? item.title ?? item.sourceId ?? 'AS RAG 근거')}</p>
           ))}
@@ -811,7 +896,8 @@ export function SupportTicketPage() {
   const [feedbackError, setFeedbackError] = useState('');
   const { data: ticket, isError, isLoading } = useQuery({
     queryKey: ['support-ticket', ticketId],
-    queryFn: () => getSupportTicket(ticketId)
+    queryFn: () => getSupportTicket(ticketId),
+    refetchInterval: 5_000
   });
   const remoteRequestMutation = useMutation({
     mutationFn: async () => {
@@ -879,6 +965,7 @@ export function SupportTicketPage() {
             {ticket.supportDecision ? <StatusBadge status={ticket.supportDecision} /> : null}
           </div>
           {hasSafetyAdvice(ticket) ? <SafetyNoticePanel ticket={ticket} /> : null}
+          {hasAgentDiagnosis(ticket) ? <AgentDiagnosisPanel ticket={ticket} /> : null}
           <DataTable columns={['시간', '주체', '내용']} rows={ticketTimeline(ticket)} />
         </Panel>
         <Panel title="담당자 확인 자료" subtitle="업로드한 로그를 바탕으로 담당자가 접수 내용을 확인합니다.">
@@ -966,6 +1053,66 @@ export function SupportTicketPage() {
   );
 }
 
+function AgentDiagnosisPanel({ ticket }: { ticket: AsTicketDto }) {
+  const evidence = ticket.diagnosisEvidence ?? [];
+  return (
+    <div className="mb-4 rounded border border-orange-200 bg-orange-50 p-4">
+      <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+        <p className="text-sm font-bold text-orange-950">PC Agent 진단 정보</p>
+        {ticket.diagnosisMode ? <StatusBadge status={ticket.diagnosisMode} /> : null}
+      </div>
+      <div className="space-y-2 text-sm">
+        <InfoRow label="요청 번호" value={ticket.requestNumber ?? '-'} />
+        <InfoRow label="요청 유형" value={diagnosisRequestTypeLabel(ticket.requestType)} />
+        <InfoRow label="진단 시각" value={formatTime(ticket.diagnosedAt ?? undefined)} />
+      </div>
+      {ticket.diagnosisTitle ? <p className="mt-4 font-bold text-slate-900">{ticket.diagnosisTitle}</p> : null}
+      {ticket.diagnosisSummary ? <p className="mt-2 whitespace-pre-wrap text-sm leading-6 text-slate-700">{ticket.diagnosisSummary}</p> : null}
+      {evidence.length ? (
+        <div className="mt-4">
+          <p className="mb-2 text-xs font-bold text-slate-600">핵심 측정 근거</p>
+          <ul className="space-y-1 text-sm leading-6 text-slate-700">
+            {evidence.map((item, index) => (
+              <li key={`${item.component ?? 'evidence'}-${item.metricType ?? index}-${index}`}>• {diagnosisEvidenceText(item, index)}</li>
+            ))}
+          </ul>
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+function hasAgentDiagnosis(ticket: AsTicketDto) {
+  return Boolean(
+    ticket.requestNumber
+    || ticket.requestType
+    || ticket.diagnosisMode
+    || ticket.diagnosisTitle
+    || ticket.diagnosisSummary
+    || ticket.diagnosisEvidence?.length
+    || ticket.diagnosedAt
+  );
+}
+
+function diagnosisRequestTypeLabel(value?: string | null) {
+  if (value === 'PHYSICAL_INSPECTION') return '하드웨어 물리 점검';
+  if (value === 'USER_ACTION') return '사용자 조치';
+  if (value === 'SOFTWARE_RECOVERY') return '소프트웨어 복구';
+  return value ?? '-';
+}
+
+function diagnosisEvidenceText(item: NonNullable<AsTicketDto['diagnosisEvidence']>[number], index: number) {
+  if (item.summary) return item.summary;
+  if (item.label) return item.label;
+  const component = item.component?.toUpperCase();
+  const metricType = item.metricType ? statusLabel(item.metricType) : undefined;
+  const measuredValue = item.value == null ? undefined : `${String(item.value)}${item.unit ? ` ${item.unit}` : ''}`;
+  const detail = [component, metricType, measuredValue, item.status ? statusLabel(item.status) : undefined]
+    .filter(Boolean)
+    .join(' · ');
+  return detail || `측정 근거 ${index + 1}`;
+}
+
 function SafetyNoticePanel({ ticket }: { ticket: AsTicketDto }) {
   const notices = ticket.safetyNotices?.length ? ticket.safetyNotices : [{ message: safetyAdviceMessage(ticket.safetyAdviceLevel) }];
   return (
@@ -996,7 +1143,7 @@ function isActiveRemoteSupportStatus(status?: string | null) {
 
 function safetyAdviceMessage(level?: string | null) {
   if (level === 'STOP_USE_UNTIL_REVIEW') {
-    return '담당자 검토 전까지 해당 PC 사용을 중지하거나 중요한 작업을 피해주세요.';
+    return '담당자 검토 전까지 해당 PC 사용을 중지하거나 중요한 작업을 피해 주세요.';
   }
   if (level === 'CAUTION') {
     return '하드웨어 오류 가능성이 있어 추가 조치 전 상태를 주의 깊게 확인해 주세요.';
@@ -1118,207 +1265,6 @@ function toSupportRequestKind(value?: string | null): SupportRequestKind {
   return 'DIAGNOSIS_ONLY';
 }
 
-async function downloadAgentPackage(activationToken: string) {
-  const manifest = await fetchAgentDownloadManifest();
-  const exe = await fetchAgentExecutable(manifest);
-  const config = {
-    apiBaseUrl: resolveAgentApiBaseUrl(),
-    webBaseUrl: window.location.origin,
-    activationToken,
-    environment: import.meta.env.MODE ?? 'local'
-  };
-  const encoder = new TextEncoder();
-  const zip = createZipBlob([
-    { name: 'PCAgent.exe', data: exe },
-    { name: 'pcagent-activation.json', data: encoder.encode(`${JSON.stringify(config, null, 2)}\n`) },
-    { name: 'README.txt', data: encoder.encode(createAgentPackageReadme()) }
-  ]);
-  const url = URL.createObjectURL(zip);
-  downloadUrl(url, 'PCAgent.zip');
-  window.setTimeout(() => URL.revokeObjectURL(url), 1000);
-}
-
-async function fetchAgentDownloadManifest(): Promise<AgentDownloadManifest> {
-  const response = await fetch('/downloads/pc-agent/latest.json', { cache: 'no-store' });
-  if (!response.ok) {
-    throw new Error('Agent manifest download failed.');
-  }
-  const body: unknown = await response.json();
-  if (!isAgentDownloadManifest(body)) {
-    throw new Error('Agent manifest is invalid.');
-  }
-  return body;
-}
-
-function isAgentDownloadManifest(value: unknown): value is AgentDownloadManifest {
-  if (typeof value !== 'object' || value == null) {
-    return false;
-  }
-  const manifest = value as Partial<AgentDownloadManifest>;
-  return typeof manifest.version === 'string'
-    && typeof manifest.downloadUrl === 'string'
-    && (manifest.sha256 == null || typeof manifest.sha256 === 'string');
-}
-
-async function fetchAgentExecutable(manifest: AgentDownloadManifest): Promise<Uint8Array<ArrayBuffer>> {
-  const manifestUrl = new URL('/downloads/pc-agent/latest.json', window.location.origin);
-  const executableUrl = new URL(manifest.downloadUrl, manifestUrl);
-  executableUrl.searchParams.set('v', manifest.version);
-  const response = await fetch(executableUrl, { cache: 'no-store' });
-  if (!response.ok) {
-    throw new Error('Agent exe download failed.');
-  }
-  const exe = new Uint8Array(await response.arrayBuffer());
-  if (manifest.sha256 && globalThis.crypto?.subtle) {
-    const actualHash = await sha256Hex(exe);
-    if (actualHash !== manifest.sha256.toLowerCase()) {
-      throw new Error('Agent exe checksum mismatch.');
-    }
-  }
-  return exe;
-}
-
-async function sha256Hex(data: Uint8Array<ArrayBuffer>) {
-  const digest = await globalThis.crypto.subtle.digest('SHA-256', data);
-  return Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, '0')).join('');
-}
-
-function createAgentPackageReadme() {
-  return [
-    'PCAgent',
-    '',
-    '1. Extract this zip file first.',
-    '2. Keep PCAgent.exe and pcagent-activation.json in the same folder.',
-    '3. Double-click PCAgent.exe.',
-    '',
-    'pcagent-activation.json is a one-time registration file.',
-    'PCAgent deletes it automatically after registration succeeds.',
-    ''
-  ].join('\n');
-}
-
-function createZipBlob(entries: ZipEntryInput[]) {
-  const encoder = new TextEncoder();
-  const localParts: Uint8Array<ArrayBuffer>[] = [];
-  const centralParts: Uint8Array<ArrayBuffer>[] = [];
-  let offset = 0;
-  const { dosTime, dosDate } = toDosDateTime(new Date());
-
-  entries.forEach((entry) => {
-    const nameBytes = encoder.encode(entry.name.replace(/\\/g, '/'));
-    const crc = crc32(entry.data);
-
-    const localHeader = new Uint8Array(30 + nameBytes.length);
-    const localView = new DataView(localHeader.buffer);
-    localView.setUint32(0, 0x04034b50, true);
-    localView.setUint16(4, 20, true);
-    localView.setUint16(6, 0, true);
-    localView.setUint16(8, 0, true);
-    localView.setUint16(10, dosTime, true);
-    localView.setUint16(12, dosDate, true);
-    localView.setUint32(14, crc, true);
-    localView.setUint32(18, entry.data.length, true);
-    localView.setUint32(22, entry.data.length, true);
-    localView.setUint16(26, nameBytes.length, true);
-    localView.setUint16(28, 0, true);
-    localHeader.set(nameBytes, 30);
-
-    const centralHeader = new Uint8Array(46 + nameBytes.length);
-    const centralView = new DataView(centralHeader.buffer);
-    centralView.setUint32(0, 0x02014b50, true);
-    centralView.setUint16(4, 20, true);
-    centralView.setUint16(6, 20, true);
-    centralView.setUint16(8, 0, true);
-    centralView.setUint16(10, 0, true);
-    centralView.setUint16(12, dosTime, true);
-    centralView.setUint16(14, dosDate, true);
-    centralView.setUint32(16, crc, true);
-    centralView.setUint32(20, entry.data.length, true);
-    centralView.setUint32(24, entry.data.length, true);
-    centralView.setUint16(28, nameBytes.length, true);
-    centralView.setUint16(30, 0, true);
-    centralView.setUint16(32, 0, true);
-    centralView.setUint16(34, 0, true);
-    centralView.setUint16(36, 0, true);
-    centralView.setUint32(38, 0, true);
-    centralView.setUint32(42, offset, true);
-    centralHeader.set(nameBytes, 46);
-
-    localParts.push(localHeader, entry.data);
-    centralParts.push(centralHeader);
-    offset += localHeader.length + entry.data.length;
-  });
-
-  const centralOffset = offset;
-  const centralSize = centralParts.reduce((size, part) => size + part.length, 0);
-  const endRecord = new Uint8Array(22);
-  const endView = new DataView(endRecord.buffer);
-  endView.setUint32(0, 0x06054b50, true);
-  endView.setUint16(4, 0, true);
-  endView.setUint16(6, 0, true);
-  endView.setUint16(8, entries.length, true);
-  endView.setUint16(10, entries.length, true);
-  endView.setUint32(12, centralSize, true);
-  endView.setUint32(16, centralOffset, true);
-  endView.setUint16(20, 0, true);
-
-  return new Blob([...localParts, ...centralParts, endRecord], { type: 'application/zip' });
-}
-
-function createCrc32Table() {
-  const table = new Uint32Array(256);
-  for (let index = 0; index < table.length; index += 1) {
-    let value = index;
-    for (let bit = 0; bit < 8; bit += 1) {
-      value = value & 1 ? 0xedb88320 ^ (value >>> 1) : value >>> 1;
-    }
-    table[index] = value >>> 0;
-  }
-  return table;
-}
-
-function crc32(data: Uint8Array) {
-  let crc = 0xffffffff;
-  data.forEach((byte) => {
-    crc = crc32Table[(crc ^ byte) & 0xff] ^ (crc >>> 8);
-  });
-  return (crc ^ 0xffffffff) >>> 0;
-}
-
-function toDosDateTime(date: Date) {
-  const year = Math.max(1980, date.getFullYear());
-  const dosTime = (date.getHours() << 11) | (date.getMinutes() << 5) | Math.floor(date.getSeconds() / 2);
-  const dosDate = ((year - 1980) << 9) | ((date.getMonth() + 1) << 5) | date.getDate();
-  return { dosTime, dosDate };
-}
-
-function resolveAgentApiBaseUrl() {
-  const configured = API_BASE_URL.trim().replace(/\/$/, '');
-  if (/^https?:\/\//.test(configured)) {
-    return configured;
-  }
-  if (configured.startsWith('/')) {
-    return `${window.location.origin}${configured}`;
-  }
-  if (isLocalDevWebOrigin()) {
-    return `${window.location.protocol}//${window.location.hostname}:8080`;
-  }
-  return window.location.origin;
-}
-
-function isLocalDevWebOrigin() {
-  return ['localhost', '127.0.0.1'].includes(window.location.hostname) && window.location.port === '5173';
-}
-
-function downloadUrl(url: string, filename: string) {
-  const anchor = document.createElement('a');
-  anchor.href = url;
-  anchor.download = filename;
-  document.body.appendChild(anchor);
-  anchor.click();
-  anchor.remove();
-}
-
 function visitSlotLabel(value?: string | null) {
   if (value === 'MORNING') return '오전';
   if (value === 'AFTERNOON') return '오후';
@@ -1338,7 +1284,7 @@ function InfoRow({ label, value }: { label: string; value: string }) {
 function causeRowsForChat(chat: AsChatResponse) {
   const candidates = chat.causeCandidates ?? [];
   if (!candidates.length) {
-    return [{ 원인: '원인 후보 없음', 신뢰도: <StatusBadge status="LOW" />, 근거: 'LLM 응답에 원인 후보가 없습니다.' }];
+    return [{ 원인: '원인 후보 없음', 신뢰도: <StatusBadge status="LOW" />, 근거: 'AI 응답에 원인 후보가 없습니다.' }];
   }
   return candidates.map((candidate) => ({
     원인: candidate.label ?? '원인 후보',
@@ -1350,7 +1296,7 @@ function causeRowsForChat(chat: AsChatResponse) {
 function actionRowsForChat(chat: AsChatResponse) {
   const actions = chat.nextActions ?? [];
   if (!actions.length) {
-    return [{ 조치: '추가 조치 없음', 우선순위: <StatusBadge status="LOW" />, 안내: 'LLM 응답에 다음 조치가 없습니다.' }];
+    return [{ 조치: '추가 조치 없음', 우선순위: <StatusBadge status="LOW" />, 안내: 'AI 응답에 다음 조치가 없습니다.' }];
   }
   return actions.map((action) => ({
     조치: action.label ?? '다음 조치',
@@ -1359,12 +1305,20 @@ function actionRowsForChat(chat: AsChatResponse) {
   }));
 }
 
+const TOOL_NAME_LABELS: Record<string, string> = {
+  compatibility: '호환성',
+  power: '전력',
+  size: '규격',
+  performance: '성능',
+  price: '가격'
+};
+
 function toolRows(toolResults: AsChatToolResult[]) {
   if (!toolResults.length) {
-    return [{ Tool: '대기', 판정: <StatusBadge status="LOW" />, 요약: '메시지 전송 후 Tool 결과가 표시됩니다.' }];
+    return [{ '검증 항목': '대기', 판정: <StatusBadge status="LOW" />, 요약: '메시지 전송 후 검증 결과가 표시됩니다.' }];
   }
   return toolResults.map((tool) => ({
-    Tool: tool.toolName,
+    '검증 항목': TOOL_NAME_LABELS[tool.toolName] ?? tool.toolName,
     판정: <StatusBadge status={tool.status} />,
     요약: tool.summary
   }));
@@ -1372,7 +1326,7 @@ function toolRows(toolResults: AsChatToolResult[]) {
 
 function evidenceRows(evidence: AsChatEvidence[]) {
   if (!evidence.length) {
-    return [{ 근거: '대기', 점수: '-', 요약: '메시지 전송 후 RAG 근거가 표시됩니다.' }];
+    return [{ 근거: '대기', 점수: '-', 요약: '메시지 전송 후 근거 자료가 표시됩니다.' }];
   }
   return evidence.map((item) => ({
     근거: item.sourceId,

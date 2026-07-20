@@ -196,10 +196,21 @@ export type BuildGraphLayoutPosition = {
   y: number;
 };
 
+export type BuildGraphAnchorPoint = {
+  x: number;
+  y: number;
+};
+
+export type BuildGraphAnchor = {
+  card: BuildGraphAnchorPoint;
+  part: BuildGraphAnchorPoint;
+};
+
 export type BuildGraphLayout = {
   layoutKey: 'DEFAULT' | string;
   source?: 'DEFAULT' | 'SAVED' | string;
   positions: Record<string, BuildGraphLayoutPosition>;
+  anchors?: Record<string, BuildGraphAnchor>;
   updatedAt?: string | null;
 };
 
@@ -886,10 +897,13 @@ export function getDefaultBuildGraphLayout() {
   return api<BuildGraphLayout>('/api/admin/build-graph-layouts/default');
 }
 
-export function saveDefaultBuildGraphLayout(positions: Record<string, BuildGraphLayoutPosition>) {
+export function saveDefaultBuildGraphLayout(
+  positions: Record<string, BuildGraphLayoutPosition>,
+  anchors: Record<string, BuildGraphAnchor>
+) {
   return api<BuildGraphLayout>('/api/admin/build-graph-layouts/default', {
     method: 'PUT',
-    body: JSON.stringify({ positions })
+    body: JSON.stringify({ positions, anchors })
   });
 }
 

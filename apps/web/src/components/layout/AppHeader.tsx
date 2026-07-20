@@ -1,15 +1,38 @@
-import { ReactNode, useEffect, useState } from 'react';
+import '@fontsource/outfit/500.css';
+import { FormEvent, ReactNode, useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { Cpu, FileText, LifeBuoy, LogIn, LogOut, Search, ShieldCheck, Sparkles, UserRound } from 'lucide-react';
+import { ChevronDown, LifeBuoy, LogIn, LogOut, Search, ShieldCheck, ShoppingCart, UserRound, Wrench } from 'lucide-react';
 import { getCurrentUser, logout as logoutApi, type CurrentUser } from '../../features/auth/authApi';
 import { AUTH_CHANGED_EVENT, ApiError, clearToken, getCachedAuthUser, getRefreshToken, getToken } from '../../lib/api';
-import { AI_BUILD_ASSISTANT_TOGGLE_EVENT } from '../../lib/events';
+import { openAiAssistant } from '../../lib/events';
 import { PrimaryNav } from './PrimaryNav';
+import { getTechnicianProfile } from '../../features/parts/assemblyApi';
 
 export function AppHeader() {
   const navigate = useNavigate();
   const [user, setUser] = useState<CurrentUser | null>(() => readCachedCurrentUser());
-  const [checkingUser, setCheckingUser] = useState(() => Boolean(getToken() && !readCachedCurrentUser()));
+  const [searchInput, setSearchInput] = useState('');
+  const [headerSearchMode, setHeaderSearchMode] = useState<'general' | 'ai'>('ai');
+  const [hasTechnicianProfile, setHasTechnicianProfile] = useState(false);
+
+  function submitSearch(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const prompt = searchInput.trim();
+    if (!prompt) return;
+    const generalSearchTarget = `/parts?q=${encodeURIComponent(prompt)}`;
+    if (!getToken()) {
+      const redirectTarget = headerSearchMode === 'general' ? generalSearchTarget : '/?assistant=open';
+      navigate(`/login?redirect=${encodeURIComponent(redirectTarget)}`);
+      return;
+    }
+    if (headerSearchMode === 'general') {
+      navigate(generalSearchTarget);
+      setSearchInput('');
+      return;
+    }
+    openAiAssistant({ prefill: prompt, autoSubmit: true });
+    setSearchInput('');
+  }
 
   useEffect(() => {
     let cancelled = false;
@@ -17,27 +40,14 @@ export function AppHeader() {
     async function loadCurrentUser() {
       if (!getToken()) {
         setUser(null);
-        setCheckingUser(false);
         return;
       }
-
-      setCheckingUser(true);
       try {
         const currentUser = await getCurrentUser();
-        if (!cancelled) {
-          setUser(currentUser);
-        }
+        if (!cancelled) setUser(currentUser);
       } catch (error) {
-        if (!cancelled) {
-          setUser(null);
-        }
-        if (error instanceof ApiError && error.status === 401) {
-          clearToken();
-        }
-      } finally {
-        if (!cancelled) {
-          setCheckingUser(false);
-        }
+        if (!cancelled) setUser(null);
+        if (error instanceof ApiError && error.status === 401) clearToken();
       }
     }
 
@@ -45,7 +55,6 @@ export function AppHeader() {
       const userFromEvent = event instanceof CustomEvent ? event.detail?.user : null;
       if (isCurrentUser(userFromEvent)) {
         setUser(userFromEvent);
-        setCheckingUser(false);
         return;
       }
       void loadCurrentUser();
@@ -54,7 +63,6 @@ export function AppHeader() {
     void loadCurrentUser();
     window.addEventListener(AUTH_CHANGED_EVENT, handleAuthChanged);
     window.addEventListener('storage', loadCurrentUser);
-
     return () => {
       cancelled = true;
       window.removeEventListener(AUTH_CHANGED_EVENT, handleAuthChanged);
@@ -62,79 +70,128 @@ export function AppHeader() {
     };
   }, []);
 
+  useEffect(() => {
+    let cancelled = false;
+    if (!user || user.role !== 'USER') {
+      setHasTechnicianProfile(false);
+      return;
+    }
+    getTechnicianProfile()
+      .then((profile) => { if (!cancelled) setHasTechnicianProfile(Boolean(profile)); })
+      .catch(() => { if (!cancelled) setHasTechnicianProfile(false); });
+    return () => { cancelled = true; };
+  }, [user?.id, user?.role]);
+
   async function logout() {
     const refreshToken = getRefreshToken();
     try {
-      if (refreshToken) {
-        await logoutApi(refreshToken);
-      }
+      if (refreshToken) await logoutApi(refreshToken);
     } finally {
       clearToken();
       navigate('/login');
     }
   }
 
+  const isGeneralSearch = headerSearchMode === 'general';
+  const searchInputLabel = isGeneralSearch ? '부품 일반 검색' : 'AI에게 견적 질문하기';
+  const searchSubmitLabel = isGeneralSearch ? '부품 검색' : 'AI 견적 검색';
+  const searchPlaceholder = isGeneralSearch
+    ? '부품명이나 모델명을 검색해보세요. 예: RTX 5060 Ti'
+    : '어떤 PC를 맞춰드릴까요? 예: QHD 게임용 200만원 PC';
+
   return (
     <>
-      <div className="border-b border-neutral-900 bg-neutral-950 text-xs text-white">
-        <div className="mx-auto flex min-h-[32px] w-full max-w-[1320px] flex-col gap-1 px-4 py-2 sm:flex-row sm:items-center sm:justify-between sm:px-6 lg:px-8 xl:px-0">
-          <span className="font-semibold">오늘의 PC 견적 특가 · 내부 자산 기준 가격/호환성 검증</span>
-          <span className="font-normal text-white/60">{user ? `로그인됨 · ${user.email} · ${user.role}` : checkingUser ? '로그인 상태 확인 중' : '로그인 필요 · 회원가입 · PCAgent'}</span>
-        </div>
-      </div>
-      <header className="border-b border-commerce-line bg-white">
-        <div className="mx-auto grid min-h-[82px] w-full max-w-[1320px] grid-cols-[auto_minmax(0,1fr)] items-center gap-3 px-4 py-3 sm:px-6 lg:px-8 xl:grid-cols-[auto_minmax(260px,520px)_auto] xl:px-0 2xl:grid-cols-[auto_minmax(320px,620px)_auto]">
-          <Link to="/" className="flex min-w-0 items-center gap-3 rounded-md focus:outline-none focus:ring-4 focus:ring-blue-100">
-            <div className="grid h-11 w-11 shrink-0 place-items-center rounded-md bg-commerce-ink text-white" aria-hidden="true">
-              <Cpu size={22} strokeWidth={2.2} />
+      <header className="bg-[#f7f7f8]">
+        <div className="mx-auto grid min-h-[68px] w-full max-w-[1320px] grid-cols-[auto_minmax(0,1fr)] items-center gap-x-3 gap-y-3 px-4 pb-[7px] pt-3 sm:px-6 lg:grid-cols-[minmax(180px,1fr)_minmax(360px,760px)_minmax(180px,1fr)] lg:gap-x-6 lg:px-8 xl:px-0">
+          <div className="flex min-w-0 items-center gap-5">
+            <Link to="/" aria-label="다짜줘 홈" className="flex h-10 min-w-0 items-center rounded-md focus:outline-none focus:ring-4 focus:ring-blue-100">
+              <span className="relative -top-[2px] text-[28px] leading-none tracking-[-0.025em] text-[#de6c2d] sm:text-[33.6px]" style={{ fontFamily: 'Outfit, sans-serif', fontWeight: 500 }}>Dazzajo</span>
+            </Link>
+            <div role="group" aria-label="검색 방식" className="hidden shrink-0 items-center gap-3 lg:flex">
+              <button
+                type="button"
+                aria-pressed={headerSearchMode === 'general'}
+                onClick={() => setHeaderSearchMode('general')}
+                className={'flex h-10 items-center border-b-2 text-[15px] font-medium leading-none transition ' + (headerSearchMode === 'general' ? 'border-[#de6c2d] text-[#222222]' : 'border-transparent text-[#595959] hover:text-[#222222]')}
+              >
+                일반검색
+              </button>
+              <button
+                type="button"
+                aria-pressed={headerSearchMode === 'ai'}
+                onClick={() => setHeaderSearchMode('ai')}
+                className={'flex h-10 items-center border-b-2 text-[15px] font-medium leading-none transition ' + (headerSearchMode === 'ai' ? 'border-[#de6c2d] text-[#222222]' : 'border-transparent text-[#595959] hover:text-[#222222]')}
+              >
+                AI 검색
+              </button>
             </div>
-            <div>
-              <div className="text-xl font-black leading-5 tracking-tight text-commerce-ink">스펙업</div>
-              <div className="text-xs font-semibold text-slate-500">당신만을 위한 PC 견적 플랫폼</div>
-            </div>
-          </Link>
-          <div className="col-span-2 row-start-2 flex h-12 w-full min-w-0 items-center rounded-md border border-commerce-ink bg-white px-3 shadow-sm xl:col-span-1 xl:col-start-2 xl:row-start-1">
-            <Search size={18} className="text-slate-500" />
-            <input className="ml-2 min-w-0 flex-1 bg-transparent text-sm font-medium outline-none placeholder:text-slate-400" placeholder="예: QHD 게임용 200만원 PC" />
-            <button className="rounded bg-commerce-ink px-4 py-2 text-xs font-black text-white hover:bg-slate-700">검색</button>
           </div>
-          <div className="col-start-2 row-start-1 flex flex-wrap items-center justify-end gap-2 xl:col-start-3 xl:flex-nowrap">
-            <HeaderButton to="/my/quotes" icon={<FileText size={15} />} label="내 견적함" dark />
-            <HeaderButton to="/support/new" icon={<LifeBuoy size={15} />} label="AS 접수" quiet />
+
+          <form data-testid="header-ai-search" onSubmit={submitSearch} className="order-last col-span-2 flex h-12 w-full min-w-0 items-center rounded-full border-2 border-commerce-ink bg-[#f7f7f8] pl-5 pr-1.5 shadow-sm transition focus-within:ring-4 focus-within:ring-blue-100 lg:order-none lg:col-span-1">
+            <input
+              value={searchInput}
+              onChange={(event) => setSearchInput(event.target.value)}
+              aria-label={searchInputLabel}
+              className="min-w-0 flex-1 bg-transparent pr-3 text-sm font-semibold outline-none placeholder:font-medium placeholder:text-slate-400"
+              placeholder={searchPlaceholder}
+            />
+            <button type="submit" aria-label={searchSubmitLabel} className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-[#de6c2d] text-white transition hover:bg-[#c45c22] focus:outline-none focus:ring-4 focus:ring-blue-100">
+              <Search size={18} aria-hidden="true" />
+            </button>
+          </form>
+
+          <div className="col-start-2 row-start-1 flex items-center justify-end gap-1 lg:col-start-3">
+            <HeaderIconLink to="/my/quotes" icon={<ShoppingCart size={21} />} label="내 견적함" />
             {user ? (
-              <>
-                <div className="flex h-9 max-w-[170px] items-center gap-2 rounded-md px-2 text-xs font-semibold text-slate-600 sm:max-w-none">
-                  {user.role === 'ADMIN' ? <ShieldCheck size={15} className="text-slate-500" /> : <UserRound size={15} className="text-slate-500" />}
-                  <span className="truncate">{user.name || user.email}</span>
+              <details data-testid="header-account-slot" className="group relative w-[118px] shrink-0">
+                <summary aria-label={'계정 메뉴: ' + (user.name || '다짜줘 사용자')} className="flex h-10 w-full cursor-pointer list-none items-center gap-2 rounded-lg px-2 text-[#595959] transition hover:bg-slate-100 hover:text-[#222222] focus:outline-none focus:ring-4 focus:ring-blue-100 [&::-webkit-details-marker]:hidden">
+                  <UserRound size={21} className="shrink-0" aria-hidden="true" />
+                  <span data-testid="header-account-name" className="w-[72px] truncate text-left text-[15px] font-medium leading-none">{user.name || '다짜줘 사용자'}</span>
+                  <ChevronDown size={10} className="shrink-0 transition group-open:rotate-180" aria-hidden="true" />
+                </summary>
+                <div className="absolute right-0 top-[calc(100%+8px)] z-50 w-56 overflow-hidden rounded-xl border border-commerce-line bg-white py-2 shadow-xl">
+                  <div className="border-b border-commerce-line px-4 pb-3 pt-2">
+                    <div className="truncate text-sm font-black text-commerce-ink">{user.name || '다짜줘 사용자'}</div>
+                    <div className="mt-0.5 truncate text-xs text-slate-500">{user.email}</div>
+                  </div>
+                  <AccountMenuLink to="/my/profile" icon={<UserRound size={16} />} label="마이페이지" />
+                  {user.role === 'ADMIN' ? <AccountMenuLink to="/admin" icon={<ShieldCheck size={16} />} label="관리자" /> : null}
+                  <AccountMenuLink to="/support/new" icon={<LifeBuoy size={16} />} label="AS 접수" />
+                  {user.role === 'USER' ? (
+                    <AccountMenuLink
+                      to={hasTechnicianProfile ? '/technician' : '/technician/apply'}
+                      icon={<Wrench size={16} />}
+                      label={hasTechnicianProfile ? '기사 포털' : '기사로 참여'}
+                    />
+                  ) : null}
+                  <button type="button" onClick={logout} className="flex w-full items-center gap-3 px-4 py-2.5 text-left text-sm font-bold text-slate-600 transition hover:bg-slate-100 hover:text-commerce-ink focus:outline-none focus:bg-slate-100">
+                    <LogOut size={16} aria-hidden="true" />
+                    로그아웃
+                  </button>
                 </div>
-                <button onClick={logout} className="flex h-9 items-center gap-1 rounded-md border border-commerce-line bg-white px-3 text-xs font-bold text-slate-600 transition hover:border-commerce-ink hover:text-commerce-ink focus:outline-none focus:ring-4 focus:ring-blue-100">
-                  <LogOut size={15} />
-                  로그아웃
-                </button>
-                <button
-                  type="button"
-                  onClick={() => window.dispatchEvent(new Event(AI_BUILD_ASSISTANT_TOGGLE_EVENT))}
-                  className="hidden h-9 items-center gap-1 rounded-md bg-brand-blue px-3 text-xs font-black text-white shadow-sm transition hover:bg-blue-700 focus:outline-none focus:ring-4 focus:ring-blue-100 md:flex"
-                >
-                  <Sparkles size={15} />
-                  AI에게 물어보기
-                </button>
-              </>
+              </details>
             ) : (
-              <HeaderButton to="/login" icon={<LogIn size={15} />} label="로그인" dark />
+              <Link
+                to="/login"
+                aria-label="계정 로그인"
+                data-testid="header-account-slot"
+                className="flex h-10 w-[118px] shrink-0 items-center gap-2 rounded-lg px-2 text-[#595959] transition hover:bg-slate-100 hover:text-[#222222] focus:outline-none focus:ring-4 focus:ring-blue-100"
+              >
+                <LogIn size={21} className="shrink-0" aria-hidden="true" />
+                <span data-testid="header-account-name" aria-hidden="true" className="block w-[72px] shrink-0" />
+                <span aria-hidden="true" className="block h-2.5 w-2.5 shrink-0" />
+              </Link>
             )}
           </div>
         </div>
       </header>
-      <PrimaryNav isAdmin={user?.role === 'ADMIN'} />
+      <PrimaryNav />
     </>
   );
 }
 
 function isCurrentUser(value: unknown): value is CurrentUser {
-  if (!value || typeof value !== 'object') {
-    return false;
-  }
+  if (!value || typeof value !== 'object') return false;
   const candidate = value as Record<string, unknown>;
   return (
     typeof candidate.id === 'string' &&
@@ -149,16 +206,19 @@ function readCachedCurrentUser() {
   return isCurrentUser(cachedUser) && getToken() ? cachedUser : null;
 }
 
-function HeaderButton({ to, icon, label, dark, quiet }: { to: string; icon: ReactNode; label: string; dark?: boolean; quiet?: boolean }) {
-  const tone = dark
-    ? 'bg-commerce-ink text-white hover:bg-slate-700'
-    : quiet
-      ? 'text-slate-600 hover:bg-slate-100 hover:text-commerce-ink'
-      : 'border border-commerce-line bg-white text-slate-700 hover:border-commerce-ink hover:text-commerce-ink';
+function HeaderIconLink({ to, icon, label }: { to: string; icon: ReactNode; label: string }) {
   return (
-    <Link to={to} className={`flex h-9 items-center gap-1 whitespace-nowrap rounded-md px-3 text-xs font-bold transition focus:outline-none focus:ring-4 focus:ring-blue-100 ${tone}`}>
-      {icon}
-      {label}
+    <Link to={to} aria-label={label} title={label} className="grid h-10 w-10 shrink-0 place-items-center rounded-lg text-[#595959] transition hover:bg-slate-100 hover:text-[#222222] focus:outline-none focus:ring-4 focus:ring-blue-100">
+      <span aria-hidden="true">{icon}</span>
+    </Link>
+  );
+}
+
+function AccountMenuLink({ to, icon, label }: { to: string; icon: ReactNode; label: string }) {
+  return (
+    <Link to={to} className="flex items-center gap-3 px-4 py-2.5 text-sm font-bold text-slate-600 transition hover:bg-slate-100 hover:text-commerce-ink focus:outline-none focus:bg-slate-100">
+      <span aria-hidden="true">{icon}</span>
+      <span>{label}</span>
     </Link>
   );
 }

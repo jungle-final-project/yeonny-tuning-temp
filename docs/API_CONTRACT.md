@@ -162,7 +162,7 @@ Google OAuth 정책:
 |---|---|---|---|---|---|---|
 | `POST` | `/api/requirements/parse` | USER | 1번 | `{ "message": "150만원 게임용 PC", "budget": 1500000, "usageTags": ["GAMING"], "resolution": "QHD", "preferredVendors": ["NVIDIA"], "priority": "성능" }` | `{ "id": "2e0f8c9c-8e1c-4d75-94a2-5d6a4977de11", "rawMessage": "150만원 게임용 PC", "budget": 1500000, "usageTags": ["GAMING"], "parsedContext": { "usageTags": ["GAMING"], "budget": 1500000, "resolution": "QHD", "parseMode": "AGENT_RAG_LLM", "parser": "requirement-parse-agent-v1" }, "questions": [{ "key": "noisePreference", "label": "소음 민감도", "options": ["상관없음", "조용한 편"], "required": false }], "agentSessionId": "7dfb98c8-7f35-4fd3-95e0-dfd58cbda77a", "agentSummary": "요구사항을 구조화했습니다.", "evidenceIds": ["9ebf5278-68aa-42a5-96f4-8ec0f90f0f77"] }` | `requirements`, `agent_sessions`, `rag_evidence` |
 | `POST` | `/api/builds/recommend` | USER | 1번 | `{ "requirementId": "2e0f8c9c-8e1c-4d75-94a2-5d6a4977de11", "answers": { "noisePreference": "조용한 편" } }` | `{ "agentSessionId": "7dfb98c8-7f35-4fd3-95e0-dfd58cbda77a", "recommendations": [{ "id": "3ff6d7a2-1c51-4c9d-9720-94b7ef1d62bd", "name": "균형형 추천 Build", "recommendedFor": "균형 우선", "summary": "내부 자산과 저장된 현재가를 조합했습니다.", "totalPrice": 1450000, "confidence": "HIGH", "items": [], "warnings": [], "toolResults": [{ "tool": "compatibility", "status": "PASS", "confidence": "HIGH", "summary": "CPU, 메인보드, RAM 호환성이 맞습니다." }], "evidenceIds": ["9ebf5278-68aa-42a5-96f4-8ec0f90f0f77"], "agentSessionId": "7dfb98c8-7f35-4fd3-95e0-dfd58cbda77a", "agentSummary": "추천 근거 요약", "changeableCategories": ["GPU", "RAM"] }], "warnings": [], "evidenceIds": ["9ebf5278-68aa-42a5-96f4-8ec0f90f0f77"], "toolResults": [] }` | `requirements`, `builds`, `build_items`, `agent_sessions`, `tool_invocations`, `rag_evidence` |
-| `POST` | `/api/ai/build-chat` | USER | 3번 | `{ "message": "GPU 빼줘", "currentBuilds": [], "appliedPartPreferences": [], "currentQuoteDraft": { "items": [] } }` | `{ "answerType": "BUDGET", "message": "LLM/RAG로 조건을 분석했습니다.", "builds": [{ "id": "ai-engine-2-qhd-균형-추천-조합", "tier": "balanced", "title": "QHD 균형 추천 조합", "totalPrice": 1980000, "items": [{ "partId": "0e9f3b8b-8c83-4d9a-9f7d-1f2b4dfb8a11", "category": "GPU", "quantity": 1, "price": 890000 }], "toolResults": [{ "tool": "price", "status": "PASS", "confidence": "HIGH", "summary": "저장된 현재가 기준 예산 안에 들어옵니다." }], "warnings": [], "confidence": "HIGH", "evidenceIds": ["9ebf5278-68aa-42a5-96f4-8ec0f90f0f77"] }], "partRecommendation": null, "actions": [{ "id": "draft-action-remove-draft-part-gpu", "type": "REMOVE_DRAFT_PART", "label": "GPU 빼기", "description": "견적에서 GPU를 제거합니다.", "payload": { "partId": "0e9f3b8b-8c83-4d9a-9f7d-1f2b4dfb8a11", "category": "GPU" }, "requiresConfirmation": true }], "warnings": [], "evidenceIds": ["9ebf5278-68aa-42a5-96f4-8ec0f90f0f77"], "agentSessionId": null }` | `parts`, `compatibility_rules`, `benchmark_summaries`, `price_snapshots`, `rag_evidence` |
+| `POST` | `/api/ai/build-chat` | USER | 3번 | `{ "message": "300만원 게이밍 PC 추천", "sessionId": null }` | `{ "outputType": "FULL_BUILD", "message": "전체 견적을 추천드릴게요.", "build": { "totalPrice": 2968930, "items": [{ "partId": "0e9f3b8b-8c83-4d9a-9f7d-1f2b4dfb8a11", "category": "GPU", "name": "RTX 5070", "manufacturer": "NVIDIA", "price": 890000, "reason": "성능과 가성비 점수를 기준으로 선택했습니다." }] }, "part": null, "sessionId": "7dfb98c8-7f35-4fd3-95e0-dfd58cbda77a" }` | `parts`, `benchmark_summaries`, `ai_chat_sessions` |
 | `POST` | `/api/build-graphs/resolve` | USER | 1번 | `{ "source": "AI_BUILD", "view": "FOCUSED", "budgetWon": 2000000, "items": [{ "partId": "0e9f3b8b-8c83-4d9a-9f7d-1f2b4dfb8a11", "category": "GPU", "quantity": 1 }], "focus": { "mode": "PART_IMPACT", "category": "GPU", "tool": "power" } }` | `{ "mode": "PART_IMPACT", "summary": "GPU 선택으로 영향을 받는 부품과 제약을 확인했습니다.", "nodes": [{ "id": "part-GPU", "type": "PART", "category": "GPU", "label": "GeForce RTX 5070", "status": "PASS" }], "edges": [{ "id": "edge-gpu-psu-power", "source": "part-GPU", "target": "part-PSU", "type": "AFFECTS", "status": "WARN", "label": "전력 여유", "summary": "권장 750W / 현재 650W 기준으로 여유를 판단합니다." }], "focusNodeIds": ["part-GPU", "part-PSU"], "insights": [{ "id": "insight-power", "status": "WARN", "title": "파워 여유 확인", "description": "PSU 정격 출력 여유가 낮습니다.", "relatedNodeIds": ["part-GPU", "part-PSU"] }], "toolResults": [] }` | `parts`, `quote_drafts`, `quote_draft_items`, `benchmark_summaries`, `compatibility_rules` |
 | `GET` | `/api/builds/{id}` | USER | 1번 | - | `{ "id": "3ff6d7a2-1c51-4c9d-9720-94b7ef1d62bd", "name": "QHD Gaming Build", "summary": "내부 자산 기반 추천", "totalPrice": 1450000, "confidence": "HIGH", "items": [{ "category": "GPU", "partId": "0e9f3b8b-8c83-4d9a-9f7d-1f2b4dfb8a11", "name": "RTX 5070", "manufacturer": "NVIDIA", "price": 850000, "attributes": {} }], "warnings": [], "toolResults": [], "evidenceIds": ["9ebf5278-68aa-42a5-96f4-8ec0f90f0f77"], "agentSummary": "추천 근거 요약", "changeableCategories": ["GPU", "RAM"], "createdAt": "2026-06-29T10:20:00Z" }` | `builds`, `build_items`, `parts` |
 | `GET` | `/api/builds/history` | USER | 1번 | `?page=0&size=20` | `{ "items": [{ "id": "3ff6d7a2-1c51-4c9d-9720-94b7ef1d62bd", "name": "QHD Gaming Build", "totalPrice": 1450000, "confidence": "HIGH", "createdAt": "2026-06-29T10:20:00Z" }], "page": 0, "size": 20, "total": 1 }` | `requirements`, `builds` |
@@ -182,26 +182,18 @@ Google OAuth 정책:
 6. response에 포함된 `agentSessionId`, `recommendations[].id`, `evidenceIds`는 모두 같은 최종 저장 transaction에서 commit된 `public_id`다.
 7. 1번 추천 API는 `agent_sessions`, `tool_invocations`, `rag_evidence`를 직접 조작하지 않고, 3번이 제공하는 내부 Agent trace service를 호출해 추적 데이터를 기록한다.
 
-`POST /api/ai/build-chat` v1 정책:
+`POST /api/ai/build-chat` v2 정책:
 
-- LLM/RAG 필수 API다. `OPENAI_API_KEY`가 없으면 `428 PRECONDITION_REQUIRED`를 반환하고 deterministic fallback을 만들지 않는다.
-- 내부 live benchmark는 optional `X-BuildGraph-AI-Profile` header를 사용할 수 있다. 지원값은 `BUILD_CHAT_FAST`, `BUILD_CHAT_54_FAST`, `BUILD_CHAT_54_MINI_FAST`이며, 사용자 화면은 이 header를 보내지 않는다.
-- 기본 Build Chat profile은 `BUILD_CHAT_DEFAULT_PROFILE`이며 실측 결과 기준 기본값은 `BUILD_CHAT_54_MINI_FAST`다. rollback이 필요하면 env에서 `BUILD_CHAT_DEFAULT_PROFILE=BUILD_CHAT_FAST`로 되돌린다. `gpt-5.4`, `gpt-5.4-mini` 후보는 같은 응답 shape를 유지한다.
-- Build Chat 응답 캐시는 Redis 기반 운영 보조 기능이다. `BUILD_CHAT_CACHE_ENABLED=true`, `BUILD_CHAT_CACHE_TTL_SECONDS=600`이 기본이며, 성공한 `POST /api/ai/build-chat` 응답만 저장한다. cache key는 사용자 내부 id, profile, 정규화된 message, selectedCategory, currentQuoteDraft fingerprint, parts/benchmark/FPS/RAG/alias version으로 만든다. Redis 장애 또는 미설정 시 응답 body를 바꾸지 않고 기존 LLM/RAG 흐름으로 우회한다. cache hit 응답은 이전 실행의 `agentSessionId`, `evidenceIds`, `toolInvocationIds`를 재사용하지 않는다.
-- LLM은 intent, 예산, 용도, 해상도, 부품 카테고리, 하드 제약만 구조화한다. 부품 ID, 가격, FPS, 상품명은 서버가 내부 DB에서만 선택한다.
-- 전체 견적 요청은 `parts.status=ACTIVE`인 실제 부품만 사용해 AI build 후보 3개를 반환한다.
-- 부품 질문은 LLM이 판단한 카테고리에서 후보 3개를 실제 `parts.price`와 내부 자산 기준으로 반환하고, `currentBuilds`의 해당 카테고리를 서버가 다시 조회한 partId 가격으로 교체한다.
-- 부품 질문에 `currentBuilds`가 없거나 복원할 수 없으면 기본 예산 build를 새로 만들지 않는다. 이 경우 `builds=[]`와 `partRecommendation`만 반환하고, 프론트는 기존 세션 build를 유지한다.
-- 서버는 client가 보낸 part 이름/가격을 신뢰하지 않는다. `currentBuilds[].items[].partId`를 기준으로 DB에서 현재 `parts.price`와 attributes를 다시 읽는다.
-- 각 AI build에는 기존 Tool 검증 결과를 `toolResults`로 포함한다. Tool 실패 시 build 자체는 반환하되 `warnings`에 실패 사유를 넣는다.
-- AI build는 대화용 DTO이며 `builds/build_items`에 저장하지 않는다. 대화 이력 저장은 프론트 `sessionStorage` 범위다.
-- `currentQuoteDraft`가 전달된 `/self-quote` 챗봇 요청은 `actions`로 변경안만 반환한다. AI API는 `quote_drafts`, `quote_draft_items`를 직접 쓰지 않고, 프론트가 사용자 확인 후 기존 quote draft API를 호출한다.
-- action 종류는 `ADD_PART_TO_DRAFT`, `REPLACE_DRAFT_PART`, `REMOVE_DRAFT_PART`, `UPDATE_DRAFT_QUANTITY`, `ASK_FOLLOW_UP`이다. 모든 저장 action은 `{ partId, category, quantity?, source }`를 payload에 담고 `requiresConfirmation=true`로 내려간다.
-- 위 action enum은 공개 `/api/ai/build-chat` 응답 기준이다. 내부 `AiChatEngine`은 `OPEN_SELF_QUOTE`, `ADD_BUILD_TO_DRAFT`, `CREATE_PRICE_ALERT` 같은 더 넓은 action을 가질 수 있지만, 현재 프론트 Build Chat 응답에는 견적초안 변경 확인용 action subset만 내려간다.
-- AI build의 사용자 표시 `totalPrice`는 항상 `items[].price * items[].quantity` 합계다. LLM/엔진의 `estimatedTotalPrice`는 내부 참고값이며 홈 추천 카드와 견적초안 장바구니 총액의 기준으로 사용하지 않는다.
+- LLM/RAG 필수 API다. `OPENAI_API_KEY`가 없으면 `428 PRECONDITION_REQUIRED`를 반환한다.
+- 공개 응답은 `outputType`, `message`, `build`, `part`, `sessionId`만 사용한다.
+- `outputType`은 `MESSAGE`, `FULL_BUILD`, `PART` 중 하나이며 프론트는 이 값으로 카드를 선택한다.
+- `FULL_BUILD`는 하나의 `build`와 카테고리별 추천 부품 `items`를 반환한다.
+- `PART`는 가장 우선순위가 높은 단일 추천 부품을 `part`로 반환한다.
+- 각 부품의 `reason`은 저장된 설명, 벤치마크 요약, 성능·가성비 점수 순서로 생성한다.
+- 부품 ID, 이름, 제조사, 가격은 LLM 생성값이 아니라 서버의 실제 parts 데이터만 사용한다.
+- Build Chat 응답 캐시는 Redis를 사용하며 키 버전은 `build-chat:v2`다. 캐시 응답의 `sessionId`는 null일 수 있다.
+- 현재 전체 견적 응답은 recommender 결과를 바로 반환하며 공개 응답에 Tool 검증 세부 결과를 포함하지 않는다.
 - LLM JSON 계약 위반이나 외부 LLM 호출 실패는 `502 BAD_GATEWAY`로 반환한다.
-- “RTX 5090 글카 들어간 PC” 같은 명시 부품 조건은 `requiredGpuClasses`와 `hardConstraintPolicy=MUST_INCLUDE`로 보존한다. 예산이 부족하면 부품을 낮추지 않고 예산 초과 warning을 반환한다.
-
 `POST /api/build-graphs/resolve` v1 정책:
 
 - 이 API는 UI 설명용 관계 그래프를 반환하며 DB를 쓰지 않는다.
@@ -621,12 +613,19 @@ AS AI Chat 규칙:
 | `AiBuildChatRequest` | `currentBuilds` | `AiBuildRecommendationDto[]` | yes | `[]` |
 | `AiBuildChatRequest` | `appliedPartPreferences` | `AiAppliedPartPreferenceDto[]` | yes | `[]` |
 | `AiBuildChatRequest` | `currentQuoteDraft` | `QuoteDraftDto` | yes | `{ "items": [] }` |
-| `AiBuildChatResponse` | `answerType` | `string` | no | `BUDGET` |
-| `AiBuildChatResponse` | `message` | `string` | no | `200만원 예산 기준 추천입니다.` |
-| `AiBuildChatResponse` | `builds` | `AiBuildRecommendationDto[]` | no | `[{ "tier": "balanced" }]` |
-| `AiBuildChatResponse` | `partRecommendation` | `AiPartRecommendationDto` | yes | `{ "category": "GPU", "options": [] }` |
-| `AiBuildChatResponse` | `actions` | `AiDraftActionDto[]` | yes | `[{ "type": "REMOVE_DRAFT_PART" }]` |
-| `AiBuildChatResponse` | `warnings` | `string[]` | no | `[]` |
+| `AiBuildChatResponse` | `outputType` | `MESSAGE/FULL_BUILD/PART` | no | `FULL_BUILD` |
+| `AiBuildChatResponse` | `message` | `string` | no | `전체 견적을 추천드릴게요.` |
+| `AiBuildChatResponse` | `build` | `AiBuildChatBuildDto` | yes | `{ "totalPrice": 2968930, "items": [] }` |
+| `AiBuildChatResponse` | `part` | `AiBuildChatPartDto` | yes | `{ "category": "GPU", "price": 890000 }` |
+| `AiBuildChatResponse` | `sessionId` | `uuid` | yes | `7dfb98c8-7f35-4fd3-95e0-dfd58cbda77a` |
+| `AiBuildChatBuildDto` | `totalPrice` | `integer` | no | `2968930` |
+| `AiBuildChatBuildDto` | `items` | `AiBuildChatPartDto[]` | no | `[{ "category": "GPU" }]` |
+| `AiBuildChatPartDto` | `partId` | `uuid` | no | `0e9f3b8b-8c83-4d9a-9f7d-1f2b4dfb8a11` |
+| `AiBuildChatPartDto` | `category` | `PartCategory` | no | `GPU` |
+| `AiBuildChatPartDto` | `name` | `string` | no | `RTX 5070` |
+| `AiBuildChatPartDto` | `manufacturer` | `string` | yes | `NVIDIA` |
+| `AiBuildChatPartDto` | `price` | `integer` | no | `890000` |
+| `AiBuildChatPartDto` | `reason` | `string` | no | `성능과 가성비 점수를 기준으로 선택했습니다.` |
 | `AiBuildRecommendationDto` | `id` | `string` | no | `ai-2000000-balanced` |
 | `AiBuildRecommendationDto` | `tier` | `string` | no | `balanced` |
 | `AiBuildRecommendationDto` | `items` | `AiBuildItemDto[]` | no | `[{ "category": "GPU" }]` |

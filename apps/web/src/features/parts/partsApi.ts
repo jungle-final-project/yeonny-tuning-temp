@@ -1,4 +1,4 @@
-import { api } from '../../lib/api';
+import { ApiError, api } from '../../lib/api';
 import type { AiBuildItem } from '../quote/aiSelection';
 import type {
   CompatiblePartCandidateRequest,
@@ -7,6 +7,7 @@ import type {
   PartPage,
   PartPriceHistory,
   PartPriceHistoryParams,
+  PublicHomeResponse,
   PartSearchParams,
   PartRow,
   QuoteDraft,
@@ -26,6 +27,21 @@ export function listParts(params: PartSearchParams = {}) {
 
 export function listHomeRecommendedParts(limit = 4) {
   return api<HomeRecommendedPartsResponse>(`/api/recommendations/home-parts?limit=${limit}`);
+}
+export function getPublicHome() {
+  return api<PublicHomeResponse>('/api/public/home').catch((error) => {
+    if (error instanceof ApiError && error.status === 404) {
+      return {
+        categoryParts: {} as PublicHomeResponse['categoryParts'],
+        recommendedParts: {
+          items: [],
+          generatedAt: new Date(0).toISOString(),
+          fallbackUsed: true
+        }
+      };
+    }
+    throw error;
+  });
 }
 
 export function recordRecommendationEvent(payload: RecommendationEventRequest) {

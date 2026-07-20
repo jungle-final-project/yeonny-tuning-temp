@@ -16,6 +16,10 @@ export function statusLabel(status: string) {
 }
 
 const STATUS_LABELS: Record<string, string> = {
+  PASS: '통과',
+  WARN: '주의',
+  FAIL: '불가',
+  ACTIVE: '활성',
   RULE_READY: '규칙 진단 완료',
   REQUIRED: '검토 필요',
   NOT_REQUIRED: '검토 불필요',

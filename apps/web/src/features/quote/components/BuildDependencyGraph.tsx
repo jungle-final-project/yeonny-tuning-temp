@@ -23,6 +23,7 @@ import {
   type BuildGraphStatus,
   type PartCategory
 } from '../aiSelection';
+import { CompositeScoreGauge } from './CompositeScoreGauge';
 import { listCompatiblePartCandidates } from '../../parts/partsApi';
 import type { CompatiblePartCandidate, PartRow } from '../../parts/types';
 
@@ -289,15 +290,18 @@ export function BuildDependencyGraph({
         <div className="min-w-0">
           <div className="flex items-center gap-2 text-xs font-black text-brand-blue">
             <GitBranch size={15} />
-            Dependency graph
+            호환 관계
           </div>
           <h2 className="mt-1 text-xl font-black text-commerce-ink">{title}</h2>
           <p className="mt-1 max-w-3xl break-keep text-sm leading-6 text-slate-500">{displayGraph?.summary ?? subtitle}</p>
         </div>
-        <div className="buildgraph-stat-grid grid grid-cols-3 gap-2 text-center text-xs sm:min-w-[260px]">
-          <GraphStat label="노드" value={displayGraph ? graphModel.nodes.length : 0} />
-          <GraphStat label="관계" value={displayGraph ? graphModel.edges.length : 0} />
-          <GraphStat label="주의" value={displayGraph?.insights.filter((insight) => insight.status !== 'PASS').length ?? 0} tone="warn" />
+        <div className="flex w-full flex-col gap-2 lg:w-auto">
+          {displayGraph?.compositeScore ? <CompositeScoreMeter score={displayGraph.compositeScore} /> : null}
+          <div className="buildgraph-stat-grid grid grid-cols-3 gap-2 text-center text-xs sm:min-w-[260px]">
+            <GraphStat label="노드" value={displayGraph ? graphModel.nodes.length : 0} />
+            <GraphStat label="관계" value={displayGraph ? graphModel.edges.length : 0} />
+            <GraphStat label="주의" value={displayGraph?.insights.filter((insight) => insight.status !== 'PASS').length ?? 0} tone="warn" />
+          </div>
         </div>
       </div>
 
@@ -561,7 +565,7 @@ function FloatingDependencyGraph({
         </button>
         <div className="flex items-center justify-between gap-3 border-b border-commerce-line px-3 py-2 pr-11">
           <div className="min-w-0">
-            <div className="text-[11px] font-black text-brand-blue">Dependency graph</div>
+            <div className="text-[11px] font-black text-brand-blue">호환 관계</div>
             <div className="truncate text-xs font-black text-commerce-ink">미니 관계도</div>
           </div>
           <button
@@ -691,7 +695,7 @@ function GraphEdgeGuideCapsule({
             </>
           ) : (
             <p className="mt-0.5 break-keep text-xs font-bold leading-5 text-slate-600">
-              선을 누르면 두 부품 사이의 제약과 판단 근거를 확인할 수 있어요
+              선을 누르면 두 부품 사이의 제약과 판단 근거를 확인할 수 있습니다
             </p>
           )}
         </div>
@@ -1290,7 +1294,7 @@ function CompatibleCandidatesPanel({
       <div className="mb-3 flex items-center justify-between gap-3">
         <div>
           <div className="text-sm font-black text-commerce-ink">호환 후보</div>
-          <div className="mt-1 text-[11px] font-bold text-slate-500">서버 Tool 검증 기준</div>
+          <div className="mt-1 text-[11px] font-bold text-slate-500">서버 검증 기준</div>
         </div>
         {rejectedCount > 0 ? (
           <span className="rounded bg-red-50 px-2 py-1 text-[11px] font-black text-red-700">제외 {rejectedCount}</span>
@@ -1324,7 +1328,7 @@ function CompatibleCandidatesPanel({
                   </div>
                   <p className="mt-2 break-keep text-[11px] leading-5 text-slate-600">{candidate.summary}</p>
                   <div className="mt-2 flex flex-wrap items-center justify-between gap-2">
-                    <span className="text-[10px] font-black uppercase tracking-wide text-slate-400">{candidate.checkedTools.join(' · ') || 'ACTIVE'}</span>
+                    <span className="text-[10px] font-black uppercase tracking-wide text-slate-400">{candidate.checkedTools.map((tool) => TOOL_LABELS[tool] ?? tool).join(' · ') || '검증 항목 없음'}</span>
                     {readOnly ? (
                       <span className="rounded bg-slate-200 px-2 py-1 text-[11px] font-black text-slate-600">읽기 전용</span>
                     ) : (
@@ -1427,6 +1431,40 @@ function partPhotoUrl(part: PartRow) {
   return null;
 }
 
+function CompositeScoreMeter({ score }: { score: NonNullable<BuildGraphResolveResponse['compositeScore']> }) {
+  return (
+    <div data-testid="build-composite-score" className="rounded-md border border-commerce-line bg-slate-50 p-3 text-left shadow-sm sm:min-w-[260px]">
+      <div className="text-[11px] font-black uppercase text-slate-400">종합 점수</div>
+      <div className="mt-1">
+        <CompositeScoreGauge score={score} size="medium" className="mx-auto" gaugeTestId="build-composite-score-gauge" />
+      </div>
+      {score.requestFit ? (
+        <div className={`mt-2 rounded px-2 py-1 text-[11px] font-black ${requestFitTone(score.requestFit.status)}`}>
+          {requestFitLabel(score.requestFit)}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+function requestFitLabel(requestFit: NonNullable<BuildGraphResolveResponse['compositeScore']>['requestFit']) {
+  if (!requestFit) return '요청 예산 정보 없음';
+  const formatter = new Intl.NumberFormat('ko-KR');
+  if (requestFit.status === 'OVER_BUDGET') {
+    return `요청 예산 초과 · 차액 ${formatter.format(Math.abs(requestFit.priceDiff ?? 0))}원`;
+  }
+  if (requestFit.status === 'PASS') return '요청 예산 적합';
+  if (requestFit.status === 'WARN') return '요청 예산 근접';
+  return requestFit.summary || '요청 예산 정보 없음';
+}
+
+function requestFitTone(status?: string) {
+  if (status === 'OVER_BUDGET') return 'bg-red-50 text-red-700';
+  if (status === 'WARN') return 'bg-amber-50 text-amber-700';
+  if (status === 'PASS') return 'bg-emerald-50 text-emerald-700';
+  return 'bg-slate-100 text-slate-500';
+}
+
 function GraphStat({ label, value, tone = 'default' }: { label: string; value: number; tone?: 'default' | 'warn' }) {
   return (
     <div className="rounded-md border border-commerce-line bg-slate-50 p-2">
@@ -1463,8 +1501,16 @@ function statusBadgeTone(status: BuildGraphStatus) {
 function statusLabel(status: BuildGraphStatus) {
   if (status === 'FAIL') return '장착 불가';
   if (status === 'WARN') return '간섭 주의';
-  return '호환됨';
+  return '호환 가능';
 }
+
+const TOOL_LABELS: Record<string, string> = {
+  compatibility: '호환성',
+  power: '전력',
+  size: '규격',
+  performance: '성능',
+  price: '가격'
+};
 
 function isPartCategory(value: string): value is PartCategory {
   return Object.keys(PART_CATEGORY_LABELS).includes(value);

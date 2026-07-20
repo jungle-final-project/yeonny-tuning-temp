@@ -1,5 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { AdminShell, DataTable, Panel, StateMessage } from '../../../components/ui';
+import { formatKstDateTime } from '../../../lib/dateTime';
 import { listPipelineJobRuns, listPriceJobs, runPriceJob } from '../adminApi';
 import { KoreanStatusBadge } from '../adminDisplay';
 
@@ -35,7 +36,7 @@ export function AdminPriceJobsPage() {
     상태: <KoreanStatusBadge status={run.status} />,
     '소요(ms)': run.durationMs ?? '-',
     결과: run.errorSummary ?? summarizeResult(run.resultSummary),
-    '실행 시간': formatDateTime(run.startedAt)
+    '실행 시간': formatKstDateTime(run.startedAt)
   }));
 
   const jobs = jobsQuery.data?.items ?? [];
@@ -44,19 +45,19 @@ export function AdminPriceJobsPage() {
     식별자: shortId(job.id),
     상태: <KoreanStatusBadge status={job.status} />,
     요청자: shortId(job.requestedBy ?? '-'),
-    '시작 시간': formatDateTime(job.startedAt),
-    '완료 시간': formatDateTime(job.finishedAt),
+    '시작 시간': formatKstDateTime(job.startedAt),
+    '완료 시간': formatKstDateTime(job.finishedAt),
     '오류 요약': job.errorSummary ?? '-',
-    '생성 시간': formatDateTime(job.createdAt)
+    '생성 시간': formatKstDateTime(job.createdAt)
   }));
   const exportRows = jobs.map((job) => ({
     id: job.id,
     status: job.status,
     requestedBy: job.requestedBy ?? '',
-    startedAt: formatDateTime(job.startedAt),
-    finishedAt: formatDateTime(job.finishedAt),
+    startedAt: formatKstDateTime(job.startedAt),
+    finishedAt: formatKstDateTime(job.finishedAt),
     errorSummary: job.errorSummary ?? '',
-    createdAt: formatDateTime(job.createdAt)
+    createdAt: formatKstDateTime(job.createdAt)
   }));
 
   return (
@@ -84,7 +85,7 @@ export function AdminPriceJobsPage() {
           )}
         </Panel>
         <Panel title="실행 정책">
-          <StateMessage type="info" title="작업 처리기 실행" body="실행 요청은 대기 작업을 만들고 작업 처리기가 실행 중, 성공 또는 실패 상태로 전이합니다. 네이버 쇼핑 연동과 다나와 가격 수집 키가 없어도 샘플/현재가 기준 상태 전이는 확인할 수 있습니다." />
+          <StateMessage type="info" title="작업 처리기 실행" body="실행 요청은 대기 작업을 만들고, 작업 처리기가 작업을 실행 중, 성공 또는 실패 상태로 전이시킵니다. 네이버 쇼핑 연동과 다나와 가격 수집 키가 없어도 샘플/현재가 기준 상태 전이는 확인할 수 있습니다." />
           <button disabled={runMutation.isPending || activeJob} onClick={() => runMutation.mutate()} className="mt-5 w-full rounded bg-brand-blue px-4 py-3 text-sm font-bold text-white disabled:bg-slate-400">
             {activeJob ? '실행 중인 작업 있음' : runMutation.isPending ? '실행 요청 중' : '가격 작업 실행'}
           </button>
@@ -127,8 +128,4 @@ function hasActiveJob(jobs: Array<{ status: string }>) {
 
 function shortId(id: string) {
   return id.length <= 12 ? id : `${id.slice(0, 8)}...${id.slice(-4)}`;
-}
-
-function formatDateTime(value?: string | null) {
-  return value ? value.replace('T', ' ').slice(0, 19) : '-';
 }

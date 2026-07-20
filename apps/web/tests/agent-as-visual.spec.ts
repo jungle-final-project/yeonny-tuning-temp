@@ -233,7 +233,7 @@ test('captures Agent AS demo UI evidence and verifies admin decision reflection'
   await page.getByLabel('지원 결정').selectOption('REMOTE_POSSIBLE');
   await page.getByLabel('위험도').selectOption('HIGH');
   await page.getByLabel('진단 적중 여부').selectOption('ACCURATE');
-  await page.getByLabel('원격 지원 링크').fill('https://support.example.test/session/qa-ticket-before');
+  await page.getByLabel('원격지원 링크').fill('https://support.example.test/session/qa-ticket-before');
   await page.getByLabel('관리자 메모').fill('Remote support link sent.');
   await page.getByRole('button', { name: '결정 저장' }).click();
   await expect(page.getByRole('main')).toContainText('결정 저장 완료');

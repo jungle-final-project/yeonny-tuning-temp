@@ -1,4 +1,49 @@
-import { expect, test } from '@playwright/test';
+import { expect, test, type Page } from '@playwright/test';
+
+type KakaoPostcodeData = {
+  zonecode: string;
+  address: string;
+  roadAddress: string;
+  jibunAddress: string;
+  userSelectedType: 'R' | 'J';
+  bname: string;
+  buildingName: string;
+  apartment: 'Y' | 'N';
+};
+
+async function mockKakaoPostcode(page: Page, overrides: Partial<KakaoPostcodeData> = {}) {
+  await page.addInitScript((postcodeOverrides: Partial<KakaoPostcodeData>) => {
+    (window as unknown as { kakao: unknown }).kakao = {
+      Postcode: class {
+        private readonly options: { oncomplete: (data: unknown) => void };
+
+        constructor(options: { oncomplete: (data: unknown) => void }) {
+          this.options = options;
+        }
+
+        open() {
+          this.options.oncomplete({
+            zonecode: '06236',
+            address: '서울시 강남구 테헤란로 1',
+            roadAddress: '서울시 강남구 테헤란로 1',
+            jibunAddress: '서울시 강남구 역삼동 1',
+            userSelectedType: 'R',
+            bname: '역삼동',
+            buildingName: '',
+            apartment: 'N',
+            ...postcodeOverrides
+          });
+        }
+      }
+    };
+  }, overrides);
+}
+
+async function selectAddress(page: Page) {
+  await page.getByRole('button', { name: '주소 찾기' }).click();
+  await expect(page.getByLabel('우편번호')).toHaveValue('06236');
+  await expect(page.getByLabel('주소', { exact: true })).toHaveValue('서울시 강남구 테헤란로 1 (역삼동)');
+}
 
 test('shows login API error message and does not save tokens', async ({ page }) => {
   await page.route('**/api/auth/login', async (route) => {
@@ -57,14 +102,16 @@ test('updates header from login response before auth me finishes', async ({ page
     });
   });
 
-  await page.goto('/login?redirect=%2Fparts%2Fpart-gpu-detail-test');
+  await page.goto('/login');
   await page.getByLabel('이메일').fill('fast@example.com');
   await page.getByLabel('비밀번호').fill('passw0rd!');
   await page.getByRole('button', { name: '로그인' }).click();
 
   await expect(page).toHaveURL('/');
-  await expect(page.getByText('로그인됨 · fast@example.com · USER')).toBeVisible({ timeout: 2_000 });
-  await expect(page.getByText('Fast User')).toBeVisible({ timeout: 2_000 });
+  await page.getByTestId('home-login-choice-dialog').getByRole('button', { name: '선택지 닫기' }).click();
+  await page.locator('summary[aria-label^="계정 메뉴:"]').click();
+  await expect(page.getByText('fast@example.com')).toBeVisible({ timeout: 2_000 });
+  await expect(page.getByTestId('header-account-name')).toHaveText('Fast User', { timeout: 2_000 });
   await expect(page.getByRole('navigation').getByRole('link', { name: '관리자' })).toHaveCount(0);
   expect(await page.evaluate(() => JSON.parse(localStorage.getItem('buildgraph.authUser') ?? '{}'))).toMatchObject({
     email: 'fast@example.com',
@@ -98,8 +145,389 @@ test('shows admin navigation only for ADMIN role', async ({ page }) => {
 
   await page.goto('/login');
 
-  await expect(page.getByText('로그인됨 · admin@example.com · ADMIN')).toBeVisible();
-  await expect(page.getByRole('navigation').getByRole('link', { name: '관리자' })).toHaveAttribute('href', '/admin');
+  await page.locator('summary[aria-label^="계정 메뉴:"]').click();
+  await expect(page.getByText('admin@example.com')).toBeVisible();
+  await expect(page.getByRole('link', { name: '관리자' })).toHaveAttribute('href', '/admin');
+});
+
+test('opens my profile from header and updates contact address', async ({ page }) => {
+  await page.addInitScript(() => {
+    localStorage.setItem('buildgraph.token', 'jwt-profile-token');
+    localStorage.setItem('buildgraph.authUser', JSON.stringify({
+      id: 'user-profile-001',
+      email: 'profile@example.com',
+      name: '기존 사용자',
+      role: 'USER'
+    }));
+  });
+  await page.route('**/api/auth/me', async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        id: 'user-profile-001',
+        email: 'profile@example.com',
+        name: '기존 사용자',
+        role: 'USER',
+        authProviders: ['LOCAL'],
+        phoneNumber: '010-0000-0000',
+        postalCode: '06236',
+        addressLine1: '서울시 강남구 테헤란로 1',
+        addressLine2: '100호'
+      })
+    });
+  });
+  await page.route('**/api/users/me', async (route) => {
+    expect(route.request().method()).toBe('PATCH');
+    expect(JSON.parse(route.request().postData() ?? '{}')).toEqual({
+      currentPassword: 'passw0rd!',
+      name: '수정 사용자',
+      phoneNumber: '010-1234-5678',
+      postalCode: '06236',
+      addressLine1: '서울시 강남구 테헤란로 1 (역삼동)',
+      addressLine2: '101호'
+    });
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        id: 'user-profile-001',
+        email: 'profile@example.com',
+        name: '수정 사용자',
+        role: 'USER',
+        phoneNumber: '010-1234-5678',
+        postalCode: '06236',
+        addressLine1: '서울시 강남구 테헤란로 1 (역삼동)',
+        addressLine2: '101호'
+      })
+    });
+  });
+  await page.route('**/api/users/me/password-verification', async (route) => {
+    expect(JSON.parse(route.request().postData() ?? '{}')).toEqual({
+      password: 'passw0rd!'
+    });
+    await route.fulfill({ status: 204 });
+  });
+  await page.route('**/api/technician/profile', async (route) => {
+    await route.fulfill({
+      status: 404,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        code: 'NOT_FOUND',
+        message: '기사 프로필이 없습니다.'
+      })
+    });
+  });
+
+  await mockKakaoPostcode(page);
+  await page.goto('/login');
+  await page.locator('summary[aria-label^="계정 메뉴:"]').click();
+  await page.getByRole('link', { name: '마이페이지' }).click();
+
+  await expect(page).toHaveURL('/my/profile');
+  await expect(page.getByRole('heading', { name: '마이페이지' })).toBeVisible();
+  await expect(page.getByLabel('비밀번호')).toBeVisible();
+  await expect(page.getByLabel('이메일')).toHaveCount(0);
+  await page.getByLabel('비밀번호').fill('passw0rd!');
+  await page.getByRole('button', { name: '확인' }).click();
+  await expect(page.getByLabel('이메일')).toHaveValue('profile@example.com');
+  await page.getByLabel('이름').fill('수정 사용자');
+  await page.getByLabel('전화번호').fill('01012345678');
+  await selectAddress(page);
+  await page.getByLabel('상세주소').fill(' 101호 ');
+  await page.getByRole('button', { name: '저장' }).click();
+
+  await expect(page.getByText('내 정보가 저장되었습니다.')).toBeVisible();
+  await page.locator('summary[aria-label^="계정 메뉴:"]').click();
+  await expect(page.getByTestId('header-account-name')).toHaveText('수정 사용자');
+  expect(await page.evaluate(() => JSON.parse(localStorage.getItem('buildgraph.authUser') ?? '{}'))).toMatchObject({
+    name: '수정 사용자',
+    phoneNumber: '010-1234-5678',
+    addressLine2: '101호'
+  });
+});
+
+test('opens profile edit form after Google verification for Google-only users', async ({ page }) => {
+  await page.addInitScript(() => {
+    localStorage.setItem('buildgraph.token', 'jwt-google-profile-token');
+    localStorage.setItem('buildgraph.authUser', JSON.stringify({
+      id: 'google-profile-001',
+      email: 'google-profile@example.com',
+      name: 'Google User',
+      role: 'USER',
+      authProviders: ['GOOGLE']
+    }));
+    sessionStorage.setItem('buildgraph.profileVerificationToken', 'google-profile-token');
+  });
+  await page.route('**/api/auth/me', async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        id: 'google-profile-001',
+        email: 'google-profile@example.com',
+        name: 'Google User',
+        role: 'USER',
+        authProviders: ['GOOGLE'],
+        phoneNumber: '010-0000-0000',
+        postalCode: '06236',
+        addressLine1: '서울시 강남구 테헤란로 1',
+        addressLine2: '100호'
+      })
+    });
+  });
+  await page.route('**/api/users/me', async (route) => {
+    expect(JSON.parse(route.request().postData() ?? '{}')).toMatchObject({
+      googleVerificationToken: 'google-profile-token',
+      name: 'Google User',
+      phoneNumber: '010-0000-0000'
+    });
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        id: 'google-profile-001',
+        email: 'google-profile@example.com',
+        name: 'Google User',
+        role: 'USER',
+        authProviders: ['GOOGLE'],
+        phoneNumber: '010-0000-0000',
+        postalCode: '06236',
+        addressLine1: '서울시 강남구 테헤란로 1',
+        addressLine2: '100호'
+      })
+    });
+  });
+  await page.route('**/api/technician/profile', async (route) => {
+    await route.fulfill({
+      status: 404,
+      contentType: 'application/json',
+      body: JSON.stringify({ code: 'NOT_FOUND', message: '기사 프로필이 없습니다.' })
+    });
+  });
+
+  await page.goto('/my/profile?verified=google');
+
+  await expect(page.getByText('Google 본인 확인이 완료되었습니다.')).toBeVisible();
+  await expect(page.getByLabel('비밀번호')).toHaveCount(0);
+  await expect(page.getByLabel('이메일')).toHaveValue('google-profile@example.com');
+  await page.getByRole('button', { name: '저장' }).click();
+  await expect(page.getByText('내 정보가 저장되었습니다.')).toBeVisible();
+  expect(await page.evaluate(() => sessionStorage.getItem('buildgraph.profileVerificationToken'))).toBeNull();
+});
+
+test('blocks USER accounts on admin login and does not save tokens', async ({ page }) => {
+  await page.route('**/api/auth/login', async (route) => {
+    expect(JSON.parse(route.request().postData() ?? '{}')).toEqual({
+      email: 'user@example.com',
+      password: 'passw0rd!'
+    });
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        accessToken: 'jwt-user-token',
+        refreshToken: 'refresh-user-token',
+        user: {
+          id: 'user-001',
+          email: 'user@example.com',
+          name: 'Regular User',
+          role: 'USER'
+        }
+      })
+    });
+  });
+
+  await page.goto('/admin/login?redirect=/admin/parts');
+  await page.getByLabel('이메일').fill('user@example.com');
+  await page.getByLabel('비밀번호').fill('passw0rd!');
+  await page.getByRole('button', { name: '관리자 로그인' }).click();
+
+  await expect(page.getByText('관리자 권한이 있는 계정만 관리자 화면에 로그인할 수 있습니다.')).toBeVisible();
+  expect(await page.evaluate(() => localStorage.getItem('buildgraph.token'))).toBeNull();
+  expect(await page.evaluate(() => localStorage.getItem('buildgraph.refreshToken'))).toBeNull();
+});
+
+test('exchanges Google callback code and stores returned tokens', async ({ page }) => {
+  let exchangeCalls = 0;
+  await page.route('**/api/auth/exchange', async (route) => {
+    exchangeCalls += 1;
+    expect(JSON.parse(route.request().postData() ?? '{}')).toEqual({ code: 'one-time-code' });
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        accessToken: 'jwt-google-user',
+        refreshToken: 'refresh-google-user',
+        user: {
+          id: 'google-user-001',
+          email: 'google-user@example.com',
+          name: 'Google User',
+          role: 'USER'
+        }
+      })
+    });
+  });
+  await page.route('**/api/auth/me', async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        id: 'google-user-001',
+        email: 'google-user@example.com',
+        name: 'Google User',
+        role: 'USER'
+      })
+    });
+  });
+
+  await page.goto('/auth/callback?code=one-time-code&redirect=/login');
+
+  await expect(page).toHaveURL('/login');
+  await expect.poll(() => exchangeCalls).toBe(1);
+  expect(await page.evaluate(() => localStorage.getItem('buildgraph.token'))).toBe('jwt-google-user');
+  expect(await page.evaluate(() => localStorage.getItem('buildgraph.refreshToken'))).toBe('refresh-google-user');
+});
+
+test('shows terms step for new Google users and retries exchange with consent', async ({ page }) => {
+  let exchangeCalls = 0;
+  await page.route('**/api/auth/exchange', async (route) => {
+    exchangeCalls += 1;
+    const payload = JSON.parse(route.request().postData() ?? '{}');
+    if (exchangeCalls === 1) {
+      expect(payload).toEqual({ code: 'terms-code' });
+      await route.fulfill({
+        status: 400,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          code: 'VALIDATION_ERROR',
+          message: '약관 동의가 필요합니다.',
+          details: {
+            reason: 'TERMS_REQUIRED',
+            email: 'new-google@example.com',
+            name: 'New Google'
+          }
+        })
+      });
+      return;
+    }
+    expect(payload).toEqual({
+      code: 'terms-code',
+      termsAccepted: true,
+      marketingAccepted: false,
+      phoneNumber: '010-1234-5678',
+      postalCode: '06236',
+      addressLine1: '서울시 강남구 테헤란로 1 (역삼동)',
+      addressLine2: '101호'
+    });
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        accessToken: 'jwt-new-google',
+        refreshToken: 'refresh-new-google',
+        user: {
+          id: 'new-google-001',
+          email: 'new-google@example.com',
+          name: 'New Google',
+          role: 'USER'
+        }
+      })
+    });
+  });
+
+  await mockKakaoPostcode(page);
+  await page.goto('/auth/callback?code=terms-code&redirect=/login');
+
+  await expect(page.getByRole('heading', { name: 'Google 회원가입 완료' })).toBeVisible();
+  await expect(page.getByText('new-google@example.com 계정의 연락처와 주소를 입력해 주세요.')).toBeVisible();
+  await page.getByLabel('전화번호').fill('01012345678');
+  await selectAddress(page);
+  await page.getByLabel('상세주소').fill(' 101호 ');
+  await page.getByLabel('서비스 이용약관 및 로그 업로드 정책 확인').check();
+  await page.getByRole('button', { name: '완료' }).click();
+
+  await expect(page).toHaveURL('/login');
+  await expect.poll(() => exchangeCalls).toBe(2);
+  expect(await page.evaluate(() => localStorage.getItem('buildgraph.token'))).toBe('jwt-new-google');
+});
+
+test('shows contact step for Google users missing profile address', async ({ page }) => {
+  let exchangeCalls = 0;
+  await page.route('**/api/auth/exchange', async (route) => {
+    exchangeCalls += 1;
+    const payload = JSON.parse(route.request().postData() ?? '{}');
+    if (exchangeCalls === 1) {
+      expect(payload).toEqual({ code: 'contact-code' });
+      await route.fulfill({
+        status: 400,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          code: 'VALIDATION_ERROR',
+          message: '연락처와 주소 입력이 필요합니다.',
+          details: {
+            reason: 'CONTACT_REQUIRED',
+            email: 'google-user@example.com',
+            name: 'Google User'
+          }
+        })
+      });
+      return;
+    }
+    expect(payload).toEqual({
+      code: 'contact-code',
+      phoneNumber: '010-1234-5678',
+      postalCode: '06236',
+      addressLine1: '서울시 강남구 테헤란로 1 (역삼동)',
+      addressLine2: '101호'
+    });
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        accessToken: 'jwt-google-contact',
+        refreshToken: 'refresh-google-contact',
+        user: {
+          id: 'google-contact-001',
+          email: 'google-user@example.com',
+          name: 'Google User',
+          role: 'USER'
+        }
+      })
+    });
+  });
+
+  await mockKakaoPostcode(page);
+  await page.goto('/auth/callback?code=contact-code&redirect=/login');
+
+  await expect(page.getByRole('heading', { name: '추가 정보 입력' })).toBeVisible();
+  await expect(page.getByText('google-user@example.com 계정의 연락처와 주소를 입력해 주세요.')).toBeVisible();
+  await page.getByLabel('전화번호').fill('01012345678');
+  await selectAddress(page);
+  await page.getByLabel('상세주소').fill(' 101호 ');
+  await page.getByRole('button', { name: '완료' }).click();
+
+  await expect(page).toHaveURL('/login');
+  await expect.poll(() => exchangeCalls).toBe(2);
+  expect(await page.evaluate(() => localStorage.getItem('buildgraph.token'))).toBe('jwt-google-contact');
+});
+
+test('shows callback failure when Google exchange code is expired', async ({ page }) => {
+  await page.route('**/api/auth/exchange', async (route) => {
+    await route.fulfill({
+      status: 401,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        code: 'UNAUTHORIZED',
+        message: 'Google login session has expired.'
+      })
+    });
+  });
+
+  await page.goto('/auth/callback?code=expired-code');
+
+  await expect(page.getByRole('heading', { name: 'Google 로그인 실패' })).toBeVisible();
+  await expect(page.getByText('Google login session has expired.')).toBeVisible();
 });
 
 test('refreshes expired access token and retries current user request', async ({ page }) => {
@@ -155,8 +583,9 @@ test('refreshes expired access token and retries current user request', async ({
 
   await page.goto('/login');
 
+  await page.locator('summary[aria-label^="계정 메뉴:"]').click();
   await expect(page.getByText('refreshed@example.com')).toBeVisible();
-  await expect(page.getByText('Refresh User')).toBeVisible();
+  await expect(page.getByTestId('header-account-name')).toHaveText('Refresh User');
   expect(expiredMeCalls).toBeGreaterThanOrEqual(1);
   expect(refreshedMeCalls).toBeGreaterThanOrEqual(1);
   expect(refreshCalls).toBe(1);
@@ -423,7 +852,8 @@ test('calls logout API and clears stored auth tokens', async ({ page }) => {
   });
 
   await page.goto('/login');
-  await expect(page.getByText('Logout User')).toBeVisible();
+  await page.locator('summary[aria-label^="계정 메뉴:"]').click();
+  await expect(page.getByTestId('header-account-name')).toHaveText('Logout User');
   await page.getByRole('button', { name: '로그아웃' }).click();
 
   await expect.poll(() => logoutCalled).toBe(true);
@@ -476,7 +906,8 @@ test('clears stored auth tokens even when logout API fails', async ({ page }) =>
   });
 
   await page.goto('/login');
-  await expect(page.getByText('Logout Fail User')).toBeVisible();
+  await page.locator('summary[aria-label^="계정 메뉴:"]').click();
+  await expect(page.getByTestId('header-account-name')).toHaveText('Logout Fail User');
   await page.getByRole('button', { name: '로그아웃' }).click();
 
   await expect.poll(() => logoutCalled).toBe(true);
@@ -497,6 +928,10 @@ test('submits signup form with the OpenAPI user payload', async ({ page }) => {
       name: '홍길동',
       email: 'new-user@example.com',
       password: 'passw0rd!',
+      phoneNumber: '010-1234-5678',
+      postalCode: '06236',
+      addressLine1: '서울시 강남구 테헤란로 1 (역삼동)',
+      addressLine2: '101호',
       termsAccepted: true,
       marketingAccepted: false
     });
@@ -512,13 +947,17 @@ test('submits signup form with the OpenAPI user payload', async ({ page }) => {
     });
   });
 
+  await mockKakaoPostcode(page);
   await page.goto('/signup');
   await page.getByLabel('이름').fill('홍길동');
   await page.getByLabel('이메일').fill('new-user@example.com');
   await page.getByLabel('비밀번호', { exact: true }).fill('passw0rd!');
   await page.getByLabel('비밀번호 확인').fill('passw0rd!');
+  await page.getByLabel('전화번호').fill('01012345678');
+  await selectAddress(page);
+  await page.getByLabel('상세주소').fill(' 101호 ');
   await page.getByLabel('서비스 이용약관 및 로그 업로드 정책 확인').check();
-  await page.getByRole('button', { name: '회원가입' }).click();
+  await page.getByRole('button', { name: '회원가입', exact: true }).click();
 
   await expect(page).toHaveURL('/login');
 });
@@ -535,14 +974,164 @@ test('shows signup API error message', async ({ page }) => {
     });
   });
 
+  await mockKakaoPostcode(page);
   await page.goto('/signup');
   await page.getByLabel('이름').fill('홍길동');
   await page.getByLabel('이메일').fill('user@example.com');
   await page.getByLabel('비밀번호', { exact: true }).fill('passw0rd!');
   await page.getByLabel('비밀번호 확인').fill('passw0rd!');
+  await page.getByLabel('전화번호').fill('010-1234-5678');
+  await selectAddress(page);
+  await page.getByLabel('상세주소').fill('101호');
   await page.getByLabel('서비스 이용약관 및 로그 업로드 정책 확인').check();
-  await page.getByRole('button', { name: '회원가입' }).click();
+  await page.getByRole('button', { name: '회원가입', exact: true }).click();
 
   await expect(page.getByText('이미 가입된 이메일입니다.')).toBeVisible();
   await expect(page).toHaveURL('/signup');
+});
+
+test('shows signup field error from API details', async ({ page }) => {
+  let signupCalled = false;
+  await page.route('**/api/users', async (route) => {
+    signupCalled = true;
+    await route.fulfill({
+      status: 400,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        code: 'VALIDATION_ERROR',
+        message: '전화번호는 지역번호를 포함해 10~11자리 숫자로 입력해 주세요.',
+        details: {
+          field: 'phoneNumber',
+          reason: 'INVALID_FORMAT',
+          message: '전화번호는 지역번호를 포함해 10~11자리 숫자로 입력해 주세요.'
+        }
+      })
+    });
+  });
+
+  await mockKakaoPostcode(page);
+  await page.goto('/signup');
+  await page.getByLabel('이름').fill('홍길동');
+  await page.getByLabel('이메일').fill('new-user@example.com');
+  await page.getByLabel('비밀번호', { exact: true }).fill('passw0rd!');
+  await page.getByLabel('비밀번호 확인').fill('passw0rd!');
+  await page.getByLabel('전화번호').fill('01012345678');
+  await selectAddress(page);
+  await page.getByLabel('상세주소').fill('101호');
+  await page.getByLabel('서비스 이용약관 및 로그 업로드 정책 확인').check();
+  await page.getByRole('button', { name: '회원가입', exact: true }).click();
+
+  await expect(page.getByText('전화번호는 지역번호를 포함해 10~11자리 숫자로 입력해 주세요.')).toBeVisible();
+  expect(signupCalled).toBe(true);
+  await expect(page).toHaveURL('/signup');
+});
+
+test('validates signup contact fields before calling API', async ({ page }) => {
+  let signupCalled = false;
+  await page.route('**/api/users', async (route) => {
+    signupCalled = true;
+    await route.fulfill({ status: 500 });
+  });
+
+  await mockKakaoPostcode(page);
+  await page.goto('/signup');
+  await page.getByLabel('이름').fill('홍길동');
+  await page.getByLabel('이메일').fill('new-user@example.com');
+  await page.getByLabel('비밀번호', { exact: true }).fill('passw0rd!');
+  await page.getByLabel('비밀번호 확인').fill('passw0rd!');
+  await page.getByLabel('전화번호').fill('abc');
+  await selectAddress(page);
+  await page.getByLabel('상세주소').fill('101호');
+  await page.getByLabel('서비스 이용약관 및 로그 업로드 정책 확인').check();
+  await page.getByRole('button', { name: '회원가입', exact: true }).click();
+
+  await expect(page.getByText('전화번호는 숫자와 하이픈만 입력해 주세요.')).toBeVisible();
+  expect(signupCalled).toBe(false);
+});
+
+test('validates signup postal code before calling API', async ({ page }) => {
+  let signupCalled = false;
+  await page.route('**/api/users', async (route) => {
+    signupCalled = true;
+    await route.fulfill({ status: 500 });
+  });
+
+  await mockKakaoPostcode(page, { zonecode: '1234' });
+  await page.goto('/signup');
+  await page.getByLabel('이름').fill('홍길동');
+  await page.getByLabel('이메일').fill('new-user@example.com');
+  await page.getByLabel('비밀번호', { exact: true }).fill('passw0rd!');
+  await page.getByLabel('비밀번호 확인').fill('passw0rd!');
+  await page.getByLabel('전화번호').fill('01012345678');
+  await page.getByRole('button', { name: '주소 찾기' }).click();
+  await expect(page.getByLabel('우편번호')).toHaveValue('1234');
+  await page.getByLabel('상세주소').fill('101호');
+  await page.getByLabel('서비스 이용약관 및 로그 업로드 정책 확인').check();
+  await page.getByRole('button', { name: '회원가입', exact: true }).click();
+
+  await expect(page.getByText('우편번호는 5자리 숫자로 입력해 주세요.')).toBeVisible();
+  expect(signupCalled).toBe(false);
+});
+
+test('validates profile phone and postal code before calling update API', async ({ page }) => {
+  let updateCalled = false;
+  await page.addInitScript(() => {
+    localStorage.setItem('buildgraph.token', 'jwt-profile-validation-token');
+    localStorage.setItem('buildgraph.authUser', JSON.stringify({
+      id: 'user-profile-validation-001',
+      email: 'profile-validation@example.com',
+      name: '검증 사용자',
+      role: 'USER'
+    }));
+  });
+  await page.route('**/api/auth/me', async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        id: 'user-profile-validation-001',
+        email: 'profile-validation@example.com',
+        name: '검증 사용자',
+        role: 'USER',
+        authProviders: ['LOCAL'],
+        phoneNumber: '010-0000-0000',
+        postalCode: '06236',
+        addressLine1: '서울시 강남구 테헤란로 1',
+        addressLine2: '100호'
+      })
+    });
+  });
+  await page.route('**/api/users/me/password-verification', async (route) => {
+    await route.fulfill({ status: 204 });
+  });
+  await page.route('**/api/users/me', async (route) => {
+    updateCalled = true;
+    await route.fulfill({ status: 500 });
+  });
+  await page.route('**/api/technician/profile', async (route) => {
+    await route.fulfill({
+      status: 404,
+      contentType: 'application/json',
+      body: JSON.stringify({ code: 'NOT_FOUND', message: '기사 프로필이 없습니다.' })
+    });
+  });
+
+  await mockKakaoPostcode(page, { zonecode: '1234' });
+  await page.goto('/my/profile');
+  await page.getByLabel('비밀번호').fill('passw0rd!');
+  await page.getByRole('button', { name: '확인' }).click();
+  await expect(page.getByLabel('이메일')).toHaveValue('profile-validation@example.com');
+  await page.getByLabel('전화번호').fill('12345');
+  await page.getByRole('button', { name: '주소 찾기' }).click();
+  await page.getByLabel('상세주소').fill('101호');
+  await page.getByRole('button', { name: '저장' }).click();
+
+  await expect(page.getByText('전화번호는 지역번호를 포함해 10~11자리 숫자로 입력해 주세요.')).toBeVisible();
+  expect(updateCalled).toBe(false);
+
+  await page.getByLabel('전화번호').fill('01012345678');
+  await page.getByRole('button', { name: '저장' }).click();
+
+  await expect(page.getByText('우편번호는 5자리 숫자로 입력해 주세요.')).toBeVisible();
+  expect(updateCalled).toBe(false);
 });

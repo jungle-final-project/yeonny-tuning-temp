@@ -108,152 +108,211 @@ public class ToolService {
         ToolBuildPart motherboard = byCategory.get("MOTHERBOARD");
         ToolBuildPart ram = byCategory.get("RAM");
 
-        Boolean socketMatched = cpu == null || motherboard == null
-                ? null
-                : same(stringAttr(cpu, "socket"), stringAttr(motherboard, "socket"));
-        Boolean memoryMatched = ram == null || motherboard == null
-                ? null
-                : same(firstText(stringAttr(ram, "memoryType"), "DDR5"),
-                        firstText(stringAttr(motherboard, "memoryType"), "DDR5"));
+        /* 비교할 부품이 모두 선택된 경우에만 해당 호환성 검사를 수행한다 */
+        boolean socketApplicable = cpu != null && motherboard != null;
+        boolean memoryApplicable = ram != null && motherboard != null;
 
-        boolean pass = !Boolean.FALSE.equals(socketMatched)
-                && !Boolean.FALSE.equals(memoryMatched);
+        String cpuSocket = stringAttr(cpu, "socket");
+        String motherboardSocket = stringAttr(motherboard, "socket");
+        String ramMemoryType = stringAttr(ram, "memoryType");
+        String motherboardMemoryType = stringAttr(motherboard, "memoryType");
+
+        /* 속성이 모두 있을 때만 일치/불일치를 확정한다 */
+        boolean socketKnown = !socketApplicable
+                || (cpuSocket != null && motherboardSocket != null);
+        boolean memoryKnown = !memoryApplicable
+                || (ramMemoryType != null && motherboardMemoryType != null);
+
+        boolean socketMismatch = socketApplicable
+                && socketKnown
+                && !same(cpuSocket, motherboardSocket);
+        boolean memoryMismatch = memoryApplicable
+                && memoryKnown
+                && !same(ramMemoryType, motherboardMemoryType);
+
+        boolean failed = socketMismatch || memoryMismatch;
+        boolean missing = !socketKnown || !memoryKnown;
+        String status = failed ? "FAIL" : missing ? "WARN" : "PASS";
 
         Map<String, Object> details = MockData.map(
-            "socketMatched", socketMatched,
-            "memoryTypeMatched", memoryMatched
+                "socketMatched", socketApplicable && socketKnown ? !socketMismatch : null,
+                "memoryTypeMatched", memoryApplicable && memoryKnown ? !memoryMismatch : null
         );
-        
-        Map<String, Object> result = Map.of(
-            "tool", "compatibility",
-            "status", pass ? "PASS" : "FAIL",
-            "score", pass ? 1.0 : 0.2,
-            "confidence", Boolean.TRUE.equals(socketMatched) && Boolean.TRUE.equals(memoryMatched) ? "HIGH" : "MEDIUM",
-            "summary", pass
-                    ? "CPU, 메인보드, RAM, 쿨러 기본 호환성이 맞습니다."
-                    : "소켓 또는 메모리 호환성 확인이 필요합니다.",
-            "warnings", pass
-                    ? List.of()
-                    : List.of("소켓 또는 메모리 호환성 확인이 필요합니다."),
-            "evidence", List.of(Map.of(
-                    "source_id", "compatibility-rule-v1",
-                    "summary", pass
-                            ? "CPU 소켓, 메모리 타입, 쿨러 소켓 지원 기준으로 검증"
-                            : "CPU 소켓, 메모리 타입, 쿨러 소켓 지원 중 불일치 항목 존재"
+
+        Map<String, Object> result = MockData.map(
+                "tool", "compatibility",
+                "status", status,
+                "score", failed ? 0.2 : missing ? 0.65 : 1.0,
+                "confidence", failed ? "HIGH" : missing ? "LOW" : "HIGH",
+                "summary", failed
+                        ? "확인된 소켓 또는 메모리 규격이 호환되지 않습니다."
+                        : missing
+                                ? "일부 속성이 없어 호환성을 완전히 확인하지 못했습니다."
+                                : "확인 가능한 CPU, 메인보드, RAM 호환성이 맞습니다.",
+                "warnings", failed
+                        ? List.of("소켓 또는 메모리 규격이 호환되지 않습니다.")
+                        : missing
+                                ? List.of("소켓 또는 메모리 규격 정보가 일부 누락되었습니다.")
+                                : List.of(),
+                "evidence", List.of(Map.of(
+                        "source_id", "compatibility-rule-v1",
+                        "summary", failed
+                                ? "확인된 CPU 소켓 또는 메모리 타입 불일치"
+                                : missing
+                                        ? "누락되지 않은 CPU 소켓과 메모리 타입만 검증"
+                                        : "CPU 소켓과 메모리 타입 기준으로 검증"
                 )),
-            "details", details
+                "details", details
         );
 
         return result;
     }
-
     /* 전력 검증 로직 */
     private Map<String, Object> power(Map<String, ToolBuildPart> byCategory) {
         /* 장비 각채 가져오기 */
         ToolBuildPart gpu = byCategory.get("GPU");
         ToolBuildPart psu = byCategory.get("PSU");
-        
+
         /* 예상 총 소비전력(CPU + GPU + 기타)
            파워 정격 출력
            GPU 권장 소비전력 */
         int estimatedWattage = PowerRule.estimatedWattage(new ArrayList<>(byCategory.values()));
         int psuCapacity = intAttr(psu, "capacityW", 0);
         int vendorRecommendedPsu = intAttr(gpu, "requiredSystemPowerW", 0);
-        
+        int gpuWattage = intAttr(gpu, "wattage", 0);
+
         /* 예상전력
            여유전력
            부하율 */
         int requiredRatedCapacity = Math.max(vendorRecommendedPsu, estimatedWattage + 120);
         int headroom = psuCapacity - estimatedWattage;
-        int loadPercent = psuCapacity <= 0 ? 100 : (int) Math.round((estimatedWattage * 100.0) / psuCapacity);
-        
-        /* 통과 및 경고 여부 알기 */
-        boolean pass = psuCapacity >= requiredRatedCapacity && loadPercent <= 85;
-        boolean warn = psuCapacity >= estimatedWattage && headroom >= 80;
-        
+        int loadPercent = psuCapacity <= 0
+                ? 100
+                : (int) Math.round((estimatedWattage * 100.0) / psuCapacity);
+
+        /* 통과 및 경고 여부 알기
+           PSU 용량이나 GPU 전력 정보가 없으면 실패로 확정하지 않고 WARN 처리한다 */
+        boolean psuCapacityKnown = psu != null && psuCapacity > 0;
+        boolean gpuPowerKnown = gpu == null || gpuWattage > 0 || vendorRecommendedPsu > 0;
+        boolean missing = !psuCapacityKnown || !gpuPowerKnown;
+
+        /* 확인된 전력만으로도 PSU 용량을 초과하면 확정 불일치로 처리한다 */
+        boolean failed = psuCapacityKnown
+                && psuCapacity < Math.max(vendorRecommendedPsu, estimatedWattage);
+        boolean pass = !missing
+                && !failed
+                && psuCapacity >= requiredRatedCapacity
+                && loadPercent <= 85;
+        String status = failed ? "FAIL" : pass ? "PASS" : "WARN";
+
         /* 상세객체 만들기 */
-        Map<String, Object> details = Map.of(
-        "estimatedContinuousLoadW", estimatedWattage,
-        "psuRatedCapacityW", psuCapacity,
-        "vendorRecommendedPsuW", vendorRecommendedPsu,
-        "requiredRatedCapacityW", requiredRatedCapacity,
-        "ratedHeadroomW", headroom,
-        "ratedLoadPercent", loadPercent,
-        "note", "capacityW는 정격 출력이며 PSU 자체 소비전력이나 피크 부하로 합산하지 않습니다."            
-         );
+        Map<String, Object> details = MockData.map(
+                "estimatedContinuousLoadW", estimatedWattage,
+                "psuRatedCapacityW", psuCapacityKnown ? psuCapacity : null,
+                "vendorRecommendedPsuW", vendorRecommendedPsu > 0 ? vendorRecommendedPsu : null,
+                "requiredRatedCapacityW", requiredRatedCapacity,
+                "ratedHeadroomW", psuCapacityKnown ? headroom : null,
+                "ratedLoadPercent", psuCapacityKnown ? loadPercent : null,
+                "note", "capacityW는 정격 출력이며 PSU 자체 소비전력이나 피크 부하로 합산하지 않습니다."
+        );
 
         /* 응답객체 만들기 */
-        Map<String, Object> response = Map.of(
-            "tool", "power",
-            "status", pass ? "PASS" : warn ? "WARN" : "FAIL",
-            "score", pass ? 1.0 : warn ? 0.65 : 0.2, 
-            "confidence", headroom >= 180 && loadPercent <= 80 ? "HIGH" : "MEDIUM",
-            /* 요약문 생성
-               경고문 생성
-               근거문 생성 */
-            "summary", pass
-                ? "PSU 정격 출력이 예상 지속 부하와 GPU 권장 정격 파워를 충족합니다."
-                : "PSU 정격 출력 여유가 낮아 상위 용량을 검토해야 합니다.",
-            "warnings", pass
-                ? List.of()
-                : List.of("PSU 정격 출력 여유가 낮아 상위 용량을 검토해야 합니다."),
-            "evidence", List.of(Map.of(
-                "source_id", "power-rule-v1",
-                "summary", "CPU/GPU 소비전력, GPU 권장 PSU, PSU 정격 출력 기준으로 검증"
+        Map<String, Object> response = MockData.map(
+                "tool", "power",
+                "status", status,
+                "score", failed ? 0.2 : pass ? 1.0 : 0.65,
+                "confidence", failed
+                        ? "HIGH"
+                        : missing
+                                ? "LOW"
+                                : headroom >= 180 && loadPercent <= 80 ? "HIGH" : "MEDIUM",
+                /* 요약문 생성
+                   경고문 생성
+                   근거문 생성 */
+                "summary", failed
+                        ? "PSU 정격 출력이 확인된 시스템 전력 요구량보다 부족합니다."
+                        : missing
+                                ? "일부 전력 속성이 없어 전력 검사를 완전히 수행하지 못했습니다."
+                                : pass
+                                        ? "PSU 정격 출력이 예상 지속 부하와 GPU 권장 정격 파워를 충족합니다."
+                                        : "PSU 정격 출력 여유가 낮아 상위 용량을 검토해야 합니다.",
+                "warnings", failed
+                        ? List.of("PSU 정격 출력이 확인된 시스템 전력 요구량보다 부족합니다.")
+                        : missing
+                                ? List.of("PSU 용량 또는 GPU 전력 정보가 일부 누락되었습니다.")
+                                : pass
+                                        ? List.of()
+                                        : List.of("PSU 정격 출력 여유가 낮아 상위 용량을 검토해야 합니다."),
+                "evidence", List.of(Map.of(
+                        "source_id", "power-rule-v1",
+                        "summary", "CPU/GPU 소비전력, GPU 권장 PSU, PSU 정격 출력 기준으로 검증"
                 )),
-            "details", details
+                "details", details
         );
-       
+
         return response;
     }
-
     /* 사이즈 호환성 검증 */
     private Map<String, Object> size(Map<String, ToolBuildPart> byCategory) {
         /* 장비 객체화 하기 */
         ToolBuildPart gpu = byCategory.get("GPU");
         ToolBuildPart pcCase = byCategory.get("CASE");
         ToolBuildPart cooler = byCategory.get("COOLER");
-        
+
         /* 객체 내에서 장비 크기 가져오기 */
         int gpuLength = intAttr(gpu, "lengthMm", 0);
         int coolerHeight = intAttr(cooler, "heightMm", intAttr(cooler, "coolerHeightMm", 0));
-        
+
         /* 케이스 내 허용 사이즈 크기 가져오기 */
         int maxGpuLength = intAttr(pcCase, "maxGpuLengthMm", 0);
-        int maxCoolerHeight = intAttr(pcCase, "maxCpuCoolerHeightMm", 190);
-       
+        int maxCoolerHeight = intAttr(pcCase, "maxCpuCoolerHeightMm", 0);
+
+        /* 비교할 부품이 선택되고 양쪽 크기 속성이 모두 있을 때만 실패를 확정한다 */
+        boolean gpuApplicable = gpu != null && pcCase != null;
+        boolean coolerApplicable = cooler != null && pcCase != null;
+        boolean gpuKnown = !gpuApplicable || (gpuLength > 0 && maxGpuLength > 0);
+        boolean coolerKnown = !coolerApplicable || (coolerHeight > 0 && maxCoolerHeight > 0);
+
         /* 통과 여부 판별하기 */
-        boolean pass = gpuLength <= maxGpuLength && coolerHeight <= maxCoolerHeight;   
+        boolean gpuFailed = gpuApplicable && gpuKnown && gpuLength > maxGpuLength;
+        boolean coolerFailed = coolerApplicable && coolerKnown && coolerHeight > maxCoolerHeight;
+        boolean failed = gpuFailed || coolerFailed;
+        boolean missing = !gpuKnown || !coolerKnown;
+        String status = failed ? "FAIL" : missing ? "WARN" : "PASS";
 
         /* 상세객체 만들기 */
-        Map<String, Object> details = Map.of(
-        "gpuLengthMm", gpuLength,
-        "maxGpuLengthMm", maxGpuLength,
-        "coolerHeightMm", coolerHeight,
-        "maxCpuCoolerHeightMm", maxCoolerHeight
+        Map<String, Object> details = MockData.map(
+                "gpuLengthMm", gpuLength > 0 ? gpuLength : null,
+                "maxGpuLengthMm", maxGpuLength > 0 ? maxGpuLength : null,
+                "coolerHeightMm", coolerHeight > 0 ? coolerHeight : null,
+                "maxCpuCoolerHeightMm", maxCoolerHeight > 0 ? maxCoolerHeight : null
         );
 
         /* 응답객체 만들기 */
-        Map<String, Object> response = Map.of(
-            "tool", "size",
-            "status", pass ? "PASS" : "WARN",
-            "score", pass ? 1.0 : 0.65,
-            "summary", pass
-                    ? "GPU 길이와 쿨러 높이가 케이스 제약 안에 있습니다."
-                    : "케이스 장착 제약을 추가 확인해야 합니다.",
-            "warnings", pass
-                    ? List.of()
-                    : List.of("GPU 길이 또는 CPU 쿨러 높이가 케이스 허용 범위를 초과했거나 여유가 부족합니다."),
-            "evidence", List.of(Map.of(
-                    "source_id", "size-rule-v1",
-                    "summary", "GPU lengthMm, 케이스 maxGpuLengthMm, 쿨러 heightMm, 케이스 maxCpuCoolerHeightMm 기준으로 검증"
-            )),
-            "details", details
+        Map<String, Object> response = MockData.map(
+                "tool", "size",
+                "status", status,
+                "score", failed ? 0.2 : missing ? 0.65 : 1.0,
+                "confidence", failed ? "HIGH" : missing ? "LOW" : "HIGH",
+                "summary", failed
+                        ? "GPU 길이 또는 CPU 쿨러 높이가 케이스 허용 범위를 초과합니다."
+                        : missing
+                                ? "일부 크기 속성이 없어 장착 검사를 완전히 수행하지 못했습니다."
+                                : "GPU 길이와 쿨러 높이가 케이스 제약 안에 있습니다.",
+                "warnings", failed
+                        ? List.of("GPU 길이 또는 CPU 쿨러 높이가 케이스 허용 범위를 초과합니다.")
+                        : missing
+                                ? List.of("부품 또는 케이스의 크기 정보가 일부 누락되었습니다.")
+                                : List.of(),
+                "evidence", List.of(Map.of(
+                        "source_id", "size-rule-v1",
+                        "summary", "GPU lengthMm, 케이스 maxGpuLengthMm, 쿨러 heightMm, 케이스 maxCpuCoolerHeightMm 기준으로 검증"
+                )),
+                "details", details
         );
 
         return response;
     }
-
     /* 퍼포먼스 측정 */
     private Map<String, Object> performance(Map<String, ToolBuildPart> byCategory, Map<String, Object> context) {
         /* CPU, GPU 객체 받기 */
@@ -421,10 +480,10 @@ public class ToolService {
         return parts.stream().mapToInt(part -> part.price() == null ? 0 : part.price()).sum();
     }
 
-    /** Compares nullable attribute strings permissively. */
+    /** Treats missing compatibility attributes as a mismatch. */
     private static boolean same(String left, String right) {
         if (left == null || right == null) {
-            return true;
+            return false;
         }
         return left.equalsIgnoreCase(right);
     }

@@ -1,0 +1,173 @@
+<!doctype html>
+<html lang="ko">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Fused parts preview</title>
+    <style>
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        background: #f4f6f8;
+        color: #0f172a;
+        font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      }
+
+      .toolbar {
+        position: sticky;
+        top: 0;
+        z-index: 10;
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+        align-items: center;
+        padding: 12px 16px;
+        border-bottom: 1px solid #dbe3ef;
+        background: rgba(255, 255, 255, 0.94);
+      }
+
+      .toolbar strong {
+        margin-right: 8px;
+        font-size: 13px;
+      }
+
+      button {
+        border: 1px solid #cbd5e1;
+        border-radius: 999px;
+        background: #ffffff;
+        color: #334155;
+        cursor: pointer;
+        font-size: 12px;
+        font-weight: 800;
+        padding: 6px 10px;
+      }
+
+      button[aria-pressed="true"] {
+        border-color: #2563eb;
+        background: #eff6ff;
+        color: #1d4ed8;
+      }
+
+      .stage {
+        min-height: calc(100vh - 57px);
+        display: grid;
+        place-items: center;
+        padding: 24px;
+      }
+
+      .plate {
+        position: relative;
+        width: min(100%, 1672px);
+        aspect-ratio: 1672 / 941;
+      }
+
+      .plate img {
+        position: absolute;
+        inset: 0;
+        width: 100%;
+        height: 100%;
+        object-fit: contain;
+        user-select: none;
+      }
+
+      .layer {
+        opacity: 0;
+        transition: opacity 150ms ease;
+      }
+
+      .layer[data-visible="true"] {
+        opacity: 1;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="toolbar" role="group" aria-label="부품 오버레이 선택">
+      <strong>Before 판 + DOM 레이어 토글</strong>
+      <button type="button" data-mode="all" aria-pressed="true">전체</button>
+      <button type="button" data-mode="none" aria-pressed="false">판만</button>
+      <button type="button" data-mode="cpu" aria-pressed="false">CPU</button>
+      <button type="button" data-mode="gpu" aria-pressed="false">GPU</button>
+      <button type="button" data-mode="ssd" aria-pressed="false">SSD</button>
+      <button type="button" data-mode="motherboard" aria-pressed="false">메인보드</button>
+      <button type="button" data-mode="case" aria-pressed="false">케이스</button>
+      <button type="button" data-mode="psu" aria-pressed="false">파워</button>
+      <button type="button" data-mode="cooler" aria-pressed="false">쿨러</button>
+      <button type="button" data-ram-count="0" aria-pressed="false">RAM 0</button>
+      <button type="button" data-ram-count="1" aria-pressed="false">RAM 1</button>
+      <button type="button" data-ram-count="2" aria-pressed="false">RAM 2</button>
+      <button type="button" data-ram-count="3" aria-pressed="false">RAM 3</button>
+      <button type="button" data-ram-count="4" aria-pressed="false">RAM 4</button>
+    </div>
+    <main class="stage">
+      <div class="plate">
+        <img src="/slot-board/backgrounds/dependency-plate-before.png" alt="" />
+        <img class="layer" data-layer="motherboard" data-visible="true" src="/slot-board/parts/motherboard-fused-overlay.png" alt="" />
+        <img class="layer" data-layer="case" data-visible="true" src="/slot-board/parts/case-fused-overlay.png" alt="" />
+        <img class="layer" data-layer="psu" data-visible="true" src="/slot-board/parts/psu-fused-overlay.png" alt="" />
+        <img class="layer" data-layer="ssd" data-visible="true" src="/slot-board/parts/ssd-fused-overlay.png" alt="" />
+        <img class="layer" data-layer="ram" data-slot="1" data-visible="true" src="/slot-board/parts/ram-slot-1-fused-overlay.png" alt="" />
+        <img class="layer" data-layer="ram" data-slot="2" data-visible="true" src="/slot-board/parts/ram-slot-2-fused-overlay.png" alt="" />
+        <img class="layer" data-layer="ram" data-slot="3" data-visible="true" src="/slot-board/parts/ram-slot-3-fused-overlay.png" alt="" />
+        <img class="layer" data-layer="ram" data-slot="4" data-visible="true" src="/slot-board/parts/ram-slot-4-fused-overlay.png" alt="" />
+        <img class="layer" data-layer="cpu" data-visible="true" src="/slot-board/parts/cpu-fused-overlay.png" alt="" />
+        <img class="layer" data-layer="cooler" data-visible="true" src="/slot-board/parts/cooler-fused-overlay.png" alt="" />
+        <img class="layer" data-layer="gpu" data-visible="true" src="/slot-board/parts/gpu-fused-overlay.png" alt="" />
+      </div>
+    </main>
+    <script>
+      const modeButtons = Array.from(document.querySelectorAll("[data-mode]"));
+      const ramButtons = Array.from(document.querySelectorAll("[data-ram-count]"));
+      const layers = Array.from(document.querySelectorAll(".layer"));
+      const baseSrcs = [
+        "/slot-board/backgrounds/dependency-plate-before.png",
+        ...layers.map((layer) => layer.getAttribute("src"))
+      ];
+
+      baseSrcs.forEach((src) => {
+        const image = new Image();
+        image.src = src;
+      });
+
+      function setLayerVisible(layer, visible) {
+        layer.dataset.visible = String(visible);
+      }
+
+      function setMode(mode) {
+        const showAll = mode === "all";
+        const showNone = mode === "none";
+        layers.forEach((layer) => {
+          const layerName = layer.dataset.layer;
+          setLayerVisible(layer, showAll || (!showNone && layerName === mode));
+        });
+        modeButtons.forEach((button) => {
+          button.setAttribute("aria-pressed", String(button.dataset.mode === mode));
+        });
+        ramButtons.forEach((button) => button.setAttribute("aria-pressed", "false"));
+      }
+
+      function setRamCount(count) {
+        layers.forEach((layer) => {
+          if (layer.dataset.layer === "ram") {
+            setLayerVisible(layer, Number(layer.dataset.slot) <= count);
+          } else {
+            setLayerVisible(layer, false);
+          }
+        });
+        modeButtons.forEach((button) => button.setAttribute("aria-pressed", "false"));
+        ramButtons.forEach((button) => {
+          button.setAttribute("aria-pressed", String(Number(button.dataset.ramCount) === count));
+        });
+      }
+
+      modeButtons.forEach((button) => {
+        button.addEventListener("click", () => setMode(button.dataset.mode));
+      });
+      ramButtons.forEach((button) => {
+        button.addEventListener("click", () => setRamCount(Number(button.dataset.ramCount)));
+      });
+    </script>
+  </body>
+</html>

@@ -4,7 +4,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { Link, useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import { CategorySidebar, DataTable, Panel, StateMessage } from '../../../../components/ui';
 import { getToken } from '../../../../lib/api';
-import { saveBuildFromChat } from '../../../quote/quoteApi';
+import { buildSaveErrorMessage, saveBuildFromChat } from '../../../quote/quoteApi';
 import { handlePartImageError, partImageUrl, partShortSpec } from '../../partDisplay';
 import { deleteQuoteDraftItem, getCurrentQuoteDraft, getPartPriceHistory, listParts, patchQuoteDraftItem, putQuoteDraftItem } from '../../partsApi';
 import { quoteDraftToRecommendedBuild, selfQuoteBuildId } from '../../selfQuoteBuild';
@@ -199,6 +199,10 @@ export function LegacySelfQuoteListSections() {
       navigate(`/login?redirect=${encodeURIComponent(`${location.pathname}${location.search}`)}`);
       return;
     }
+    if (quantity <= 0) {
+      removePart(partId);
+      return;
+    }
     quantityMutation.mutate({ partId, quantity });
   };
 
@@ -224,7 +228,7 @@ export function LegacySelfQuoteListSections() {
                 <option value="name">이름순</option>
               </select>
             </label>
-            <button type="button" onClick={() => { selectCategory(''); updateQuery(''); }} className="min-h-11 rounded-md border border-commerce-line bg-white px-3 py-2 text-sm font-black text-slate-700 hover:border-commerce-ink hover:text-commerce-ink">
+            <button type="button" onClick={() => { selectCategory(''); updateQuery(''); }} className="min-h-11 rounded-md border border-commerce-line bg-white px-3 py-2 text-sm font-black text-commerce-point hover:border-commerce-point hover:bg-orange-50">
               전체 보기
             </button>
           </div>
@@ -247,7 +251,7 @@ export function LegacySelfQuoteListSections() {
                     type="button"
                     onClick={() => movePage(safePage - 1)}
                     disabled={safePage === 0 || showPartsRefreshing}
-                    className="rounded-md border border-commerce-line bg-white px-3 py-2 text-sm font-black text-slate-700 disabled:cursor-not-allowed disabled:border-slate-200 disabled:text-slate-300"
+                    className="rounded-md border border-commerce-line bg-white px-3 py-2 text-sm font-black text-commerce-point hover:enabled:border-commerce-point disabled:cursor-not-allowed disabled:border-slate-200 disabled:text-slate-300"
                   >
                     이전
                   </button>
@@ -255,7 +259,7 @@ export function LegacySelfQuoteListSections() {
                     type="button"
                     onClick={() => movePage(safePage + 1)}
                     disabled={safePage >= totalPages - 1 || showPartsRefreshing}
-                    className="rounded-md border border-commerce-line bg-white px-3 py-2 text-sm font-black text-slate-700 disabled:cursor-not-allowed disabled:border-slate-200 disabled:text-slate-300"
+                    className="rounded-md border border-commerce-line bg-white px-3 py-2 text-sm font-black text-commerce-point hover:enabled:border-commerce-point disabled:cursor-not-allowed disabled:border-slate-200 disabled:text-slate-300"
                   >
                     다음
                   </button>
@@ -263,7 +267,7 @@ export function LegacySelfQuoteListSections() {
               </div>
               {showPartsRefreshing ? (
                 <div className="absolute inset-x-0 top-11 z-10 flex justify-center">
-                  <div className="rounded-full border border-blue-100 bg-white/95 px-3 py-1.5 text-xs font-black text-brand-blue shadow-product">
+                  <div className="rounded-full border border-blue-100 bg-white/95 px-3 py-1.5 text-xs font-black text-[#ce7237] shadow-product">
                     목록 업데이트 중
                   </div>
                 </div>
@@ -282,7 +286,7 @@ export function LegacySelfQuoteListSections() {
               type="button"
               onClick={() => saveQuoteMutation.mutate(quoteDraft)}
               disabled={saveQuoteMutation.isPending}
-              className="inline-flex min-h-9 items-center gap-1.5 rounded-md bg-brand-blue px-3 text-xs font-black text-white hover:bg-blue-700 disabled:cursor-wait disabled:bg-slate-400"
+              className="inline-flex min-h-9 items-center gap-1.5 rounded-md border border-commerce-point bg-white px-3 text-xs font-black text-commerce-point hover:enabled:bg-orange-50 disabled:cursor-wait disabled:border-slate-200 disabled:text-slate-400"
             >
               <FolderPlus size={14} />
               {saveQuoteMutation.isPending ? '추가 중' : '내 견적함에 추가'}
@@ -294,7 +298,7 @@ export function LegacySelfQuoteListSections() {
             {!hasToken ? (
               <div className="rounded-md border border-dashed border-slate-300 p-4 text-sm text-slate-500">
                 로그인하면 제품 상세와 목록에서 담은 부품이 서버 견적초안에 저장됩니다.
-                <Link to={`/login?redirect=${encodeURIComponent(`${location.pathname}${location.search}`)}`} className="mt-3 block rounded-md bg-commerce-ink px-3 py-2 text-center text-xs font-black text-white">
+                <Link to={`/login?redirect=${encodeURIComponent(`${location.pathname}${location.search}`)}`} className="mt-3 block rounded-md border border-commerce-point bg-white px-3 py-2 text-center text-xs font-black text-commerce-point hover:bg-orange-50">
                   로그인하고 견적 담기
                 </Link>
               </div>
@@ -316,10 +320,10 @@ export function LegacySelfQuoteListSections() {
                 <div className="mt-1 text-slate-500">수량 {part.quantity}개</div>
                 <PriceTrendBadge partId={part.partId} />
                 <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
-                  <span className="font-black text-brand-blue">{part.lineTotal.toLocaleString()}원</span>
+                  <span className="font-black text-commerce-ink">{part.lineTotal.toLocaleString()}원</span>
                   <div className="flex items-center gap-2">
                     {allowsQuantity(part.category) ? <DraftQuantityStepper item={part} onChange={updateQuantity} disabled={quantityMutation.isPending} /> : null}
-                    <button type="button" aria-label={`${part.name} 견적에서 제거`} onClick={() => removePart(part.partId)} className="rounded-md border border-commerce-line px-2 py-1 font-black text-slate-600 hover:border-commerce-sale hover:text-commerce-sale">
+                    <button type="button" aria-label={`${part.name} 견적에서 제거`} onClick={() => removePart(part.partId)} className="rounded-md border border-slate-300 bg-white px-2 py-1 font-black text-slate-600 transition hover:border-slate-400 hover:bg-slate-50 hover:text-commerce-ink focus:outline-none focus:ring-2 focus:ring-slate-300">
                       빼기
                     </button>
                   </div>
@@ -335,7 +339,7 @@ export function LegacySelfQuoteListSections() {
               </div>
             ) : null}
             {saveQuoteMutation.isError ? (
-              <StateMessage type="warn" title="내 견적함 추가 실패" body="현재 견적을 저장하지 못했습니다. 잠시 후 다시 시도해 주세요." />
+              <StateMessage type="warn" title="내 견적함 추가 실패" body={buildSaveErrorMessage(saveQuoteMutation.error)} />
             ) : null}
           </div>
           <div className="mt-4 space-y-3">
@@ -344,8 +348,8 @@ export function LegacySelfQuoteListSections() {
               부품 호환 검증은 셀프 견적 보드에서 확인할 수 있습니다.
             </div>
             {draftItems.length > 0 ? (
-              <Link to="/checkout" className="flex min-h-11 items-center justify-center gap-2 rounded-md border border-commerce-line bg-white px-4 py-3 text-center text-sm font-black text-commerce-ink hover:border-commerce-ink">
-                <ShoppingCart size={17} className="text-commerce-amber" />
+              <Link to="/checkout" className="flex min-h-11 items-center justify-center gap-2 rounded-md border border-commerce-point bg-white px-4 py-3 text-center text-sm font-black text-commerce-point hover:bg-orange-50">
+                <ShoppingCart size={17} />
                 구매하기
               </Link>
             ) : (
@@ -365,7 +369,7 @@ function QuoteTotalCard({ totalPrice }: { totalPrice: number }) {
   return (
     <div className="rounded-md border border-commerce-line bg-white p-4 shadow-sm">
       <div className="text-xs font-bold text-slate-500">견적 합계</div>
-      <div className="mt-2 text-2xl font-black tracking-tight text-brand-blue">{totalPrice.toLocaleString()}원</div>
+      <div className="mt-2 text-2xl font-black tracking-tight text-commerce-ink">{totalPrice.toLocaleString()}원</div>
     </div>
   );
 }
@@ -457,10 +461,10 @@ function partRows(
           aria-label={isSelected ? `${part.name} 견적에서 제거` : isReplace ? `${part.name} 견적 교체` : `${part.name} 견적 담기`}
           disabled={isPending}
           onClick={() => isSelected ? onRemovePart(part.id) : onAddPart(part)}
-          className={`rounded-md px-3 py-2 text-xs font-black transition focus:outline-none focus:ring-2 focus:ring-brand-blue disabled:cursor-wait disabled:opacity-60 ${
+          className={`inline-flex min-h-11 min-w-16 items-center justify-center whitespace-nowrap rounded-md border px-3 py-2 text-xs font-black transition focus:outline-none focus:ring-2 focus:ring-[#de6c2d] disabled:cursor-wait disabled:opacity-60 ${
             isSelected
-              ? 'border border-red-200 bg-red-50 text-red-700 hover:border-red-300 hover:bg-red-100'
-              : 'bg-commerce-ink text-white hover:bg-slate-700'
+              ? 'border-commerce-ink bg-white text-commerce-ink hover:bg-slate-50'
+              : 'border-[#de6c2d] bg-[#de6c2d] text-white hover:border-[#c25f27] hover:bg-[#c25f27]'
           }`}
         >
           {isPending ? (isSelected ? '빼는 중' : isReplace ? '교체 중' : '담는 중') : isSelected ? '빼기' : isReplace ? '교체' : '담기'}
@@ -536,7 +540,7 @@ function DraftQuantityStepper({ item, onChange, disabled }: { item: QuoteDraftIt
       <button
         type="button"
         aria-label={`${item.name} 수량 감소`}
-        disabled={disabled || item.quantity <= 1}
+        disabled={disabled}
         onClick={() => onChange(item.partId, item.quantity - 1)}
         className="w-7 bg-slate-50 text-sm font-bold text-slate-600 disabled:text-slate-300"
       >
@@ -572,7 +576,7 @@ function PartProductCell({ part }: { part: PartRow }) {
         />
       </Link>
       <div>
-        <Link to={`/parts/${part.id}`} className="font-black leading-5 text-commerce-ink hover:text-brand-blue hover:underline">{part.name}</Link>
+        <Link to={`/parts/${part.id}`} className="font-black leading-5 text-commerce-ink hover:text-[#ce7237] hover:underline">{part.name}</Link>
         <div className="mt-1 text-[11px] font-medium text-slate-500">{partShortSpec(part)}</div>
       </div>
     </div>
@@ -589,7 +593,7 @@ function SupplierCell({ part }: { part: PartRow }) {
     return supplierName;
   }
   return (
-    <a href={offerUrl} target="_blank" rel="noreferrer" className="font-black text-brand-blue hover:underline">
+    <a href={offerUrl} target="_blank" rel="noreferrer" className="font-black text-commerce-point hover:underline">
       {supplierName}
     </a>
   );

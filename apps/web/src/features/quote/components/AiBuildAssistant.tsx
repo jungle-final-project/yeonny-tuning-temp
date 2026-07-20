@@ -1,11 +1,14 @@
-import { type FormEvent, memo, useCallback, useEffect, useRef, useState } from 'react';
+import { type CSSProperties, type FormEvent, type ReactNode, memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
-import { BarChart3, Bot, CheckCircle2, Send, ShoppingCart, Sparkles, X } from 'lucide-react';
+import { BarChart3, Bot, CheckCircle2, Download, LifeBuoy, Send, ShoppingCart, Sparkles, X } from 'lucide-react';
 import { useLockedPageScroll } from '../../../hooks/useHiddenPageScrollbar';
 import { AUTH_CHANGED_EVENT, ApiError, clearToken, getToken } from '../../../lib/api';
-import { AI_BUILD_ASSISTANT_CLOSE_EVENT, AI_BUILD_ASSISTANT_OPEN_EVENT, AI_BUILD_ASSISTANT_TOGGLE_EVENT, SUPPORT_CHAT_CLOSE_EVENT, SUPPORT_CHAT_OPEN_EVENT, setAiAssistantOpen, type AiAssistantOpenDetail } from '../../../lib/events';
-import { applyAiBuildToQuoteDraft, getCurrentQuoteDraft } from '../../parts/partsApi';
+import { AI_BUILD_ASSISTANT_CLOSE_EVENT, AI_BUILD_ASSISTANT_OPEN_EVENT, AI_BUILD_ASSISTANT_TOGGLE_EVENT, SUPPORT_CHAT_CLOSE_EVENT, SUPPORT_CHAT_OPEN_EVENT, requestPerfCompare, setAiAssistantOpen, type AiAssistantOpenDetail } from '../../../lib/events';
+import { applyAiBuildToQuoteDraft, getCurrentQuoteDraft, putQuoteDraftItem } from '../../parts/partsApi';
+import { downloadPcAgentForCurrentUser } from '../../support/agentDownload';
+import { requestPcAgentDiagnosis } from '../../support/supportApi';
+import { AiChatPendingBubble } from './AiChatPendingBubble';
 import {
   AI_ASSISTANT_SESSION_CHANGED_EVENT,
   PART_CATEGORY_LABELS,
@@ -20,17 +23,24 @@ import {
   resetAssistantConversation,
   saveAssistantSession,
   saveSelectedAiBuild,
+  type AiAssessmentContext,
+  type AiAssistantSession,
+  type AiBuildAssessment,
   type AiChatMessage,
+  type AiBoardFocus,
   type AiPerformanceSimulation,
+  type AiQuickReplyCommand,
   type AiRecommendedBuild,
-  type AiToolResult,
-  type BuildGraphFocus
+  type AiSupportGuidance,
+  type BuildGraphFocus,
+  type PartCategory
 } from '../aiSelection';
-import { buildChat } from '../quoteApi';
+import { buildChat, resolveBuildGraph } from '../quoteApi';
 
 type AiBuildAssistantProps = {
   surface?: 'home' | 'self-quote';
   variant?: 'floating' | 'embedded';
+  onBoardFocus?: (focus: AiBoardFocus) => void;
 };
 
 type AiChatMessageSize = 'default' | 'large';
@@ -44,11 +54,6 @@ type CenterScrollbarState = {
 
 const LOGIN_REQUIRED_MESSAGE = '로그인이 필요합니다. 다시 로그인해 주세요.';
 const GENERIC_SUBMIT_ERROR_MESSAGE = 'AI 추천 API 호출에 실패했습니다. 잠시 후 다시 시도해 주세요.';
-const COMMON_QUICK_PROMPTS = [
-  { label: '200만원 게이밍 PC', prompt: '200만원으로 게이밍 PC 추천해줘' },
-  { label: '견적 마저 채우기', prompt: '지금 견적 기준으로 나머지 부품 채워줘' },
-  { label: '성능 비교', prompt: 'CPU를 9700X로 바꾸면 성능 어떻게 돼?' }
-];
 
 const ASSISTANT_DESKTOP_QUERY = '(min-width: 768px)';
 const CENTER_SCROLLBAR_TRACK_TOP = 8;
@@ -56,7 +61,58 @@ const CENTER_SCROLLBAR_TRACK_BOTTOM = 12;
 const CENTER_SCROLLBAR_MIN_THUMB_HEIGHT = 32;
 const CENTER_SCROLLBAR_HIDE_DELAY_MS = 700;
 
-export function AiBuildAssistant({ surface = 'home', variant = 'floating' }: AiBuildAssistantProps) {
+type NaturalApplyResolution =
+  | { status: 'READY'; build: AiRecommendedBuild }
+  | { status: 'MISSING' | 'AMBIGUOUS' | 'BLOCKED' };
+
+function isNaturalApplyCommand(message: string) {
+  const compact = message
+    .toLowerCase()
+    .replace(/[^\p{L}\p{N}]+/gu, '');
+  const directApply = /^(?:(?:이|그|해당)(?:거|걸|변경안|조합)(?:으?로)?)?(?:바로)?(?:적용|반영)(?:해)?(?:줘|주세요)$/;
+  const referentialReplace = /^(?:이거|이걸|그거|그걸|이변경안|그변경안|이조합|그조합)(?:으?로)?(?:바꿔|교체해)(?:줘|주세요)$/;
+  return directApply.test(compact) || referentialReplace.test(compact);
+}
+
+function resolveNaturalApplyBuild(session: AiAssistantSession): NaturalApplyResolution {
+  const lastMessage = session.messages[session.messages.length - 1];
+  if (!lastMessage || lastMessage.role !== 'assistant' || !lastMessage.builds?.length) {
+    return { status: 'MISSING' };
+  }
+  if (lastMessage.builds.length !== 1) {
+    return { status: 'AMBIGUOUS' };
+  }
+  const build = normalizeAiRecommendedBuild(lastMessage.builds[0]);
+  if (!build.items.length || build.toolResults?.some((result) => result.status === 'FAIL')) {
+    return { status: 'BLOCKED' };
+  }
+  return { status: 'READY', build };
+}
+
+const FAST_CATEGORY_ROUTE_TERMS: Array<[PartCategory, string[]]> = [
+  ['MOTHERBOARD', ['메인보드', '마더보드', 'motherboard']],
+  ['COOLER', ['쿨러', 'cooler']],
+  ['STORAGE', ['ssd', '스토리지', '저장장치', 'storage']],
+  ['PSU', ['파워', 'psu', '전원공급장치']],
+  ['CASE', ['케이스', 'case']],
+  ['GPU', ['gpu', '그래픽카드', '그래픽 카드', '글카', '지피유']],
+  ['CPU', ['cpu', '씨피유', '씨퓨', '프로세서']],
+  ['RAM', ['ram', '램', '메모리']]
+];
+
+function fastCategoryRouteIntent(message: string): PartCategory | null {
+  const normalized = message.toLowerCase().replace(/\s+/g, ' ').trim();
+  if (!/(보여\s*줘|열어\s*줘|화면|목록|카테고리|이동)/.test(normalized)) return null;
+  if (/(추천|후보|바꿔|교체|담아|넣어|빼|삭제|추가|성능|프레임|fps|비교|위치|어디|상세|상품\s*페이지|제품\s*페이지)/.test(normalized)) return null;
+  if (/(rtx|지포스|라이젠|ryzen|core|m\.2|nvme|\d{3,})/i.test(normalized)) return null;
+
+  const matches = FAST_CATEGORY_ROUTE_TERMS
+    .filter(([, terms]) => terms.some((term) => normalized.includes(term)))
+    .map(([category]) => category);
+  return matches.length === 1 ? matches[0] : null;
+}
+
+export function AiBuildAssistant({ surface = 'home', variant = 'floating', onBoardFocus }: AiBuildAssistantProps) {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const messagesEndRef = useRef<HTMLDivElement | null>(null);
@@ -73,11 +129,20 @@ export function AiBuildAssistant({ surface = 'home', variant = 'floating' }: AiB
   const [prompt, setPrompt] = useState('');
   const [session, setSession] = useState(() => readAssistantSession());
   const [isSending, setIsSending] = useState(false);
+  // 응답 대기 임시 버블. 300ms 이내 응답에는 띄우지 않아 깜빡임을 막는다(pendingVisible 게이트).
+  // 세션에 저장하지 않고 React 상태로만 둬서 새로고침 시 유령 버블이 남지 않게 한다.
+  const [pending, setPending] = useState<{ id: string; excerpt: string } | null>(null);
+  const [pendingVisible, setPendingVisible] = useState(false);
+  const activeRequestRef = useRef<string | null>(null);
+  const pendingTimerRef = useRef<number | null>(null);
+  // 방금 도착한 assistant 답변만 문장 단위로 순차 노출한다. 세션 복원/과거 메시지는 애니메이션하지 않는다.
+  const [revealMessageId, setRevealMessageId] = useState<string | null>(null);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [applyError, setApplyError] = useState<string | null>(null);
   const [failedBuild, setFailedBuild] = useState<AiRecommendedBuild | null>(null);
   const [applyingBuildId, setApplyingBuildId] = useState<string | null>(null);
-  const [pendingSubmit, setPendingSubmit] = useState<string | null>(null);
+  const [runningQuickReplyCommandId, setRunningQuickReplyCommandId] = useState<string | null>(null);
+  const [pendingSubmit, setPendingSubmit] = useState<{ text: string; assessmentContext?: AiAssessmentContext } | null>(null);
   const [centerScrollbar, setCenterScrollbar] = useState<CenterScrollbarState>({
     canScroll: false,
     visible: false,
@@ -134,7 +199,13 @@ export function AiBuildAssistant({ surface = 'home', variant = 'floating' }: AiB
       setOpen(true);
       if (detail?.prefill) {
         if (detail.autoSubmit) {
-          setPendingSubmit(detail.prefill);
+          setPendingSubmit({ text: detail.prefill, assessmentContext: detail.assessmentContext });
+          window.requestAnimationFrame(() => {
+            document.querySelector('[data-testid="ai-chatbot-panel"]')?.scrollIntoView({
+              behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth',
+              block: 'nearest'
+            });
+          });
         } else {
           setPrompt(detail.prefill);
         }
@@ -173,16 +244,17 @@ export function AiBuildAssistant({ surface = 'home', variant = 'floating' }: AiB
   }, [isDesktopAssistant, isEmbedded]);
 
   useEffect(() => {
-    const shouldReserveSpace = !isEmbedded && open && isDesktopAssistant && placement === 'side';
-    document.documentElement.classList.toggle('ai-assistant-open', shouldReserveSpace);
-    return () => {
-      document.documentElement.classList.remove('ai-assistant-open');
-    };
-  }, [open, isDesktopAssistant, placement, isEmbedded]);
-
-  useEffect(() => {
     setAiAssistantOpen(!isEmbedded && open);
   }, [open, isEmbedded]);
+
+  useEffect(() => {
+    if (typeof document === 'undefined') return undefined;
+    const shouldDock = !isEmbedded && open && placement === 'side' && isDesktopAssistant;
+    document.documentElement.classList.toggle('ai-assistant-side-open', shouldDock);
+    return () => {
+      document.documentElement.classList.remove('ai-assistant-side-open');
+    };
+  }, [isDesktopAssistant, isEmbedded, open, placement]);
 
   useEffect(() => {
     return () => setAiAssistantOpen(false);
@@ -276,20 +348,24 @@ export function AiBuildAssistant({ surface = 'home', variant = 'floating' }: AiB
 
   useEffect(() => {
     if (!pendingSubmit || isSending) return;
-    const text = pendingSubmit;
+    const submission = pendingSubmit;
     setPendingSubmit(null);
-    void sendMessage(text);
+    void sendMessage(submission.text, submission.assessmentContext);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pendingSubmit, isSending]);
+
+  useEffect(() => () => {
+    if (pendingTimerRef.current !== null) window.clearTimeout(pendingTimerRef.current);
+  }, []);
 
   async function submitPrompt(event: FormEvent) {
     event.preventDefault();
     await sendMessage(prompt);
   }
 
-  async function sendMessage(rawPrompt: string) {
+  async function sendMessage(rawPrompt: string, assessmentContext?: AiAssessmentContext) {
     const nextPrompt = rawPrompt.trim();
-    if (!nextPrompt || isSending) return;
+    if (!nextPrompt || isSending || applyingBuildId) return;
 
     const ownerKey = getAiStorageOwnerKey();
     if (!getToken() || !ownerKey) {
@@ -315,23 +391,74 @@ export function AiBuildAssistant({ surface = 'home', variant = 'floating' }: AiB
     saveAssistantSession(optimisticSession, ownerKey);
     setPrompt('');
     setSubmitError(null);
+
+    if (isNaturalApplyCommand(nextPrompt)) {
+      await applyBuildFromNaturalCommand(baseSession, optimisticSession, ownerKey);
+      return;
+    }
+
+    const fastCategory = fastCategoryRouteIntent(nextPrompt);
+    if (fastCategory) {
+      const responseTime = new Date().toISOString();
+      const assistantMessage: AiChatMessage = {
+        id: createAiMessageId('route'),
+        role: 'assistant',
+        text: `${PART_CATEGORY_LABELS[fastCategory]} 부품 화면으로 이동했습니다.`,
+        createdAt: responseTime,
+        kind: 'general'
+      };
+      const nextSession = {
+        ...optimisticSession,
+        messages: [...optimisticSession.messages, assistantMessage],
+        updatedAt: responseTime
+      };
+      setSession(nextSession);
+      saveAssistantSession(nextSession, ownerKey);
+      setPendingClarification(null);
+      navigate(`/self-quote?category=${fastCategory}`);
+      return;
+    }
+
     setIsSending(true);
 
+    // 응답 대기 표시 arm — fastCategory route는 위에서 이미 return했으므로 여기까지 오지 않는다.
+    // 300ms 타이머가 발화하기 전에 응답이 오면 finally가 타이머를 지워 버블이 뜨지 않는다.
+    const requestId = createAiMessageId('pending');
+    activeRequestRef.current = requestId;
+    const excerpt = nextPrompt.length > 30 ? `${nextPrompt.slice(0, 30)}…` : nextPrompt;
+    setPending({ id: requestId, excerpt });
+    setPendingVisible(false);
+    if (pendingTimerRef.current !== null) window.clearTimeout(pendingTimerRef.current);
+    pendingTimerRef.current = window.setTimeout(() => {
+      if (activeRequestRef.current === requestId) setPendingVisible(true);
+    }, 300);
+
     try {
-      // 견적 완성/성능 비교만 현재 견적(드래프트) 문맥이 필요하다. 예산 추천·미지원·명확화는
-      // draft 없이 즉시 서버로 보내 체감 지연을 줄인다. 이미 캐시된 draft는 그대로 활용한다.
-      const currentQuoteDraft = needsDraftContext(nextPrompt)
+      // 셀프견적에서는 어떤 후속 질문도 현재 장바구니와 충돌할 수 있으므로 최신 draft를 항상 보낸다.
+      // 홈의 문맥 없는 전체 견적 추천만 draft 없이 보내 shared cache 이점을 유지한다.
+      const shouldAttachDraft = surface === 'self-quote'
+        || pendingClarification !== null
+        || needsDraftContext(nextPrompt);
+      const currentQuoteDraft = shouldAttachDraft
         ? quoteDraftQuery.data ?? await queryClient.fetchQuery({
           queryKey: ['quote-draft', 'current'],
           queryFn: getCurrentQuoteDraft
         })
-        : quoteDraftQuery.data;
+        : undefined;
       const response = await buildChat({
         message: nextPrompt,
         currentBuilds: recentBuildsForChatContext(baseSession),
         currentQuoteDraft,
+        uiContext: surface === 'self-quote'
+          ? { surface: 'SELF_QUOTE', capabilities: ['BOARD_PART_FOCUS'] }
+          : { surface: 'HOME', capabilities: [] },
+        assessmentContext,
         clarificationContext: pendingClarification ?? undefined
       });
+      const boardFocus = normalizeBoardFocus(response.boardFocus);
+      if (boardFocus && onBoardFocus) {
+        onBoardFocus(boardFocus);
+      }
       setPendingClarification(
         response.clarification?.originalMessage
           ? { originalMessage: response.clarification.originalMessage }
@@ -349,8 +476,11 @@ export function AiBuildAssistant({ surface = 'home', variant = 'floating' }: AiB
         kind: messageKind(response.answerType),
         builds: responseBuilds,
         simulation: response.simulation ?? undefined,
+        buildAssessment: response.buildAssessment ?? undefined,
+        supportGuidance: response.supportGuidance ?? undefined,
         warnings: response.warnings ?? [],
-        quickReplies: response.quickReplies ?? undefined
+        quickReplies: response.quickReplies ?? undefined,
+        quickReplyCommands: response.quickReplyCommands ?? undefined
       };
       const nextSession = {
         messages: [...optimisticSession.messages, assistantMessage],
@@ -366,6 +496,7 @@ export function AiBuildAssistant({ surface = 'home', variant = 'floating' }: AiB
       };
       setSession(nextSession);
       saveAssistantSession(nextSession, ownerKey);
+      setRevealMessageId(assistantMessage.id);
     } catch (error) {
       if (error instanceof ApiError && error.status === 401) {
         saveAssistantSession(baseSession, ownerKey);
@@ -376,15 +507,170 @@ export function AiBuildAssistant({ surface = 'home', variant = 'floating' }: AiB
       }
       setSubmitError(GENERIC_SUBMIT_ERROR_MESSAGE);
     } finally {
+      // 이 요청이 아직 최신이면 대기 버블을 정리한다(응답/오류로 교체). 늦게 도착한 이전 요청은
+      // activeRequestRef가 달라 최신 UI를 덮지 않는다. 실제 응답이 오는 즉시 교체하며 인위 지연은 없다.
+      if (pendingTimerRef.current !== null) {
+        window.clearTimeout(pendingTimerRef.current);
+        pendingTimerRef.current = null;
+      }
+      if (activeRequestRef.current === requestId) {
+        activeRequestRef.current = null;
+        setPending(null);
+        setPendingVisible(false);
+      }
       setIsSending(false);
     }
   }
 
-  // 되묻기 칩 클릭 → 기존 pendingSubmit 경로로 자동 전송. setState만 쓰므로 참조가 영구 안정이라
-  // ChatMessage memo를 깨지 않는다.
-  const handleQuickReply = useCallback((reply: string) => {
-    setPendingSubmit(reply);
+  async function applyBuildFromNaturalCommand(
+    baseSession: AiAssistantSession,
+    optimisticSession: AiAssistantSession,
+    ownerKey: string
+  ) {
+    const resolution = resolveNaturalApplyBuild(baseSession);
+    const resolvedBuildId = resolution.status === 'READY' ? resolution.build.id : undefined;
+    const appendResult = (text: string, warnings: string[] = []) => {
+      const createdAt = new Date().toISOString();
+      const assistantMessage: AiChatMessage = {
+        id: createAiMessageId('draft-apply'),
+        role: 'assistant',
+        text,
+        createdAt,
+        kind: 'part',
+        warnings
+      };
+      const nextSession = {
+        ...optimisticSession,
+        messages: [...optimisticSession.messages, assistantMessage],
+        latestActiveBuildId: resolvedBuildId ?? optimisticSession.latestActiveBuildId,
+        updatedAt: createdAt
+      };
+      setSession(nextSession);
+      saveAssistantSession(nextSession, ownerKey);
+      setRevealMessageId(assistantMessage.id);
+    };
+
+    setPendingClarification(null);
+    if (resolution.status === 'MISSING') {
+      appendResult('바로 앞 대화에 적용할 변경안이 없습니다. 먼저 원하는 변경안을 요청해 주세요.');
+      return;
+    }
+    if (resolution.status === 'AMBIGUOUS') {
+      appendResult('바로 앞 대화에 선택 가능한 조합이 여러 개입니다. 원하는 카드의 적용 버튼을 눌러 주세요.');
+      return;
+    }
+    if (resolution.status === 'BLOCKED') {
+      appendResult('호환성 검증을 통과하지 못한 변경안은 적용할 수 없습니다. 다른 변경안을 요청해 주세요.', ['DRAFT_APPLY_BLOCKED']);
+      return;
+    }
+    if (resolution.status !== 'READY') return;
+
+    const build = resolution.build;
+    setIsSending(true);
+    setApplyingBuildId(build.id);
+    setApplyError(null);
+    setFailedBuild(null);
+    try {
+      const appliedDraft = await applyAiBuildToQuoteDraft({
+        buildId: build.id,
+        conflictPolicy: 'REPLACE',
+        items: build.items.map((item) => ({
+          partId: item.partId,
+          category: item.category,
+          quantity: item.quantity
+        }))
+      });
+      saveSelectedAiBuild(build);
+      queryClient.setQueryData(['quote-draft', 'current'], appliedDraft);
+      void queryClient.invalidateQueries({ queryKey: ['quote-draft', 'current'] });
+      void queryClient.invalidateQueries({ queryKey: ['parts', 'slot-candidates'] });
+      appendResult(`요청하신 변경안이 현재 견적에 적용되었습니다. 현재 예상가는 ${build.totalPrice.toLocaleString('ko-KR')}원입니다.`);
+      if (!isEmbedded) {
+        setOpen(false);
+      }
+      navigate('/self-quote');
+    } catch {
+      setFailedBuild(build);
+      setApplyError('AI 조합을 셀프 견적 장바구니에 적용하지 못했습니다.');
+      appendResult('변경안 자동 적용에 실패했습니다. 현재 견적은 변경되지 않았습니다. 카드의 적용 버튼으로 다시 시도해 주세요.', ['DRAFT_APPLY_FAILED']);
+    } finally {
+      setApplyingBuildId(null);
+      setIsSending(false);
+    }
+  }
+
+  const appendAssistantStatus = useCallback((text: string, warnings: string[] = []) => {
+    const ownerKey = getAiStorageOwnerKey();
+    if (!ownerKey) return;
+    const baseSession = readAssistantSession(ownerKey);
+    const createdAt = new Date().toISOString();
+    const nextSession = {
+      ...baseSession,
+      messages: [...baseSession.messages, {
+        id: createAiMessageId('draft-action'),
+        role: 'assistant' as const,
+        text,
+        createdAt,
+        kind: 'part' as const,
+        warnings
+      }],
+      updatedAt: createdAt
+    };
+    setSession(nextSession);
+    saveAssistantSession(nextSession, ownerKey);
   }, []);
+
+  // 일반 칩은 기존처럼 자연어를 재전송한다. 다만 구체 RAM/SSD 상품 칩은 사용자가 이미 상품을
+  // 골랐으므로 LLM/Tool 미리보기를 다시 태우지 않고 quote draft API로 바로 추가한다.
+  const handleQuickReply = useCallback(async (
+    reply: string,
+    command?: AiQuickReplyCommand,
+    messageId?: string
+  ) => {
+    if (!command) {
+      setPendingSubmit({ text: reply });
+      return;
+    }
+    const commandId = `${messageId ?? 'quick-reply'}:${command.partId}`;
+    if (runningQuickReplyCommandId) return;
+
+    setRunningQuickReplyCommandId(commandId);
+    try {
+      // 캐시된 draft가 아니라 버튼을 누른 순간의 최신 수량을 읽어, 같은 RAM/SSD를 +1 한다.
+      const currentDraft = await getCurrentQuoteDraft();
+      const existingItem = currentDraft.items.find((item) => item.partId === command.partId);
+      const nextQuantity = (existingItem?.quantity ?? 0) + command.quantityDelta;
+      if (nextQuantity > 9) {
+        appendAssistantStatus(`${command.partName}은(는) 최대 9개까지 담을 수 있습니다.`);
+        return;
+      }
+
+      const updatedDraft = await putQuoteDraftItem(command.partId, nextQuantity);
+      queryClient.setQueryData(['quote-draft', 'current'], updatedDraft);
+      void queryClient.invalidateQueries({ queryKey: ['quote-draft', 'current'] });
+      void queryClient.invalidateQueries({ queryKey: ['parts', 'slot-candidates'] });
+      appendAssistantStatus(`${command.partName} 추가됨. 현재 수량: ${nextQuantity}개입니다.`);
+
+      // 직접 선택한 다중 상품은 저장을 막지 않는다. 다만 이후 graph 검사에서 FAIL이면 채팅에도
+      // 명확히 남겨 사용자가 견적 화면에서 조정할 수 있게 한다. 검사 실패 자체는 저장 실패가 아니다.
+      void resolveBuildGraph({ source: 'QUOTE_DRAFT_CURRENT' })
+        .then((graph) => {
+          if (graph.toolResults.some((result) => result.status === 'FAIL')) {
+            appendAssistantStatus(
+              `${command.partName}은(는) 추가됐지만 현재 견적에 호환성 확인이 필요한 항목이 있습니다. 구매 전 견적 화면에서 조정해 주세요.`,
+              ['DRAFT_COMPATIBILITY_WARNING']
+            );
+          }
+        })
+        .catch(() => {
+          appendAssistantStatus(`${command.partName} 추가됨. 호환성 상태는 견적 화면에서 다시 확인해 주세요.`);
+        });
+    } catch {
+      appendAssistantStatus(`${command.partName} 추가 실패. 현재 견적은 변경되지 않았습니다.`);
+    } finally {
+      setRunningQuickReplyCommandId(null);
+    }
+  }, [appendAssistantStatus, queryClient, runningQuickReplyCommandId]);
 
   // 새 메시지 추가로 리스트가 리렌더될 때 ChatMessage memo가 유지되도록 참조를 안정화한다.
   const selectBuild = useCallback(async (build: AiRecommendedBuild) => {
@@ -419,23 +705,19 @@ export function AiBuildAssistant({ surface = 'home', variant = 'floating' }: AiB
     }
   }, [applyingBuildId, queryClient, navigate]);
 
-  if (!isPanelOpen && isDesktopAssistant) {
-    return null;
-  }
-
   if (!isPanelOpen) {
     return (
       <button
         type="button"
         aria-label="AI 견적 챗봇 열기"
         data-testid="ai-chatbot-launcher"
-        onClick={() => setOpen(true)}
-        className="fixed bottom-5 right-5 z-50 flex h-16 w-16 items-center justify-center rounded-2xl border border-slate-900 bg-slate-950 text-white shadow-2xl transition hover:-translate-y-0.5 hover:bg-slate-800 focus:outline-none focus:ring-4 focus:ring-blue-200 md:hidden"
+        onClick={() => {
+          setPlacement('side');
+          setOpen(true);
+        }}
+        className="fixed bottom-5 right-5 z-50 flex h-14 w-14 items-center justify-center rounded-2xl bg-[#ce7237] text-white shadow-2xl transition-transform hover:-translate-y-0.5 focus:outline-none focus:ring-4 focus:ring-[#ce7237]/20"
       >
-        <span className="relative grid h-11 w-11 place-items-center rounded-xl bg-white text-slate-950">
-          <Bot size={26} />
-          <span className="absolute -right-1 -top-1 h-3 w-3 rounded-full border-2 border-slate-950 bg-emerald-400" />
-        </span>
+        <Bot size={26} />
       </button>
     );
   }
@@ -445,7 +727,7 @@ export function AiBuildAssistant({ surface = 'home', variant = 'floating' }: AiB
     const centeredMessages = session.messages.filter((message) => message.id !== 'ai-intro');
     const hasMessages = centeredMessages.length > 0;
     const centeredPromptForm = (
-      <form onSubmit={submitPrompt} className="mx-auto w-full max-w-[896px]">
+      <form autoComplete="off" onSubmit={submitPrompt} className="mx-auto w-full max-w-[896px]">
         {submitError ? (
           <div role="alert" className="mb-3 rounded-xl bg-red-50 px-4 py-3 text-base font-bold text-red-700">
             {submitError}
@@ -469,6 +751,7 @@ export function AiBuildAssistant({ surface = 'home', variant = 'floating' }: AiB
           <input
             id="ai-build-chat-input"
             aria-label="AI에게 PC 견적 질문"
+            autoComplete="off"
             value={prompt}
             onChange={(event) => setPrompt(event.target.value)}
             disabled={isSending}
@@ -508,7 +791,7 @@ export function AiBuildAssistant({ surface = 'home', variant = 'floating' }: AiB
         onWheel={(event) => event.stopPropagation()}
         onTouchMove={(event) => event.stopPropagation()}
       >
-        <div data-testid="ai-chatbot-panel" className="relative mx-auto flex h-[calc(100dvh-3rem)] w-full max-w-[1064px] flex-col">
+        <div data-testid="ai-chatbot-panel" className="relative mx-auto flex h-[calc(100dvh-3rem)] w-full max-w-[1064px] scale-[0.8] flex-col">
           {hasMessages ? (
             <div className="flex h-full min-h-0 items-center justify-center">
               <div className="relative flex max-h-full min-h-0 w-full max-w-[896px] flex-col">
@@ -528,20 +811,21 @@ export function AiBuildAssistant({ surface = 'home', variant = 'floating' }: AiB
                       revealCenterScrollbar();
                     }}
                   >
-                    {centeredMessages.map((message) => (
+                    {centeredMessages.map((message, messageIndex) => (
                       <ChatMessage
                         key={message.id}
                         message={message}
                         onSelectBuild={selectBuild}
                         onQuickReply={handleQuickReply}
+                        runningQuickReplyCommandId={runningQuickReplyCommandId}
                         applyingBuildId={applyingBuildId}
                         size="large"
+                        reveal={message.id === revealMessageId}
+                        precedingUserText={precedingUserTextFor(centeredMessages, messageIndex)}
                       />
                     ))}
-                    {isSending ? (
-                      <div className="rounded-[22px] bg-slate-50 px-5 py-4 text-[20px] font-bold leading-8 text-slate-500">
-                        서버에서 추천 조합을 계산하는 중입니다.
-                      </div>
+                    {pending && pendingVisible ? (
+                      <AiChatPendingBubble excerpt={pending.excerpt} size="large" />
                     ) : null}
                     <div ref={messagesEndRef} />
                   </div>
@@ -596,10 +880,11 @@ export function AiBuildAssistant({ surface = 'home', variant = 'floating' }: AiB
     );
   }
 
+  const isDockedAssistant = !isEmbedded && isDesktopAssistant;
   const panelClassName = isEmbedded
-    ? 'panel flex h-full min-h-[720px] flex-col overflow-hidden bg-[#f8fbff]'
+    ? 'panel flex h-full min-h-0 flex-col overflow-hidden bg-[#f7f7f8]'
     : isDesktopAssistant
-    ? 'fixed inset-y-0 right-0 z-50 flex h-dvh w-[420px] flex-col overflow-hidden border-l border-slate-200 bg-[#f8fbff] shadow-2xl'
+    ? 'ai-assistant-docked-panel fixed inset-y-0 right-0 z-50 flex h-dvh w-[390px] flex-col overflow-hidden bg-[#f7f7f8]'
     : 'fixed bottom-4 right-3 z-50 w-[min(calc(100vw-1.5rem),460px)] overflow-hidden rounded-2xl border border-slate-200 bg-[#f8fbff] shadow-2xl';
   const bodyClassName = `${isEmbedded || isDesktopAssistant ? 'min-h-0 flex-1' : 'max-h-[78vh]'} flex flex-col`;
 
@@ -608,15 +893,16 @@ export function AiBuildAssistant({ surface = 'home', variant = 'floating' }: AiB
       data-testid="ai-chatbot-panel"
       className={panelClassName}
     >
-      <div className="border-b border-slate-200 bg-white px-4 py-3">
+      {!isDockedAssistant ? (
+      <div className={isEmbedded ? 'border-b border-slate-200 bg-white px-4 py-3' : 'border-b border-[#c45c22] bg-[#de6c2d] px-4 py-3 text-white'}>
         <div className="flex items-center justify-between gap-3">
           <div className="flex min-w-0 items-center gap-3">
-            <div className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-brand-blue text-white shadow-sm">
+            <div className={isEmbedded ? 'grid h-10 w-10 shrink-0 place-items-center rounded-full bg-[#de6c2d] text-white shadow-sm' : 'grid h-9 w-9 shrink-0 place-items-center rounded-md bg-white text-[#de6c2d] shadow-sm'}>
               <Sparkles size={20} />
             </div>
             <div className="min-w-0">
-              <h2 className="truncate text-sm font-black text-commerce-ink">AI 견적 어시스턴트</h2>
-              <p className="truncate text-xs font-bold text-slate-500">{surface === 'home' ? '내부 견적 자산 기준 · 호환성 자동 체크' : '현재 견적 기준 · 부품 교체 자동 적용'}</p>
+              <h2 className={isEmbedded ? 'truncate text-sm font-black text-commerce-ink' : 'truncate text-sm font-black text-white'}>AI 견적 어시스턴트</h2>
+              <p className={isEmbedded ? 'truncate text-xs font-bold text-slate-500' : 'truncate text-xs font-bold text-white/80'}>{surface === 'home' ? '내부 견적 자산 기준 · 호환성 자동 체크' : '현재 견적 기준 · 부품 교체 자동 적용'}</p>
             </div>
           </div>
           {!isEmbedded ? (
@@ -624,50 +910,48 @@ export function AiBuildAssistant({ surface = 'home', variant = 'floating' }: AiB
               type="button"
               aria-label="AI 견적 챗봇 닫기"
               onClick={() => setOpen(false)}
-              className="grid h-9 w-9 place-items-center rounded-md border border-slate-200 bg-white text-slate-500 transition hover:border-slate-300 hover:text-commerce-ink focus:outline-none focus:ring-4 focus:ring-blue-100"
+              className="grid h-9 w-9 place-items-center rounded-md border border-white/20 text-white transition hover:bg-white/10 focus:outline-none focus:ring-4 focus:ring-white/20"
             >
               <X size={17} />
             </button>
           ) : null}
         </div>
       </div>
+      ) : null}
 
-      <div className={bodyClassName}>
-        <div className="border-b border-slate-100 bg-[#f8fbff] px-4 py-3">
-          <div className="mb-2 text-[11px] font-black text-slate-400">이렇게 물어보세요</div>
-          <div className="flex flex-wrap gap-2">
-            {COMMON_QUICK_PROMPTS.map((example) => (
-              <button
-                key={example.label}
-                type="button"
-                onClick={() => setPrompt(example.prompt)}
-                className="rounded-full border border-slate-200 bg-white px-3 py-1.5 text-[11px] font-black text-slate-600 shadow-sm transition hover:border-brand-blue hover:text-brand-blue focus:outline-none focus:ring-4 focus:ring-blue-100"
-              >
-                {example.label}
-              </button>
-            ))}
+      <div className={`${bodyClassName} ${isDockedAssistant ? 'bg-[#f7f7f8]' : ''}`}>
+        {isDockedAssistant ? (
+          <div className="flex justify-end px-4 pt-2">
+            <button
+              type="button"
+              aria-label="AI 견적 챗봇 닫기"
+              onClick={() => setOpen(false)}
+              className="grid h-9 w-9 shrink-0 place-items-center rounded-md text-slate-500 transition hover:bg-slate-200 hover:text-slate-800 focus:outline-none focus:ring-4 focus:ring-orange-100"
+            >
+              <X size={17} />
+            </button>
           </div>
-        </div>
-
+        ) : null}
         <div data-testid="ai-chat-messages" className="min-h-0 flex-1 space-y-3 overflow-y-auto px-4 py-4">
-          {session.messages.map((message) => (
+          {session.messages.map((message, messageIndex) => (
             <ChatMessage
               key={message.id}
               message={message}
               onSelectBuild={selectBuild}
               onQuickReply={handleQuickReply}
+              runningQuickReplyCommandId={runningQuickReplyCommandId}
               applyingBuildId={applyingBuildId}
+              reveal={message.id === revealMessageId}
+              precedingUserText={precedingUserTextFor(session.messages, messageIndex)}
             />
           ))}
-          {isSending ? (
-            <div className="rounded-2xl border border-slate-200 bg-white px-3 py-2 text-sm font-bold text-slate-500 shadow-sm">
-              서버에서 추천 조합을 계산하는 중입니다.
-            </div>
+          {pending && pendingVisible ? (
+            <AiChatPendingBubble excerpt={pending.excerpt} />
           ) : null}
           <div ref={messagesEndRef} />
         </div>
 
-        <form onSubmit={submitPrompt} className="border-t border-slate-200 bg-white p-3">
+        <form autoComplete="off" onSubmit={submitPrompt} className={isDockedAssistant || isEmbedded ? 'border-t border-slate-200 bg-[#f7f7f8] p-3' : 'border-t border-slate-200 bg-white p-3'}>
           {submitError ? (
             <div role="alert" className="mb-2 rounded-md border border-red-100 bg-red-50 px-3 py-2 text-xs font-bold text-red-700">
               {submitError}
@@ -687,10 +971,11 @@ export function AiBuildAssistant({ surface = 'home', variant = 'floating' }: AiB
             </div>
           ) : null}
           <label className="sr-only" htmlFor="ai-build-chat-input">AI 챗봇에게 PC 사양 질문</label>
-          <div className="flex gap-2 rounded-full border border-slate-200 bg-slate-50 p-1.5 shadow-inner focus-within:border-brand-blue focus-within:ring-4 focus-within:ring-blue-100">
+          <div className="flex gap-2 rounded-full border border-slate-200 bg-white p-1.5 shadow-inner focus-within:border-[#de6c2d] focus-within:ring-4 focus-within:ring-[#de6c2d]/15">
             <input
               id="ai-build-chat-input"
               aria-label="AI 챗봇에게 PC 사양 질문"
+              autoComplete="off"
               value={prompt}
               onChange={(event) => setPrompt(event.target.value)}
               disabled={isSending}
@@ -701,14 +986,10 @@ export function AiBuildAssistant({ surface = 'home', variant = 'floating' }: AiB
               type="submit"
               aria-label="질문 보내기"
               disabled={!prompt.trim() || isSending}
-              className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-brand-blue text-white transition hover:bg-blue-700 disabled:bg-slate-300"
+              className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-[#de6c2d] text-white transition hover:bg-[#c45c22] disabled:bg-slate-300"
             >
               <Send size={17} />
             </button>
-          </div>
-          <div className="mt-2 flex items-center gap-2 text-[11px] font-bold text-slate-500">
-            <CheckCircle2 size={14} className="text-commerce-green" />
-            추천은 서버의 부품 데이터 기준으로 계산되며 대화 기록은 브라우저에만 임시 저장됩니다(창을 닫으면 사라집니다).
           </div>
         </form>
       </div>
@@ -718,8 +999,20 @@ export function AiBuildAssistant({ surface = 'home', variant = 'floating' }: AiB
   return panel;
 }
 
-// 서버가 현재 견적(드래프트) 문맥을 실제로 쓰는 요청만 draft를 먼저 확보한다.
-// 백엔드 BuildChatIntentRouter의 시뮬레이션/견적완성 판정 어휘와 맞춘다.
+function normalizeBoardFocus(value: AiBoardFocus | null | undefined): AiBoardFocus | null {
+  if (!value || value.type !== 'PART_LOCATION') return null;
+  const categories = value.categories.filter((category): category is PartCategory => category in PART_CATEGORY_LABELS);
+  const uniqueCategories = [...new Set(categories)];
+  if (uniqueCategories.length === 0) return null;
+  return {
+    type: 'PART_LOCATION',
+    categories: uniqueCategories,
+    label: value.label || `${uniqueCategories.map((category) => PART_CATEGORY_LABELS[category]).join(' · ')} 위치`
+  };
+}
+
+// 홈에서도 서버가 현재 견적 문맥을 반드시 써야 하는 요청은 draft를 먼저 확보한다.
+// 셀프견적 화면은 이 판정과 무관하게 항상 최신 draft를 보낸다.
 function needsDraftContext(prompt: string) {
   const normalized = prompt.toLowerCase().replace(/\s+/g, '');
   const completionLike = /지금|현재|이견적|그래프|나머지|마저|채워|완성/.test(normalized);
@@ -764,60 +1057,257 @@ function toolFromPrompt(prompt: string): BuildGraphFocus['tool'] {
   return undefined;
 }
 
+// index번째 메시지 직전의 사용자 발화 — PC 상담 카드가 접수 증상으로 그대로 쓴다.
+function precedingUserTextFor(messages: AiChatMessage[], index: number): string {
+  for (let cursor = index - 1; cursor >= 0; cursor -= 1) {
+    if (messages[cursor].role === 'user') return messages[cursor].text;
+  }
+  return '';
+}
+
+// 답변 텍스트를 문장 단위로 자른다. 문장부호 뒤 공백 또는 줄바꿈에서만 끊어 "3.5" 같은 소수점은 보존한다.
+function splitIntoSentences(text: string): string[] {
+  return text
+    .split(/\n+/)
+    .flatMap((line) => line.split(/(?<=[.!?…。])\s+/))
+    .map((sentence) => sentence.trim())
+    .filter(Boolean);
+}
+
+// 새로 추가된 문장 하나를 자연스럽게 페이드 인한다. 커스텀 keyframe 없이 opacity 트랜지션만 쓴다(index.css 무수정).
+function FadeInSentence({ text, leadingSpace }: { text: string; leadingSpace: boolean }) {
+  const [shown, setShown] = useState(false);
+  useEffect(() => {
+    const id = window.requestAnimationFrame(() => setShown(true));
+    return () => window.cancelAnimationFrame(id);
+  }, []);
+  return (
+    <span
+      data-testid="ai-message-sentence"
+      className={`transition-opacity duration-300 ${shown ? 'opacity-100' : 'opacity-0'}`}
+    >
+      {leadingSpace ? ' ' : ''}{text}
+    </span>
+  );
+}
+
+// 카드 프레임이 부드럽게 등장(내용은 카드 내부에서 한 칸씩 채워짐 — CompactBuildCard 참고).
+function FadeInBlock({ children }: { children: ReactNode }) {
+  const [shown, setShown] = useState(false);
+  useEffect(() => {
+    // 초기 숨김 상태를 한 프레임 페인트한 뒤 표시해 트랜지션이 스냅 없이 재생되게 한다(이중 rAF).
+    let raf2 = 0;
+    const raf1 = window.requestAnimationFrame(() => {
+      raf2 = window.requestAnimationFrame(() => setShown(true));
+    });
+    return () => {
+      window.cancelAnimationFrame(raf1);
+      window.cancelAnimationFrame(raf2);
+    };
+  }, []);
+  return (
+    <div className={`transition-all duration-300 ease-out ${shown ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-1'}`}>
+      {children}
+    </div>
+  );
+}
+
+// 카드 내부 섹션을 순서대로 하나씩 노출하기 위한 스텝 카운터(0→count). active가 아니면 즉시 전체 노출.
+function useStepReveal(count: number, active: boolean, stepMs: number): number {
+  const [shown, setShown] = useState(active ? 1 : count);
+  useEffect(() => {
+    if (!active) {
+      setShown(count);
+      return;
+    }
+    setShown(1);
+    let cancelled = false;
+    const timers: number[] = [];
+    for (let index = 1; index < count; index += 1) {
+      const nextShown = index + 1;
+      timers.push(window.setTimeout(() => {
+        if (!cancelled) setShown(nextShown);
+      }, index * stepMs));
+    }
+    return () => {
+      cancelled = true;
+      timers.forEach((timer) => window.clearTimeout(timer));
+    };
+  }, [active, count, stepMs]);
+  return active ? shown : count;
+}
+
+function prefersReducedMotion() {
+  return typeof window !== 'undefined'
+    && typeof window.matchMedia === 'function'
+    && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+}
+
+// 방금 도착한 답변을 문장 → 카드 순서로 한 스텝씩 노출한다. 문장은 길이에 비례한 간격, 카드는 고정 간격.
+// active가 아니면(과거 메시지·모션 최소화·스텝 1개) 전체를 즉시 노출한다.
+function useSequentialReveal(sentences: string[], extraCount: number, active: boolean): number {
+  const total = sentences.length + extraCount;
+  const [count, setCount] = useState(active ? 1 : total);
+
+  useEffect(() => {
+    if (!active) {
+      setCount(total);
+      return;
+    }
+    setCount(1);
+    let cancelled = false;
+    const timers: number[] = [];
+    let elapsed = 0;
+    for (let index = 1; index < total; index += 1) {
+      const delay = index < sentences.length
+        ? Math.min(240 + sentences[index].length * 16, 720) // 문장: 읽는 속도처럼
+        : 850; // 카드: 내부 섹션이 차근차근 채워지는 걸 보여주도록 넉넉한 간격
+      elapsed += delay;
+      const nextCount = index + 1;
+      timers.push(window.setTimeout(() => {
+        if (!cancelled) setCount(nextCount);
+      }, elapsed));
+    }
+    return () => {
+      cancelled = true;
+      timers.forEach((timer) => window.clearTimeout(timer));
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [active, total]);
+
+  return active ? count : total;
+}
+
 const ChatMessage = memo(function ChatMessage({
   message,
   onSelectBuild,
   onQuickReply,
+  runningQuickReplyCommandId,
   applyingBuildId,
-  size = 'default'
+  size = 'default',
+  reveal = false,
+  precedingUserText = ''
 }: {
   message: AiChatMessage;
   onSelectBuild: (build: AiRecommendedBuild) => void;
-  onQuickReply: (reply: string) => void;
+  onQuickReply: (reply: string, command?: AiQuickReplyCommand, messageId?: string) => void;
+  runningQuickReplyCommandId: string | null;
   applyingBuildId: string | null;
   size?: AiChatMessageSize;
+  reveal?: boolean;
+  /** 이 assistant 답변을 만든 직전 사용자 메시지 — PC 상담 카드의 접수 증상으로 쓴다. */
+  precedingUserText?: string;
 }) {
   const isUser = message.role === 'user';
   const isLarge = size === 'large';
+  const messageSurfaceClassName = isUser
+    ? `${isLarge ? 'rounded-[22px] px-5 py-4 text-[20px] leading-8 bg-brand-blue' : 'rounded-2xl bg-[#de6c2d] px-3 py-2 text-sm leading-6'} text-white shadow-sm`
+    : `${isLarge ? 'px-1 py-2 text-[20px] leading-8 text-white' : 'px-1 py-1 text-sm leading-6 text-slate-700'}`;
+  const assistantLabelClassName = isLarge
+    ? 'mb-2 gap-3 text-[15px] text-white/85'
+    : 'mb-1 gap-2 text-[11px] text-[#de6c2d]';
+  const assistantIconClassName = isLarge
+    ? 'h-7 w-7 bg-white/10 text-white'
+    : 'h-5 w-5 bg-[#de6c2d] text-white';
+
+  // 리빌 타임라인: 문장들 → 카드(가이드/시뮬/평가/견적) 순서로 한 스텝씩 노출한다.
+  const sentences = useMemo(() => (isUser ? [] : splitIntoSentences(message.text)), [isUser, message.text]);
+  const extraCount = isUser
+    ? 0
+    : (message.supportGuidance ? 1 : 0)
+      + (message.simulation ? 1 : 0)
+      + (message.buildAssessment ? 1 : 0)
+      + (message.builds?.length ?? 0);
+  const animate = reveal && !isUser && !prefersReducedMotion() && sentences.length + extraCount > 1;
+  const revealedCount = useSequentialReveal(sentences, extraCount, animate);
+  const sentencesShown = animate ? Math.min(revealedCount, sentences.length) : sentences.length;
+  const extrasShown = animate ? Math.max(0, revealedCount - sentences.length) : extraCount;
+  const textDone = !animate || sentencesShown >= sentences.length;
+  // 카드들을 DOM 순서대로 순회하며 현재 노출 스텝까지만 보이게 한다.
+  let extraCursor = 0;
+  const revealNextExtra = () => {
+    const visible = !animate || extrasShown > extraCursor;
+    extraCursor += 1;
+    return visible;
+  };
 
   return (
     <div className={`flex ${isUser ? 'justify-end' : 'justify-start'}`}>
       <div className={`max-w-full ${isUser ? 'w-fit max-w-[86%]' : 'w-full'}`}>
-        <div className={`${isLarge ? 'rounded-[22px] px-5 py-4 text-[20px] leading-8' : 'rounded-2xl px-3 py-2 text-sm leading-6'} shadow-sm ${isUser ? 'bg-brand-blue text-white' : 'border border-slate-200 bg-white text-slate-700'}`}>
+        <div
+          data-testid={isUser ? 'ai-chat-message-user' : 'ai-chat-message-assistant'}
+          data-message-surface={isUser ? 'bubble' : 'plain'}
+          className={messageSurfaceClassName}
+        >
           {!isUser ? (
-            <div className={`${isLarge ? 'mb-2 gap-3 text-[15px]' : 'mb-1 gap-2 text-[11px]'} flex items-center font-black text-brand-blue`}>
-              <span className={`${isLarge ? 'h-7 w-7' : 'h-5 w-5'} grid place-items-center rounded-full bg-blue-50 text-brand-blue`}>
+            <div className={`${assistantLabelClassName} flex items-center font-black`}>
+              <span className={`${assistantIconClassName} ai-message-author-icon grid place-items-center rounded-full`}>
                 <Sparkles size={isLarge ? 17 : 12} />
               </span>
-              {message.simulation ? '성능 시뮬레이션' : 'AI 견적 어시스턴트'}
+              {message.supportGuidance ? 'PC 상태 안내' : message.buildAssessment ? '견적 점수 설명' : message.simulation ? '성능 시뮬레이션' : 'AI 견적 어시스턴트'}
             </div>
           ) : null}
-          <p className="break-keep">{message.text}</p>
-          {!isUser && message.quickReplies?.length ? (
+          {isUser ? (
+            <p className="break-keep">{message.text}</p>
+          ) : (
+            <p data-testid="ai-message-text" className="break-keep" aria-live={animate ? 'polite' : undefined}>
+              {animate
+                ? sentences.slice(0, sentencesShown).map((sentence, index) => (
+                  <FadeInSentence key={index} text={sentence} leadingSpace={index > 0} />
+                ))
+                : message.text}
+            </p>
+          )}
+          {!isUser && message.quickReplies?.length && textDone ? (
             <div data-testid="ai-quick-replies" className={`${isLarge ? 'mt-3 gap-3' : 'mt-2 gap-2'} flex flex-wrap`}>
-              {message.quickReplies.map((reply) => (
-                <button
-                  key={reply}
-                  type="button"
-                  onClick={() => onQuickReply(reply)}
-                  className={`${isLarge ? 'px-4 py-2 text-[15px]' : 'px-3 py-1.5 text-[11px]'} rounded-full border border-slate-200 bg-white font-black text-slate-600 shadow-sm transition hover:border-brand-blue hover:text-brand-blue focus:outline-none focus:ring-4 focus:ring-blue-100`}
-                >
-                  {reply}
-                </button>
-              ))}
+              {message.quickReplies.map((reply) => {
+                const command = message.quickReplyCommands?.find((item) => item.label === reply);
+                const commandId = command ? `${message.id}:${command.partId}` : null;
+                const isRunning = commandId !== null && runningQuickReplyCommandId === commandId;
+                return (
+                  <button
+                    key={reply}
+                    type="button"
+                    disabled={isRunning}
+                    onClick={() => onQuickReply(reply, command, message.id)}
+                    className={`${isLarge ? 'px-4 py-2 text-[15px]' : 'px-3 py-1.5 text-[11px]'} rounded-full border border-slate-200 bg-white font-black text-slate-600 shadow-sm transition hover:border-[#de6c2d] hover:text-[#de6c2d] focus:outline-none focus:ring-4 focus:ring-[#de6c2d]/15 disabled:cursor-wait disabled:opacity-60`}
+                  >
+                    {isRunning ? '추가 중...' : reply}
+                  </button>
+                );
+              })}
             </div>
           ) : null}
         </div>
 
-        {message.simulation ? (
-          <SimulationResultCard simulation={message.simulation} size={size} />
+        {message.supportGuidance && revealNextExtra() ? (
+          animate
+            ? <FadeInBlock><SupportGuidanceCard guidance={message.supportGuidance} size={size} symptom={precedingUserText} /></FadeInBlock>
+            : <SupportGuidanceCard guidance={message.supportGuidance} size={size} symptom={precedingUserText} />
         ) : null}
 
-        {message.builds ? (
+        {message.simulation && revealNextExtra() ? (
+          animate
+            ? <FadeInBlock><SimulationResultCard simulation={message.simulation} size={size} /></FadeInBlock>
+            : <SimulationResultCard simulation={message.simulation} size={size} />
+        ) : null}
+
+        {message.buildAssessment && revealNextExtra() ? (
+          animate
+            ? <FadeInBlock><BuildAssessmentCard assessment={message.buildAssessment} size={size} /></FadeInBlock>
+            : <BuildAssessmentCard assessment={message.buildAssessment} size={size} />
+        ) : null}
+
+        {message.builds?.length ? (
           <div className={`${isLarge ? 'mt-4 gap-3' : 'mt-2 gap-2'} grid`}>
-            {message.builds.map((build) => (
-              <CompactBuildCard key={`${message.id}-${build.id}`} build={build} onSelectBuild={onSelectBuild} applyingBuildId={applyingBuildId} size={size} />
-            ))}
+            {message.builds.map((build) => {
+              if (!revealNextExtra()) return null;
+              const key = `${message.id}-${build.id}`;
+              const distinction = deriveBuildDistinction(build, message.builds ?? []);
+              return animate
+                ? <FadeInBlock key={key}><CompactBuildCard build={build} onSelectBuild={onSelectBuild} applyingBuildId={applyingBuildId} size={size} reveal distinction={distinction} /></FadeInBlock>
+                : <CompactBuildCard key={key} build={build} onSelectBuild={onSelectBuild} applyingBuildId={applyingBuildId} size={size} distinction={distinction} />;
+            })}
           </div>
         ) : null}
       </div>
@@ -830,9 +1320,258 @@ const ChatMessage = memo(function ChatMessage({
   prev.message.id === next.message.id
   && prev.onSelectBuild === next.onSelectBuild
   && prev.onQuickReply === next.onQuickReply
+  && prev.runningQuickReplyCommandId === next.runningQuickReplyCommandId
   && prev.applyingBuildId === next.applyingBuildId
   && prev.size === next.size
+  && prev.reveal === next.reveal
+  && prev.precedingUserText === next.precedingUserText
 ));
+
+function SupportGuidanceCard({
+  guidance,
+  size = 'default',
+  symptom = ''
+}: {
+  guidance: AiSupportGuidance;
+  size?: AiChatMessageSize;
+  /** 이 안내를 만든 사용자 증상 문장 — [PC Agent로 바로 접수]가 그대로 전달한다. */
+  symptom?: string;
+}) {
+  const navigate = useNavigate();
+  const isLarge = size === 'large';
+  const possibleCauses = guidance.possibleCauses ?? [];
+  const [downloadState, setDownloadState] = useState<'idle' | 'downloading' | 'done' | 'error'>('idle');
+  const [downloadMessage, setDownloadMessage] = useState('');
+  const [diagnosisState, setDiagnosisState] = useState<'idle' | 'requesting' | 'accepted' | 'rejected' | 'error'>('idle');
+  const [diagnosisMessage, setDiagnosisMessage] = useState('');
+  const canDownload = guidance.actions.some((action) => action.type === 'DOWNLOAD_PC_AGENT');
+  const supportRoute = guidance.actions.find((action) => action.type === 'OPEN_SUPPORT_NEW')?.route ?? '/support/new';
+
+  async function requestAgentDiagnosis() {
+    if (diagnosisState === 'requesting') return;
+    setDiagnosisState('requesting');
+    setDiagnosisMessage('');
+    try {
+      const response = await requestPcAgentDiagnosis({
+        symptom: symptom.trim(),
+        requestedChecks: ['cpu', 'gpu', 'memory', 'disk', 'cooling'],
+        mode: 'LIVE'
+      });
+      if (response.status === 'ACCEPTED') {
+        setDiagnosisState('accepted');
+        setDiagnosisMessage('설치된 PC Agent가 증상을 접수했습니다. PC 화면의 진단 창을 확인해 주세요.');
+      } else {
+        setDiagnosisState('rejected');
+        setDiagnosisMessage(response.message || `PC Agent가 요청을 처리하지 않았습니다. (${response.status})`);
+      }
+    } catch (cause) {
+      setDiagnosisState('error');
+      if (cause instanceof ApiError && cause.code === 'AGENT_DISCONNECTED') {
+        setDiagnosisMessage('실행 중인 PC Agent가 없습니다. 아래에서 다운로드해 실행한 뒤 다시 접수해 주세요.');
+      } else if (cause instanceof ApiError && cause.status === 401) {
+        setDiagnosisMessage('로그인 후 PC Agent 접수를 이용해 주세요.');
+      } else {
+        setDiagnosisMessage('PC Agent 접수 요청에 실패했습니다. 잠시 후 다시 시도해 주세요.');
+      }
+    }
+  }
+
+  async function downloadAgent() {
+    if (downloadState === 'downloading') return;
+    setDownloadState('downloading');
+    setDownloadMessage('');
+    try {
+      await downloadPcAgentForCurrentUser();
+      setDownloadState('done');
+      setDownloadMessage('PCAgent.zip을 내려받았습니다. 압축을 풀고 PCAgent.exe를 실행해 주세요.');
+    } catch (error) {
+      setDownloadState('error');
+      setDownloadMessage(error instanceof ApiError && error.status === 401
+        ? '로그인 후 PC Agent를 다운로드해 주세요.'
+        : 'PC Agent를 내려받지 못했습니다. 잠시 후 다시 시도해 주세요.');
+    }
+  }
+
+  return (
+    <section
+      data-testid="ai-support-guidance"
+      data-response-surface="plain"
+      className={`${isLarge ? 'mt-4 px-1 py-2' : 'mt-2 px-1 py-2'}`}
+      aria-label={guidance.title}
+    >
+      <div className="flex flex-wrap items-start justify-between gap-2">
+        <div className="min-w-0">
+          <div className="flex items-center gap-2">
+            <LifeBuoy size={isLarge ? 20 : 16} className="shrink-0 text-cyan-700" />
+            <h3 className={`${isLarge ? 'text-lg text-white' : 'text-sm text-commerce-ink'} font-black`}>{guidance.title}</h3>
+          </div>
+          <p className={`${isLarge ? 'mt-2 text-base leading-7 text-white/80' : 'mt-1 text-xs leading-5 text-slate-600'} break-keep font-semibold`}>
+            {guidance.summary}
+          </p>
+        </div>
+        <span className="shrink-0 rounded-full border border-cyan-200 bg-white px-2 py-1 text-[10px] font-black text-cyan-700">
+          진단 전 안내
+        </span>
+      </div>
+
+      {possibleCauses.length ? (
+        <div className={`${isLarge ? 'mt-4 p-4' : 'mt-3 p-3'} rounded-md border border-amber-200 bg-amber-50`}>
+          <p className={`${isLarge ? 'text-sm' : 'text-xs'} font-black text-amber-800`}>증상만으로 예상되는 원인</p>
+          <ul className={`${isLarge ? 'mt-2 gap-2 text-sm' : 'mt-1.5 gap-1.5 text-xs'} grid text-amber-900`}>
+            {possibleCauses.map((cause) => (
+              <li key={cause} className="flex items-start gap-2">
+                <span aria-hidden="true" className="mt-[7px] h-1.5 w-1.5 shrink-0 rounded-full bg-amber-500" />
+                <span className="break-keep font-bold">{cause}</span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      ) : null}
+
+      <ul className={`${isLarge ? 'mt-4 gap-2 text-sm text-white/85' : 'mt-3 gap-1.5 text-xs text-slate-700'} grid`}>
+        {guidance.beforeDiagnosisChecks.map((check) => (
+          <li key={check} className="flex items-start gap-2">
+            <CheckCircle2 size={isLarge ? 17 : 14} className="mt-0.5 shrink-0 text-cyan-700" />
+            <span className="break-keep font-bold">{check}</span>
+          </li>
+        ))}
+      </ul>
+
+      <p className={`${isLarge ? 'mt-4 text-sm leading-6' : 'mt-3 text-[11px] leading-5'} rounded-md border border-cyan-100 bg-white px-3 py-2 font-semibold text-slate-600`}>
+        위 항목은 입력한 증상에서 흔히 확인하는 가능성입니다. 원인 확정과 지원 방식은 PC Agent의 별도 진단 AI가 동의한 로그를 확인한 뒤 안내합니다.
+      </p>
+
+      <div className={`${isLarge ? 'mt-4 gap-3' : 'mt-3 gap-2'} flex flex-wrap`}>
+        {symptom.trim() ? (
+          <button
+            type="button"
+            data-testid="ai-agent-diagnosis-request"
+            disabled={diagnosisState === 'requesting' || diagnosisState === 'accepted'}
+            onClick={requestAgentDiagnosis}
+            className={`${isLarge ? 'px-4 py-2.5 text-sm' : 'px-3 py-2 text-xs'} inline-flex items-center gap-2 rounded-md bg-cyan-700 font-black text-white transition hover:bg-cyan-800 focus:outline-none focus:ring-4 focus:ring-cyan-100 disabled:cursor-not-allowed disabled:opacity-60`}
+          >
+            <LifeBuoy size={isLarge ? 18 : 15} />
+            {diagnosisState === 'requesting' ? '접수 중...' : diagnosisState === 'accepted' ? '접수 완료' : 'PC Agent로 바로 접수'}
+          </button>
+        ) : null}
+        {canDownload ? (
+          <button
+            type="button"
+            data-testid="ai-download-pc-agent"
+            disabled={downloadState === 'downloading'}
+            onClick={downloadAgent}
+            className={`${isLarge ? 'px-4 py-2.5 text-sm' : 'px-3 py-2 text-xs'} inline-flex items-center gap-2 rounded-md bg-brand-blue font-black text-white transition hover:bg-blue-700 focus:outline-none focus:ring-4 focus:ring-blue-100 disabled:cursor-wait disabled:opacity-60`}
+          >
+            <Download size={isLarge ? 18 : 15} />
+            {downloadState === 'downloading' ? '준비 중...' : 'PC Agent 다운로드'}
+          </button>
+        ) : null}
+        <button
+          type="button"
+          data-testid="ai-open-support-new"
+          onClick={() => navigate(supportRoute)}
+          className={`${isLarge ? 'px-4 py-2.5 text-sm' : 'px-3 py-2 text-xs'} inline-flex items-center gap-2 rounded-md border border-slate-300 bg-white font-black text-slate-700 transition hover:border-brand-blue hover:text-brand-blue focus:outline-none focus:ring-4 focus:ring-blue-100`}
+        >
+          <LifeBuoy size={isLarge ? 18 : 15} />
+          AS 접수 화면 보기
+        </button>
+      </div>
+
+      {diagnosisMessage ? (
+        <p
+          aria-live="polite"
+          data-testid="ai-agent-diagnosis-status"
+          className={`${isLarge ? 'mt-3 text-sm' : 'mt-2 text-[11px]'} font-bold ${diagnosisState === 'accepted' ? 'text-emerald-700' : 'text-red-600'}`}
+        >
+          {diagnosisMessage}
+        </p>
+      ) : null}
+
+      {downloadMessage ? (
+        <p
+          aria-live="polite"
+          className={`${isLarge ? 'mt-3 text-sm' : 'mt-2 text-[11px]'} font-bold ${downloadState === 'error' ? 'text-red-600' : 'text-emerald-700'}`}
+        >
+          {downloadMessage}
+        </p>
+      ) : null}
+
+      <p className={`${isLarge ? 'mt-4 text-xs text-white/60' : 'mt-3 text-[10px] text-slate-500'} break-keep`}>{guidance.disclaimer}</p>
+    </section>
+  );
+}
+
+function BuildAssessmentCard({ assessment, size = 'default' }: { assessment: AiBuildAssessment; size?: AiChatMessageSize }) {
+  const isLarge = size === 'large';
+  return (
+    <section
+      data-testid="ai-build-assessment"
+      data-response-surface="plain"
+      className={`${isLarge ? 'mt-4 px-1 py-2' : 'mt-2 px-1 py-2'}`}
+      aria-label={`현재 견적 종합 점수 ${assessment.score}점 / ${assessment.maxScore}점`}
+    >
+      <div className="flex flex-wrap items-end justify-between gap-2">
+        <div>
+          <p className={`${isLarge ? 'text-base text-blue-200' : 'text-xs text-brand-blue'} font-black`}>현재 견적 종합 점수</p>
+          <p className={`${isLarge ? 'text-4xl text-white' : 'text-2xl text-commerce-ink'} mt-1 font-black`}>
+            {assessment.score}<span className={`${isLarge ? 'text-base text-white/60' : 'text-xs text-slate-400'} ml-1`}>/ {assessment.maxScore}</span>
+          </p>
+        </div>
+        <span className="rounded-full border border-blue-200 bg-white px-2 py-1 text-[11px] font-black text-brand-blue">
+          {assessment.grade} · {assessment.label}
+        </span>
+      </div>
+      <p className={`${isLarge ? 'text-base leading-7 text-white/85' : 'text-xs leading-5 text-slate-700'} mt-3 break-keep font-bold`}>
+        {assessment.summary}
+      </p>
+      {assessment.strengths.length ? <AssessmentList title="강점" items={assessment.strengths} tone="positive" size={size} /> : null}
+      {assessment.cautions.length ? <AssessmentList title="주의점" items={assessment.cautions} tone="caution" size={size} /> : null}
+      {assessment.recommendations.length ? (
+        <div className={`${isLarge ? 'border-white/20' : 'border-blue-100'} mt-3 border-t pt-3`}>
+          <p className={`${isLarge ? 'text-white/70' : 'text-slate-500'} text-[11px] font-black`}>개선 우선순위</p>
+          <ol className="mt-1.5 space-y-1.5">
+            {assessment.recommendations.map((item) => (
+              <li key={`${item.priority}-${item.category}`} className="flex gap-2 rounded bg-white px-2.5 py-2 text-xs leading-5 text-slate-700">
+                <span className="grid h-5 w-5 shrink-0 place-items-center rounded-full bg-brand-blue text-[10px] font-black text-white">{item.priority}</span>
+                <span><strong>{item.title}</strong><br /><span className="text-slate-500">{item.reason}</span></span>
+              </li>
+            ))}
+          </ol>
+        </div>
+      ) : null}
+    </section>
+  );
+}
+
+function AssessmentList({ title, items, tone, size = 'default' }: {
+  title: string;
+  items: AiBuildAssessment['strengths'];
+  tone: 'positive' | 'caution';
+  size?: AiChatMessageSize;
+}) {
+  const isLarge = size === 'large';
+  return (
+    <div className="mt-3">
+      <p className={`${isLarge ? 'text-white/70' : 'text-slate-500'} text-[11px] font-black`}>{title}</p>
+      <ul className="mt-1.5 space-y-1.5">
+        {items.map((item) => (
+          <li
+            key={item.code}
+            className={`rounded border px-2.5 py-2 text-xs leading-5 ${
+              tone === 'positive'
+                ? 'border-emerald-100 bg-emerald-50 text-emerald-800'
+                : item.severity === 'FAIL'
+                  ? 'border-red-100 bg-red-50 text-red-800'
+                  : 'border-amber-100 bg-amber-50 text-amber-800'
+            }`}
+          >
+            <strong>{item.title}</strong><br />{item.description}
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
 
 function SimulationResultCard({ simulation, size = 'default' }: { simulation: AiPerformanceSimulation; size?: AiChatMessageSize }) {
   const isLarge = size === 'large';
@@ -845,14 +1584,18 @@ function SimulationResultCard({ simulation, size = 'default' }: { simulation: Ai
   );
 
   return (
-    <section className={`${isLarge ? 'mt-4 rounded-xl p-5' : 'mt-2 rounded-lg p-3'} border border-blue-100 bg-blue-50`}>
+    <section
+      data-testid="ai-simulation-result"
+      data-response-surface="plain"
+      className={`${isLarge ? 'mt-4 px-1 py-2' : 'mt-2 px-1 py-2'}`}
+    >
       <div className={`${isLarge ? 'gap-3' : 'gap-2'} flex flex-wrap items-start justify-between`}>
         <div className="min-w-0">
-          <div className={`${isLarge ? 'gap-3 text-base' : 'gap-2 text-xs'} flex items-center font-black text-brand-blue`}>
+          <div className={`${isLarge ? 'gap-3 text-base text-blue-200' : 'gap-2 text-xs text-brand-blue'} flex items-center font-black`}>
             <BarChart3 size={isLarge ? 20 : 14} />
             성능 시뮬레이션
           </div>
-          <div className={`${isLarge ? 'mt-2 text-[20px] leading-8' : 'mt-1 text-sm'} break-keep font-black text-commerce-ink`}>
+          <div className={`${isLarge ? 'mt-2 text-[20px] leading-8 text-white' : 'mt-1 text-sm text-commerce-ink'} break-keep font-black`}>
             {simulation.currentPart.name} → {simulation.targetPart.name}
           </div>
         </div>
@@ -927,7 +1670,7 @@ function SimulationResultCard({ simulation, size = 'default' }: { simulation: Ai
           {simulation.warnings[0]}
         </div>
       ) : null}
-      <p className={`${isLarge ? 'mt-4 text-[15px] leading-7' : 'mt-3 text-[11px] leading-5'} break-keep font-bold text-slate-500`}>
+      <p className={`${isLarge ? 'mt-4 text-[15px] leading-7 text-white/65' : 'mt-3 text-[11px] leading-5 text-slate-500'} break-keep font-bold`}>
         {simulation.disclaimer
           ?? '본 수치는 내부 벤치마크 DB 기준 참고용 추정치입니다. 실제 성능은 게임 버전, 그래픽 옵션, 드라이버, 해상도, 냉각·전원 환경에 따라 달라질 수 있습니다.'}
       </p>
@@ -955,30 +1698,111 @@ function MiniBar({ value, max, className, size = 'default' }: { value?: number |
   );
 }
 
+// 변경 미리보기 → 성능 패널 비교 연동을 이미 보낸 빌드 — 채팅을 다시 열어 과거 카드가
+// 재마운트될 때 옛 비교가 다시 켜지지 않도록 빌드 단위로 1회만 발행한다.
+const perfCompareNotifiedBuildIds = new Set<string>();
+
+// 특이점에서 비교할 핵심 부품(성능 체감이 큰 순서)과, 짧은 설명에 쓸 한국어 명칭.
+const DISTINCTION_CATEGORY_ORDER: PartCategory[] = ['GPU', 'CPU', 'RAM', 'STORAGE'];
+const EMPHASIS_WORD: Partial<Record<PartCategory, string>> = {
+  GPU: '그래픽',
+  CPU: 'CPU',
+  RAM: '메모리',
+  STORAGE: '저장'
+};
+
+// 같은 응답의 다른 추천들과 비교해 이 조합만의 특이점을 "짧은 설명"으로 만든다(부품명 X — 잘리면 의미 없음).
+// 카테고리별 지출을 다른 조합 평균과 비교해 이 조합이 가장 힘준/줄인 부분 + 가격 위치를 한 구절로 표현한다.
+// 백엔드 summary가 모든 카드에 동일한 보일러플레이트라 프런트에서 실제 차이를 뽑아 대체한다.
+function deriveBuildDistinction(build: AiRecommendedBuild, builds: AiRecommendedBuild[]): string | null {
+  if (!builds || builds.length < 2) return null;
+  const others = builds.filter((candidate) => candidate.id !== build.id);
+  const prices = builds.map((candidate) => candidate.totalPrice);
+  const minPrice = Math.min(...prices);
+  const maxPrice = Math.max(...prices);
+  const isCheapest = build.totalPrice === minPrice && minPrice !== maxPrice;
+  const isPriciest = build.totalPrice === maxPrice && minPrice !== maxPrice;
+
+  const spendOf = (target: AiRecommendedBuild, category: PartCategory) => target.items
+    .filter((item) => item.category === category)
+    .reduce((sum, item) => sum + item.price * (item.quantity || 1), 0);
+
+  // 다른 조합 평균 대비 지출 차이가 가장 큰 카테고리 = 이 조합의 힘준/줄인 지점.
+  let emphasisCategory: PartCategory | null = null;
+  let emphasisDelta = 0;
+  for (const category of DISTINCTION_CATEGORY_ORDER) {
+    const mine = spendOf(build, category);
+    const avgOthers = others.reduce((sum, candidate) => sum + spendOf(candidate, category), 0) / others.length;
+    const delta = mine - avgOthers;
+    if (Math.abs(delta) > Math.abs(emphasisDelta) && Math.abs(delta) >= 30000) {
+      emphasisDelta = delta;
+      emphasisCategory = category;
+    }
+  }
+  const word = emphasisCategory ? EMPHASIS_WORD[emphasisCategory] : null;
+
+  if (isPriciest) return word && emphasisDelta > 0 ? `${word} 비중을 높인 고사양` : '성능을 우선한 구성';
+  if (isCheapest) return word && emphasisDelta < 0 ? `${word} 비중을 낮춘 가성비` : '가격을 아낀 구성';
+  return '성능·가격 균형';
+}
+
 function CompactBuildCard({
   build,
   onSelectBuild,
   applyingBuildId,
-  size = 'default'
+  size = 'default',
+  reveal = false,
+  distinction
 }: {
   build: AiRecommendedBuild;
   onSelectBuild: (build: AiRecommendedBuild) => void;
   applyingBuildId: string | null;
   size?: AiChatMessageSize;
+  reveal?: boolean;
+  distinction?: string | null;
 }) {
   // 변경 미리보기 카드는 전체 견적이 아니라 바뀐 부품만 보여준다(전체 8부품 나열은 무엇이 바뀌는지 흐린다).
   // 적용은 여전히 build 전체(items 전량)로 하므로 나머지 부품이 삭제되지 않는다.
   const isEditPreview = build.label === '변경 미리보기' && build.appliedPartCategories.length > 0;
   const changedItems = build.items.filter((item) => build.appliedPartCategories.includes(item.category));
+
+  // CPU/GPU 변경 미리보기가 그려지면 셀프견적 성능 패널의 교체 비교도 함께 켠다(이벤트 발행만 — 디자인 불변).
+  useEffect(() => {
+    if (!isEditPreview || perfCompareNotifiedBuildIds.has(build.id)) return;
+    const changed = changedItems.find((item) => (item.category === 'CPU' || item.category === 'GPU') && item.partId);
+    if (!changed) return;
+    perfCompareNotifiedBuildIds.add(build.id);
+    requestPerfCompare({
+      category: changed.category as 'CPU' | 'GPU',
+      partId: changed.partId,
+      name: changed.name,
+      price: changed.price
+    });
+  }, [build.id, isEditPreview, changedItems]);
   const primaryItems = isEditPreview && changedItems.length > 0 ? changedItems : build.items.slice(0, 5);
   const isLarge = size === 'large';
   // 이 카드가 적용 중이면 로딩 표시, 다른 카드가 적용 중이면 클릭이 조용히 무시되지 않도록 함께 비활성화한다.
   const isApplyingThis = applyingBuildId === build.id;
   const isApplyDisabled = Boolean(applyingBuildId);
 
+  // 카드 내부를 헤더 → 제목·특이사항·가격 → 담기 버튼 순서로 하나씩 채운다(강조).
+  const animateSections = reveal && !prefersReducedMotion();
+  let sectionIndex = 0;
+  const headerIdx = sectionIndex++;
+  const titleIdx = sectionIndex++;
+  const buttonIdx = sectionIndex++;
+  const visibleSections = useStepReveal(sectionIndex, animateSections, 280);
+  const sectionStyle = (idx: number): CSSProperties | undefined => (animateSections
+    ? {
+      opacity: idx < visibleSections ? 1 : 0,
+      transform: idx < visibleSections ? 'translateY(0)' : 'translateY(6px)',
+      transition: 'opacity 300ms ease-out, transform 300ms ease-out, color 150ms ease, background-color 150ms ease, border-color 150ms ease'
+    }
+    : undefined);
+
   return (
-    <article className={`${isLarge ? 'rounded-[22px] p-5' : 'rounded-2xl p-3'} border border-slate-200 bg-white shadow-sm`}>
-      <div className={`${isLarge ? 'gap-3' : 'gap-2'} flex flex-wrap items-center`}>
+    <article data-testid="ai-build-card" className={`${isLarge ? 'rounded-[22px] p-5' : 'rounded-2xl p-3'} border border-slate-200 bg-white shadow-sm`}>
+      <div style={sectionStyle(headerIdx)} className={`${isLarge ? 'gap-3' : 'gap-2'} flex flex-wrap items-center`}>
         <span className={`${isLarge ? 'px-3 py-1.5 text-[15px]' : 'px-2.5 py-1 text-[11px]'} rounded-full bg-brand-blue font-black text-white`}>{build.label}</span>
         {build.appliedPartCategories.map((category) => (
           <span key={category} className={`${isLarge ? 'px-3 py-1.5 text-[15px]' : 'px-2.5 py-1 text-[11px]'} rounded-full bg-emerald-50 font-black text-emerald-700`}>
@@ -986,10 +1810,10 @@ function CompactBuildCard({
           </span>
         ))}
       </div>
-      <div className={`${isLarge ? 'mt-4 gap-3' : 'mt-3 gap-2'} flex flex-col sm:flex-row sm:items-start sm:justify-between`}>
+      <div style={sectionStyle(titleIdx)} className={`${isLarge ? 'mt-4 gap-3' : 'mt-3 gap-2'} flex flex-col sm:flex-row sm:items-start sm:justify-between`}>
         <div className="min-w-0">
           <h3 className={`${isLarge ? 'text-[20px] leading-8' : 'text-sm leading-5'} font-black text-commerce-ink`}>{build.title}</h3>
-          <p className={`${isLarge ? 'mt-2 text-base leading-7' : 'mt-1 text-xs leading-5'} line-clamp-2 break-keep text-slate-500`}>{build.summary}</p>
+          <p className={`${isLarge ? 'mt-2 text-base leading-7' : 'mt-1 text-xs leading-5'} line-clamp-2 break-keep ${distinction ? 'font-bold text-slate-600' : 'text-slate-500'}`}>{distinction || build.summary}</p>
         </div>
         <div className="shrink-0 text-left sm:text-right">
           <div className={`${isLarge ? 'text-[22px] leading-8' : 'text-base'} font-black text-brand-blue`}>{build.totalPrice.toLocaleString()}원</div>
@@ -998,31 +1822,11 @@ function CompactBuildCard({
           </div>
         </div>
       </div>
-      {build.toolResults?.length ? (
-        <div className={`${isLarge ? 'mt-4 gap-2' : 'mt-3 gap-1.5'} flex flex-wrap`} aria-label="검증 결과">
-          {build.toolResults.map((result) => (
-            <span
-              key={`${result.tool}-${result.status}`}
-              title={result.summary}
-              className={`${isLarge ? 'px-3 py-1.5 text-[15px]' : 'px-2 py-1 text-[11px]'} rounded-full border font-black ${toolStatusChipClass(result.status)}`}
-            >
-              {toolDisplayLabel(result.tool)} {toolStatusLabel(result.status)}
-            </span>
-          ))}
-        </div>
-      ) : null}
-      <div className={`${isLarge ? 'mt-4 gap-2 text-base' : 'mt-3 gap-1.5 text-xs'} grid`}>
-        {primaryItems.map((item) => (
-          <div key={item.partId} className={`${isLarge ? 'grid-cols-[78px_minmax(0,1fr)] gap-3 rounded-xl px-4 py-2.5' : 'grid-cols-[56px_minmax(0,1fr)] gap-2 rounded-lg px-2.5 py-1.5'} grid bg-slate-50`}>
-            <span className="font-black text-brand-blue">{PART_CATEGORY_LABELS[item.category]}</span>
-            <span className="truncate font-semibold text-slate-700">{item.name}</span>
-          </div>
-        ))}
-      </div>
       <button
         type="button"
         onClick={() => onSelectBuild(build)}
         disabled={isApplyDisabled}
+        style={sectionStyle(buttonIdx)}
         className={`${isLarge ? 'mt-4 min-h-14 gap-3 px-4 text-base' : 'mt-3 min-h-10 gap-2 px-3 text-xs'} flex w-full items-center justify-center rounded-full border border-blue-200 bg-white font-black text-brand-blue transition hover:border-brand-blue hover:bg-blue-50 focus:outline-none focus:ring-4 focus:ring-blue-100 disabled:border-slate-200 disabled:bg-slate-50 disabled:text-slate-400`}
       >
         <ShoppingCart size={isLarge ? 21 : 15} />
@@ -1030,29 +1834,6 @@ function CompactBuildCard({
       </button>
     </article>
   );
-}
-
-function toolDisplayLabel(tool: AiToolResult['tool']) {
-  const labels: Record<string, string> = {
-    compatibility: '호환성',
-    power: '전력',
-    size: '규격',
-    performance: '성능',
-    price: '가격'
-  };
-  return labels[tool] ?? tool;
-}
-
-function toolStatusLabel(status: AiToolResult['status']) {
-  if (status === 'PASS') return '통과';
-  if (status === 'WARN') return '주의';
-  return '불가';
-}
-
-function toolStatusChipClass(status: AiToolResult['status']) {
-  if (status === 'PASS') return 'border-emerald-200 bg-emerald-50 text-emerald-700';
-  if (status === 'WARN') return 'border-amber-200 bg-amber-50 text-amber-700';
-  return 'border-red-200 bg-red-50 text-red-700';
 }
 
 function formatPlainNumber(value?: number | null) {

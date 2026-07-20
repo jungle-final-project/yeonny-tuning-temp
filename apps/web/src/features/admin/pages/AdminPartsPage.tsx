@@ -741,7 +741,7 @@ export function AdminPartsPage() {
     }
     const price = Number(manualPrice);
     if (!Number.isFinite(price) || price < 0) {
-      window.alert('대표 가격은 0 이상 숫자여야 합니다.');
+      window.alert('대표 가격은 0 이상의 숫자여야 합니다.');
       return;
     }
     if (window.confirm('대표 가격을 수동 보정하고 ADMIN_MANUAL 가격 이력을 남길까요?')) {
@@ -1320,7 +1320,7 @@ export function AdminPartsPage() {
       <div className="mt-5">
         <Panel title="가격 데이터 기준">
           <StateMessage type="info" title="운영 기준" body="대표 가격은 parts.price, 수동 보정 이력은 price_snapshots.source=ADMIN_MANUAL, 외부 구매처는 part_external_offers에 분리 저장됩니다." />
-          <Link to="/admin/price-jobs" className="mt-5 inline-block rounded bg-brand-blue px-4 py-3 text-center text-sm font-bold text-white">가격 Job 보기</Link>
+          <Link to="/admin/price-jobs" className="mt-5 inline-block rounded bg-brand-blue px-4 py-3 text-center text-sm font-bold text-white">가격 작업 보기</Link>
         </Panel>
       </div>
     </AdminShell>
