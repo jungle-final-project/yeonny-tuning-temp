@@ -65,6 +65,30 @@ class PcAgentDiagnosisAsRequestServiceTest {
     }
 
     @Test
+    void insufficientEvidenceKeepsAdminDecisionOpenWithoutRemoteRecommendation() {
+        StubJdbcTemplate jdbc = new StubJdbcTemplate();
+        StubBroker broker = eligibleBroker();
+        broker.result.result().put("diagnosisType", "INSUFFICIENT_EVIDENCE");
+        broker.result.result().put("remoteAsRecommended", false);
+
+        Map<String, Object> response = service(jdbc, broker).create(
+                PRINCIPAL,
+                validRequest(),
+                DIAGNOSIS_ID
+        );
+
+        assertThat(response).containsEntry("status", "OPEN");
+        assertThat(jdbc.lastInsertSql)
+                .contains("'REQUIRED',\n  NULL,")
+                .doesNotContain("'REMOTE_POSSIBLE'");
+        assertThat(String.valueOf(jdbc.lastInsertArgs[13]))
+                .contains("\"recommendedService\":\"DIAGNOSIS_ONLY\"")
+                .contains("\"recommendedDecision\":\"NEEDS_MORE_INFO\"")
+                .contains("\"requiresAdminApproval\":true")
+                .doesNotContain("REMOTE_POSSIBLE");
+    }
+
+    @Test
     void sameDiagnosisReturnsExistingTicketWithoutRecreatingIt() {
         StubJdbcTemplate jdbc = new StubJdbcTemplate();
         jdbc.existingRows = List.of(jdbc.ticketRow());

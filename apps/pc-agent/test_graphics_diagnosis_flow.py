@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import tempfile
 import unittest
+from dataclasses import replace
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
@@ -217,7 +218,7 @@ class GraphicsDiagnosisFlowTest(unittest.TestCase):
         session, _, snapshot, result, _, provider_calls, _ = self.run_flow(
             43,
             mode="DEMO",
-            symptom=GRAPHICS_CODE43_REMOTE_SUPPORT_SYMPTOM,
+            symptom="pc가 버벅여",
             snapshot_override=demo_snapshot,
         )
 
@@ -235,6 +236,41 @@ class GraphicsDiagnosisFlowTest(unittest.TestCase):
         self.assertIn("방문 점검 전환", " ".join(result.recommended_actions))
         self.assertNotIn("물리 고장으로 확정", result.title)
         self.assertNotEqual("PHYSICAL_INSPECTION", result.resolution_type)
+        symptom_evidence = next(
+            item for item in snapshot.task("symptom_correlation").evidence
+            if item.get("metricType") == "symptom_correlation"
+        )
+        self.assertEqual("MATCHED", symptom_evidence["status"])
+        self.assertIs(True, symptom_evidence["value"]["supported"])
+        self.assertEqual("pc가 버벅여", symptom_evidence["value"]["symptom"])
+        self.assertEqual(
+            GRAPHICS_CODE43_REMOTE_SUPPORT_SYMPTOM,
+            symptom_evidence["value"]["scenarioSymptom"],
+        )
+        problem_evidence = next(
+            item for item in result.evidence
+            if item.metric_type == "display_device_status" and item.code == 43
+        )
+        self.assertEqual("gpu", problem_evidence.component)
+        self.assertEqual("AVAILABLE", problem_evidence.availability)
+        self.assertEqual("DEVICE", problem_evidence.category)
+        self.assertEqual("DEVICE_REPORTED_PROBLEM", problem_evidence.status)
+        self.assertEqual("Intel(R) Arc(TM) A350M Graphics", problem_evidence.value["deviceName"])
+        self.assertEqual(43, problem_evidence.value["problemCode"])
+        self.assertEqual("OK", problem_evidence.value["problemCodeQueryStatus"])
+        self.assertTrue(any(
+            item.metric_type == "display_device_status"
+            and item.value.get("deviceName") == "Intel(R) Iris(R) Xe Graphics"
+            and item.value.get("problemCode") == 0
+            for item in result.evidence
+        ))
+        serialized_result = json.loads(json.dumps(result.to_dict(), ensure_ascii=False))
+        serialized_problem = next(
+            item for item in serialized_result["evidence"]
+            if item.get("metricType") == "display_device_status" and item.get("code") == 43
+        )
+        self.assertIsInstance(serialized_problem["code"], int)
+        self.assertIsInstance(serialized_problem["value"]["problemCode"], int)
 
         websocket_temporary = tempfile.TemporaryDirectory()
         self.addCleanup(websocket_temporary.cleanup)
@@ -267,6 +303,40 @@ class GraphicsDiagnosisFlowTest(unittest.TestCase):
             GRAPHICS_CODE43_REMOTE_SUPPORT_SCENARIO_ID,
             result_frames[-1]["detail"]["scenarioId"],
         )
+
+    def test_live_generic_symptom_does_not_use_demo_scenario_correlation(self) -> None:
+        _, _, snapshot, result, _, _, _ = self.run_flow(
+            43,
+            mode="LIVE",
+            symptom="pc가 버벅여",
+        )
+
+        symptom_evidence = next(
+            item for item in snapshot.task("symptom_correlation").evidence
+            if item.get("metricType") == "symptom_correlation"
+        )
+        self.assertEqual("UNSUPPORTED_SYMPTOM", symptom_evidence["status"])
+        self.assertIs(False, symptom_evidence["value"]["supported"])
+        self.assertNotIn("scenarioSymptom", symptom_evidence["value"])
+        self.assertEqual("INSUFFICIENT_EVIDENCE", result.diagnosis_type)
+
+    def test_graphics_rule_rejects_string_problem_code_contract(self) -> None:
+        _, metrics, snapshot, _, _, _, _ = self.run_flow(43)
+        tasks = []
+        for task in snapshot.tasks:
+            evidence = []
+            for item in task.evidence:
+                changed = dict(item)
+                if changed.get("metricType") == "display_device_status" and changed.get("code") == 43:
+                    changed["code"] = "43"
+                    changed["value"] = {**changed["value"], "problemCode": "43"}
+                evidence.append(changed)
+            tasks.append(replace(task, evidence=tuple(evidence)))
+
+        result = agent.DiagnosisRuleEngine().evaluate(metrics, replace(snapshot, tasks=tuple(tasks)))
+
+        self.assertEqual("INSUFFICIENT_EVIDENCE", result.diagnosis_type)
+        self.assertFalse(result.remote_as_recommended)
 
     def test_black_screen_and_code_22_complete_real_task_event_and_result_flow(self) -> None:
         session, metrics, snapshot, result, updates, provider_calls, result_cleared = self.run_flow(22)

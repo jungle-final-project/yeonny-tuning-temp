@@ -116,6 +116,7 @@ from pc_agent_ui_rendering import (
 from pc_agent_demo_scenarios import (
     DEMO_DATA_MODE,
     GRAPHICS_CODE43_REMOTE_SUPPORT_SCENARIO_ID,
+    GRAPHICS_CODE43_REMOTE_SUPPORT_SYMPTOM,
     demo_scenario_id,
 )
 from windows_graphics_diagnostics import (
@@ -890,7 +891,13 @@ def graphics_diagnosis_task_handlers(
         if not isinstance(session, DiagnosisSession) or session.request.diagnosis_id != run.diagnosis_id:
             return TaskOutcome("FAILED", error_code="SESSION_MISMATCH", failure_reason="현재 웹 진단 요청을 확인할 수 없습니다.")
         snapshot = windows_snapshot()
-        supported = is_supported_graphics_symptom(session.request.symptom)
+        scenario_symptom = (
+            GRAPHICS_CODE43_REMOTE_SUPPORT_SYMPTOM
+            if snapshot.data_mode == DEMO_DATA_MODE
+            and snapshot.scenario_id == GRAPHICS_CODE43_REMOTE_SUPPORT_SCENARIO_ID
+            else None
+        )
+        supported = is_supported_graphics_symptom(scenario_symptom or session.request.symptom)
         occurred_at = session.request.requested_at
         value = {
             "symptom": session.request.symptom,
@@ -900,6 +907,11 @@ def graphics_diagnosis_task_handlers(
             "graphicsEventOccurredAt": [event.occurred_at for event in snapshot.graphics_events],
             "components": sorted({event.component for event in snapshot.graphics_events} | ({"gpu"} if snapshot.devices else set())),
         }
+        if scenario_symptom:
+            value.update({
+                "scenarioId": snapshot.scenario_id,
+                "scenarioSymptom": scenario_symptom,
+            })
         evidence = ({
             "component": "system",
             "metricType": "symptom_correlation",

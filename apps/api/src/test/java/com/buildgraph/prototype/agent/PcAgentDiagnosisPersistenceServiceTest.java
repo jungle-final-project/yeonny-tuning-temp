@@ -5,6 +5,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyBoolean;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
@@ -101,12 +102,18 @@ class PcAgentDiagnosisPersistenceServiceTest {
                 eq("원격 점검을 권장합니다."),
                 eq("SOFTWARE_RECOVERY"),
                 eq(false),
-                anyString(),
+                argThat(json -> json.contains("\"metricType\":\"display_device_status\"")
+                        && json.contains("\"deviceName\":\"Intel(R) Arc(TM) A350M Graphics\"")
+                        && json.contains("\"code\":43")
+                        && json.contains("\"problemCode\":43")
+                        && json.contains("\"problemCodeQueryStatus\":\"OK\"")),
                 anyString(),
                 org.mockito.ArgumentMatchers.contains("드라이버 재설치"),
                 eq("DEMO"),
                 eq("GRAPHICS_CODE43_REMOTE_SUPPORT"),
-                org.mockito.ArgumentMatchers.contains("\"dataMode\":\"DEMO\"")
+                argThat(json -> json.contains("\"dataMode\":\"DEMO\"")
+                        && json.contains("\"scenarioId\":\"GRAPHICS_CODE43_REMOTE_SUPPORT\"")
+                        && json.contains("\"remoteAsRecommended\":true"))
         );
     }
 
@@ -148,7 +155,22 @@ class PcAgentDiagnosisPersistenceServiceTest {
         result.put("summary", "원격 점검을 권장합니다.");
         result.put("resolutionType", "SOFTWARE_RECOVERY");
         result.put("canAutoRecover", false);
-        result.put("evidence", List.of(Map.of("metricType", "PNP_PROBLEM_CODE", "value", 43)));
+        result.put("remoteAsRecommended", true);
+        result.put("evidence", List.of(
+                deviceEvidence("Intel(R) Iris(R) Xe Graphics", "PCI\\IRIS", 0, "OK"),
+                deviceEvidence("Intel(R) Arc(TM) A350M Graphics", "PCI\\ARC", 43, "DEVICE_REPORTED_PROBLEM"),
+                Map.ofEntries(
+                        Map.entry("taskId", "symptom_correlation"),
+                        Map.entry("component", "system"),
+                        Map.entry("metricType", "symptom_correlation"),
+                        Map.entry("value", Map.of("supported", true)),
+                        Map.entry("unit", ""),
+                        Map.entry("availability", "AVAILABLE"),
+                        Map.entry("status", "MATCHED"),
+                        Map.entry("source", "DiagnosisSession"),
+                        Map.entry("sampledAt", "2026-07-13T01:00:00Z")
+                )
+        ));
         result.put("findings", List.of(Map.of("code", "GRAPHICS_DEVICE_CODE_43")));
         result.put("recommendedActions", List.of("드라이버 재설치"));
         result.put("evaluatedAt", "2026-07-13T01:00:00Z");
@@ -157,5 +179,31 @@ class PcAgentDiagnosisPersistenceServiceTest {
             result.put("scenarioId", scenarioId);
         }
         return result;
+    }
+
+    private static Map<String, Object> deviceEvidence(
+            String deviceName,
+            String instanceId,
+            int problemCode,
+            String status
+    ) {
+        return Map.ofEntries(
+                Map.entry("taskId", "windows_display_devices"),
+                Map.entry("component", "gpu"),
+                Map.entry("metricType", "display_device_status"),
+                Map.entry("value", Map.of(
+                        "deviceName", deviceName,
+                        "instanceId", instanceId,
+                        "problemCode", problemCode,
+                        "problemCodeQueryStatus", "OK"
+                )),
+                Map.entry("unit", ""),
+                Map.entry("availability", "AVAILABLE"),
+                Map.entry("status", status),
+                Map.entry("source", "Win32_PnPEntity"),
+                Map.entry("sampledAt", "2026-07-13T01:00:00Z"),
+                Map.entry("category", "DEVICE"),
+                Map.entry("code", problemCode)
+        );
     }
 }
