@@ -1100,7 +1100,7 @@ paths:
           name: q
           schema:
             type: string
-          description: 부품명, 제조사, attributes JSON 검색어
+          description: 부품명, 제조사, attributes JSON 검색어(외부 쇼핑몰 상품ID는 검색 대상에서 제외)
         - in: query
           name: manufacturer
           schema:

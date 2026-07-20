@@ -342,6 +342,35 @@ class BuildChatIntentRouterTest {
         assertThat(balanceRequest.ambiguityReasons()).doesNotContain("RECIPIENT_CONTEXT");
     }
 
+    // 감사 재현(BG-AUDIT-004): "개발과 게임 균형 CPU"가 현재 견적 점수 설명으로 빠졌다.
+    // "균형"은 그 자체로 평가 요청이 아니다 — 무엇을 평가할지가 함께 있어야 점수 설명이다.
+    @Test
+    void balanceWordAloneIsNotAScoreExplanationSignal() {
+        for (String message : List.of("개발과 게임 균형 CPU", "밸런스 좋은 CPU 추천해줘", "균형 잡힌 램 골라줘")) {
+            BuildChatIntentDecision decision = router.decide(draftRequest(message), message);
+            assertThat(decision.intent()).as(message).isNotEqualTo(BuildChatIntent.EXPLAIN_BUILD_SCORE);
+        }
+    }
+
+    @Test
+    void balanceWordStaysAScoreExplanationSignalWhenItPointsAtTheCurrentBuild() {
+        for (String message : List.of(
+                "지금 견적 균형이 맞아?",
+                "이 견적 밸런스 어때?",
+                "종합점수 기준으로 균형이 안 맞는 부분 알려줘")) {
+            BuildChatIntentDecision decision = router.decide(draftRequest(message), message);
+            assertThat(decision.intent()).as(message).isEqualTo(BuildChatIntent.EXPLAIN_BUILD_SCORE);
+        }
+    }
+
+    // CPU와 GPU를 나란히 놓고 균형을 묻는 문장은 별도 신호(cpuGpuContrast)가 계속 잡는다.
+    @Test
+    void cpuGpuBalanceQuestionStillRoutesToScoreExplanation() {
+        String message = "CPU랑 GPU 균형이 왜 이래?";
+        BuildChatIntentDecision decision = router.decide(draftRequest(message), message);
+        assertThat(decision.intent()).isEqualTo(BuildChatIntent.EXPLAIN_BUILD_SCORE);
+    }
+
     private static Case c(String message, BuildChatIntent intent) {
         return new Case(message, Map.of("message", message), intent);
     }

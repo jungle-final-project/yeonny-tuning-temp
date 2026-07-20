@@ -58,6 +58,13 @@ spring:
       port: ${SPRING_DATA_REDIS_PORT:6379}
       username: ${SPRING_DATA_REDIS_USERNAME:}
       password: ${SPRING_DATA_REDIS_PASSWORD:}
+      # 캐시는 선택 기능이다 — 없으면 원래 계산 경로로 돌면 그만이다. 그런데 command timeout을
+      # 안 주면 Lettuce 기본값(60초)이 적용돼, Redis가 응답 없이 매달릴 때 캐시 조회 한 번이
+      # 60초를 잡아먹고 Build Chat 요청이 통째로 죽는다(2026-07-20 감사 실측 60,003ms).
+      # 같은 VPC 조회는 한 자릿수 ms라 250ms면 넉넉하고, 넘으면 캐시를 포기하는 편이 낫다.
+      timeout: ${SPRING_DATA_REDIS_TIMEOUT:250ms}
+      # 연결 수립은 별개로 넉넉히 준다 — 운영은 TLS(in-transit)라 핸드셰이크가 붙는다.
+      connect-timeout: ${SPRING_DATA_REDIS_CONNECT_TIMEOUT:2s}
       ssl:
         enabled: ${SPRING_DATA_REDIS_SSL_ENABLED:false}
   rabbitmq:

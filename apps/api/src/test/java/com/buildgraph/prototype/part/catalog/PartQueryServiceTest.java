@@ -225,6 +225,31 @@ class PartQueryServiceTest {
         verify(partDetailCachedLoader).detailsByPublicIds(List.of("gpu-basic"));
     }
 
+    // 검색어는 사람이 읽는 텍스트(제품명·제조사·스펙·검색 키워드)에만 걸려야 한다. 외부 쇼핑몰 상품ID는
+    // 11자리 숫자라 '5050' 같은 모델 토큰이 ID 한가운데에 걸려, 5050을 찾는 사람에게 RTX 5080이 나왔다.
+    @Test
+    void searchHaystackExcludesExternalShoppingProductKey() {
+        org.mockito.ArgumentCaptor<String> idsSql = org.mockito.ArgumentCaptor.forClass(String.class);
+        when(jdbcTemplate.queryForList(idsSql.capture(), eq(String.class), any(Object[].class)))
+                .thenReturn(List.of());
+        when(jdbcTemplate.queryForObject(anyString(), eq(Integer.class), any(Object[].class)))
+                .thenReturn(0);
+        when(partDetailCachedLoader.detailsByPublicIds(anyList())).thenReturn(List.of());
+
+        service.parts("GPU", "5050", null, null, null, null, 0, 20, "price_asc");
+
+        String sql = idsSql.getValue();
+        assertThat(sql).contains("p.attributes #- '{externalSources,naver,sourceProductKey}'");
+        // `#-`는 부분 함수다 — 해당 경로가 객체가 아닌 행이 하나만 있어도 목록과 total이 통째로 500이 된다.
+        // 타입을 먼저 물어보는 가드 없이 경로 삭제만 쓰면 안 된다.
+        assertThat(sql).contains("jsonb_typeof(p.attributes #> '{externalSources,naver}') = 'object'");
+        // attributes를 통째로 훑는 옛 술어가 남아 있으면 상품ID가 다시 건초더미에 들어온다.
+        assertThat(sql).doesNotContain("p.attributes::text");
+        // 나머지 검색 대상은 그대로다 — 제품명·제조사·스펙·검색 키워드는 계속 걸려야 한다.
+        assertThat(sql).contains("lower(p.name) LIKE");
+        assertThat(sql).contains("lower(coalesce(p.manufacturer, '')) LIKE");
+    }
+
     private static Map<String, Object> part(String publicId, long internalId, String category, String name, int price) {
         return MockData.map(
                 "internal_id", internalId,

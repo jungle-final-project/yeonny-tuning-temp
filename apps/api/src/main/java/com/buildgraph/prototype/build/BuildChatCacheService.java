@@ -196,7 +196,11 @@ public class BuildChatCacheService {
         // v67: 응답에 화면 이동(actions) 추가.
         // v68: 후보 2~4건이면 이동 대신 칩으로 되묻도록 응답 모양이 바뀜(#264) + 이동 해상 실패 시 문구 교정.
         // v69: 목록 대체 이동의 q가 리졸버 토큰으로 바뀜 + 이동 턴 문구 교정 + 되묻기 응답에 quickReplyKind 추가.
-        return "buildgraph:build-chat:v69:" + sha256(json);
+        // v70: 검색 토큰 우선순위 재편(두 글자 브랜드 허용·카테고리어 후순위)으로 같은 문장의 해상 결과가
+        //      달라진다("삼성 램"이 미해상 → 후보 칩). 카테고리 이동 턴 문구 교정도 같은 문장의 응답을 바꾼다.
+        // v71: "균형" 라우팅 교정("개발과 게임 균형 CPU"가 점수 설명 → 부품 추천)과 다중 부품 요청 처리
+        //      ("CPU와 GPU 추천"이 GPU 단일 → 견적 경로)로 같은 문장의 응답이 또 달라진다.
+        return "buildgraph:build-chat:v71:" + sha256(json);
     }
 
     private static Map<String, Object> uiContextFingerprint(Object value) {

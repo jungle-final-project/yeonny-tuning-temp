@@ -1391,6 +1391,20 @@ public class BuildChatService {
                 .orElse(null);
     }
 
+    private static final List<CategoryKeywords> RECOMMENDATION_TARGET_CATEGORIES = List.of(
+            new CategoryKeywords("MOTHERBOARD", List.of("메인보드", "마더보드", "motherboard", "보드")),
+            new CategoryKeywords("COOLER", List.of("쿨러", "cooler", "수랭", "공랭")),
+            new CategoryKeywords("STORAGE", List.of("m.2", "m2", "ssd", "스토리지", "저장장치", "nvme")),
+            new CategoryKeywords("PSU", List.of("파워", "psu", "전원공급", "전원 공급")),
+            new CategoryKeywords("CASE", List.of("케이스", "case")),
+            new CategoryKeywords("GPU", List.of("그래픽카드", "그래픽 카드", "글카", "gpu", "지피유", "vga", "rtx")),
+            new CategoryKeywords("CPU", List.of("cpu", "씨퓨", "씨피유", "프로세서", "라이젠", "ryzen", "인텔", "intel")),
+            new CategoryKeywords("RAM", List.of("ram", "램", "메모리", "memory"))
+    );
+
+    /** "CPU와 GPU", "램이랑 SSD"처럼 두 부품을 나란히 묶는 접속. */
+    private static final Pattern PART_CONJUNCTION = Pattern.compile("\\s*(와|과|랑|이랑|및|그리고|,|\\+|&)\\s*");
+
     /**
      * 관계형 추천 문장에서는 앞의 기준 부품이 아니라 추천 동사에 가장 가까운 카테고리가 대상이다.
      * 예: "현재 메인보드에 맞는 CPU 추천"은 CPU, "CPU에 맞는 메인보드 후보"는 메인보드.
@@ -1404,16 +1418,7 @@ public class BuildChatService {
         if (recommendationBoundary < 0) {
             return null;
         }
-        List<CategoryKeywords> categories = List.of(
-                new CategoryKeywords("MOTHERBOARD", List.of("메인보드", "마더보드", "motherboard", "보드")),
-                new CategoryKeywords("COOLER", List.of("쿨러", "cooler", "수랭", "공랭")),
-                new CategoryKeywords("STORAGE", List.of("m.2", "m2", "ssd", "스토리지", "저장장치", "nvme")),
-                new CategoryKeywords("PSU", List.of("파워", "psu", "전원공급", "전원 공급")),
-                new CategoryKeywords("CASE", List.of("케이스", "case")),
-                new CategoryKeywords("GPU", List.of("그래픽카드", "그래픽 카드", "글카", "gpu", "지피유", "vga", "rtx")),
-                new CategoryKeywords("CPU", List.of("cpu", "씨퓨", "씨피유", "프로세서", "라이젠", "ryzen", "인텔", "intel")),
-                new CategoryKeywords("RAM", List.of("ram", "램", "메모리", "memory"))
-        );
+        List<CategoryKeywords> categories = RECOMMENDATION_TARGET_CATEGORIES;
         String selected = null;
         int selectedIndex = -1;
         String prefix = normalized.substring(0, recommendationBoundary);
@@ -1427,6 +1432,71 @@ public class BuildChatService {
             }
         }
         return selected;
+    }
+
+    /**
+     * "최상급 CPU와 GPU로 추천"처럼 한 문장이 부품 두 개를 나란히 요구하는가.
+     *
+     * 단일 부품 추천 경로는 추천 동사에 가장 가까운 카테고리 하나만 고른다. 그 규칙은 관계형 문장
+     * ("메인보드에 맞는 CPU 추천")에서는 맞지만, 접속으로 묶인 문장에서는 앞 부품이 조용히 사라진다 —
+     * CPU와 GPU를 함께 달라고 했는데 GPU 후보 3개만 돌려주는 턴이 그렇게 만들어졌다.
+     * 그런 턴은 단일 부품으로 답할 수 없으므로 견적 경로에 넘긴다.
+     *
+     * 접속(와/과/랑/및/,)으로 실제로 이어져 있을 때만 참이다. 관계형 문장은 접속이 없어 걸리지 않는다.
+     */
+    static boolean requestsMultiplePartCategories(String message) {
+        String normalized = message == null ? "" : message.toLowerCase(Locale.ROOT);
+        int recommendationBoundary = firstKeywordIndex(
+                normalized,
+                List.of("추천", "후보", "골라", "어떤 게 좋", "어떤게 좋", "뭐가 좋", "뭐가좋")
+        );
+        String scope = recommendationBoundary < 0 ? normalized : normalized.substring(0, recommendationBoundary);
+        // 카테고리 이름이 등장한 위치를 모아 둔다 — 같은 카테고리의 여러 별칭은 한 번만 센다.
+        Map<Integer, String> hitsByIndex = new java.util.TreeMap<>();
+        for (CategoryKeywords category : RECOMMENDATION_TARGET_CATEGORIES) {
+            for (String keyword : category.keywords()) {
+                int index = scope.indexOf(keyword);
+                while (index >= 0) {
+                    hitsByIndex.putIfAbsent(index, category.category());
+                    index = scope.indexOf(keyword, index + 1);
+                }
+            }
+        }
+        if (hitsByIndex.size() < 2) {
+            return false;
+        }
+        List<Map.Entry<Integer, String>> hits = new ArrayList<>(hitsByIndex.entrySet());
+        for (int i = 0; i < hits.size() - 1; i += 1) {
+            Map.Entry<Integer, String> left = hits.get(i);
+            Map.Entry<Integer, String> right = hits.get(i + 1);
+            if (left.getValue().equals(right.getValue())) {
+                continue;
+            }
+            // 앞 카테고리 이름이 끝난 지점부터 뒤 카테고리 이름이 시작하는 지점 사이가 접속뿐인가.
+            int gapStart = left.getKey() + longestKeywordAt(scope, left.getKey(), left.getValue());
+            if (gapStart > right.getKey()) {
+                continue;
+            }
+            if (PART_CONJUNCTION.matcher(scope.substring(gapStart, right.getKey())).matches()) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private static int longestKeywordAt(String scope, int index, String category) {
+        int longest = 0;
+        for (CategoryKeywords candidate : RECOMMENDATION_TARGET_CATEGORIES) {
+            if (!candidate.category().equals(category)) {
+                continue;
+            }
+            for (String keyword : candidate.keywords()) {
+                if (scope.startsWith(keyword, index)) {
+                    longest = Math.max(longest, keyword.length());
+                }
+            }
+        }
+        return longest;
     }
 
     private static int firstKeywordIndex(String text, List<String> keywords) {
@@ -3797,7 +3867,9 @@ public class BuildChatService {
         String compact = normalizeCommand(message);
         if (category == null
                 || !isExplicitRecommendationRequest(message)
-                || isWholeBuildRecommendationContext(compact)) {
+                || isWholeBuildRecommendationContext(compact)
+                // 부품 두 개를 함께 요구한 턴은 단일 부품 후보로 답하면 한쪽 조건이 사라진다.
+                || requestsMultiplePartCategories(message)) {
             return Optional.empty();
         }
         BuildChatFeasibilityService.SpecConstraint constraint = mergedPartConstraint(Map.of(), message);

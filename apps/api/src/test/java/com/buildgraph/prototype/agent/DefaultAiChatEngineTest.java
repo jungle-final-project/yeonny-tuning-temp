@@ -2137,6 +2137,267 @@ class DefaultAiChatEngineTest {
         verifyNoJdbcWrites();
     }
 
+    // 실서버 재현: "삼성 램"이 통째로 미해상이 되어 "그런 상품이 없어요"가 나갔다. 검색 토큰에 세 글자
+    // 하한이 걸려 있어 '램'(1자)은 토큰에서 빠지고 '삼성'(2자)은 하한에 걸려, 쓸 토큰이 하나도 안 남았다.
+    // 한글 브랜드는 두 글자가 흔하다(삼성·인텔·조텍) — 두 글자도 받는다.
+    @Test
+    void llmRequiredPartDetailUsesTwoLetterKoreanBrandAsSearchTerm() {
+        stubBuildChatPlan(partDetailPlan("삼성 램 상세페이지로 이동할게요.", "RAM", "삼성 램"));
+        when(jdbcTemplate.queryForList(anyString(), eq("RAM"), eq("삼성"), eq("삼성"), eq("삼성")))
+                .thenReturn(List.of(
+                        Map.of(
+                                "id", "33333333-3333-4333-8333-333333333333",
+                                "category", "RAM",
+                                "name", "삼성전자 DDR5-5600 32GB",
+                                "manufacturer", "삼성전자"),
+                        Map.of(
+                                "id", "44444444-4444-4444-8444-444444444444",
+                                "category", "RAM",
+                                "name", "삼성전자 DDR5-4800 16GB",
+                                "manufacturer", "삼성전자")));
+
+        AiChatEngineResponse response = engine.respondLlmRequired(new AiChatEngineRequest(
+                "삼성 램 상세페이지로 이동해", "HOME", null, null, null, Map.of(), 1L));
+
+        assertThat(response.assistantMessage()).doesNotContain("찾을 수 있는 상품이 없어요");
+        assertThat(response.parsedContext().get("routeChoiceChips"))
+                .asInstanceOf(org.assertj.core.api.InstanceOfAssertFactories.list(String.class))
+                .containsExactly(
+                        "삼성전자 DDR5-5600 32GB 상세페이지로 이동해",
+                        "삼성전자 DDR5-4800 16GB 상세페이지로 이동해");
+        verifyNoJdbcWrites();
+    }
+
+    // '삼성 메모리'에서 '메모리'를 검색어로 고르면 삼성과 무관한 RAM이 통째로 나온다.
+    // 카테고리 이름은 이미 category=로 걸러졌으니, 무엇을 찾는지 말해 주는 토큰을 먼저 쓴다.
+    @Test
+    void llmRequiredPartDetailPrefersTheRealSearchTermOverACategoryNoun() {
+        stubBuildChatPlan(partDetailPlan("삼성 메모리 상세페이지로 이동할게요.", "RAM", "삼성 메모리"));
+        when(jdbcTemplate.queryForList(anyString(), eq("RAM"), eq("삼성"), eq("삼성"), eq("삼성")))
+                .thenReturn(List.of(
+                        Map.of(
+                                "id", "33333333-3333-4333-8333-333333333333",
+                                "category", "RAM",
+                                "name", "삼성전자 DDR5-5600 32GB",
+                                "manufacturer", "삼성전자"),
+                        Map.of(
+                                "id", "44444444-4444-4444-8444-444444444444",
+                                "category", "RAM",
+                                "name", "삼성전자 DDR5-4800 16GB",
+                                "manufacturer", "삼성전자")));
+
+        AiChatEngineResponse response = engine.respondLlmRequired(new AiChatEngineRequest(
+                "삼성 메모리 상세페이지로 이동해", "HOME", null, null, null, Map.of(), 1L));
+
+        assertThat(response.parsedContext().get("routeChoiceChips"))
+                .asInstanceOf(org.assertj.core.api.InstanceOfAssertFactories.list(String.class))
+                .hasSize(2);
+        verifyNoJdbcWrites();
+    }
+
+    // 머지 전 검수에서 잡힌 회귀: "최신 메인보드"는 '최신'(상품명에 없는 수식어)이 두 글자 후보로
+    // 먼저 뽑혀 0건으로 끝났다. 검색어 후보를 하나만 확정하면 그걸로 못 찾았을 때 되돌아갈 길이 없다 —
+    // 후보를 순서대로 물어 카테고리 이름까지 내려가야 종전처럼 목록으로 간다.
+    @Test
+    void llmRequiredPartDetailRetriesWithTheCategoryNounWhenTheFirstSearchTermFindsNothing() {
+        stubBuildChatPlan(partDetailPlan("최신 메인보드 상세페이지로 이동할게요.", "MOTHERBOARD", "최신 메인보드"));
+        when(jdbcTemplate.queryForList(anyString(), eq("MOTHERBOARD"), eq("최신"), eq("최신"), eq("최신")))
+                .thenReturn(List.of());
+        when(jdbcTemplate.queryForList(anyString(), eq("MOTHERBOARD"), eq("메인보드"), eq("메인보드"), eq("메인보드")))
+                .thenReturn(candidateRows("MOTHERBOARD", "메인보드", 6));
+
+        AiChatEngineResponse response = engine.respondLlmRequired(new AiChatEngineRequest(
+                "최신 메인보드 상세페이지로 이동해", "HOME", null, null, null, Map.of(), 1L));
+
+        assertThat(response.assistantMessage()).doesNotContain("찾을 수 있는 상품이 없어요");
+        assertThat(response.actions())
+                .filteredOn(action -> action.type() == AiChatActionType.OPEN_ROUTE)
+                .singleElement()
+                .satisfies(action -> assertThat(action.payload().get("route"))
+                        .isEqualTo("/self-quote?category=MOTHERBOARD"));
+        verifyNoJdbcWrites();
+    }
+
+    // 퇴행 가드: 카테고리 이름 하나뿐인 요청은 그걸로라도 찾아 목록으로 보낸다.
+    // 카테고리 이름을 검색어에서 통째로 빼면 '메인보드 보여줘'가 미해상으로 떨어져 종전 길이 막힌다.
+    @Test
+    void llmRequiredPartDetailStillFallsBackToACategoryNounWhenItIsTheOnlyToken() {
+        stubBuildChatPlan(partDetailPlan("메인보드 상세페이지로 이동할게요.", "MOTHERBOARD", "메인보드"));
+        when(jdbcTemplate.queryForList(anyString(), eq("MOTHERBOARD"), eq("메인보드"), eq("메인보드"), eq("메인보드")))
+                .thenReturn(candidateRows("MOTHERBOARD", "메인보드", 6));
+
+        AiChatEngineResponse response = engine.respondLlmRequired(new AiChatEngineRequest(
+                "메인보드 상세페이지로 이동해", "HOME", null, null, null, Map.of(), 1L));
+
+        assertThat(response.actions())
+                .filteredOn(action -> action.type() == AiChatActionType.OPEN_ROUTE)
+                .singleElement()
+                .satisfies(action -> assertThat(action.payload().get("route"))
+                        // q는 카테고리 이름이라 싣지 않는다 — 이미 category=로 거른 목록이 또 잘린다.
+                        .isEqualTo("/self-quote?category=MOTHERBOARD"));
+        verifyNoJdbcWrites();
+    }
+
+    private static String partDetailPlan(String assistantMessage, String category, String partQuery) {
+        return """
+                {
+                  "intent": "ASK_FOLLOW_UP",
+                  "assistantMessage": "%s",
+                  "selectedCategory": "%s",
+                  "parsedContext": {
+                    "budget": null,
+                    "usageTags": [],
+                    "resolution": null,
+                    "preferredVendors": [],
+                    "priority": null,
+                    "performanceTier": "STANDARD",
+                    "budgetPolicy": "UNSPECIFIED",
+                    "mustHave": [],
+                    "requiredGpuClasses": [],
+                    "requiredPartKeywords": [],
+                    "hardConstraintPolicy": "NONE",
+                    "confidence": {}
+                  },
+                  "draftEdit": {
+                    "operation": "NONE",
+                    "category": null,
+                    "priceDirection": "ANY",
+                    "targetMaxPrice": null,
+                    "targetQuantity": null,
+                    "reason": null
+                  },
+                  "routeIntent": {
+                    "shouldNavigate": true,
+                    "routeType": "PART_DETAIL",
+                    "category": "%s",
+                    "partQuery": "%s",
+                    "confidence": "HIGH",
+                    "reason": "사용자가 특정 상품 상세를 요청했습니다."
+                  }
+                }
+                """.formatted(assistantMessage, category, category, partQuery);
+    }
+
+    // 실서버 재현: "쿨러마스터 파워 상세페이지로 이동해"를 LLM이 PART_DETAIL이 아니라 CATEGORY로 분류하면
+    // 서버가 목록 폴백 표식을 찍지 않는다. 표식으로 문구 교정 여부를 판정하던 시절에는 교정이 통째로
+    // 건너뛰어져, "상세 페이지로 이동할게요"라고 말하고 파워 목록에 떨구는 턴이 그대로 나갔다.
+    @Test
+    void llmRequiredCategoryRouteStopsPromisingADetailPageItDoesNotOpen() {
+        stubBuildChatPlan("""
+                {
+                  "intent": "ASK_FOLLOW_UP",
+                  "assistantMessage": "파워서플라이 상세 페이지로 이동할게요.",
+                  "selectedCategory": null,
+                  "parsedContext": {
+                    "budget": null,
+                    "usageTags": [],
+                    "resolution": null,
+                    "preferredVendors": [],
+                    "priority": null,
+                    "performanceTier": "STANDARD",
+                    "budgetPolicy": "UNSPECIFIED",
+                    "mustHave": [],
+                    "requiredGpuClasses": [],
+                    "requiredPartKeywords": [],
+                    "hardConstraintPolicy": "NONE",
+                    "confidence": {}
+                  },
+                  "draftEdit": {
+                    "operation": "NONE",
+                    "category": null,
+                    "priceDirection": "ANY",
+                    "targetMaxPrice": null,
+                    "targetQuantity": null,
+                    "reason": null
+                  },
+                  "routeIntent": {
+                    "shouldNavigate": true,
+                    "routeType": "CATEGORY",
+                    "category": "PSU",
+                    "partQuery": "쿨러마스터 파워",
+                    "confidence": "HIGH",
+                    "reason": "사용자가 파워 카테고리를 요청했습니다."
+                  }
+                }
+                """);
+
+        AiChatEngineResponse response = engine.respondLlmRequired(new AiChatEngineRequest(
+                "쿨러마스터 파워 상세페이지로 이동해",
+                "HOME",
+                null,
+                null,
+                null,
+                Map.of(),
+                1L
+        ));
+
+        // 도착지는 그대로 카테고리 목록이다 — 고치는 것은 문구지 이동이 아니다.
+        assertThat(response.actions())
+                .filteredOn(action -> action.type() == AiChatActionType.OPEN_ROUTE)
+                .singleElement()
+                .satisfies(action -> assertThat(action.payload().get("route")).isEqualTo("/self-quote?category=PSU"));
+        assertThat(response.assistantMessage()).doesNotContain("상세 페이지로 이동");
+        assertThat(response.assistantMessage()).contains("목록");
+        // 후보를 세어 보지 않은 턴이므로 후보가 몇 개 있다고 단언하지 않는다.
+        assertThat(response.assistantMessage()).doesNotContain("후보 목록에서 확인");
+        verifyNoJdbcWrites();
+    }
+
+    // 반대편 경계: LLM이 처음부터 목록으로 안내했으면 그 문구를 서버가 갈아치우지 않는다.
+    @Test
+    void llmRequiredCategoryRouteKeepsAnHonestListMessageAsIs() {
+        stubBuildChatPlan("""
+                {
+                  "intent": "ASK_FOLLOW_UP",
+                  "assistantMessage": "쿨러마스터 파워 상품 목록으로 이동할게요.",
+                  "selectedCategory": null,
+                  "parsedContext": {
+                    "budget": null,
+                    "usageTags": [],
+                    "resolution": null,
+                    "preferredVendors": [],
+                    "priority": null,
+                    "performanceTier": "STANDARD",
+                    "budgetPolicy": "UNSPECIFIED",
+                    "mustHave": [],
+                    "requiredGpuClasses": [],
+                    "requiredPartKeywords": [],
+                    "hardConstraintPolicy": "NONE",
+                    "confidence": {}
+                  },
+                  "draftEdit": {
+                    "operation": "NONE",
+                    "category": null,
+                    "priceDirection": "ANY",
+                    "targetMaxPrice": null,
+                    "targetQuantity": null,
+                    "reason": null
+                  },
+                  "routeIntent": {
+                    "shouldNavigate": true,
+                    "routeType": "CATEGORY",
+                    "category": "PSU",
+                    "partQuery": "쿨러마스터 파워",
+                    "confidence": "HIGH",
+                    "reason": "사용자가 파워 카테고리를 요청했습니다."
+                  }
+                }
+                """);
+
+        AiChatEngineResponse response = engine.respondLlmRequired(new AiChatEngineRequest(
+                "쿨러마스터 파워 목록 보여줘",
+                "HOME",
+                null,
+                null,
+                null,
+                Map.of(),
+                1L
+        ));
+
+        assertThat(response.assistantMessage()).isEqualTo("쿨러마스터 파워 상품 목록으로 이동할게요.");
+        verifyNoJdbcWrites();
+    }
+
     @Test
     void llmRequiredNavigationThatResolvesNowhereStopsPromisingToNavigate() {
         // 실서버 재현: "커세어 상세페이지로 이동해줘"는 브랜드명뿐이라 상품도 카테고리도 특정되지 않는다.

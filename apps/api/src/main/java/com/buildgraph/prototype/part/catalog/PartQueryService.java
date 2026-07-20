@@ -672,11 +672,25 @@ public class PartQueryService {
             params.add(escapeLike(search.manufacturer()));
         }
         if (search.query() != null) {
+            // attributes를 통째로 훑되 외부 쇼핑몰 상품ID는 건초더미에서 뺀다. 그 값은 11자리 숫자라
+            // '5050' 같은 모델 토큰이 ID 한가운데(5(9505)024542)에 걸려, 5050을 검색한 사람에게
+            // RTX 5080이 나온다. 사람이 읽는 텍스트(제품명·제조사·스펙·검색 키워드)만 검색 대상이고
+            // 외부 시스템 식별자는 아니다. 다른 소스가 식별자를 추가하면 여기에 함께 빼 준다.
+            //
+            // jsonb_typeof 가드가 붙은 이유: `#-`는 부분 함수다. externalSources나 naver가 객체가
+            // 아니면("path element at position 2 is not an integer") 쿼리 자체가 에러로 죽어,
+            // 그 행 하나 때문에 검색 목록과 total이 통째로 500이 된다. `#>`는 반대로 관대해서
+            // 경로가 없거나 타입이 어긋나면 NULL만 돌려준다 — 그걸로 먼저 물어보고 지운다.
             clauses.add("""
                     (
                       lower(p.name) LIKE lower(concat('%', ?, '%')) ESCAPE '\\'
                       OR lower(coalesce(p.manufacturer, '')) LIKE lower(concat('%', ?, '%')) ESCAPE '\\'
-                      OR lower(coalesce(p.attributes::text, '')) LIKE lower(concat('%', ?, '%')) ESCAPE '\\'
+                      OR lower(coalesce((case
+                           when jsonb_typeof(p.attributes #> '{externalSources,naver}') = 'object'
+                             then p.attributes #- '{externalSources,naver,sourceProductKey}'
+                           else p.attributes
+                         end)::text, ''))
+                         LIKE lower(concat('%', ?, '%')) ESCAPE '\\'
                     )
                     """);
             String escapedQuery = escapeLike(search.query());

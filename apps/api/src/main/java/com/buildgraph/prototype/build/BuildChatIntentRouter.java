@@ -239,8 +239,14 @@ public class BuildChatIntentRouter {
                 "현재견적", "이견적", "담긴견적", "내견적", "지금견적", "현재구성", "이구성", "지금구성");
         boolean scoreSignal = containsAny(normalized,
                 "종합점수", "총점", "이점수", "점수가", "점수를", "점수왜", "점수설명", "점수낮", "점수높");
+        // "균형/밸런스"는 그 자체로 점수 설명 신호가 아니다 — "개발과 게임 균형 CPU"는 CPU 추천 요청이다.
+        // 이 낱말이 현재 견적 평가를 가리키려면 무엇을 평가할지("현재 견적"·"점수")가 함께 있어야 한다.
+        // 아래 cpuGpuContrast는 "CPU와 GPU 균형이 왜 안 맞아?"를 따로 잡으므로 여기서 빠져도 덮인다.
+        boolean balanceSignal = containsAny(normalized, "균형", "밸런스")
+                && (currentBuildSignal || scoreSignal);
         boolean weaknessSignal = containsAny(normalized,
-                "병목", "약점", "부족한부분", "아쉬운부분", "문제점", "균형", "밸런스");
+                "병목", "약점", "부족한부분", "아쉬운부분", "문제점")
+                || balanceSignal;
         boolean prioritySignal = containsAny(normalized,
                 "뭐부터업그레이드", "무엇부터업그레이드", "뭘먼저업그레이드", "업그레이드우선", "먼저바꿀");
         boolean cpuGpuContrast = containsAny(normalized, "cpu", "씨피유", "프로세서")

@@ -279,7 +279,11 @@ public class DefaultAiChatEngine implements AiChatEngine {
         if (routeIntent != null) {
             parsedContext.put("routeIntent", routeIntent.context());
             String correctedMessage = correctedRouteMessage(assistantMessage, routeIntent);
-            serverAuthoredRouteMessage = !Objects.equals(correctedMessage, assistantMessage);
+            // '서버가 도착지를 근거로 썼다'고 인정하는 건 후보를 실제로 세어 본 목록 폴백 턴뿐이다.
+            // 후보를 안 세어 본 턴(LLM이 CATEGORY로 분류)에서 이 깃발을 세우면 아래 빈-후보 가드를
+            // 밀어내, 후보가 0건인데도 그 사실을 알리지 못하게 된다. 문구는 고치되 가드는 살려 둔다.
+            serverAuthoredRouteMessage = !Objects.equals(correctedMessage, assistantMessage)
+                    && PART_DETAIL_LIST_FALLBACK.equals(routeIntent.reason());
             assistantMessage = correctedMessage;
         }
         if (!routePlan.choiceChips().isEmpty()) {
@@ -953,15 +957,27 @@ public class DefaultAiChatEngine implements AiChatEngine {
     }
 
     /**
-     * "상세페이지로 이동할게요"라고 답해 놓고 실제로는 상품을 하나로 특정하지 못해 후보 목록으로 보내는 경우,
-     * 문구가 약속한 화면과 실제 도착지가 어긋난다. 그 어긋남이 있을 때만 사실대로 다시 쓴다 —
+     * "상세페이지로 이동할게요"라고 답해 놓고 실제로는 목록 화면으로 보내는 경우, 문구가 약속한 화면과
+     * 실제 도착지가 어긋난다. 그 어긋남이 있을 때만 사실대로 다시 쓴다 —
      * LLM이 처음부터 "목록으로 이동"이라고 답했으면 손대지 않는다.
+     *
+     * 판정 기준은 '서버가 목록 폴백 표식을 남겼는가'가 아니라 **실제 도착지가 목록인가**다.
+     * LLM이 같은 요청을 routeType=CATEGORY로 분류하면 표식이 안 찍히는데, 그때도 도착지는 목록이라
+     * 표식으로 판정하면 "파워 상세 페이지로 이동할게요"라고 말하고 파워 목록에 떨구는 턴이 그대로 나간다.
      */
     private static String correctedRouteMessage(String assistantMessage, EngineRouteIntent routeIntent) {
-        if (!PART_DETAIL_LIST_FALLBACK.equals(routeIntent.reason()) || !promisesDetailPage(assistantMessage)) {
+        if (!isCategoryListRoute(routeIntent.route()) || !promisesDetailPage(assistantMessage)) {
             return assistantMessage;
         }
-        String category = text(routeIntent.context().get("category"));
+        // 카테고리는 컨텍스트가 아니라 route에서 되읽는다 — route는 화이트리스트 정규식을 이미 통과했고,
+        // 컨텍스트 값은 클라이언트가 보낸 selectedCategory가 검증 없이 반사될 수 있는 자리다.
+        String category = routeCategory(routeIntent.route());
+        if (!PART_DETAIL_LIST_FALLBACK.equals(routeIntent.reason())) {
+            // 서버가 후보를 세어 보지 않은 턴이다. 몇 개가 걸렸는지 모르면서 "후보 목록에서 확인해 주세요"라고
+            // 하면 없는 후보를 있다고 말하는 셈이라, 도착지만 바로잡고 후보 수는 말하지 않는다.
+            String listLabel = category == null ? "부품" : categoryLabel(category);
+            return listLabel + " 목록 화면으로 이동할게요. 특정 상품 상세를 보시려면 정확한 제품명을 알려주세요.";
+        }
         // route의 q= 값과 같은 정제를 거친 문구를 인용한다 — 도착한 화면의 검색어와 답변이 어긋나지 않게.
         String partQuery = text(PartRouteResolver.extractPartQuery(text(routeIntent.context().get("partQuery"))));
         String label = category == null ? "부품" : categoryLabel(category);
@@ -969,6 +985,16 @@ public class DefaultAiChatEngine implements AiChatEngine {
                 ? "찾으시는 상품을 하나로 특정하지 못했어요. "
                 : "'" + partQuery + "'에 정확히 맞는 상품을 하나로 특정하지 못했어요. ";
         return head + label + " 후보 목록에서 확인해 주세요.";
+    }
+
+    /**
+     * 도착지가 특정 카테고리의 부품 목록인가. 상품 상세(/parts/{id})는 약속과 도착지가 어긋나지 않고,
+     * 카테고리 없는 셀프견적(/self-quote)은 "무슨 목록"인지 말할 근거가 없어 둘 다 대상이 아니다.
+     * 후자를 포함하면 문구는 "파워 목록으로 이동할게요"라고 하고 버튼은 "셀프 견적 열기", 도착 화면은
+     * 카테고리 없는 셀프견적이 되어 셋이 서로 다른 곳을 가리킨다.
+     */
+    private static boolean isCategoryListRoute(String route) {
+        return route != null && route.startsWith("/self-quote?category=");
     }
 
     /** 이동하려 했으나 갈 곳을 해상하지 못했을 때, 이동을 약속하는 대신 사실대로 되묻는 문구. */
