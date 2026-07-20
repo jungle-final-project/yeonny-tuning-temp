@@ -132,6 +132,11 @@ export function AdminTicketDetailPage() {
     reviewMutation.mutate(action);
   }
 
+  async function requestRemoteSupportFromChat() {
+    setLastAction('APPROVE_REMOTE_SUPPORT');
+    await reviewMutation.mutateAsync('APPROVE_REMOTE_SUPPORT');
+  }
+
   function submitFeedback(event: FormEvent) {
     event.preventDefault();
     feedbackMutation.mutate();
@@ -162,17 +167,18 @@ export function AdminTicketDetailPage() {
     <AdminShell title="AS 티켓 상세">
       <div className="grid min-w-0 gap-5 min-[1000px]:grid-cols-[minmax(0,1fr)_420px]">
         <div data-testid="admin-as-ticket-overview" className="min-w-0 space-y-4">
+          <TicketIssueSpotlight ticket={ticket} />
           <Panel title="접수 정보" subtitle={ticket.id}>
-            <DataTable columns={['항목', '내용']} rows={receiptRows(ticket)} nowrapColumns={['항목']} />
+            <DataTable columns={['항목', '내용']} rows={receiptRows(ticket)} minWidth={0} nowrapColumns={['항목']} />
           </Panel>
           <Panel title="사용자 요청" subtitle="사용자가 접수한 증상과 요청 내용을 확인합니다.">
-            <DataTable columns={['항목', '내용']} rows={userRequestRows(ticket)} nowrapColumns={['항목']} />
+            <DataTable columns={['항목', '내용']} rows={userRequestRows(ticket)} minWidth={0} nowrapColumns={['항목']} />
           </Panel>
           <Panel title="Agent 진단" subtitle="PC Agent가 저장한 진단 결과를 그대로 표시합니다.">
-            <DataTable columns={['항목', '내용']} rows={agentDiagnosisRows(ticket)} nowrapColumns={['항목']} />
+            <DataTable columns={['항목', '내용']} rows={agentDiagnosisRows(ticket)} minWidth={0} nowrapColumns={['항목']} />
           </Panel>
           <Panel title="판단 근거" subtitle="수집된 근거와 진단 결과에 실제로 포함된 판단 자료입니다.">
-            <DataTable columns={['항목', '내용']} rows={evidenceRows(ticket)} nowrapColumns={['항목']} />
+            <DataTable columns={['항목', '내용']} rows={evidenceRows(ticket)} minWidth={0} nowrapColumns={['항목']} />
             <div className="mt-4 border-t border-slate-100 pt-4">
               <AgentLogSamplesToggle ticket={ticket} />
             </div>
@@ -183,11 +189,14 @@ export function AdminTicketDetailPage() {
         <div className="min-w-0 space-y-4">
           <AdminTicketSupportChat
             ticketId={ticketId}
-            remoteAction={remoteSupportApproved ? (
-              <a className="shrink-0 rounded border border-brand-blue px-2 py-1 text-xs font-bold text-brand-blue hover:bg-blue-50" href="#admin-ticket-remote-support">
-                {remoteSupportActionLabel(remoteSupportQuery.data?.status)}
-              </a>
-            ) : undefined}
+            remoteSupport={remoteSupportApproved || (!reviewCompleted && remoteApprovalAvailable) ? {
+              status: remoteSupportQuery.data?.status,
+              canRequest: remoteSupportApproved
+                ? !['CODE_READY', 'IN_PROGRESS', 'COMPLETED'].includes(remoteSupportQuery.data?.status ?? '')
+                : !reviewCompleted && remoteApprovalAvailable,
+              isPending: reviewMutation.isPending,
+              onRequest: requestRemoteSupportFromChat
+            } : undefined}
           />
           <div>
             <Panel title={reviewCompleted ? '처리 결과' : '관리자 검토'} subtitle={reviewCompleted ? '완료된 검토 결과입니다.' : '필요한 업무 행동만 선택해 처리합니다.'}>
@@ -218,7 +227,7 @@ export function AdminTicketDetailPage() {
                       원격 지원 승인
                     </button>
                   ) : (
-                    <p className="rounded bg-slate-50 px-3 py-2 text-xs font-semibold leading-5 text-slate-500">현재 Agent 권장 처리에서는 원격 지원 승인을 제공하지 않습니다.</p>
+                    <p className="rounded bg-slate-50 px-3 py-2 text-xs font-semibold leading-5 text-slate-500">지원 범위 밖 차단 사유가 있어 원격 지원으로 전환할 수 없습니다.</p>
                   )}
                 </div>
                 {reviewMutation.isSuccess ? <StateMessage type="success" title={reviewActionLabel(lastAction)} body="업무 상태가 일관되게 반영되었습니다." /> : null}
@@ -420,18 +429,38 @@ function adminRemoteSupportTitle(status?: string | null) {
   return '지원 코드 등록 대기';
 }
 
-function remoteSupportActionLabel(status?: string | null) {
-  if (status === 'WAITING_FOR_CODE') return '지원 코드 대기';
-  if (status === 'IN_PROGRESS') return '원격 지원 진행 중';
-  if (status === 'COMPLETED') return '원격 지원 완료';
-  return '원격 지원 연결';
-}
-
 function adminRemoteSupportDescription(status?: string | null) {
   if (status === 'CODE_READY') return '코드를 복사한 뒤 Chrome Remote Desktop에서 연결을 시도해 주세요.';
   if (status === 'IN_PROGRESS') return 'Chrome Remote Desktop에서 진행 중인 지원을 마친 뒤 완료를 기록해 주세요.';
   if (status === 'COMPLETED') return '원격지원 업무가 완료됐으며 코드 복사와 시작 기능은 비활성화되었습니다.';
   return '사용자가 일회용 지원 코드를 등록하기를 기다리고 있습니다.';
+}
+
+function TicketIssueSpotlight({ ticket }: { ticket: AdminAsTicket }) {
+  const headline = ticket.title ?? ticket.diagnosisTitle ?? firstLine(ticket.symptom);
+  const diagnosis = ticket.diagnosisSummary ?? ticket.description ?? ticket.detailDescription ?? ticket.symptom;
+  return (
+    <section data-testid="admin-ticket-issue-spotlight" className="overflow-hidden rounded-lg border border-slate-800 bg-slate-950 p-5 text-white shadow-sm">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div className="min-w-0">
+          <p className="text-xs font-black uppercase tracking-[0.18em] text-blue-300">문제 핵심</p>
+          <h2 className="mt-2 break-words text-xl font-black leading-8 sm:text-2xl">{headline}</h2>
+        </div>
+        {ticket.riskLevel ? <StatusBadge status={ticket.riskLevel} /> : null}
+      </div>
+      <p className="mt-3 break-words text-sm font-semibold leading-6 text-slate-200">{diagnosis}</p>
+      <div className="mt-4 grid gap-2 sm:grid-cols-2">
+        <div className="rounded-md border border-white/10 bg-white/5 p-3">
+          <p className="text-[11px] font-black uppercase tracking-wide text-slate-400">추정 원인</p>
+          <p className="mt-1 break-words text-sm font-extrabold leading-6 text-white">{primaryCauseLabel(ticket)}</p>
+        </div>
+        <div className="rounded-md border border-blue-400/30 bg-blue-400/10 p-3">
+          <p className="text-[11px] font-black uppercase tracking-wide text-blue-200">권장 처리</p>
+          <p className="mt-1 text-sm font-extrabold leading-6 text-white">{recommendedSupportLabel(ticket)}</p>
+        </div>
+      </div>
+    </section>
+  );
 }
 
 function receiptRows(ticket: AdminAsTicket) {
@@ -734,17 +763,34 @@ function isReviewCompleted(ticket: AdminAsTicket) {
 }
 
 function canApproveRemoteSupport(ticket: AdminAsTicket) {
-  if (ticket.supportDecision === 'REMOTE_POSSIBLE' || ticket.requestType === 'REMOTE_SUPPORT') {
-    return true;
-  }
-  const diagnosisResult = objectValue(ticket.diagnosisResult);
-  if (textValue(diagnosisResult?.resolutionType) === 'REMOTE_SUPPORT') {
-    return true;
-  }
   const routing = objectValue(ticket.supportRouting);
-  return textValue(routing?.recommendedService) === 'REMOTE_SUPPORT'
-    || textValue(routing?.recommendedDecision) === 'REMOTE_POSSIBLE'
-    || textValue(routing?.supportDecision) === 'REMOTE_POSSIBLE';
+  const blockingFactors = valueList(routing?.blockingFactors)
+    .map(textValue)
+    .filter((value): value is string => Boolean(value));
+  return !blockingFactors.some((factor) => [
+    'OUT_OF_SCOPE',
+    'UNSUPPORTED_SCOPE',
+    'OUT_OF_PC_SCOPE',
+    'DATA_RECOVERY_REQUIRED',
+    'UNSUPPORTED_SOFTWARE',
+    'PHYSICAL_DAMAGE_POLICY_REQUIRED'
+  ].includes(factor));
+}
+
+function primaryCauseLabel(ticket: AdminAsTicket) {
+  const diagnosisResult = objectValue(ticket.diagnosisResult);
+  const candidates = valueList(diagnosisResult?.suspectedCauses).length > 0
+    ? valueList(diagnosisResult?.suspectedCauses)
+    : ticket.causeCandidates;
+  const first = candidates[0];
+  const firstObject = objectValue(first);
+  return textValue(first)
+    ?? textValue(firstObject?.label)
+    ?? textValue(firstObject?.summary)
+    ?? textValue(firstObject?.reason)
+    ?? textValue(firstObject?.name)
+    ?? textValue(firstObject?.code)
+    ?? (first === undefined ? '진단된 원인 후보 없음' : compactValue(first));
 }
 
 function reviewActionLabel(action: ReviewAction | null) {
@@ -769,15 +815,42 @@ function structuredList(items: unknown[]) {
     return '-';
   }
   return (
-    <ul className="space-y-1.5">
-      {items.map((item, index) => (
-        <li key={`${textValue(item) ?? compactValue(item)}-${index}`} className="break-words text-sm leading-5 text-slate-700">
-          <span aria-hidden="true" className="mr-2 text-slate-400">•</span>
-          {textValue(item) ?? compactValue(item)}
-        </li>
-      ))}
+    <ul className="min-w-0 space-y-2" data-testid="structured-evidence-list">
+      {items.map((item, index) => {
+        const formatted = structuredJson(item);
+        return (
+          <li key={`${textValue(item) ?? compactValue(item)}-${index}`} className="min-w-0">
+            {formatted ? (
+              <pre className="max-h-56 max-w-full overflow-auto rounded-md border border-slate-700 bg-slate-950 p-3 text-xs leading-5 text-slate-100"><code>{formatted}</code></pre>
+            ) : (
+              <p className="break-words text-sm leading-6 text-slate-700">
+                <span aria-hidden="true" className="mr-2 text-slate-400">•</span>
+                {textValue(item) ?? compactValue(item)}
+              </p>
+            )}
+          </li>
+        );
+      })}
     </ul>
   );
+}
+
+function structuredJson(value: unknown) {
+  if (value && typeof value === 'object') {
+    return prettyJson(value);
+  }
+  if (typeof value !== 'string') {
+    return null;
+  }
+  const candidate = value.trim();
+  if (!(candidate.startsWith('{') || candidate.startsWith('['))) {
+    return null;
+  }
+  try {
+    return prettyJson(JSON.parse(candidate));
+  } catch {
+    return null;
+  }
 }
 
 function compactValue(value: unknown) {

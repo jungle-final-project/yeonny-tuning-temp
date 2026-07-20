@@ -718,9 +718,8 @@ class TicketQueryServiceTest {
     }
 
     @Test
-    void approveRemoteSupportUpdatesReviewDecisionAssignmentAndTimestampTogether() {
+    void approveRemoteSupportAllowsAdminToSwitchAnActionableTicketToRemoteTriage() {
         Map<String, Object> current = actionRow("OPEN", "REQUIRED", "VISIT_REQUIRED");
-        current.put("diagnosis_result", "{\"resolutionType\":\"REMOTE_SUPPORT\"}");
         when(jdbcTemplate.queryForList(contains("FOR UPDATE"), eq("ticket-public-id")))
                 .thenReturn(List.of(current));
         when(jdbcTemplate.queryForList(contains("LEFT JOIN agent_log_uploads"), eq("ticket-public-id")))
@@ -744,6 +743,18 @@ class TicketQueryServiceTest {
                 eq(1L),
                 eq(1L)
         );
+    }
+
+    @Test
+    void approveRemoteSupportRejectsTicketWithOutOfScopeBlockingFactor() {
+        Map<String, Object> current = actionRow("OPEN", "REQUIRED", "VISIT_REQUIRED");
+        current.put("support_routing", "{\"blockingFactors\":[\"PHYSICAL_DAMAGE_POLICY_REQUIRED\"]}");
+        when(jdbcTemplate.queryForList(contains("FOR UPDATE"), eq("ticket-public-id")))
+                .thenReturn(List.of(current));
+
+        assertThatThrownBy(() -> service.approveRemoteSupport("ticket-public-id", null, admin))
+                .isInstanceOf(ResponseStatusException.class)
+                .satisfies(exception -> assertThatStatus((ResponseStatusException) exception, HttpStatus.CONFLICT));
     }
 
     @Test

@@ -11,6 +11,7 @@ import { prepareSupportLogFile } from './logFileProcessing';
 import { createSupportTicket, getRemoteSupportState, getSupportDraft, getSupportTicket, issueAgentActivationToken, previewAgentLogRag, registerRemoteSupportAccessCode, requestPcAgentDiagnosis, requestRemoteSupport, submitSupportFeedback, uploadAgentLog } from './supportApi';
 import type { PcAgentDiagnosisResultDto } from './supportApi';
 import { getCurrentSupportChat } from './supportChatApi';
+import { SupportChatMessageContent } from './SupportChatMessageContent';
 import type { AsRagAnalysisDto, AsTicketDraftDto, AsTicketDto, CauseCandidate, RemoteSupportStateDto, SupportChatContact } from './types';
 import { diagnosisStatus, usePcAgentDiagnosisPolling } from './usePcAgentDiagnosisPolling';
 import type { PcAgentDiagnosisPollingState } from './usePcAgentDiagnosisPolling';
@@ -201,7 +202,7 @@ export function AsChatPage() {
                   <div key={item.id} className={`flex ${item.role === 'USER' ? 'justify-end' : 'justify-start'}`}>
                     <div className={`max-w-[88%] break-words rounded px-4 py-3 text-sm leading-6 shadow-sm sm:max-w-[72%] ${item.role === 'USER' ? 'bg-brand-blue text-white' : 'border border-slate-200 bg-white text-slate-800'}`}>
                       <div className="mb-1 text-[11px] font-bold opacity-75">{item.role === 'USER' ? '사용자' : 'AI 상담'}</div>
-                      <p className="whitespace-pre-wrap">{item.content}</p>
+                      <SupportChatMessageContent className="whitespace-pre-wrap" content={item.content} />
                     </div>
                   </div>
                 ))}

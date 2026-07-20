@@ -708,7 +708,7 @@ Support Chat Rooms 규칙:
 | `PATCH` | `/api/admin/as-tickets/{id}` | ADMIN | 4번 | `{ "status": "IN_PROGRESS", "assignedAdminId": "c6d75f0c-0f57-4d1c-a8b2-a4079dcd40fd", "adminNote": "확인 중" }` | `{ "id": "4aef8ef7-1dc7-45d1-bfc2-bb0cfdaf7f8a", "status": "IN_PROGRESS", "assignedAdminId": "c6d75f0c-0f57-4d1c-a8b2-a4079dcd40fd", "adminNote": "확인 중", "resolvedAt": null, "updatedAt": "2026-06-29T10:45:00Z" }` | `as_tickets`, `users`, `admin_audit_logs` |
 | `POST` | `/api/admin/as-tickets/{id}/assign-to-me` | ADMIN | 4번 | - | 현재 인증 관리자를 담당자로 배정하고 `OPEN→ASSIGNED`, `REQUIRED→IN_REVIEW`를 함께 적용한다. 동일 관리자 재호출은 멱등 처리하며 다른 관리자 담당 티켓은 `409`다. | `as_tickets`, `admin_audit_logs` |
 | `POST` | `/api/admin/as-tickets/{id}/request-more-info` | ADMIN | 4번 | `{ "adminNote": "재현 시각과 화면 녹화를 알려 주세요." }` | 현재 관리자를 배정하고 `status=IN_PROGRESS`, `reviewStatus=IN_REVIEW`, `supportDecision=NEEDS_MORE_INFO`와 요청 사유를 한 트랜잭션으로 저장한다. | `as_tickets`, `admin_audit_logs` |
-| `POST` | `/api/admin/as-tickets/{id}/approve-remote-support` | ADMIN | 4번 | `{ "adminNote": "원격 점검 승인" }` | 원격지원 권장 티켓을 현재 관리자에게 배정하고 `status=IN_PROGRESS`, `reviewStatus=APPROVED`, `supportDecision=REMOTE_POSSIBLE`, `reviewedAt`을 저장한 뒤 Chrome Remote Desktop 세션을 `WAITING_FOR_CODE`로 준비한다. 실제 연결이나 코드는 생성하지 않는다. | `as_tickets`, `remote_support_sessions`, `admin_audit_logs` |
+| `POST` | `/api/admin/as-tickets/{id}/approve-remote-support` | ADMIN | 4번 | `{ "adminNote": "원격 점검 승인" }` | 처리 가능한 지원 범위 안 티켓을 현재 관리자에게 배정하고 `status=IN_PROGRESS`, `reviewStatus=APPROVED`, `supportDecision=REMOTE_POSSIBLE`, `reviewedAt`을 저장한 뒤 Chrome Remote Desktop 세션을 `WAITING_FOR_CODE`로 준비한다. Agent가 방문을 권장했더라도 관리자가 상담 중 원격 선점검으로 전환할 수 있으며 실제 연결이나 코드는 생성하지 않는다. | `as_tickets`, `remote_support_sessions`, `admin_audit_logs` |
 | `GET` | `/api/admin/as-tickets/{id}/remote-support` | ADMIN | 4번 | - | 현재 담당 관리자에게만 `{ "status": "CODE_READY", "maskedAccessCode": "****** 1234", ... }`를 반환한다. 전체 코드는 포함하지 않는다. | `as_tickets`, `remote_support_sessions` |
 | `GET` | `/api/admin/as-tickets/{id}/remote-support/access-code` | ADMIN | 4번 | - | 담당 관리자가 복사 동작을 수행할 때만 `{ "accessCode": "123456789" }`를 반환한다. `CODE_READY` 또는 `IN_PROGRESS` 외 상태는 `409`다. | `as_tickets`, `remote_support_sessions` |
 | `POST` | `/api/admin/as-tickets/{id}/remote-support/start` | ADMIN | 4번 | - | 담당 관리자가 Chrome Remote Desktop 연결을 직접 확인한 뒤 `CODE_READY→IN_PROGRESS`와 시작 시각을 기록한다. 중복 시작은 시각을 변경하지 않는다. | `as_tickets`, `remote_support_sessions`, `admin_audit_logs` |
@@ -765,7 +765,7 @@ PC Agent 등록/인증 규칙:
 - `assign-to-me`, `request-more-info`, `approve-remote-support`는 요청 body로 담당자 ID를 받지 않고 인증된 ADMIN의 내부 ID를 사용한다.
 - 다른 관리자가 이미 배정된 티켓은 덮어쓰지 않고 `409`를 반환한다.
 - `RESOLVED`, `CLOSED`, `CANCELLED` 티켓과 이미 완료된 검토는 다시 승인하지 않는다.
-- 원격지원 승인은 기존 `supportDecision=REMOTE_POSSIBLE`, 지원 라우팅의 원격 권장 또는 PC Agent `diagnosisResult.resolutionType=REMOTE_SUPPORT` 중 하나가 확인될 때만 허용한다.
+- 원격지원 승인은 처리 가능한 미완료 티켓에서 관리자가 원격 선점검을 선택할 때 허용한다. 단, 지원 라우팅에 지원 범위 밖 차단 사유가 있거나 다른 관리자에게 배정된 티켓은 `409`를 반환한다.
 - 원격지원 승인만으로 `diagnosticAccuracy`를 변경하지 않는다.
 - 승인 시 Chrome Remote Desktop 세션은 `WAITING_FOR_CODE`가 되고, 사용자의 코드 등록·교체는 `CODE_READY`, 담당 관리자의 수동 시작은 `IN_PROGRESS`, 완료 처리는 `COMPLETED`로 전이한다.
 - 전체 지원 코드는 일반 사용자·관리자 티켓 목록 및 상세 DTO에 포함하지 않는다. 담당 관리자가 복사할 때만 별도 API로 조회하며, 완료·티켓 종료·삭제 시 저장 코드를 제거한다.

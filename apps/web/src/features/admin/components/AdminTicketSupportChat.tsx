@@ -1,6 +1,6 @@
-import { FormEvent, type ReactNode, useEffect, useRef, useState } from 'react';
+import { FormEvent, useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Send } from 'lucide-react';
+import { MonitorUp, Send } from 'lucide-react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Panel, StateMessage } from '../../../components/ui';
 import {
@@ -15,11 +15,23 @@ import { AdminChatBubble, connectionClass, socketStatusLabel, type SocketStatus 
 
 const DEFAULT_POLL_MS = 5000;
 const SOCKET_RECONNECT_DELAYS_MS = [1000, 2000, 5000, 10000];
+const REMOTE_SUPPORT_GUIDE_MESSAGE = [
+  'Chrome 원격 지원을 시작하겠습니다.',
+  '아래 페이지에서 일회용 지원 코드를 만든 뒤 AS 요청 상세 화면에 등록해 주세요.',
+  'https://remotedesktop.google.com/support'
+].join('\n');
+
+type RemoteSupportAction = {
+  status?: string | null;
+  canRequest: boolean;
+  isPending: boolean;
+  onRequest: () => Promise<void>;
+};
 
 // AS 티켓 상세에 박는 상담방 채팅(메시지 + 입력만). 방문 예약·상담방 삭제 같은 관리 기능은
 // /admin/support-chat-sessions가 담당하고, 여기서는 이 티켓의 대화 확인·답변 전송만 한다.
 // 실시간 방식은 상담방 관리 페이지와 동일: WebSocket 수신 + 재연결 사다리 + 폴링 폴백.
-export function AdminTicketSupportChat({ ticketId, remoteAction }: { ticketId: string; remoteAction?: ReactNode }) {
+export function AdminTicketSupportChat({ ticketId, remoteSupport }: { ticketId: string; remoteSupport?: RemoteSupportAction }) {
   const queryClient = useQueryClient();
   const socketRef = useRef<SupportChatSocket | null>(null);
   const messagesRef = useRef<HTMLDivElement | null>(null);
@@ -162,6 +174,23 @@ export function AdminTicketSupportChat({ ticketId, remoteAction }: { ticketId: s
     }
   });
 
+  const remoteInviteMutation = useMutation({
+    mutationFn: async () => {
+      if (!remoteSupport || !sessionId) return null;
+      await remoteSupport.onRequest();
+      return postAdminSupportChatMessage(sessionId, REMOTE_SUPPORT_GUIDE_MESSAGE);
+    },
+    onSuccess: (detail) => {
+      if (!detail) return;
+      forceScrollToBottomRef.current = true;
+      setSendError(null);
+      applyDetail(detail);
+    },
+    onError: (error) => {
+      setSendError(errorMessage(error));
+    }
+  });
+
   const contact = detailQuery.data?.contact ?? session ?? null;
   const messages: SupportChatMessage[] = detailQuery.data?.messages ?? [];
   const canSend = Boolean(sessionId && contact?.canSendMessage && message.trim() && !sendMutation.isPending);
@@ -193,7 +222,6 @@ export function AdminTicketSupportChat({ ticketId, remoteAction }: { ticketId: s
         subtitle="이 AS 티켓의 사용자 상담방입니다. 방문 예약과 상담방 삭제는 상담방 관리에서 처리합니다."
         action={(
           <div className="flex flex-wrap items-center justify-end gap-2">
-            {remoteAction}
             <Link className="shrink-0 text-xs font-bold text-brand-blue hover:underline" to="/admin/support-chat-sessions">상담방 관리로 이동</Link>
           </div>
         )}
@@ -264,11 +292,65 @@ export function AdminTicketSupportChat({ ticketId, remoteAction }: { ticketId: s
                 </div>
               )}
             </form>
+            {remoteSupport ? (
+              <div className="mt-4 rounded-lg border border-blue-200 bg-gradient-to-r from-blue-50 to-indigo-50 p-4 shadow-sm">
+                <div className="flex items-start gap-3">
+                  <span className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-brand-blue text-white shadow-sm">
+                    <MonitorUp aria-hidden="true" size={20} />
+                  </span>
+                  <div className="min-w-0 flex-1">
+                    <p className="text-sm font-black text-slate-950">Chrome 원격 지원</p>
+                    <p className="mt-1 text-xs font-semibold leading-5 text-slate-600">
+                      {remoteSupportStatusDescription(remoteSupport.status, remoteSupport.canRequest)}
+                    </p>
+                  </div>
+                </div>
+                {remoteSupport.status === 'CODE_READY' || remoteSupport.status === 'IN_PROGRESS' || remoteSupport.status === 'COMPLETED' ? (
+                  <a
+                    className="mt-3 inline-flex w-full items-center justify-center rounded-md border border-brand-blue bg-white px-4 py-2.5 text-sm font-black text-brand-blue hover:bg-blue-50"
+                    href="#admin-ticket-remote-support"
+                  >
+                    {remoteSupportActionLabel(remoteSupport.status)}
+                  </a>
+                ) : (
+                  <button
+                    type="button"
+                    disabled={!remoteSupport.canRequest || !sessionId || contact?.canSendMessage === false || remoteSupport.isPending || remoteInviteMutation.isPending}
+                    onClick={() => remoteInviteMutation.mutate()}
+                    className="mt-3 inline-flex w-full items-center justify-center rounded-md bg-brand-blue px-4 py-2.5 text-sm font-black text-white transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-slate-400"
+                  >
+                    {remoteInviteMutation.isPending || remoteSupport.isPending
+                      ? '원격 지원 준비 중...'
+                      : remoteSupport.status === 'WAITING_FOR_CODE'
+                        ? 'Chrome 원격지원 안내 다시 보내기'
+                        : 'Chrome 원격지원 안내 보내기'}
+                  </button>
+                )}
+                {remoteInviteMutation.isSuccess ? (
+                  <p className="mt-2 text-xs font-bold text-emerald-700">원격지원 승인과 사용자 안내 전송을 완료했습니다.</p>
+                ) : null}
+              </div>
+            ) : null}
           </>
         ) : null}
       </Panel>
     </div>
   );
+}
+
+function remoteSupportActionLabel(status?: string | null) {
+  if (status === 'CODE_READY') return '등록된 지원 코드 확인';
+  if (status === 'IN_PROGRESS') return '원격 지원 진행 상태 보기';
+  return '완료된 원격 지원 보기';
+}
+
+function remoteSupportStatusDescription(status: string | null | undefined, canRequest: boolean) {
+  if (status === 'WAITING_FOR_CODE') return '사용자가 일회용 지원 코드를 등록하기를 기다리고 있습니다. 필요하면 안내를 다시 보낼 수 있습니다.';
+  if (status === 'CODE_READY') return '사용자가 일회용 코드를 등록했습니다. 기존 원격 지원 패널에서 코드를 확인해 연결하세요.';
+  if (status === 'IN_PROGRESS') return 'Chrome Remote Desktop 원격 지원이 진행 중입니다.';
+  if (status === 'COMPLETED') return '원격 지원이 완료되어 코드 조회와 재시작이 차단되었습니다.';
+  if (!canRequest) return '완료됐거나 지원 범위를 벗어난 티켓에서는 원격 지원을 시작할 수 없습니다.';
+  return '기존 승인 절차로 티켓을 원격 지원으로 전환하고 사용자에게 일회용 코드 등록 안내를 바로 보냅니다.';
 }
 
 function findSession(list: SupportChatSessionListDto | undefined, ticketId: string) {

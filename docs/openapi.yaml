@@ -4212,7 +4212,7 @@ paths:
   /api/admin/as-tickets/{id}/approve-remote-support:
     post:
       summary: 관리자 AS 티켓 원격 지원 승인
-      description: 원격지원 권장 티켓의 담당자, 검토 승인, 지원 결정, 처리 상태와 검토 시각을 한 트랜잭션으로 확정하고 Chrome Remote Desktop 세션을 WAITING_FOR_CODE로 준비한다. 실제 원격 연결이나 코드는 생성하지 않는다.
+      description: 처리 가능한 지원 범위 안 티켓의 담당자, 검토 승인, 지원 결정, 처리 상태와 검토 시각을 한 트랜잭션으로 확정하고 Chrome Remote Desktop 세션을 WAITING_FOR_CODE로 준비한다. Agent가 방문을 권장했더라도 관리자가 상담 중 원격 선점검으로 전환할 수 있다. 다른 관리자 배정, 완료 티켓, 지원 범위 밖 차단 사유가 있으면 409를 반환하며 실제 원격 연결이나 코드는 생성하지 않는다.
       security:
         - bearerAuth: []
       parameters:

@@ -6,6 +6,7 @@ import { AdminShell, DataTable, Panel, StateMessage } from '../../../components/
 import { AUTH_CHANGED_EVENT, getCachedAuthUser } from '../../../lib/api';
 import { formatSeoulDateTime } from '../../../lib/dateTime';
 import { deleteAdminSupportChatSession, deleteAdminSupportChatVisitReservation, getAdminSupportChatSession, getAdminSupportChatSessions, openAdminSupportChatQueueSocket, openSupportChatSocket, postAdminSupportChatMessage, putAdminSupportChatVisitReservation, type SupportChatSocket } from '../../support/supportChatApi';
+import { SupportChatMessageContent } from '../../support/SupportChatMessageContent';
 import { KoreanStatusBadge } from '../adminDisplay';
 import type { SupportChatContact, SupportChatMessage, SupportChatSessionDto, SupportChatSessionListDto, VisitSupportReservation } from '../../support/types';
 
@@ -619,7 +620,7 @@ export function AdminChatBubble({ message }: { message: SupportChatMessage }) {
             {formatDateTime(message.createdAt)}
           </time>
         </div>
-        <p className="whitespace-pre-wrap break-words">{message.content}</p>
+        <SupportChatMessageContent className="whitespace-pre-wrap break-words" content={message.content} />
       </div>
     </div>
   );

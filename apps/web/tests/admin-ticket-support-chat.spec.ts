@@ -107,6 +107,31 @@ async function mockTicket(page: Page) {
   await page.route(`**/api/admin/as-tickets/${TICKET_ID}`, async (route) => {
     await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(adminTicket) });
   });
+  await page.route(`**/api/admin/as-tickets/${TICKET_ID}/approve-remote-support`, async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        ...adminTicket,
+        status: 'IN_PROGRESS',
+        reviewStatus: 'APPROVED',
+        supportDecision: 'REMOTE_POSSIBLE',
+        assignedAdminId: '00000000-0000-4000-8000-000000000001',
+        reviewedAt: '2026-07-06T10:11:00Z'
+      })
+    });
+  });
+  await page.route(`**/api/admin/as-tickets/${TICKET_ID}/remote-support`, async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        status: 'WAITING_FOR_CODE',
+        provider: 'CHROME_REMOTE_DESKTOP',
+        accessCodeRegistered: false
+      })
+    });
+  });
 }
 
 async function mockChat(
@@ -222,6 +247,28 @@ test('ticket detail embeds the support chat in place of the decision form and se
   await expect.poll(() => postedMessage).toEqual({ content: '파워 로그를 추가로 확인하겠습니다.' });
   await expect(chat.getByText('파워 로그를 추가로 확인하겠습니다.')).toBeVisible();
   await expect(chat.getByPlaceholder('관리자 답변을 입력하세요')).toHaveValue('');
+});
+
+test('starts the existing Chrome remote support flow from chat and sends the official link', async ({ page }) => {
+  let postedMessage: Record<string, unknown> | undefined;
+  await mockAdmin(page);
+  await mockTicket(page);
+  await mockChat(page, {
+    room: chatRoom(),
+    messages: baseMessages(),
+    onPostedMessage: (payload) => { postedMessage = payload as Record<string, unknown>; }
+  });
+
+  await page.goto(`/admin/as-tickets/${TICKET_ID}`);
+  const chat = page.getByTestId('admin-ticket-support-chat');
+  const remoteButton = chat.getByRole('button', { name: 'Chrome 원격지원 안내 보내기' });
+  await expect(remoteButton).toBeVisible();
+  await remoteButton.click();
+
+  await expect.poll(() => postedMessage?.content).toContain('https://remotedesktop.google.com/support');
+  await expect(chat.getByRole('link', { name: 'Chrome Remote Desktop 열기' })).toHaveAttribute('href', 'https://remotedesktop.google.com/support');
+  await expect(chat).toContainText('원격지원 승인과 사용자 안내 전송을 완료했습니다.');
+  await expect(page.getByTestId('admin-remote-support-panel')).toContainText('지원 코드 등록 대기');
 });
 
 test('shows an empty state when the ticket has no chat session yet', async ({ page }) => {

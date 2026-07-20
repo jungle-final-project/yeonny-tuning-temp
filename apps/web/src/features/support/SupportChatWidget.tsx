@@ -6,6 +6,7 @@ import { AUTH_CHANGED_EVENT, getCachedAuthUser, getToken } from '../../lib/api';
 import { AI_BUILD_ASSISTANT_CLOSE_EVENT, AI_BUILD_ASSISTANT_OPEN_EVENT, AI_BUILD_ASSISTANT_TOGGLE_EVENT, SUPPORT_CHAT_CLOSE_EVENT, SUPPORT_CHAT_OPEN_EVENT } from '../../lib/events';
 import { getCurrentUser } from '../auth/authApi';
 import { getCurrentSupportChat, getSupportChatSession, openSupportChatSocket, postSupportChatMessage, putSupportChatVisitReservation, type SupportChatSocket } from './supportChatApi';
+import { SupportChatMessageContent } from './SupportChatMessageContent';
 import type { SupportChatMessage, SupportChatSessionDto, VisitSupportReservation } from './types';
 
 const DEFAULT_POLL_MS = 5000;
@@ -561,7 +562,7 @@ function SupportChatBubble({ message }: { message: SupportChatMessage }) {
         <div className="mb-1 text-[11px] font-bold opacity-75">
           {isSystem ? '시스템' : isUser ? '나' : message.senderName ?? '상담원'}
         </div>
-        <p className="whitespace-pre-wrap break-words">{message.content}</p>
+        <SupportChatMessageContent className="whitespace-pre-wrap break-words" content={message.content} />
       </div>
     </div>
   );

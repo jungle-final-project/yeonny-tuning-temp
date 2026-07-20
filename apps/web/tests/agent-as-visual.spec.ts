@@ -468,8 +468,15 @@ test('captures Agent AS demo UI evidence and verifies admin decision reflection'
   await expect(page.getByRole('main')).toContainText('사용자 요청 지원');
   await expect(page.getByRole('main')).toContainText('우선 진단만 받기');
   await expect(page.getByRole('main')).toContainText('GPU 온도 상승 신호');
+  const issueSpotlight = page.getByTestId('admin-ticket-issue-spotlight');
+  await expect(issueSpotlight).toContainText('문제 핵심');
+  await expect(issueSpotlight).toContainText('GPU temperature spike during gaming');
+  await expect(issueSpotlight).toContainText('GPU thermal throttling');
+  await expect(issueSpotlight).toContainText('우선 진단만 받기');
 
   const ticketOverview = page.getByTestId('admin-as-ticket-overview');
+  const evidenceCode = ticketOverview.getByTestId('structured-evidence-list').filter({ hasText: 'GPU thermal throttling' }).locator('pre code');
+  await expect(evidenceCode).toContainText('"label": "GPU thermal throttling"');
   const overviewLabels = await ticketOverview.locator('tbody > tr > td:first-child').allTextContents();
   expect(overviewLabels.slice(0, 4)).toEqual(['상태', '접수 시각', '사용자', '담당자']);
   await expect(ticketOverview.getByRole('cell', { name: '상태', exact: true })).toHaveCSS('white-space', 'nowrap');

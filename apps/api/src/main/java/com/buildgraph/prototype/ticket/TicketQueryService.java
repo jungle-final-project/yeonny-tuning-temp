@@ -292,8 +292,8 @@ public class TicketQueryService {
 
         requireActionableTicket(current);
         requireReviewNotCompleted(current);
-        if (!isRemoteSupportCandidate(current) || hasOutOfScopeBlockingFactor(current)) {
-            throw new ResponseStatusException(HttpStatus.CONFLICT, "현재 진단 및 지원 결정에서는 원격 지원을 승인할 수 없습니다.");
+        if (hasOutOfScopeBlockingFactor(current)) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "지원 범위 밖 티켓은 원격 지원을 승인할 수 없습니다.");
         }
 
         String note = adminNote == null || adminNote.isBlank() ? null : adminNote.trim();
@@ -1069,27 +1069,6 @@ public class TicketQueryService {
         if (assignedAdminId != null && !assignedAdminId.equals(admin.internalId())) {
             throw new ResponseStatusException(HttpStatus.CONFLICT, "다른 관리자가 담당 중인 AS 티켓입니다.");
         }
-    }
-
-    private static boolean isRemoteSupportCandidate(Map<String, Object> current) {
-        if ("REMOTE_POSSIBLE".equals(DbValueMapper.string(current, "support_decision"))) {
-            return true;
-        }
-        if ("REMOTE_SUPPORT".equals(DbValueMapper.string(current, "request_type"))) {
-            return true;
-        }
-        Object diagnosisValue = DbValueMapper.json(current, "diagnosis_result", Map.of());
-        if (diagnosisValue instanceof Map<?, ?> diagnosis
-                && "REMOTE_SUPPORT".equals(stringOrNull(diagnosis.get("resolutionType")))) {
-            return true;
-        }
-        Object routingValue = DbValueMapper.json(current, "support_routing", Map.of());
-        if (!(routingValue instanceof Map<?, ?> routing)) {
-            return false;
-        }
-        return "REMOTE_SUPPORT".equals(stringOrNull(routing.get("recommendedService")))
-                || "REMOTE_POSSIBLE".equals(stringOrNull(routing.get("recommendedDecision")))
-                || "REMOTE_POSSIBLE".equals(stringOrNull(routing.get("supportDecision")));
     }
 
     private void auditTicketAction(
