@@ -21,6 +21,12 @@ const CANDIDATE_PAGE_SIZE = 20;
 // 추천이 목록에 없을 수 있지만, 열자마자 수십 번 요청하는 편보다 낫다.
 const AI_PICK_AUTOLOAD_PAGE_LIMIT = 10;
 
+type CandidatePanelView = 'AI_RECOMMENDATION' | 'CATALOG';
+
+function normalizeAiPickedPartIds(partIds: string[]): string[] {
+  return [...new Set(partIds.filter(Boolean))].slice(0, 3);
+}
+
 // 데스크톱 패널 초기 위치·크기: 보드 스테이지 좌측에 떠 있던 기존 배치를 재현하되,
 // 헤더 제거 리디자인 이후 스테이지 좌상단에 사는 플로팅 컨트롤(문제 칩·다음 가이드·AI 강조)을
 // 가리지 않도록 그 아래(+56px)에서 시작한다. 패널은 body 포탈이라 z-index로는 스트립을 못 이긴다.
@@ -87,22 +93,48 @@ export function SlotCandidatePanel({
   // 필터는 기본 접힘 — 제목 바로 아래 검색, 그 밑은 바로 후보가 되도록 자리를 비운다.
   const [filtersOpen, setFiltersOpen] = useState(false);
   // 챗봇이 이 카테고리로 추천해 열었다면 그 순서가 남아 있다. 슬롯을 바꾸면 다시 읽는다.
-  const [aiPickedPartIds, setAiPickedPartIds] = useState<string[]>(() => readAiPartPicks(slot.category));
-  // 챗봇에게 추천을 받아 열린 창이면 추천만 보여준다 — 전체 카탈로그를 함께 깔면
-  // "추천 창"이 아니라 "부품 목록 창"으로 읽힌다. 전체는 눌러야 펼쳐진다.
-  const [showAllCandidates, setShowAllCandidates] = useState(false);
+  const [aiPickedPartIds, setAiPickedPartIds] = useState<string[]>(() => normalizeAiPickedPartIds(readAiPartPicks(slot.category)));
+  // 추천 화면과 카탈로그 화면을 명시적으로 분리한다. 검색어 유무로 모드를 암묵적으로 바꾸면
+  // 검색어를 지웠을 때 오래된 추천이 되살아나고, 숨겨진 필터가 추천을 가릴 수 있다.
+  const [panelView, setPanelView] = useState<CandidatePanelView>(() => (
+    initialSearch.trim() || readAiPartPicks(slot.category).length === 0
+      ? 'CATALOG'
+      : 'AI_RECOMMENDATION'
+  ));
+  const panelViewRef = useRef(panelView);
+  panelViewRef.current = panelView;
+  const categoryRef = useRef(slot.category);
   useEffect(() => {
-    const sync = () => {
-      setAiPickedPartIds(readAiPartPicks(slot.category));
-      // 새 추천이 오면 다시 추천만 보여준다(전체를 펼쳐 둔 채였어도).
-      setShowAllCandidates(false);
+    // 추천 화면에서 다른 카테고리로 떠나면 이전 추천은 소비한다. 그렇지 않으면 같은 카테고리를
+    // 수동으로 다시 열었을 때 오래된 추천 화면이 되살아난다.
+    if (categoryRef.current !== slot.category && panelViewRef.current === 'AI_RECOMMENDATION') {
+      clearAiPartPicks();
+    }
+    categoryRef.current = slot.category;
+
+    const syncInitialState = () => {
+      const nextPartIds = normalizeAiPickedPartIds(readAiPartPicks(slot.category));
+      setAiPickedPartIds(nextPartIds);
+      setPanelView(initialSearch.trim() || nextPartIds.length === 0 ? 'CATALOG' : 'AI_RECOMMENDATION');
     };
-    sync();
+    const syncNewRecommendation = () => {
+      const nextPartIds = normalizeAiPickedPartIds(readAiPartPicks(slot.category));
+      setAiPickedPartIds(nextPartIds);
+      // 새 추천이 도착하면 기존 카탈로그 상태와 무관하게 추천 화면으로 전환한다.
+      setPanelView(nextPartIds.length > 0 ? 'AI_RECOMMENDATION' : 'CATALOG');
+    };
+    syncInitialState();
     // 패널이 이미 그 카테고리로 열려 있으면 챗봇이 다시 추천해도 주소가 안 바뀐다 —
     // 리마운트도 카테고리 변경도 없으므로 이 신호로만 새 순서를 안다.
-    window.addEventListener(AI_PART_PICKS_CHANGED_EVENT, sync);
-    return () => window.removeEventListener(AI_PART_PICKS_CHANGED_EVENT, sync);
-  }, [slot.category]);
+    window.addEventListener(AI_PART_PICKS_CHANGED_EVENT, syncNewRecommendation);
+    return () => window.removeEventListener(AI_PART_PICKS_CHANGED_EVENT, syncNewRecommendation);
+  }, [slot.category, initialSearch]);
+  const isAiRecommendationView = panelView === 'AI_RECOMMENDATION' && aiPickedPartIds.length > 0;
+  const consumeAiRecommendation = () => {
+    setAiPickedPartIds([]);
+    setPanelView('CATALOG');
+    clearAiPartPicks();
+  };
   const activeFilterCount = [manufacturer, minPriceInput, maxPriceInput].filter(Boolean).length
     + (onlyWishlist ? 1 : 0)
     + (hideFail ? 1 : 0);
@@ -206,17 +238,32 @@ export function SlotCandidatePanel({
 
   // RAM/SSD는 기존 구성에 후보를 더하는 ADD 기준, 단일 슬롯은 서버 기본 REPLACE 기준으로 평가한다.
   const compatibilityMode = isMulti ? 'ADD' as const : undefined;
-  const { data, isLoading, isError, isFetchingNextPage, hasNextPage, fetchNextPage } = useInfiniteQuery({
-    queryKey: ['parts', 'slot-candidates', slot.category, sort, q, manufacturer, minPrice, maxPrice, compatibilityMode ?? 'REPLACE'],
+  // AI 추천 화면은 카탈로그의 검색·가격·제조사·찜 필터와 완전히 격리한다. 컨트롤만 숨기고
+  // 같은 쿼리를 쓰면 사용자가 전에 걸어 둔 조건 때문에 추천 1~3개가 보이지 않을 수 있다.
+  const effectiveSort = isAiRecommendationView ? 'price_asc' : sort;
+  const effectiveQ = isAiRecommendationView ? '' : q;
+  const effectiveManufacturer = isAiRecommendationView ? '' : manufacturer;
+  const effectiveMinPrice = isAiRecommendationView ? undefined : minPrice;
+  const effectiveMaxPrice = isAiRecommendationView ? undefined : maxPrice;
+  const {
+    data,
+    isLoading,
+    isError,
+    isFetchingNextPage,
+    isFetchNextPageError,
+    hasNextPage,
+    fetchNextPage
+  } = useInfiniteQuery({
+    queryKey: ['parts', 'slot-candidates', slot.category, effectiveSort, effectiveQ, effectiveManufacturer, effectiveMinPrice, effectiveMaxPrice, compatibilityMode ?? 'REPLACE'],
     queryFn: ({ pageParam }) => listParts({
       category: slot.category,
       page: pageParam,
       size: CANDIDATE_PAGE_SIZE,
-      sort,
-      q: q || undefined,
-      manufacturer: manufacturer || undefined,
-      minPrice,
-      maxPrice,
+      sort: effectiveSort,
+      q: effectiveQ || undefined,
+      manufacturer: effectiveManufacturer || undefined,
+      minPrice: effectiveMinPrice,
+      maxPrice: effectiveMaxPrice,
       compatibilitySource: 'QUOTE_DRAFT_CURRENT',
       compatibilityMode
     }),
@@ -230,11 +277,12 @@ export function SlotCandidatePanel({
   // 추천이 다 실릴 때까지만 다음 장을 당겨 오고, 못 찾아도 정해진 장수에서 멈춘다(무한 당김 방지).
   const loadedPartIds = useMemo(() => new Set(pages.flatMap((page) => page.items.map((item) => item.id))), [pages]);
   useEffect(() => {
-    if (aiPickedPartIds.length === 0 || q) return;
+    if (!isAiRecommendationView) return;
+    if (isFetchNextPageError) return;
     if (!hasNextPage || isFetchingNextPage || pages.length >= AI_PICK_AUTOLOAD_PAGE_LIMIT) return;
     if (aiPickedPartIds.every((partId) => loadedPartIds.has(partId))) return;
     void fetchNextPage();
-  }, [aiPickedPartIds, q, hasNextPage, isFetchingNextPage, pages.length, loadedPartIds, fetchNextPage]);
+  }, [isAiRecommendationView, aiPickedPartIds, hasNextPage, isFetchingNextPage, isFetchNextPageError, pages.length, loadedPartIds, fetchNextPage]);
   // 멘토 피드백: 비호환 후보를 숨기지 않는다 — 전부 보여주되 FAIL은 회색 비활성 + 사유를 표시해
   // 사용자가 "왜 안 되는지"를 알 수 있게 한다.
   const visibleParts = useMemo(() => pages.flatMap((page) => page.items), [pages]);
@@ -258,52 +306,54 @@ export function SlotCandidatePanel({
   // 표시 필터(client-side): '장착 불가 숨기기'(FAIL 제외)와 '찜만 보기'(찜한 부품만).
   // 기본은 전부 표시(멘토 룰). 서버 검색·정렬·필터는 그대로 두고 렌더 단계에서만 좁힌다.
   const renderedParts = useMemo(() => {
+    if (isAiRecommendationView) {
+      const rank = new Map(aiPickedPartIds.map((partId, index) => [partId, index]));
+      return visibleParts
+        .filter((part) => rank.has(part.id))
+        .sort((left, right) => (rank.get(left.id) ?? 0) - (rank.get(right.id) ?? 0));
+    }
+
     let list = hideFail ? visibleParts.filter((part) => part.compatibility?.status !== 'FAIL') : visibleParts;
     if (onlyWishlist) {
       list = list.filter((part) => wishlist.has(part.id));
     }
-    // 챗봇이 골라 준 후보만 그 순서대로 보여준다. 사용자가 검색어를 치는 순간 그만둔다 —
-    // 그때부터는 "챗봇이 추천한 것"이 아니라 "내가 찾는 것"이 목록의 주인이다.
-    if (aiPickedPartIds.length > 0 && !q) {
-      const rank = new Map(aiPickedPartIds.map((partId, index) => [partId, index]));
-      if (!showAllCandidates) {
-        return list
-          .filter((part) => rank.has(part.id))
-          .sort((left, right) => (rank.get(left.id) ?? 0) - (rank.get(right.id) ?? 0));
-      }
-      // 전체를 펼쳐도 추천은 맨 위에 남긴다 — 어디로 갔는지 찾게 만들지 않는다.
-      list = [...list].sort((left, right) => {
-        const leftRank = rank.get(left.id) ?? Number.MAX_SAFE_INTEGER;
-        const rightRank = rank.get(right.id) ?? Number.MAX_SAFE_INTEGER;
-        return leftRank - rightRank;
-      });
-    }
     return list;
-  }, [visibleParts, hideFail, onlyWishlist, wishlist, aiPickedPartIds, q, showAllCandidates]);
+  }, [visibleParts, hideFail, onlyWishlist, wishlist, isAiRecommendationView, aiPickedPartIds]);
 
-  // 추천만 보여주는 중인가 — 헤더 문구와 '전체 목록' 버튼의 조건이자, 무한스크롤을 멈추는 조건이다.
-  const showingAiPicksOnly = aiPickedPartIds.length > 0 && !q && !showAllCandidates;
   // 추천 중 아직 목록에 실리지 않은 개수(다음 장을 당겨 오는 중이면 0으로 수렴한다).
-  const missingPickCount = showingAiPicksOnly
+  const missingPickCount = isAiRecommendationView
     ? aiPickedPartIds.filter((partId) => !loadedPartIds.has(partId)).length
     : 0;
+  const loadedPickCount = isAiRecommendationView ? aiPickedPartIds.length - missingPickCount : 0;
+  const aiPickLookupFinished = isAiRecommendationView
+    && missingPickCount > 0
+    && !isLoading
+    && !isFetchingNextPage
+    && (isFetchNextPageError || !hasNextPage || pages.length >= AI_PICK_AUTOLOAD_PAGE_LIMIT);
+
+  const closeCandidatePanel = () => {
+    if (isAiRecommendationView) {
+      consumeAiRecommendation();
+    }
+    onClose();
+  };
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key === 'Escape') {
-        onClose();
+        closeCandidatePanel();
       }
     };
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
-  }, [onClose]);
+  }, [isAiRecommendationView, onClose]);
 
   const sentinelRef = useRef<HTMLDivElement | null>(null);
   useEffect(() => {
     const sentinel = sentinelRef.current;
     // 추천만 보여주는 동안은 목록이 짧아 센티넬이 늘 보인다 — 그대로 두면 화면에 뜨지도 않을
     // 전체 카탈로그를 뒤에서 계속 당겨 온다. 추천을 찾는 데 필요한 만큼은 위 이펙트가 당긴다.
-    if (!sentinel || !hasNextPage || showingAiPicksOnly) {
+    if (!sentinel || !hasNextPage || isAiRecommendationView || isFetchNextPageError) {
       return;
     }
     const observer = new IntersectionObserver((entries) => {
@@ -313,12 +363,16 @@ export function SlotCandidatePanel({
     });
     observer.observe(sentinel);
     return () => observer.disconnect();
-  }, [hasNextPage, isFetchingNextPage, fetchNextPage, showingAiPicksOnly]);
+  }, [hasNextPage, isFetchingNextPage, isFetchNextPageError, fetchNextPage, isAiRecommendationView]);
 
   const commitPart = async (part: PartRow) => {
     setCommitError(null);
     try {
       await onAddPart(part);
+      if (isAiRecommendationView) {
+        // 현재 부모는 적용 성공 후 패널을 닫지만, 저장소 소비는 그 구현에 의존하지 않는다.
+        clearAiPartPicks();
+      }
     } catch {
       setCommitError('부품을 견적에 반영하지 못했습니다. 잠시 후 다시 시도해 주세요.');
     }
@@ -326,13 +380,14 @@ export function SlotCandidatePanel({
 
   const panelContent = (
     <>
-      <div aria-hidden="true" onClick={onClose} className="fixed inset-0 z-30 bg-slate-900/40 lg:hidden" />
+      <div aria-hidden="true" onClick={closeCandidatePanel} className="fixed inset-0 z-30 bg-slate-900/40 lg:hidden" />
       <section
         ref={panelRef}
         data-testid="slot-candidate-panel"
         data-placement={placement}
         role="dialog"
-        aria-label={`${slot.label} 부품 목록`}
+        aria-label={isAiRecommendationView ? `AI 추천 ${slot.label}` : `${slot.label} 부품 목록`}
+        data-view={panelView}
         style={isDesktop
           ? {
               // 사용자가 맞춰 둔 크기가 있으면 그걸 쓴다(화면 밖으로 커지는 건 max-w/h 클래스가 막는다).
@@ -350,12 +405,29 @@ export function SlotCandidatePanel({
         onDoubleClick={resetPanelPlacement}
         className={`slot-candidate-panel__header flex items-start justify-between gap-3 border-b border-commerce-line px-4 py-3 ${isDragging ? 'lg:cursor-grabbing' : 'lg:cursor-grab'} select-none lg:touch-none`}
       >
-        {/* 제목 아래에는 아무것도 두지 않는다 — 바로 검색이 오도록 비워 후보 목록을 위로 끌어올린다. */}
-        <div className="min-w-0">
-          <h2 className="text-base font-black text-commerce-ink">{slot.label} 부품 목록</h2>
+        <div className="min-w-0 flex-1">
+          <h2 className="text-base font-black text-commerce-ink">
+            {isAiRecommendationView ? `AI 추천 ${slot.label}` : `${slot.label} 부품 목록`}
+          </h2>
+          {isAiRecommendationView ? (
+            <p className="mt-0.5 text-[11px] font-bold text-slate-500">
+              현재 견적 기준 추천 {aiPickedPartIds.length}개
+            </p>
+          ) : null}
         </div>
-        <div className="flex items-center gap-2">
-          <label className="flex items-center rounded-md border border-commerce-line bg-white px-2 py-1">
+        <div className="flex shrink-0 items-center gap-2">
+          {isAiRecommendationView ? (
+            <button
+              type="button"
+              data-testid="candidate-show-catalog"
+              onClick={consumeAiRecommendation}
+              className="whitespace-nowrap rounded-md border border-commerce-line bg-white px-2.5 py-1.5 text-xs font-black text-slate-700 transition hover:border-commerce-ink hover:text-commerce-ink"
+            >
+              전체 {slot.label} 보기
+            </button>
+          ) : (
+          <>
+            <label className="flex items-center rounded-md border border-commerce-line bg-white px-2 py-1">
             <span className="sr-only">후보 정렬 기준</span>
             <select
               aria-label="후보 정렬 기준"
@@ -376,9 +448,9 @@ export function SlotCandidatePanel({
               <option value="price_desc">가격 높은순</option>
               <option value="name">이름순</option>
             </select>
-          </label>
+            </label>
           {/* 필터는 정렬 옆에 둔다 — 접혀 있을 때 줄 하나를 통째로 쓰던 걸 없애 후보를 위로 끌어올린다. */}
-          <button
+            <button
             type="button"
             data-testid="candidate-filters-toggle"
             aria-expanded={filtersOpen}
@@ -391,11 +463,13 @@ export function SlotCandidatePanel({
             {activeFilterCount > 0 ? (
               <span data-testid="candidate-filters-active-count" className="rounded-full bg-brand-blue px-1.5 text-[10px] font-black text-white">{activeFilterCount}</span>
             ) : null}
-          </button>
+            </button>
+          </>
+          )}
           <button
             type="button"
             aria-label="후보 패널 닫기"
-            onClick={onClose}
+            onClick={closeCandidatePanel}
             className="grid h-8 w-8 place-items-center rounded-md border border-commerce-line bg-white text-slate-600 hover:border-commerce-ink hover:text-commerce-ink"
           >
             <X size={15} />
@@ -404,6 +478,7 @@ export function SlotCandidatePanel({
       </div>
 
       {/* 검색: 이름·제조사로 후보를 좁힌다(디바운스 300ms, 호환 검사·정렬은 그대로 유지). */}
+      {!isAiRecommendationView ? (
       <div data-testid="candidate-panel-search" className="slot-candidate-panel__search shrink-0 border-b border-commerce-line px-4 py-2.5">
         <div className="relative">
           <Search size={14} className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400" />
@@ -429,12 +504,13 @@ export function SlotCandidatePanel({
           ) : null}
         </div>
       </div>
+      ) : null}
 
       {/* 필터: 제조사·가격대(기존 GET /api/parts 파라미터 재사용) + 장착 불가 숨기기(client-side, 기본 꺼짐).
           기본 접힘 — 대부분은 검색과 목록만 쓰므로, 펼쳐 두면 후보가 그만큼 아래로 밀린다.
           걸어 둔 필터가 있으면 접힌 상태에서도 개수를 배지로 보여 준다(숨겨진 필터가 결과를 줄이는 것을 모르면 안 된다). */}
       {/* 토글 버튼은 헤더의 정렬 옆으로 옮겼다 — 접혀 있으면 이 행 자체가 사라진다. */}
-      {filtersOpen ? (
+      {!isAiRecommendationView && filtersOpen ? (
       <div data-testid="candidate-panel-filters" className="slot-candidate-panel__filters shrink-0 border-b border-commerce-line px-4 py-2.5">
         <div
           id="candidate-filter-controls"
@@ -499,7 +575,18 @@ export function SlotCandidatePanel({
       ) : null}
 
       {/* 담은 부품은 후보 피드와 독립된 관리 행으로 유지한다. RAM/SSD 수량과 제거를 여기서 바로 조작한다. */}
-      {draftItems.length > 0 ? (
+      {isAiRecommendationView && draftItems.length > 0 ? (
+        <div data-testid="candidate-ai-current-part" className="shrink-0 border-b border-commerce-line bg-slate-50 px-4 py-2.5 text-xs text-slate-600">
+          {isMulti ? (
+            <span><strong className="font-black text-commerce-ink">현재 {slot.label}</strong>: {draftItems.length}종 · 총 {draftItems.reduce((sum, item) => sum + item.quantity, 0)}개</span>
+          ) : (
+            <div className="flex min-w-0 items-center gap-1.5">
+              <strong className="shrink-0 font-black text-commerce-ink">현재 {slot.label}:</strong>
+              <span className="truncate font-bold" title={draftItems[0].name}>{draftItems[0].name}</span>
+            </div>
+          )}
+        </div>
+      ) : !isAiRecommendationView && draftItems.length > 0 ? (
         <div data-testid="candidate-panel-selected" className="slot-candidate-panel__selected shrink-0 border-b border-commerce-line px-4 py-3">
           <div className="slot-candidate-panel__selected-label mb-1.5 text-[11px] font-black text-slate-500">담은 {slot.label} {draftItems.length}개</div>
           <div className="slot-candidate-panel__selected-items space-y-1.5">
@@ -535,34 +622,34 @@ export function SlotCandidatePanel({
         </div>
       ) : null}
 
-      {/* 챗봇에게 추천을 받아 열린 창은 추천만 보여준다 — 전체 카탈로그가 함께 깔리면
-          "추천 창"이 아니라 "부품 목록 창"으로 읽힌다. 전체는 눌러야 펼쳐진다. */}
-      {aiPickedPartIds.length > 0 && !q ? (
-        <div data-testid="candidate-ai-picks-banner" className="shrink-0 border-b border-commerce-line bg-blue-50/60 px-4 py-2.5">
-          <div className="flex items-center justify-between gap-2">
-            <div className="min-w-0 text-xs font-black text-brand-blue">
-              챗봇이 고른 {slot.label} 추천 {aiPickedPartIds.length}개
-              {missingPickCount > 0 ? <span className="ml-1 font-bold text-slate-500">· 불러오는 중…</span> : null}
-            </div>
-            <button
-              type="button"
-              data-testid="candidate-toggle-all"
-              onClick={() => setShowAllCandidates((open) => !open)}
-              className="shrink-0 rounded-md border border-commerce-line bg-white px-2 py-1 text-xs font-bold text-slate-600 transition hover:border-commerce-ink hover:text-commerce-ink"
-            >
-              {showAllCandidates ? '추천만 보기' : `전체 ${slot.label} 목록 보기`}
-            </button>
-          </div>
-        </div>
-      ) : null}
-
       {/* 후보 목록만 스크롤하고 보드 자체의 크기에는 영향을 주지 않는다. */}
-      <div data-testid="slot-candidate-list" className="slot-candidate-list min-h-0 flex-1 overflow-y-auto p-4">
+      <div
+        data-testid="slot-candidate-list"
+        aria-busy={isAiRecommendationView && missingPickCount > 0 && !aiPickLookupFinished}
+        className="slot-candidate-list min-h-0 flex-1 overflow-y-auto p-4"
+      >
         {isLoading ? (
           <div className="rounded-md border border-commerce-line p-4 text-sm text-slate-500">후보 목록을 불러오는 중입니다.</div>
         ) : null}
         {isError && pages.length === 0 ? (
           <div className="rounded-md border border-orange-200 bg-orange-50 p-4 text-sm text-orange-700">후보 목록을 불러오지 못했습니다. 잠시 후 다시 시도해 주세요.</div>
+        ) : null}
+
+        {isAiRecommendationView && missingPickCount > 0 && !aiPickLookupFinished ? (
+          <div className="mb-3 rounded-md border border-blue-100 bg-blue-50 px-3 py-2 text-xs font-bold text-brand-blue" aria-live="polite">
+            AI 추천 부품을 불러오는 중입니다.
+          </div>
+        ) : null}
+        {aiPickLookupFinished ? (
+          <div data-testid="candidate-ai-picks-incomplete" className="mb-3 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-bold text-amber-800" role="status">
+            {isFetchNextPageError
+              ? loadedPickCount > 0
+                ? `추천 ${aiPickedPartIds.length}개 중 ${loadedPickCount}개를 표시했습니다. 추가 목록을 불러오지 못해 나머지는 전체 ${slot.label} 목록에서 다시 확인해 주세요.`
+                : `추천 부품을 불러오지 못했습니다. 전체 ${slot.label} 목록에서 다시 확인해 주세요.`
+              : loadedPickCount > 0
+                ? `추천 ${aiPickedPartIds.length}개 중 ${loadedPickCount}개를 표시했습니다. 나머지는 전체 ${slot.label} 목록에서 확인해 주세요.`
+                : `추천 부품을 목록에서 확인하지 못했습니다. 전체 ${slot.label} 목록에서 확인해 주세요.`}
+          </div>
         ) : null}
 
         <div className="space-y-2">
@@ -709,7 +796,7 @@ export function SlotCandidatePanel({
         ) : null}
 
         <div ref={sentinelRef} aria-hidden="true" className="h-1" />
-        {hasNextPage ? (
+        {!isAiRecommendationView && hasNextPage ? (
           <button
             type="button"
             disabled={isFetchingNextPage}

@@ -10,7 +10,9 @@ import {
   AI_ASSISTANT_SESSION_CHANGED_EVENT,
   AI_SELECTED_BUILD_CHANGED_EVENT,
   PART_CATEGORY_LABELS,
+  clearAiPartPicks,
   clearSelectedAiBuild,
+  readAiPartPicks,
   readAssistantSession,
   readSelectedAiBuild,
   recentBuildsForChatContext,
@@ -77,6 +79,17 @@ function SelfQuoteSlotBoardPage() {
   }, []);
   const categoryParam = searchParams.get('category');
   const selectedCategory: PartCategory | null = isSlotCategory(categoryParam) ? categoryParam : null;
+  const previousSelectedCategoryRef = useRef<PartCategory | null>(selectedCategory);
+  useEffect(() => {
+    const previousCategory = previousSelectedCategoryRef.current;
+    previousSelectedCategoryRef.current = selectedCategory;
+    if (previousCategory === null || previousCategory === selectedCategory) return;
+    // X나 보드 클릭이 아닌 브라우저 history 이동으로 추천 패널이 사라져도 이전 추천을 소비한다.
+    // 새 카테고리 추천이 막 저장된 전환에서는 이전 카테고리 조회가 빈 배열이므로 새 추천을 지우지 않는다.
+    if (readAiPartPicks(previousCategory).length > 0) {
+      clearAiPartPicks();
+    }
+  }, [selectedCategory]);
   // AI가 상품을 하나로 특정하지 못해 "후보 목록에서 확인해 주세요"라며 보낼 때 함께 오는 검색어.
   // 이걸 후보 패널에 넘기지 않으면 안내와 달리 걸러지지 않은 전체 목록에 떨어진다.
   const pendingSearch = searchParams.get('q') ?? '';
@@ -244,6 +257,9 @@ function SelfQuoteSlotBoardPage() {
   };
 
   const closePanel = useCallback(() => {
+    // 추천 패널을 X, 배경, 체크리스트 토글, 적용 성공 중 어느 경로로 닫아도 이전 추천을 소비한다.
+    // 그렇지 않으면 같은 카테고리를 수동으로 다시 열 때 오래된 추천 화면이 되살아난다.
+    clearAiPartPicks();
     setSearchParams((current) => {
       const nextParams = new URLSearchParams(current);
       nextParams.delete('category');

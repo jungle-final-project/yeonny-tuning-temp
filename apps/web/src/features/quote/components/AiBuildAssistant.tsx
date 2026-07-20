@@ -153,6 +153,14 @@ function currentRouteKey(location: { pathname: string; search: string }) {
   return `${location.pathname}${location.search}`;
 }
 
+function isCurrentSelfQuoteCategory(
+  location: { pathname: string; search: string },
+  category: PartCategory
+) {
+  if (location.pathname !== '/self-quote') return false;
+  return new URLSearchParams(location.search).get('category') === category;
+}
+
 export function AiBuildAssistant({ surface = 'home', variant = 'floating', onBoardFocus }: AiBuildAssistantProps) {
   const navigate = useNavigate();
   // 늦게 도착한 응답이 화면을 낚아채지 않도록 '보낼 때 있던 화면'과 '지금 화면'을 비교한다.
@@ -663,7 +671,13 @@ export function AiBuildAssistant({ surface = 'home', variant = 'floating', onBoa
         // 위에서 이미 서버가 지정한 곳으로 옮겼으면 두 번 밀지 않는다. 두 번 밀면 첫 이동이
         // 실어 준 검색어(q)가 곧바로 지워지고, 뒤로가기가 사용자가 본 적 없는 화면으로 돌아간다.
         const candidatePanelRoute = `/self-quote?category=${partRecommendation.category}`;
-        if (!followedNavigation && candidatePanelRoute !== currentRouteKey(locationRef.current)) {
+        // 같은 카테고리 패널에서는 저장 이벤트만으로 추천 화면이 갱신된다. URL을 다시 만들면
+        // 사용자가 카탈로그에서 쓰던 q 검색어가 사라져 '전체 목록 보기' 후 상태를 복원할 수 없다.
+        const alreadyInCandidateCategory = isCurrentSelfQuoteCategory(
+          locationRef.current,
+          partRecommendation.category
+        );
+        if (!followedNavigation && !alreadyInCandidateCategory && candidatePanelRoute !== currentRouteKey(locationRef.current)) {
           navigate(candidatePanelRoute);
         }
       }
