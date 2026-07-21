@@ -5680,7 +5680,12 @@ public class BuildChatService {
         }
         // 후보 탐색 문장은 LLM이 BUILD_MODIFY로 흔들려도 변경 대상을 임의 확정하지 않는다.
         // 후보 목록을 먼저 제공하고, 사용자가 특정 상품을 고른 다음 턴에만 미리보기를 만든다.
-        if (isExplicitRecommendationRequest(text(body.get("message")))) {
+        // 서버가 후보 탐색과 전체 Tool 검증을 끝내 단일 부품을 확정한 fast path는
+        // 사용자 문장에 "추천해줘"가 남아 있어도 미리보기를 만들어야 한다.
+        // 일반 LLM 추천 요청만 기존처럼 임의 확정을 막는다.
+        boolean serverVerifiedSelection = Boolean.TRUE.equals(
+                engineResponse.parsedContext().get("serverVerifiedSelection"));
+        if (isExplicitRecommendationRequest(text(body.get("message"))) && !serverVerifiedSelection) {
             return;
         }
         List<Map<String, Object>> draftItems = objectMaps(objectMap(body.get("currentQuoteDraft")).get("items"));

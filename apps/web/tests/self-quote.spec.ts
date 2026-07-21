@@ -3001,6 +3001,7 @@ test('picks a replacement candidate in the performance panel, compares, and appl
   await expect(panel.getByTestId('perf-candidate-select')).toContainText('라이젠 9600X');
   await expect(workspace.getByTestId('fps-compare-avg')).toHaveText('243');
   await expect(panel.getByTestId('perf-candidate-category-CPU')).toHaveAttribute('aria-pressed', 'true');
+  await expect(page.getByTestId('performance-comparison-spotlight')).toHaveCount(0);
 });
 
 test('overlays a composite ghost arc from the swapped-combo resolve with diverging effect bars', async ({ page }) => {
@@ -3244,6 +3245,19 @@ test('composite ghost for an AI linked GPU+PSU preview swaps both parts instead 
   await expect(panel.getByTestId('quote-composite-ghost-gauge')).toBeVisible();
   await expect(panel.getByTestId('quote-composite-ghost-base')).toHaveText('734');
   await expect(panel.getByTestId('quote-composite-compare-score')).toHaveText('745');
+  const spotlight = page.getByTestId('performance-comparison-spotlight');
+  await expect(spotlight).toBeVisible();
+  await expect(spotlight).toContainText('성능 개선 예상');
+  await expect(spotlight.getByTestId('spotlight-composite-ghost-base')).toHaveText('734');
+  await expect(spotlight.getByTestId('spotlight-composite-compare-score')).toHaveText('745');
+  await expect(spotlight.getByTestId('spotlight-price-comparison')).toContainText('870,000원');
+  await expect(spotlight.getByTestId('spotlight-price-comparison')).toContainText('2,500,000원');
+  await expect(spotlight.getByTestId('spotlight-fps-comparison')).toContainText('74 FPS');
+  await expect(spotlight.getByTestId('spotlight-fps-comparison')).toContainText('127 FPS');
+  // 중앙 카드는 비교를 강조할 뿐이다. 카드 자체를 눌러 닫아도 상단 비교와 적용 버튼은 유지된다.
+  await spotlight.click({ position: { x: 24, y: 24 } });
+  await expect(spotlight).toHaveCount(0);
+  await expect(panel.getByTestId('perf-apply-replace')).toBeVisible();
   expect(ghostResolveRequests.length).toBeGreaterThanOrEqual(1);
   const lastGhost = ghostResolveRequests[ghostResolveRequests.length - 1];
   expect(lastGhost.items).toEqual(expect.arrayContaining([
@@ -3266,6 +3280,10 @@ test('composite ghost for an AI linked GPU+PSU preview swaps both parts instead 
   await expect(page.getByTestId('ai-chat-messages').getByText('파워까지 함께 바꾸는')).toHaveCount(2, { timeout: 10000 });
   await expect(panel.getByTestId('quote-composite-ghost-gauge')).toBeVisible();
   await expect(panel.getByTestId('quote-composite-compare-score')).toHaveText('745');
+  // 같은 build.id여도 새 AI 응답은 새 requestKey라 중앙 비교를 다시 보여준다.
+  await expect(spotlight).toBeVisible();
+  await page.keyboard.press('Escape');
+  await expect(spotlight).toHaveCount(0);
 
   // 회귀: '이 제품으로 교체해 담기'는 고스트 점수를 만든 조합 그대로 담아야 한다 —
   // GPU만 담으면 실제 견적은 "새 GPU + 옛 파워"가 되어 방금 보여준 745점과 정반대로 전력 FAIL이 된다.
@@ -3276,6 +3294,198 @@ test('composite ghost for an AI linked GPU+PSU preview swaps both parts instead 
   // 연계 파워를 GPU보다 먼저 담아 중간 상태에서도 전력이 모자라지 않게 한다.
   expect(putRequests[0]).toBe('cand-psu-850');
   await expect(panel.getByTestId('perf-apply-error')).toHaveCount(0);
+});
+
+test('shows an AI performance spotlight once per request and preserves the top comparison after every dismiss path', async ({ page }) => {
+  await loginAsUser(page);
+  await page.addInitScript(() => {
+    localStorage.setItem('buildgraph.authUser', JSON.stringify({ id: 'user-spotlight', email: 'spotlight@example.com', name: 'Spotlight User', role: 'USER' }));
+  });
+  const draft = {
+    ...emptyDraft,
+    items: [
+      draftItem('part-perf-cpu', 'CPU', '라이젠 9600X', 300000),
+      draftItem('part-perf-gpu', 'GPU', 'RTX 5060', 500000)
+    ],
+    totalPrice: 800000,
+    itemCount: 2
+  };
+  await page.route('**/api/quote-drafts/current**', async (route) => {
+    await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(draft) });
+  });
+  await page.route('**/api/build-graphs/resolve', async (route) => {
+    const body = JSON.parse(route.request().postData() ?? '{}');
+    const isGhost = body?.source === 'AI_BUILD';
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({ ...buildGraphResponse(), compositeScore: compositeScoreFixture(isGhost ? 782 : 734) })
+    });
+  });
+  await page.route('**/api/parts**', async (route) => {
+    await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ items: [], page: 0, size: 20, total: 0 }) });
+  });
+  await page.route('**/api/tools/performance/check', async (route) => {
+    const body = JSON.parse(route.request().postData() ?? '{}');
+    const partIds: string[] = Array.isArray(body?.partIds) ? body.partIds : [];
+    const changed = partIds.includes('cand-cpu-1');
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        tool: 'performance', status: 'PASS', confidence: 'HIGH', summary: '',
+        details: {
+          gameFpsEvidence: [{
+            gameTitle: '배틀그라운드', gameKey: 'pubg', resolution: '4K', graphicsPreset: 'PC_BUILDS_MEDIUM',
+            avgFps: changed ? 102 : 80, onePercentLowFps: changed ? 78 : 60,
+            sourceName: 'PC-Builds FPS calculator', confidence: 'MEDIUM',
+            match: { evidenceExactness: 'GPU_CLASS_REFERENCE', gameMatched: true, resolutionMatched: true }
+          }]
+        }
+      })
+    });
+  });
+
+  await page.goto('/self-quote');
+  const panel = page.getByTestId('quote-performance-panel');
+  const spotlight = page.getByTestId('performance-comparison-spotlight');
+  const dispatchComparison = (requestKey: string, origin: 'AI' | 'MANUAL' = 'AI') => page.evaluate(({ requestKey, origin }) => {
+    window.dispatchEvent(new CustomEvent('buildgraph.perfCompare.request', {
+      detail: {
+        category: 'CPU', partId: 'cand-cpu-1', name: '인텔 245K', price: 350000,
+        origin, requestKey, totalPriceComparison: { before: 800000, after: 850000 }
+      }
+    }));
+  }, { requestKey, origin });
+
+  await dispatchComparison('spotlight-close-button');
+  await expect(spotlight).toBeVisible();
+  await expect(spotlight.getByTestId('spotlight-composite-ghost-base')).toHaveText('734');
+  await expect(spotlight.getByTestId('spotlight-composite-compare-score')).toHaveText('782');
+  await expect(spotlight.getByTestId('spotlight-price-comparison')).toContainText('+50,000원');
+  await expect(spotlight.getByTestId('spotlight-fps-comparison')).toContainText('+28%');
+  await spotlight.getByRole('button', { name: '성능 비교 닫기' }).click();
+  await expect(spotlight).toHaveCount(0);
+  await expect(panel.getByTestId('perf-apply-replace')).toBeVisible();
+
+  await dispatchComparison('spotlight-backdrop');
+  await expect(spotlight).toBeVisible();
+  await page.getByTestId('performance-comparison-spotlight-backdrop').click({ position: { x: 4, y: 4 } });
+  await expect(spotlight).toHaveCount(0);
+
+  await dispatchComparison('spotlight-escape');
+  await expect(spotlight).toBeVisible();
+  await page.keyboard.press('Escape');
+  await expect(spotlight).toHaveCount(0);
+
+  await page.setViewportSize({ width: 320, height: 720 });
+  await dispatchComparison('spotlight-card');
+  await expect(spotlight).toBeVisible();
+  await expect.poll(async () => {
+    const box = await spotlight.boundingBox();
+    return box ? Math.ceil(box.x + box.width) : Number.POSITIVE_INFINITY;
+  }).toBeLessThanOrEqual(320);
+  await spotlight.click({ position: { x: 20, y: 20 } });
+  await expect(spotlight).toHaveCount(0);
+
+  // 이미 소비한 requestKey는 다른 요청을 거친 뒤 다시 와도 열리지 않는다.
+  await dispatchComparison('spotlight-close-button');
+  await expect(spotlight).toHaveCount(0);
+  // 수동 후보 비교는 requestKey가 있어도 중앙 강조 대상이 아니다.
+  await dispatchComparison('manual-comparison', 'MANUAL');
+  await expect(spotlight).toHaveCount(0);
+  await expect(panel.getByTestId('quote-composite-ghost-gauge')).toBeVisible();
+});
+
+test('opens on score readiness, updates delayed FPS in place, and never labels lower or zero scores as improvements', async ({ page }) => {
+  await loginAsUser(page);
+  await page.addInitScript(() => {
+    localStorage.setItem('buildgraph.authUser', JSON.stringify({ id: 'user-spotlight-edge', email: 'spotlight-edge@example.com', role: 'USER' }));
+  });
+  const draft = {
+    ...emptyDraft,
+    items: [
+      draftItem('part-perf-cpu', 'CPU', '라이젠 9600X', 300000),
+      draftItem('part-perf-gpu', 'GPU', 'RTX 5060', 500000)
+    ],
+    totalPrice: 800000,
+    itemCount: 2
+  };
+  await page.route('**/api/quote-drafts/current**', async (route) => {
+    await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(draft) });
+  });
+  await page.route('**/api/build-graphs/resolve', async (route) => {
+    const body = JSON.parse(route.request().postData() ?? '{}');
+    const items = (body?.items ?? []) as Array<{ partId?: string }>;
+    const score = body?.source !== 'AI_BUILD'
+      ? 734
+      : items.some((item) => item.partId === 'cand-gpu-fail')
+        ? 0
+        : 710;
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({ ...buildGraphResponse(), compositeScore: compositeScoreFixture(score) })
+    });
+  });
+  await page.route('**/api/parts**', async (route) => {
+    await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ items: [], page: 0, size: 20, total: 0 }) });
+  });
+  await page.route('**/api/tools/performance/check', async (route) => {
+    const body = JSON.parse(route.request().postData() ?? '{}');
+    const partIds: string[] = Array.isArray(body?.partIds) ? body.partIds : [];
+    const isChanged = partIds.some((partId) => partId.startsWith('cand-gpu-'));
+    if (isChanged) await new Promise((resolve) => setTimeout(resolve, 550));
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        tool: 'performance', status: 'PASS', confidence: 'HIGH', summary: '',
+        details: {
+          gameFpsEvidence: [{
+            gameTitle: '배틀그라운드', gameKey: 'pubg', resolution: '4K', graphicsPreset: 'PC_BUILDS_MEDIUM',
+            avgFps: isChanged ? 92 : 100, onePercentLowFps: isChanged ? 70 : 76,
+            sourceName: isChanged ? '다른 측정 출처' : 'PC-Builds FPS calculator', confidence: 'MEDIUM',
+            match: { evidenceExactness: 'GPU_CLASS_REFERENCE', gameMatched: true, resolutionMatched: true }
+          }]
+        }
+      })
+    });
+  });
+
+  await page.goto('/self-quote');
+  const spotlight = page.getByTestId('performance-comparison-spotlight');
+  await page.evaluate(() => {
+    window.dispatchEvent(new CustomEvent('buildgraph.perfCompare.request', {
+      detail: {
+        category: 'GPU', partId: 'cand-gpu-down', name: '낮은 성능 GPU', price: 420000,
+        origin: 'AI', requestKey: 'spotlight-delayed-down', totalPriceComparison: { before: 800000, after: 720000 }
+      }
+    }));
+  });
+  await expect(spotlight).toBeVisible();
+  await expect(spotlight).toContainText('변경안 성능 비교');
+  await expect(spotlight).not.toContainText('성능 개선 예상');
+  await expect(spotlight.getByTestId('spotlight-fps-loading')).toBeVisible();
+  await expect(spotlight.getByTestId('spotlight-fps-comparison')).toContainText('100 FPS');
+  await expect(spotlight.getByTestId('spotlight-fps-comparison')).toContainText('92 FPS');
+  await expect(spotlight.getByTestId('spotlight-fps-comparison')).not.toContainText('%');
+  await expect(spotlight.getByTestId('spotlight-fps-mismatch')).toBeVisible();
+  await spotlight.getByRole('button', { name: '성능 비교 닫기' }).click();
+
+  await page.evaluate(() => {
+    window.dispatchEvent(new CustomEvent('buildgraph.perfCompare.request', {
+      detail: {
+        category: 'GPU', partId: 'cand-gpu-fail', name: '호환 불가 GPU', price: 600000,
+        origin: 'AI', requestKey: 'spotlight-zero-score', totalPriceComparison: { before: 800000, after: 900000 }
+      }
+    }));
+  });
+  await expect(spotlight).toBeVisible();
+  await expect(spotlight).toContainText('변경안 확인 필요');
+  await expect(spotlight.getByTestId('spotlight-composite-compare-score')).toHaveText('0');
+  await expect(spotlight.getByTestId('spotlight-score-warning')).toContainText('호환성 또는 장착 문제');
+  await expect(spotlight).not.toContainText('성능 개선 예상');
 });
 
 test('drives the candidate popover: open, dismiss without picking, pick WARN, and clear', async ({ page }) => {

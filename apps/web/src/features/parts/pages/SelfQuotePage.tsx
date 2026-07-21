@@ -200,6 +200,7 @@ function SelfQuoteSlotBoardPage() {
   // 성능 비교 시작: 비교 대상을 저장하고 성능 패널로 부드럽게 이동한다(패널은 그리드 아래에 있어 안 보일 수 있다).
   const startPerfComparison = useCallback((target: PerfCompareTarget) => {
     setPerfComparison(target);
+    if (target.origin === 'AI') return;
     requestAnimationFrame(() => {
       perfPanelRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
     });

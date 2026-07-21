@@ -2157,13 +2157,19 @@ function CompactBuildCard({
       partId: changed.partId,
       name: changed.name,
       price: changed.price,
+      origin: 'AI',
+      requestKey: notifiedKey,
+      totalPriceComparison: changeReceipt ? {
+        before: changeReceipt.beforeTotalPrice,
+        after: changeReceipt.afterTotalPrice
+      } : undefined,
       // 연계 변경(예: 새 GPU에 필요한 파워)도 함께 실어야 종합점수 고스트가
       // "기존 파워+새 GPU"라는 실제로는 제안되지 않은 조합을 0점으로 그리지 않는다.
       linkedChanges: changedItems
         .filter((item) => item !== changed && item.partId)
         .map((item) => ({ category: item.category, partId: item.partId, name: item.name, price: item.price }))
     });
-  }, [messageId, build.id, isEditPreview, changedItems]);
+  }, [messageId, build.id, isEditPreview, changedItems, changeReceipt]);
   const primaryItems = isEditPreview && changedItems.length > 0 ? changedItems : build.items.slice(0, 5);
   const isLarge = size === 'large';
   // 이 카드가 적용 중이면 로딩 표시, 다른 카드가 적용 중이면 클릭이 조용히 무시되지 않도록 함께 비활성화한다.

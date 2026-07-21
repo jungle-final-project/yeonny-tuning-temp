@@ -19,6 +19,12 @@ export type PerfCompareTarget = {
   partId: string;
   name: string;
   price: number;
+  origin?: 'AI' | 'MANUAL';
+  requestKey?: string;
+  totalPriceComparison?: {
+    before: number;
+    after: number;
+  };
   linkedChanges?: Array<{ category: string; partId: string; name: string; price: number }>;
 };
 
