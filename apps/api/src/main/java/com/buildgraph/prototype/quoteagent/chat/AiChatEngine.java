@@ -97,7 +97,6 @@ public class AiChatEngine {
         /* LLM 응답 결과 파싱 */
         boolean conversationMode = Boolean.TRUE.equals(llmResponse.get("conversationMode"));
         String replyMessage = text(llmResponse.get("replyMessage"));
-        // System.out.println("conversationMode: " + conversationMode);
         
         /* 행동 모드 진입 여부 결정하기 => 내부는 대화 모드 진행 */  
         Map<String, Object> newContextPatch = objectMap(llmResponse.get("contextPatch"));
@@ -202,10 +201,7 @@ public class AiChatEngine {
                                     );
         
         /* 임시 출력 문구 */
-        System.out.println("산출된 백터: performance=" 
-                            + ragQuery.performance() + 
-                            ", value=" + 
-                            ragQuery.value());
+        System.out.println("산출된 백터: performance=" + ragQuery.performance() + ", value=" + ragQuery.value());
 
         /* recommender 호출 하여 추천 품목 리스트(견적 한 개) 가져오기 */
         List<Map<String, Object>> matchedParts =
@@ -290,10 +286,7 @@ public class AiChatEngine {
                                     );
         
         /* 임시 디버깅 */
-        System.out.println("산출된 백터: performance=" 
-                            + ragQuery.performance() + 
-                            ", value=" + 
-                            ragQuery.value());
+        System.out.println("산출된 백터: performance=" + ragQuery.performance() + ", value=" + ragQuery.value());
 
         /* Recommeder 호출: 단일 품목에서 찾아내기 */
         List<Map<String, Object>> matchedParts =
