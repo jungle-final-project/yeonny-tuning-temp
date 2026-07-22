@@ -18,6 +18,7 @@ import com.buildgraph.prototype.part.tool.ToolCheckService;
 import com.buildgraph.prototype.part.tool.ToolApplicabilityPolicy;
 import com.buildgraph.prototype.recommendation.CandidateReranker;
 import com.buildgraph.prototype.recommendation.NoopCandidateReranker;
+import com.buildgraph.prototype.quoteagent.adapter.QuoteAgentAiChatEngineAdapter;
 import com.buildgraph.prototype.user.CurrentUserService;
 import java.time.Instant;
 import java.util.ArrayList;
@@ -128,6 +129,9 @@ public class BuildChatService {
     private final PartRouteResolver partRouteResolver;
     private final BuildChatIntentRouter intentRouter;
     private final BuildChatSemanticCacheService semanticCacheService;
+    private QuoteAgentAiChatEngineAdapter quoteAgentAiChatEngineAdapter;
+    @Value("${ai.build-chat.quote-agent.enabled:true}")
+    private boolean quoteAgentEnabled;
     private final BuildChatFeasibilityService feasibilityService;
     private final BuildEvaluationService buildEvaluationService;
     private PartCompatibleCandidateService partCompatibleCandidateService;
@@ -222,6 +226,11 @@ public class BuildChatService {
 
     @Value("${ai.build-chat.tier-snapshot.tolerance-pct:15}")
     private double tierSnapshotTolerancePct = 15;
+
+    @Autowired(required = false)
+    public void setQuoteAgentAiChatEngineAdapter(QuoteAgentAiChatEngineAdapter adapter) {
+        this.quoteAgentAiChatEngineAdapter = adapter;
+    }
 
     @Autowired(required = false)
     public void setTierSnapshotStore(BuildChatTierSnapshotStore tierSnapshotStore) {
@@ -446,7 +455,7 @@ public class BuildChatService {
                     BuildChatGuardStats.empty());
             return response;
         }
-        if (intentDecision.intent() == BuildChatIntent.ASK_CLARIFICATION) {
+        if (intentDecision.intent() == BuildChatIntent.ASK_CLARIFICATION && !quoteAgentEnabled) {
             Map<String, Object> response = clarificationResponse(
                     body,
                     message,
@@ -470,12 +479,20 @@ public class BuildChatService {
             return response;
         }
         boolean recommendFlow = intentDecision.intent() == BuildChatIntent.BUILD_RECOMMEND;
+        boolean quoteAgentFlow = quoteAgentEnabled
+                && quoteAgentAiChatEngineAdapter != null
+                && userId != null
+                && (intentDecision.intent() == BuildChatIntent.BUILD_RECOMMEND
+                    || intentDecision.intent() == BuildChatIntent.ASK_CLARIFICATION
+                    || intentDecision.intent() == BuildChatIntent.UNSUPPORTED);
         // 명시 부품 하드 조건은 모델명·예산이 정확히 일치해야만 재사용할 수 있다. exact cache는 계속
         // 사용하되, miss 가능성이 높은 semantic lookup을 위해 임베딩을 먼저 호출하지 않는다. 복잡한
         // 요구사항 해석은 아래 LLM 경로에 그대로 맡긴다.
-        boolean semanticCacheAllowed = !rawBudgetIntent.explicitHardConstraint();
+        boolean semanticCacheAllowed = !quoteAgentFlow && !rawBudgetIntent.explicitHardConstraint();
         long stageStartNanos = System.nanoTime();
-        var cachedResponse = buildChatCacheService.lookup(body, requestedAiProfile, userId);
+        var cachedResponse = quoteAgentFlow
+                ? Optional.<Map<String, Object>>empty()
+                : buildChatCacheService.lookup(body, requestedAiProfile, userId);
         long redisMs = elapsedMs(stageStartNanos);
         if (cachedResponse.isPresent()) {
             // 캐시 구현이나 테스트 대역이 불변 Map을 반환할 수 있다. 후속 문맥을 붙이더라도
@@ -521,7 +538,9 @@ public class BuildChatService {
                 return response;
             }
         }
-        Optional<Map<String, Object>> fastPartRecommendation = deterministicPartRecommendationResponse(body, message, user);
+        Optional<Map<String, Object>> fastPartRecommendation = quoteAgentFlow
+                ? Optional.empty()
+                : deterministicPartRecommendationResponse(body, message, user);
         if (fastPartRecommendation.isPresent()) {
             Map<String, Object> response = fastPartRecommendation.get();
             applyConversationalPartAdvice(response, body, message, user, requestedAiProfile);
@@ -531,7 +550,8 @@ public class BuildChatService {
                     BuildChatGuardStats.empty(), "redisMs=" + redisMs);
             return response;
         }
-        if (recommendFlow
+        if (!quoteAgentFlow
+                && recommendFlow
                 && tierSnapshotStore != null
                 && rawBudgetIntent.hasBudget()
                 && !rawBudgetIntent.explicitHardConstraint()
@@ -559,7 +579,7 @@ public class BuildChatService {
             }
         }
         stageStartNanos = System.nanoTime();
-        Optional<Map<String, Object>> completionResponse = recommendFlow
+        Optional<Map<String, Object>> completionResponse = recommendFlow && !quoteAgentFlow
                 ? draftCompletionFastResponse(body, message, rawBudgetIntent)
                 : Optional.empty();
         long completionMs = elapsedMs(stageStartNanos);
@@ -571,7 +591,7 @@ public class BuildChatService {
             return withConversationTransition(response, recommendationConversationTransition);
         }
         stageStartNanos = System.nanoTime();
-        Optional<Map<String, Object>> deterministicResponse = recommendFlow
+        Optional<Map<String, Object>> deterministicResponse = recommendFlow && !quoteAgentFlow
                 ? deterministicFastResponse(body, message, rawBudgetIntent)
                 : Optional.empty();
         long deterministicMs = elapsedMs(stageStartNanos);
@@ -604,7 +624,9 @@ public class BuildChatService {
         }
         // 다중부품 감액 요청은 현재 드래프트를 대체할 전체 변경안과 부품별 조정 칩을 함께 제공한다.
         // 사용자가 적용 버튼을 누르기 전에는 quote draft를 변경하지 않는다.
-        Optional<Map<String, Object>> multiPartReduction = multiPartReductionResponse(body, message, rawBudgetIntent);
+        Optional<Map<String, Object>> multiPartReduction = quoteAgentFlow
+                ? Optional.empty()
+                : multiPartReductionResponse(body, message, rawBudgetIntent);
         if (multiPartReduction.isPresent()) {
             Map<String, Object> response = multiPartReduction.get();
             attachFollowUpContext(response, message);
@@ -647,7 +669,9 @@ public class BuildChatService {
             );
             engineResponse = mockRequest
                     ? mockAiChatEngine.respond(engineRequest)
-                    : aiChatEngine.respondLlmRequired(engineRequest, requestedAiProfile);
+                    : quoteAgentFlow
+                            ? quoteAgentAiChatEngineAdapter.respondLlmRequired(engineRequest, requestedAiProfile)
+                            : aiChatEngine.respondLlmRequired(engineRequest, requestedAiProfile);
         } catch (RuntimeException error) {
             if (recommendFlow) {
                 throw error;

@@ -320,6 +320,7 @@ export type AiDraftApplicationFeedback = {
 };
 
 export type AiAssistantSession = {
+  agentSessionId?: string | null;
   messages: AiChatMessage[];
   latestBuilds: AiRecommendedBuild[];
   savedBuildIds: Record<string, string>;
@@ -331,6 +332,7 @@ export type AiAssistantSession = {
 
 export type AiBuildChatRequest = {
   message: string;
+  agentSessionId?: string | null;
   currentBuilds?: AiRecommendedBuild[];
   currentQuoteDraft?: QuoteDraft;
   uiContext?: {
@@ -381,6 +383,7 @@ export type AiChatNavigationAction = {
 
 export type AiBuildChatResponse = {
   answerType: AiChatAnswerType;
+  agentSessionId?: string | null;
   message: string;
   builds: AiRecommendedBuild[];
   /** 화면 이동 명령. 이게 없으면 답변 문구가 이동을 약속해도 아무 일도 일어나지 않는다. */
@@ -563,6 +566,7 @@ const initialAssistantMessage: AiChatMessage = {
 
 export function emptyAssistantSession(): AiAssistantSession {
   return {
+    agentSessionId: null,
     messages: [initialAssistantMessage],
     latestBuilds: [],
     savedBuildIds: {},
@@ -659,6 +663,7 @@ export function readAssistantSession(ownerKey: string | null = getAiStorageOwner
       return emptyAssistantSession();
     }
     return {
+      agentSessionId: parsed.agentSessionId ?? null,
       messages: normalizeAssistantMessages(parsed.messages.length > 0 ? parsed.messages : [initialAssistantMessage]),
       latestBuilds: mergeAiBuildHistory(parsed.latestBuilds ?? [], []),
       savedBuildIds: normalizeSavedBuildIds(parsed.savedBuildIds),

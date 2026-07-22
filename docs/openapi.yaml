@@ -4853,6 +4853,25 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
+  /api/admin/part-vectors/recalculate:
+    post:
+      summary: 추천 부품 벡터 전체 재계산
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: 재계산 완료
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [status, calculatedParts]
+                properties:
+                  status:
+                    type: string
+                    enum: [COMPLETED]
+                  calculatedParts:
+                    type: integer
 components:
   securitySchemes:
     bearerAuth:
@@ -5697,6 +5716,11 @@ components:
       properties:
         message:
           type: string
+        agentSessionId:
+          type: string
+          format: uuid
+          nullable: true
+          description: QuoteAgent 모드에서 직전 응답의 서버 대화 세션을 이어갈 때 사용한다.
         currentBuilds:
           type: array
           items:

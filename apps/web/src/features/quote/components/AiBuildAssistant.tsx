@@ -573,6 +573,7 @@ export function AiBuildAssistant({ surface = 'home', variant = 'floating', onBoa
         : undefined;
       const response = await buildChat({
         message: nextPrompt,
+        agentSessionId: baseSession.agentSessionId,
         currentBuilds: recentBuildsForChatContext(baseSession),
         currentQuoteDraft,
         // PART_CANDIDATE_PANEL은 두 화면 모두 선언한다 — 홈에서 물어도 셀프견적으로 옮겨
@@ -631,6 +632,7 @@ export function AiBuildAssistant({ surface = 'home', variant = 'floating', onBoa
         quickReplyCommands: response.quickReplyCommands ?? undefined
       };
       const nextSession = {
+        agentSessionId: response.agentSessionId ?? baseSession.agentSessionId ?? null,
         messages: [...optimisticSession.messages, assistantMessage],
         latestBuilds,
         savedBuildIds: baseSession.savedBuildIds,

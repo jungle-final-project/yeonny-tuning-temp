@@ -1230,6 +1230,14 @@ Embedding 정책:
 - `metadata.embeddingModel`, `metadata.embeddingDimensions`, `metadata.embeddingTextHash`, `metadata.embeddingUpdatedAt`으로 백필 상태를 추적한다.
 - Agent 실행 중 복사된 세션별 evidence에는 원본 chunk의 `source_id`, `summary`, `chunk_text`와 함께 `metadata.sourceEvidenceId`, `metadata.retrievalMode`, `metadata.vectorScore`, `metadata.keywordScore`를 남긴다.
 
+### ai_chat_sessions / ai_chat_messages
+
+QuoteAgent feature flag가 활성화된 Build Chat의 사용자별 대화 문맥을 서버에 저장한다. `ai_chat_sessions.session_id`는 public UUID이고 `user_id -> users.id` 소유권을 반드시 함께 검사한다. `context`에는 현재 `budget`, 누적 `usageTags` 등 QuoteAgent가 구조화한 문맥만 저장하며 다른 사용자의 session UUID만으로 조회할 수 없다. `ai_chat_messages`는 같은 session UUID에 연결되는 선택적 턴 저장 테이블이다.
+
+### part_vectors
+
+content-based recommender가 사용하는 부품별 정규화 점수를 저장한다. `part_id -> parts.id`가 PK/FK이며 현재 초기 벡터는 `performance_score`, `value_score` 두 축이다. `POST /api/admin/part-vectors/recalculate`가 ACTIVE 부품의 최신 benchmark와 가격을 카테고리 안에서 정규화해 전체를 다시 계산한다.
+
 ### build_chat_semantic_cache
 
 목적: 문맥 없는 Build Chat 읽기/추천 요청의 의미적으로 같은 반복 질문을 pgvector similarity로 재사용한다. Redis exact cache와 별도이며, 장바구니 변경/시뮬레이션/라우팅/문맥 있는 요청에는 사용하지 않는다.
@@ -2725,7 +2733,7 @@ V108__visit_support_reservations_exact_time.sql
 
 `V33`과 `V69`~`V89`는 의도적 공번(결번)이다. 특히 `V69`~`V89`는 병렬 PR(PC Agent 통합 계열)과의 migration 번호 충돌을 피하기 위해 건너뛰었으므로 새 migration을 이 구간 번호로 만들지 않는다(다음 번호는 `V98`부터).
 
-현재 저장소에는 위 순서의 Flyway migration이 반영되어 있다. 기존 PostgreSQL volume이 남아 있으면 새 migration과 seed가 다시 실행되지 않으므로, 공통 DB를 처음부터 검증할 때는 `docker compose down -v` 후 `docker compose up --build`를 사용한다.
+현재 저장소에는 위 순서와 V134 QuoteAgent 세션, V135 part vector migration이 반영되어 있다. 기존 PostgreSQL volume이 남아 있으면 새 migration과 seed가 다시 실행되지 않으므로, 공통 DB를 처음부터 검증할 때는 `docker compose down -v` 후 `docker compose up --build`를 사용한다.
 
 ## 조립 기사 중개
 

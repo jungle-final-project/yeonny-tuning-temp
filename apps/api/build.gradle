@@ -27,6 +27,26 @@ def localDatasourceUrl = providers.environmentVariable('SPRING_DATASOURCE_URL')
 
 tasks.named('bootRun') {
     environment 'SPRING_DATASOURCE_URL', localDatasourceUrl.get()
+
+    // Gradle bootRun does not load the repository root .env by itself.
+    // Keep explicitly exported shell variables as the highest priority.
+    doFirst {
+        def envFile = rootProject.file('../../.env')
+        if (envFile.exists()) {
+            envFile.eachLine { line ->
+                def trimmed = line.trim()
+                if (!trimmed || trimmed.startsWith('#') || !trimmed.contains('=')) return
+
+                def index = trimmed.indexOf('=')
+                def key = trimmed.substring(0, index).trim()
+                def value = trimmed.substring(index + 1).trim()
+
+                if (!System.getenv(key)) {
+                    environment key, value
+                }
+            }
+        }
+    }
 }
 
 dependencies {
