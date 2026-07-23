@@ -1,4 +1,4 @@
-package com.buildgraph.prototype.quoteagent.chat.dto;
+package com.buildgraph.prototype.aichat.chat.dto;
 
 import java.util.List;
 import java.util.Map;

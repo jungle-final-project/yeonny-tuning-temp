@@ -1823,7 +1823,7 @@ test('chatbot asks for login when token disappears before submit', async ({ page
   expect(buildChatCalls).toBe(0);
 });
 
-test('chatbot asks clarification with quick replies for vague requests and merges the follow-up', async ({ page }) => {
+test('chatbot asks clarification with quick replies while the server owns follow-up context', async ({ page }) => {
   await mockBuildGraphApi(page);
   await mockCompatibleCandidatesApi(page);
   await mockCurrentQuoteDraftApi(page);
@@ -1874,11 +1874,52 @@ test('chatbot asks clarification with quick replies for vague requests and merge
   await expect(chatbotPanel).toContainText('어떤 해상도 기준으로');
   await quickReplies.getByRole('button', { name: 'QHD 게이밍 250만원' }).click();
 
-  // 2턴: 칩 문구가 그대로 전송되고 원 요청이 clarificationContext로 에코된다
+  // 2턴: 프론트는 선택 문장만 보내고, 이전 문맥은 로그인 사용자 기준 서버 세션이 유지한다.
   await expect.poll(() => chatRequests.length).toBe(2);
   expect(chatRequests[1].message).toBe('QHD 게이밍 250만원');
-  expect(chatRequests[1].clarificationContext?.originalMessage).toBe('해상도 좋은 피시 맞춰줘');
+  expect(chatRequests[1].clarificationContext).toBeUndefined();
   await expect(chatbotPanel).toContainText('250만원 기준 추천입니다.');
+});
+
+test('new conversation resets server context and clears the local chat only after success', async ({ page }) => {
+  await mockBuildGraphApi(page);
+  await mockCompatibleCandidatesApi(page);
+  await mockCurrentQuoteDraftApi(page);
+  let resetCalls = 0;
+  await page.route('**/api/ai/build-chat/session/reset', async (route) => {
+    resetCalls += 1;
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({ status: 'RESET' })
+    });
+  });
+  await page.route('**/api/ai/build-chat', async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        answerType: 'GENERAL',
+        message: '서버 문맥에 이어서 답변했습니다.',
+        builds: [],
+        warnings: []
+      })
+    });
+  });
+
+  await openHomeAsUser(page);
+  await openDesktopAiAssistant(page);
+  const panel = page.getByTestId('ai-chatbot-panel');
+  const input = page.getByRole('textbox', { name: 'AI 챗봇에게 PC 사양 질문' });
+  await input.fill('이 대화는 초기화됩니다');
+  await page.getByRole('button', { name: '질문 보내기' }).click();
+  await expect(panel).toContainText('서버 문맥에 이어서 답변했습니다.');
+
+  await panel.getByRole('button', { name: '새 대화 시작하기' }).click();
+
+  await expect.poll(() => resetCalls).toBe(1);
+  await expect(panel).not.toContainText('이 대화는 초기화됩니다');
+  await expect(panel).not.toContainText('서버 문맥에 이어서 답변했습니다.');
 });
 
 test('chatbot sends draft mutation messages to build-chat without touching the quote draft', async ({ page }) => {

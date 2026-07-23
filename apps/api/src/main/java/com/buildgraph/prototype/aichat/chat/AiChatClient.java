@@ -1,4 +1,4 @@
-package com.buildgraph.prototype.quoteagent.chat;
+package com.buildgraph.prototype.aichat.chat;
 
 import com.buildgraph.prototype.agent.LlmProvider;
 import com.buildgraph.prototype.agent.LlmResponseResult;

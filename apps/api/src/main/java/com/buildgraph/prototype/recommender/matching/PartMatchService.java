@@ -65,6 +65,26 @@ public class PartMatchService {
             .toList();
     }
 
+    /* 기존 견적에서 특정 부품 교체 => 검증하기 수행 */
+    public Map<String, Object> matchReplacement(
+            String category,
+            List<Map<String, Object>> currentItems,
+            Map<String, Object> preferences,
+            int budget
+    ) {
+        /* 벡터 기준 내림차순 정렬된 후보군들: greedy */
+        List<Map<String, Object>> candidates =
+                matchParts(category, preferences, 20);
+
+        /* 이를 순차적으로 검증 수행 => 통과 발생 시: 즉시 반환 */
+        return partMatchGreedyBuilder.selectReplacement(
+                category,
+                currentItems,
+                candidates,
+                budget
+        );
+    }    
+
     /* ==== 여기서 부터 보조 함수 ==== */
     /* 성능·가성비 선호도 파싱 */
     private double[] parsePreferences(

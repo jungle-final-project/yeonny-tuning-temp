@@ -43,6 +43,51 @@ import org.springframework.web.server.ResponseStatusException;
 
 class BuildChatServiceTest {
     @Test
+    void quoteAgentResponseReturnsOnlyOneVerifiedRecommendationWithoutFallback() {
+        AiChatEngineResponse.PartRecommendation part = new AiChatEngineResponse.PartRecommendation(
+                "part-1", "CPU", "CPU A", "Maker", 300_000, Map.of()
+        );
+        AiChatEngineResponse.BuildRecommendation first = new AiChatEngineResponse.BuildRecommendation(
+                "QuoteAgent 추천", "게임용", "검증된 추천", 300_000, "HIGH", List.of(part)
+        );
+        AiChatEngineResponse response = new AiChatEngineResponse(
+                "추천 결과입니다.", AiChatIntent.FULL_BUILD_RECOMMEND, List.of(),
+                List.of(first, first), List.of(), Map.of("quoteAgentMode", true),
+                List.of(), List.of(), null
+        );
+
+        Map<String, Object> mapped = BuildChatService.quoteAgentResponseMap(
+                response, new BuildChatService.BudgetIntent(2_000_000, "TARGET", false, false)
+        );
+        List<?> builds = (List<?>) mapped.get("builds");
+        Map<?, ?> build = (Map<?, ?>) builds.get(0);
+
+        assertThat(builds).hasSize(1);
+        assertThat(build.get("title")).isEqualTo("QuoteAgent 추천");
+        assertThat(build.get("totalPrice")).isEqualTo(300_000);
+        assertThat(build.get("toolResults")).isEqualTo(List.of());
+    }
+
+    @Test
+    void quoteAgentResponseIncludesPartRecommendationPayload() {
+        AiChatEngineResponse.PartRecommendation cpu = new AiChatEngineResponse.PartRecommendation(
+                "cpu-1", "CPU", "Ryzen CPU", "AMD", 490_000, Map.of()
+        );
+        AiChatEngineResponse response = new AiChatEngineResponse(
+                "CPU 추천입니다.", AiChatIntent.PART_RECOMMEND, List.of(), List.of(),
+                List.of(cpu), Map.of("quoteAgentMode", true), List.of(), List.of(), null
+        );
+
+        Map<String, Object> mapped = BuildChatService.quoteAgentResponseMap(response, null);
+        Map<?, ?> recommendation = (Map<?, ?>) mapped.get("partRecommendation");
+        List<?> options = (List<?>) recommendation.get("options");
+
+        assertThat(mapped.get("answerType")).isEqualTo("PART");
+        assertThat(recommendation.get("category")).isEqualTo("CPU");
+        assertThat(options).hasSize(1);
+    }
+
+    @Test
     void homeRecommendationRequiresCompleteBudgetSafeToolValidatedBuild() {
         List<Map<String, Object>> completeItems = List.of(
                 Map.of("category", "CPU"),

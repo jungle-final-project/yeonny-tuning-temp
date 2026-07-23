@@ -1,21 +1,22 @@
-package com.buildgraph.prototype.quoteagent.adapter;
+package com.buildgraph.prototype.aichat.adapter;
 
 import com.buildgraph.prototype.agent.AiChatAction;
 import com.buildgraph.prototype.agent.AiChatEngineRequest;
 import com.buildgraph.prototype.agent.AiChatEngineResponse;
 import com.buildgraph.prototype.agent.AiChatIntent;
-import com.buildgraph.prototype.quoteagent.chat.dto.AiChatRequestDto;
-import com.buildgraph.prototype.quoteagent.chat.dto.AiChatResponseDto;
+import com.buildgraph.prototype.aichat.chat.dto.AiChatRequestDto;
+import com.buildgraph.prototype.aichat.chat.dto.AiChatResponseDto;
+
 import java.util.List;
 import java.util.Map;
 import org.springframework.stereotype.Service;
 
 @Service
 public class QuoteAgentAiChatEngineAdapter {
-    private final com.buildgraph.prototype.quoteagent.chat.AiChatEngine quoteAgent;
+    private final com.buildgraph.prototype.aichat.chat.AiChatEngine quoteAgent;
 
     public QuoteAgentAiChatEngineAdapter(
-            com.buildgraph.prototype.quoteagent.chat.AiChatEngine quoteAgent
+            com.buildgraph.prototype.aichat.chat.AiChatEngine quoteAgent
     ) {
         this.quoteAgent = quoteAgent;
     }
@@ -32,11 +33,9 @@ public class QuoteAgentAiChatEngineAdapter {
             AiChatEngineRequest request,
             String requestedAiProfile
     ) {
-        String sessionId = sessionId(request == null ? null : request.context());
         AiChatResponseDto response = quoteAgent.LLMorchestrator(
                 new AiChatRequestDto(
                         request == null ? null : request.message(),
-                        sessionId,
                         request == null ? null : request.userInternalId()
                 ),
                 requestedAiProfile
@@ -70,7 +69,7 @@ public class QuoteAgentAiChatEngineAdapter {
                 Map.of("quoteAgentMode", true),
                 List.of(),
                 List.of(),
-                source.sessionId()
+                null
         );
     }
 
@@ -98,12 +97,4 @@ public class QuoteAgentAiChatEngineAdapter {
         }
     }
 
-    private static String sessionId(Map<String, Object> context) {
-        if (context == null) return null;
-        Object value = context.get("sessionId");
-        if (value == null) value = context.get("agentSessionId");
-        if (value == null) return null;
-        String text = String.valueOf(value).trim();
-        return text.isEmpty() ? null : text;
-    }
 }

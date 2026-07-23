@@ -9,16 +9,8 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import org.springframework.stereotype.Service;
 
-/**
- * Build Chat 축소 정책(2026-07 회의)의 intent 라우터.
- * 지원 범위는 예산/그래프 기반 견적 추천, 부품 교체 성능 시뮬레이션, 접수 전 PC 증상 안내,
- * 셀프 견적 보드 위치 강조, 명확화 질문이다. 화면 이동, 장바구니 조작, 단일 부품 추천,
- * 그 밖의 일반 상담은 UNSUPPORTED로 고정 안내한다.
- *
- * 분기 순서가 오탐 방어의 핵심이다:
- * 시뮬레이션 → 견적 완성 → 장바구니 조작 veto → 주변기기 veto → PC 증상 안내 → 견적 추천 → 보드 위치 → 명확화 → UNSUPPORTED
- */
 @Service
+/* 사용자 입력 text를 파싱하여 의도를 추적하는 1계층 의도 해석을 맡는다 */
 public class BuildChatIntentRouter {
     // 본체(완성 PC)를 가리키는 강한 명사 — 부품 한정 질문과 견적 요청을 구분하는 기준
     private static final String[] CORE_BUILD_NOUNS = {

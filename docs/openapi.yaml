@@ -493,9 +493,9 @@ paths:
         compatibility/power/size/performance/price Tool 검증이 모두 있는 전체 변경안 카드 1장 및 고액 부품별
         조정 quickReplies를 함께 반환한다. 목표 예산이 불가능하면 목표를 임의로 바꾸지 않고 검증된 최소 완성
         조합·최소가·부족액·BUDGET_BELOW_MINIMUM을 반환하며, Tool 검증이 불완전하거나 FAIL이면 전체 카드를
-        노출하지 않는다. 예산·용도가 모두 없는 모호 요청과 예산 없이 용도만 있는 요청은 견적 없이 되묻기
-        (quickReplies 칩 + clarification)로 응답하고, 프론트가 clarificationContext를 에코한 후속 답변과 합성한다.
-        서버는 누적 문맥에서 예산·용도 슬롯을 매 턴 다시 계산해 이미 확인한 값은 다시 묻지 않고 남은 슬롯만
+        노출하지 않는다. QuoteAgent 모드에서 예산·용도가 모두 없는 모호 요청과 예산 없이 용도만 있는 요청은
+        견적 없이 되묻고, 로그인 사용자 기준 서버 세션의 context에 예산·용도를 누적한다. 프론트는 세션 ID나
+        clarificationContext를 보내지 않는다. 서버는 누적 문맥에서 슬롯을 매 턴 다시 계산해 남은 슬롯만
         요청하며, 둘 다 채워지면 추천을 시작한다. 첫 되묻기에는 ACTIVE 내부 자산으로 서버가 계산한 최소 구성가를
         포함하고, 후속 턴에서 용도가 확인되면 해당 용도 최소 구성가로 갱신한다. 대상·관계·학년·선물 상황이 명시된
         첫 저정보 요청은 gpt-5.4-mini가 명시 맥락만 짧게 확인하고, 가격과 누락 질문은 서버가 확정한다. 모델 호출
@@ -570,6 +570,30 @@ paths:
                 $ref: "#/components/schemas/ErrorResponse"
         "502":
           description: LLM 호출 실패 또는 JSON 계약 위반(견적 추천 플로우 한정 — 강등 플로우는 502 대신 200 거절 응답을 반환한다)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+  /api/ai/build-chat/session/reset:
+    post:
+      summary: 현재 사용자의 Build Chat 문맥 초기화
+      description: 로그인 사용자의 현재 ai_chat_sessions.context를 빈 객체로 초기화한다. 세션 ID는 요청이나 응답에 노출하지 않는다.
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: 대화 문맥 초기화 완료
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [status]
+                properties:
+                  status:
+                    type: string
+                    enum: [RESET]
+        "401":
+          description: 로그인 필요
           content:
             application/json:
               schema:
@@ -5716,11 +5740,6 @@ components:
       properties:
         message:
           type: string
-        agentSessionId:
-          type: string
-          format: uuid
-          nullable: true
-          description: QuoteAgent 모드에서 직전 응답의 서버 대화 세션을 이어갈 때 사용한다.
         currentBuilds:
           type: array
           items:
@@ -5742,15 +5761,8 @@ components:
           description: >-
             이 message가 사용자가 직접 입력한 문장이 아니라 직전 응답의 quickReplies 칩에서 온 것임을 알리는 표식.
             ROUTE_CHOICE는 quickReplyKind=ROUTE_CHOICE 응답의 칩("{정확한 상품명} 상세페이지로 이동해")을 누른 턴에만 실린다.
-            서버는 이 턴의 문장을 어휘로 재분류하지 않고 상품 상세 이동으로 확정하며, clarificationContext와 합성하지 않는다.
+            서버는 이 턴의 문장을 어휘로 재분류하지 않고 상품 상세 이동으로 확정한다.
             (상품명 전문에는 "게임PC", "포함", "컴퓨터" 같은 어휘가 그대로 들어 있어 표층 분류가 견적 추천으로 새기 때문이다.)
-        clarificationContext:
-          nullable: true
-          description: 직전 되묻기 응답의 originalMessage 에코. 서버는 이 값과 새 message를 합성해 무상태 문맥을 누적한다. 예산 또는 용도만 채워지면 이미 확인한 슬롯은 유지하고 남은 슬롯만 clarification.missingSlots로 다시 묻고, 둘 다 채워지면 추천 경로로 진행한다. 라우터 되묻기 외에 LLM 후속 질문과 시뮬레이션 교체 대상 미해상 턴에도 같은 방식으로 에코한다.
-          type: object
-          properties:
-            originalMessage:
-              type: string
     AiChatNavigationAction:
       type: object
       required: [type, label, payload]
@@ -5883,7 +5895,7 @@ components:
         clarification:
           nullable: true
           type: object
-          description: 모호 요청의 무상태 대화 문맥과 미해결 슬롯. 예산·용도 중 일부만 답하면 originalMessage에 누적 문맥을 담고 missingSlots에는 아직 필요한 값만 남긴다. 둘 다 채워지면 추천으로 진행한다. LLM 후속 질문과 시뮬레이션 교체 대상 미해상 턴에는 missingSlots가 빈 배열일 수 있다. 프론트는 다음 요청의 clarificationContext로 originalMessage를 에코한다.
+          description: 모호 요청의 미해결 슬롯 안내. QuoteAgent 모드의 문맥은 로그인 사용자 기준 서버 세션에 저장되며 프론트는 이 값을 다음 요청에 에코하지 않는다. LLM 후속 질문과 시뮬레이션 교체 대상 미해상 턴에는 missingSlots가 빈 배열일 수 있다.
           properties:
             missingSlots:
               type: array

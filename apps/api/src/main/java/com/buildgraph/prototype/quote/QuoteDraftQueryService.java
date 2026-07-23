@@ -58,6 +58,10 @@ public class QuoteDraftQueryService {
 
     public Map<String, Object> current(String authorization) {
         Long userId = currentUserId(authorization);
+        return currentByUserId(userId);
+    }
+
+    public Map<String, Object> currentByUserId(Long userId) {
         return draftReadCache.response(userId, () -> {
             Map<String, Object> draft = activeDraft(userId);
             if (draft == null) {

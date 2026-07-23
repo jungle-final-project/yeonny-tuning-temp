@@ -275,6 +275,7 @@ export type AiChatMessage = {
   simulation?: AiPerformanceSimulation | null;
   buildAssessment?: AiBuildAssessment;
   supportGuidance?: AiSupportGuidance;
+  partRecommendation?: AiPartRecommendation;
   warnings?: string[];
   quickReplies?: string[];
   /** 이 칩이 무엇을 뜻하는지. ROUTE_CHOICE면 "상품 하나 고르기"라서 다음 요청에 출처를 되보낸다. */
@@ -320,7 +321,6 @@ export type AiDraftApplicationFeedback = {
 };
 
 export type AiAssistantSession = {
-  agentSessionId?: string | null;
   messages: AiChatMessage[];
   latestBuilds: AiRecommendedBuild[];
   savedBuildIds: Record<string, string>;
@@ -332,7 +332,6 @@ export type AiAssistantSession = {
 
 export type AiBuildChatRequest = {
   message: string;
-  agentSessionId?: string | null;
   currentBuilds?: AiRecommendedBuild[];
   currentQuoteDraft?: QuoteDraft;
   uiContext?: {
@@ -350,8 +349,6 @@ export type AiBuildChatRequest = {
     performance?: PerformanceViewSelection;
   };
   assessmentContext?: AiAssessmentContext;
-  /** 직전 되묻기(clarification)에 대한 답변임을 알리는 에코 — 서버가 원 요청과 합성한다. */
-  clarificationContext?: { originalMessage: string };
   /**
    * 이 message가 사용자가 직접 친 문장이 아니라 되묻기 칩에서 온 것임을 알리는 표식.
    * ROUTE_CHOICE면 서버는 상품명 어휘를 해석하지 않고 그 턴을 상품 이동으로 확정한다.
@@ -475,14 +472,18 @@ const AI_PART_PICKS_KEY = 'buildgraph.aiPartPicks';
 export const AI_PART_PICKS_CHANGED_EVENT = 'buildgraph:ai-part-picks-changed';
 
 /** 답변에 실려 온 추천 결과를 꺼낸다. 카테고리가 우리가 아는 8개가 아니면 버린다. */
-export function partRecommendationFrom(response: AiBuildChatResponse): AiPartRecommendation | null {
-  const raw = response.partRecommendation;
+function normalizePartRecommendation(raw: unknown): AiPartRecommendation | null {
   if (!raw || typeof raw !== 'object') return null;
-  const category = raw.category;
+  const candidate = raw as Partial<AiPartRecommendation>;
+  const category = candidate.category;
   if (!category || !(category in PART_CATEGORY_LABELS)) return null;
-  const options = (Array.isArray(raw.options) ? raw.options : [])
+  const options = (Array.isArray(candidate.options) ? candidate.options : [])
     .filter((option): option is AiPartRecommendationOption => typeof option?.partId === 'string' && option.partId.length > 0);
   return options.length > 0 ? { category, options } : null;
+}
+
+export function partRecommendationFrom(response: AiBuildChatResponse): AiPartRecommendation | null {
+  return normalizePartRecommendation(response.partRecommendation);
 }
 
 /**
@@ -559,14 +560,13 @@ export const PART_CATEGORY_LABELS: Record<PartCategory, string> = {
 const initialAssistantMessage: AiChatMessage = {
   id: 'ai-intro',
   role: 'assistant',
-  text: '예산 견적은 “200만원 게이밍 PC 추천”, 견적 완성은 “지금 견적 나머지 채워줘”, 성능 비교는 “CPU를 9700X로 바꾸면?”처럼 물어보세요. 추천은 실제 부품 데이터와 검증 결과를 바탕으로 계산됩니다.',
+  text: 'PC 조립, 견적을 비롯해 궁금한 점을 물어보세요.',
   createdAt: '2026-06-30T00:00:00.000Z',
   kind: 'intro'
 };
 
 export function emptyAssistantSession(): AiAssistantSession {
   return {
-    agentSessionId: null,
     messages: [initialAssistantMessage],
     latestBuilds: [],
     savedBuildIds: {},
@@ -663,7 +663,6 @@ export function readAssistantSession(ownerKey: string | null = getAiStorageOwner
       return emptyAssistantSession();
     }
     return {
-      agentSessionId: parsed.agentSessionId ?? null,
       messages: normalizeAssistantMessages(parsed.messages.length > 0 ? parsed.messages : [initialAssistantMessage]),
       latestBuilds: mergeAiBuildHistory(parsed.latestBuilds ?? [], []),
       savedBuildIds: normalizeSavedBuildIds(parsed.savedBuildIds),
@@ -696,11 +695,8 @@ export function clearAssistantSession(ownerKey: string | null = getAiStorageOwne
 export function resetAssistantConversation(ownerKey: string | null = getAiStorageOwnerKey()) {
   const session = readAssistantSession(ownerKey);
   const nextSession: AiAssistantSession = {
-    ...session,
-    messages: [initialAssistantMessage],
-    latestGraphFocus: undefined,
-    latestActiveBuildId: undefined,
-    draftApplicationFeedback: undefined,
+    ...emptyAssistantSession(),
+    savedBuildIds: session.savedBuildIds,
     updatedAt: new Date().toISOString()
   };
   saveAssistantSession(nextSession, ownerKey);
@@ -829,10 +825,12 @@ function normalizeSavedBuildIds(value: unknown): Record<string, string> {
 
 function normalizeAssistantMessages(messages: AiChatMessage[]) {
   return messages.map((message) => {
-    const { actions: _legacyActions, partRecommendation: _legacyPartRecommendation, ...rest } =
-      message as AiChatMessage & { actions?: unknown; partRecommendation?: unknown };
+    const { actions: _legacyActions, ...rest } =
+      message as AiChatMessage & { actions?: unknown };
     return {
       ...rest,
+      text: message.id === initialAssistantMessage.id ? initialAssistantMessage.text : rest.text,
+      partRecommendation: normalizePartRecommendation(message.partRecommendation) ?? undefined,
       builds: message.builds ? normalizeAiBuilds(message.builds) : undefined
     };
   });

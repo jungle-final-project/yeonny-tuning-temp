@@ -8,6 +8,7 @@ import java.util.Map;
 
 import org.springframework.stereotype.Component;
 
+import com.buildgraph.prototype.part.query.PartQuery;
 import com.buildgraph.prototype.part.tool.ToolBuildPart;
 import com.buildgraph.prototype.part.tool.ToolCheckService;
 
@@ -16,9 +17,14 @@ import com.buildgraph.prototype.part.tool.ToolCheckService;
 public class PartMatchGreedyBuilder {
 
         private final ToolCheckService toolCheckService;
+        private final PartQuery partQuery;
 
-        public PartMatchGreedyBuilder(ToolCheckService toolCheckService) {
+        public PartMatchGreedyBuilder(
+                ToolCheckService toolCheckService,
+                PartQuery partQuery
+        ) {
                 this.toolCheckService = toolCheckService;
+                this.partQuery = partQuery;
         }
 
         private static final List<String> CATEGORY_ORDER = List.of(
@@ -74,8 +80,7 @@ public class PartMatchGreedyBuilder {
                 /* 일단 카테고리 별로 분류한다 */
                 for (Map<String, Object> part : scoredParts) {
                 String category = (String) part.get("category");
-
-                candidatesByCategory
+                        candidatesByCategory
                                 .computeIfAbsent(category, key -> new ArrayList<>())
                                 .add(part);
                 }
@@ -151,53 +156,131 @@ public class PartMatchGreedyBuilder {
                 return false;
         }
 
-        @SuppressWarnings("unchecked")
-        /* ToolService를 호출하여 검증을 수행한다 */
-        private boolean validateQuote(
+        /* 특정 부품을 교체후 검증한다 */
+        public Map<String, Object> selectReplacement(
                 String category,
-                List<Map<String, Object>> trialParts,
+                List<Map<String, Object>> currentItems,
+                List<Map<String, Object>> candidates,
                 int budget
         ) {
-        /* ToolBuildPart 형태의 객체로 변환 */
-        List<ToolBuildPart> toolParts = trialParts.stream()
-                .map(part -> new ToolBuildPart(
+                List<ToolBuildPart> currentToolParts =
+                        loadCurrentToolParts(currentItems);
+
+                for (Map<String, Object> candidate : candidates) {
+                        List<ToolBuildPart> trialParts =
+                                new ArrayList<>(currentToolParts);
+
+                        /* 기존 견적에서 해당 품목 부품 제거 => 새 거 삽입 */
+                        trialParts.removeIf(part -> category.equals(part.category()));
+                        trialParts.add(toToolBuildPart(candidate));
+
+                        if (validateToolParts(category, trialParts, budget)) {
+                                return candidate;
+                        }
+                }
+
+                return Map.of();
+        }
+
+        /* 1. Draft 부품을 Tool 검증 객체로 일괄 변환한다 */
+        private List<ToolBuildPart> loadCurrentToolParts(
+                List<Map<String, Object>> currentItems
+        ) {
+                List<String> partIds = currentItems.stream()
+                        .map(item -> String.valueOf(item.get("partId")))
+                        .toList();
+
+                Map<String, Integer> quantities = new LinkedHashMap<>();
+
+                for (Map<String, Object> item : currentItems) {
+                        String partId = String.valueOf(item.get("partId"));
+                        Object quantityValue = item.get("quantity");
+                        int quantity = quantityValue instanceof Number number
+                                ? number.intValue()
+                                : 1;
+
+                        quantities.put(partId, quantity);
+                }
+
+                return partQuery.partsForPublicIdQuantities(
+                        partIds,
+                        quantities
+                );
+        }
+
+        /* 2. Recommender 후보를 Tool 검증 객체로 변환한다 */
+        private ToolBuildPart toToolBuildPart(
+                Map<String, Object> part
+        ) {
+                return new ToolBuildPart(
                         ((Number) part.get("part_id")).longValue(),
                         (String) part.get("id"),
                         (String) part.get("category"),
                         (String) part.get("name"),
                         (String) part.get("manufacturer"),
                         ((Number) part.get("price")).intValue(),
-                        (Map<String, Object>) part.getOrDefault(
-                                "attributes",
-                                Map.of()
-                        )
-                ))
-                .toList();
-
-        /* 품목에 따라서 검증이 돌아가는 도구가 다름 */
-        List<String> affectedTools = switch (category) {
-                case "CPU" -> List.of("price");
-                case "MOTHERBOARD", "RAM" -> List.of("compatibility", "price");
-                case "GPU" -> List.of("compatibility", "performance", "price");
-                case "COOLER" -> List.of("compatibility", "performance", "price");
-                case "CASE" -> List.of("compatibility", "size", "performance", "price");
-                case "PSU" -> List.of("compatibility", "power", "size", "performance", "price");
-                case "STORAGE" -> List.of("compatibility", "performance", "price");
-                default -> List.of("compatibility", "power", "size", "performance", "price");
-        };
-
-        /* 사용할 도구를 기준으로 삼아 검증 결과를 호출 */
-        List<Map<String, Object>> results =
-                toolCheckService.checkBuildTools(
-                        affectedTools,
-                        toolParts,
-                        budget,
-                        null
+                        attributes(part),
+                        1
                 );
+        }
 
-        return results.stream()
-                .noneMatch(result ->
-                        "FAIL".equals(result.get("status"))
-                );
+        /* 3. 부품 속성을 Tool 검증용 Map으로 변환한다 */
+        @SuppressWarnings("unchecked")
+        private Map<String, Object> attributes(
+                Map<String, Object> part
+        ) {
+                Object value = part.get("attributes");
+
+                if (value instanceof Map<?, ?>) {
+                        return (Map<String, Object>) value;
+                }
+
+                return Map.of();
+        }
+
+        /* ToolService를 호출하여 검증을 수행한다 */
+        private boolean validateQuote(
+                String category,
+                List<Map<String, Object>> trialParts,
+                int budget
+        ) {
+                List<ToolBuildPart> toolParts = trialParts.stream()
+                        .map(this::toToolBuildPart)
+                        .toList();
+
+                return validateToolParts(category, toolParts, budget);
+        }
+
+        /* 4. ToolBuildPart 견적을 품목별 Tool로 검증한다 */
+        private boolean validateToolParts(
+                String category,
+                List<ToolBuildPart> toolParts,
+                int budget
+        ) {
+                /* 품목에 따라서 검증이 돌아가는 도구가 다름 */
+                List<String> affectedTools = switch (category) {
+                        case "CPU" -> List.of("price");
+                        case "MOTHERBOARD", "RAM" -> List.of("compatibility", "price");
+                        case "GPU" -> List.of("compatibility", "performance", "price");
+                        case "COOLER" -> List.of("compatibility", "performance", "price");
+                        case "CASE" -> List.of("compatibility", "size", "performance", "price");
+                        case "PSU" -> List.of("compatibility", "power", "size", "performance", "price");
+                        case "STORAGE" -> List.of("compatibility", "performance", "price");
+                        default -> List.of("compatibility", "power", "size", "performance", "price");
+                };
+
+                /* 사용할 도구를 기준으로 삼아 검증 결과를 호출 */
+                List<Map<String, Object>> results =
+                        toolCheckService.checkBuildTools(
+                                affectedTools,
+                                toolParts,
+                                budget,
+                                null
+                        );
+
+                return results.stream()
+                        .noneMatch(result ->
+                                "FAIL".equals(result.get("status"))
+                        );
         }
 }

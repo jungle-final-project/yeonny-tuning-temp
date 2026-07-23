@@ -3,6 +3,7 @@ package com.buildgraph.prototype.build;
 import com.buildgraph.prototype.agent.AiChatEngine;
 import com.buildgraph.prototype.agent.AiChatEngineRequest;
 import com.buildgraph.prototype.agent.mock.MockAiChatEngine;
+import com.buildgraph.prototype.aichat.adapter.QuoteAgentAiChatEngineAdapter;
 import com.buildgraph.prototype.agent.SupportGuidanceDraft;
 import com.buildgraph.prototype.agent.AiChatEngineResponse;
 import com.buildgraph.prototype.agent.AiChatIntent;
@@ -18,7 +19,6 @@ import com.buildgraph.prototype.part.tool.ToolCheckService;
 import com.buildgraph.prototype.part.tool.ToolApplicabilityPolicy;
 import com.buildgraph.prototype.recommendation.CandidateReranker;
 import com.buildgraph.prototype.recommendation.NoopCandidateReranker;
-import com.buildgraph.prototype.quoteagent.adapter.QuoteAgentAiChatEngineAdapter;
 import com.buildgraph.prototype.user.CurrentUserService;
 import java.time.Instant;
 import java.util.ArrayList;
@@ -264,6 +264,8 @@ public class BuildChatService {
         return chat(request, requestedAiProfile, user, null, null);
     }
 
+
+    /* 채팅 문자를 해석하여 분기를 결정하는 1차 관문 */
     public Map<String, Object> chat(
             Map<String, Object> request,
             String requestedAiProfile,
@@ -325,519 +327,543 @@ public class BuildChatService {
         }
         Long userId = user == null ? null : user.internalId();
         BudgetIntent rawBudgetIntent = budgetIntent(message);
-        BuildChatIntentDecision intentDecision = intentRouter.decide(body, message);
-        String recommendationConversationTransition = buildRecommendationConversationTransition(
+
+        AiChatEngineRequest engineRequest = new AiChatEngineRequest(
                 message,
-                mergedClarificationReply,
-                intentDecision,
-                rawBudgetIntent
+                chatSurface(body),
+                text(body.get("selectedCategory")),
+                text(body.get("buildId")),
+                text(body.get("draftId")),
+                body,
+                userId
         );
-        log.debug(
-                "Build Chat intent decision: intent={}, confidence={}, sideEffectRisk={}, preferredPath={}, cachePolicy={}, ambiguityReasons={}",
-                intentDecision.intent(),
-                intentDecision.confidence(),
-                intentDecision.sideEffectRisk(),
-                intentDecision.preferredPath(),
-                intentDecision.cachePolicy(),
-                intentDecision.ambiguityReasons()
-        );
-        log.debug(
-                "Build Chat request received: userId={}, requestedAiProfile={}, cacheLookup=true, cacheService={}",
-                userId,
-                requestedAiProfile,
-                buildChatCacheService.getClass().getName()
-        );
-        if (intentDecision.intent() == BuildChatIntent.SUPPORT_GUIDANCE) {
-            Map<String, Object> response = shoppingSupportGuidanceResponse(message, Map.of());
-            attachFollowUpContext(response, message);
-            logBuildChatPath("FAST_SUPPORT_GUIDANCE", startedNanos, userId, requestedAiProfile, false, BuildChatGuardStats.empty());
-            return response;
-        }
-        if (intentDecision.intent() == BuildChatIntent.OPEN_DRAFT_HISTORY) {
-            Map<String, Object> response = draftHistoryResponse(user, intentDecision);
-            logBuildChatPath("FAST_DRAFT_HISTORY", startedNanos, userId, requestedAiProfile, false,
-                    BuildChatGuardStats.empty());
-            return response;
-        }
-        if (intentDecision.intent() == BuildChatIntent.LOCATE_BOARD_PART
-                && "HIGH".equals(intentDecision.confidence())
-                && !intentDecision.targetCategories().isEmpty()) {
-            Map<String, Object> response = boardFocusResponse(intentDecision.targetCategories());
-            logBuildChatPath("FAST_BOARD_FOCUS", startedNanos, userId, requestedAiProfile, false, BuildChatGuardStats.empty());
-            return response;
-        }
-        if (intentDecision.intent() == BuildChatIntent.EXPLAIN_BUILD_SCORE) {
-            Map<String, Object> response = buildScoreExplanationResponse(body, message, user, intentDecision);
-            if (mergedClarificationReply) {
-                attachFollowUpContext(response, message);
-            } else if (contextualCandidateFollowUp) {
-                attachFollowUpContext(response, clarificationOriginal + " " + rawMessage);
-            }
-            logBuildChatPath("LIVE_BUILD_ASSESSMENT", startedNanos, userId, SCORE_EXPLANATION_PROFILE, false, BuildChatGuardStats.empty());
-            return response;
-        }
-        if (intentDecision.intent() == BuildChatIntent.SIMULATE_REPLACEMENT) {
-            Optional<Map<String, Object>> simulationCard = performanceSimulationResponse(body, message);
-            // 카드가 못 나왔고(교체 대상 미해상) 속성 요청 가능성이 있으면 dead-end로 끝내지 않고 LLM 경로로
-            // 흘려보낸다(UNSUPPORTED→LLM 강등과 동일 철학) — LLM이 "수랭/PCIe 5.0/통풍" 같은 속성을
-            // partConstraint로 구조화하면 서버가 속성 조회로 1:1 비교 카드 또는 후보를 제시한다.
-            // LLM도 못 잡으면 아래 공통 경로의 안전망(속성 카드 실패 시 역제안·에코·칩)이 받는다.
-            boolean attributeFallThrough = simulationCard.isEmpty()
-                    && simulationAttributeFallThroughEligible(body, message);
-            if (!attributeFallThrough) {
-                Map<String, Object> response = simulationCard
-                        .orElseGet(() -> simulationClarificationResponse(body, message));
-                // 시뮬 카드가 못 나온 dead-end면 원문을 에코해 다음 짧은 답("MSI X870")이 원 요청과 합성되게
-                // 한다(무상태 후속). 되묻기는 최대 1회 — 이미 후속 턴이면 재부착하지 않는다.
-                if (response.get("simulation") == null && response.get("clarification") == null) {
-                    response.put("clarification", MockData.map("missingSlots", List.of(), "originalMessage", message));
-                }
-                // 에코도 카드도 없는 순수 dead-end에는 다음 행동 칩을 보강한다(형태 판정 — 에코가 붙었으면 개입 안 함).
-                ensureNextAction(response, intentDecision.intent(), rawBudgetIntent);
-                logBuildChatPath("FAST_SIMULATION", startedNanos, userId, requestedAiProfile, false, BuildChatGuardStats.empty());
-                return response;
-            }
-        }
-        Optional<Map<String, Object>> targetFpsPreview = targetFpsGpuPreviewResponse(body, message);
-        if (targetFpsPreview.isPresent()) {
-            Map<String, Object> response = targetFpsPreview.get();
-            attachFollowUpContext(response, message);
-            logBuildChatPath("FAST_TARGET_FPS_DRAFT_EDIT", startedNanos, userId, requestedAiProfile, false,
-                    BuildChatGuardStats.empty());
-            return response;
-        }
-        Optional<Map<String, Object>> compatibleCasePreview = compatibleCaseRepairPreviewResponse(body, message);
-        if (compatibleCasePreview.isPresent()) {
-            Map<String, Object> response = compatibleCasePreview.get();
-            attachFollowUpContext(response, message);
-            logBuildChatPath("FAST_COMPATIBLE_CASE_DRAFT_EDIT", startedNanos, userId, requestedAiProfile, false,
-                    BuildChatGuardStats.empty());
-            return response;
-        }
-        Optional<Map<String, Object>> exactPartPreview = exactSingletonPartPreviewResponse(body, message, user);
-        if (exactPartPreview.isPresent()) {
-            Map<String, Object> response = exactPartPreview.get();
-            attachFollowUpContext(response, message);
-            logBuildChatPath("FAST_EXACT_PART_PREVIEW", startedNanos, userId, requestedAiProfile, false, BuildChatGuardStats.empty());
-            return response;
-        }
-        Optional<Map<String, Object>> underspecifiedPartMutation = underspecifiedPartMutationClarificationResponse(body, message);
-        if (underspecifiedPartMutation.isPresent()) {
-            Map<String, Object> response = underspecifiedPartMutation.get();
-            logBuildChatPath("FAST_PART_SELECTION_CLARIFICATION", startedNanos, userId, requestedAiProfile, false,
-                    BuildChatGuardStats.empty());
-            return response;
-        }
-        Optional<Map<String, Object>> directionalDraftEdit = directionalDraftEditFastResponse(body, message);
-        if (directionalDraftEdit.isPresent()) {
-            Map<String, Object> response = directionalDraftEdit.get();
-            attachFollowUpContext(response, message);
-            logBuildChatPath("FAST_DIRECTIONAL_DRAFT_EDIT", startedNanos, userId, requestedAiProfile, false, BuildChatGuardStats.empty());
-            return response;
-        }
-        Optional<Map<String, Object>> fastCaseImprovement = fastCaseScoreImprovementResponse(body, message);
-        if (fastCaseImprovement.isPresent()) {
-            Map<String, Object> response = fastCaseImprovement.get();
-            attachFollowUpContext(response, message);
-            logBuildChatPath("FAST_CASE_SCORE_IMPROVEMENT", startedNanos, userId, requestedAiProfile, false, BuildChatGuardStats.empty());
-            return response;
-        }
-        Optional<Map<String, Object>> progressiveClarification = progressiveLowInformationClarificationResponse(
-                message,
-                rawMessage,
-                clarificationOriginal,
-                mergedClarificationReply,
-                intentDecision
-        );
-        if (progressiveClarification.isPresent()) {
-            Map<String, Object> response = progressiveClarification.get();
-            logBuildChatPath("FAST_PROGRESSIVE_CLARIFICATION", startedNanos, userId, requestedAiProfile, false,
-                    BuildChatGuardStats.empty());
-            return response;
-        }
-        if (intentDecision.intent() == BuildChatIntent.ASK_CLARIFICATION && !quoteAgentEnabled) {
-            Map<String, Object> response = clarificationResponse(
-                    body,
-                    message,
-                    rawMessage,
-                    intentDecision.ambiguityReasons(),
-                    clarificationFollowUp,
-                    userId
-            );
-            logBuildChatPath("FAST_CLARIFICATION", startedNanos, userId, requestedAiProfile, false, BuildChatGuardStats.empty());
-            return response;
-        }
-        // 라우터가 UNSUPPORTED로 본 문장도 즉답 거절하지 않는다 — 키워드 오인("램을 바꿔줘" 류)이
-        // 잦아, LLM 제약 파서까지 흘려보내 실제 의도(부품 제약·드래프트 변경·설명)를 살린다.
-        // LLM이 불가하거나 실패할 때만 우아한 거절(기능 안내 + 바로 눌러볼 칩)로 마무리한다.
-        Optional<Map<String, Object>> minimumFeasibleBuild = minimumFeasibleBuildResponse(body, message);
-        if (minimumFeasibleBuild.isPresent()) {
-            Map<String, Object> response = minimumFeasibleBuild.get();
-            buildChatCacheService.storeAsync(body, requestedAiProfile, userId, response);
-            logBuildChatPath("FAST_MINIMUM_FEASIBLE_BUILD", startedNanos, userId, requestedAiProfile, false,
-                    BuildChatGuardStats.routeFallback());
-            return response;
-        }
-        boolean recommendFlow = intentDecision.intent() == BuildChatIntent.BUILD_RECOMMEND;
-        boolean quoteAgentFlow = quoteAgentEnabled
-                && quoteAgentAiChatEngineAdapter != null
-                && userId != null
-                && (intentDecision.intent() == BuildChatIntent.BUILD_RECOMMEND
-                    || intentDecision.intent() == BuildChatIntent.ASK_CLARIFICATION
-                    || intentDecision.intent() == BuildChatIntent.UNSUPPORTED);
-        // 명시 부품 하드 조건은 모델명·예산이 정확히 일치해야만 재사용할 수 있다. exact cache는 계속
-        // 사용하되, miss 가능성이 높은 semantic lookup을 위해 임베딩을 먼저 호출하지 않는다. 복잡한
-        // 요구사항 해석은 아래 LLM 경로에 그대로 맡긴다.
-        boolean semanticCacheAllowed = !quoteAgentFlow && !rawBudgetIntent.explicitHardConstraint();
-        long stageStartNanos = System.nanoTime();
-        var cachedResponse = quoteAgentFlow
-                ? Optional.<Map<String, Object>>empty()
-                : buildChatCacheService.lookup(body, requestedAiProfile, userId);
-        long redisMs = elapsedMs(stageStartNanos);
-        if (cachedResponse.isPresent()) {
-            // 캐시 구현이나 테스트 대역이 불변 Map을 반환할 수 있다. 후속 문맥을 붙이더라도
-            // 캐시 원본 payload 자체를 바꾸지 않도록 요청별 복사본만 수정한다.
-            Map<String, Object> response = new LinkedHashMap<>(cachedResponse.get());
-            if (mergedClarificationReply && shouldPreserveMergedTurnContext(response)) {
-                attachFollowUpContext(response, message);
-            }
-            logBuildChatPath("CACHE_HIT", startedNanos, userId, requestedAiProfile, true, BuildChatGuardStats.empty(),
-                    "redisMs=" + redisMs);
-            return withConversationTransition(response, recommendationConversationTransition);
-        }
-        // 결정적 이동: "{정확한 상품명} 상세페이지로 이동해"류를 LLM 없이 즉시 처리한다.
-        // 라우터가 UNSUPPORTED로 본 턴에서만 시도한다 — 견적 추천·시뮬·점수설명·보드포커스·되묻기는
-        // 이미 위에서 각자 경로로 빠졌으므로, 여기서는 구조적으로 '이동만' 가로챌 수 있다.
-        // 상품을 하나로 특정했을 때만 이동하고, 못 하면 조용히 기존 LLM 경로로 떨어진다.
-        if (partRouteResolver != null && intentDecision.intent() == BuildChatIntent.UNSUPPORTED) {
-            Optional<PartRouteResolver.ResolvedRoute> fastRoute;
-            try {
-                fastRoute = partRouteResolver.resolveFastRoute(
-                        message,
-                        text(body.get("selectedCategory")),
-                        BuildChatIntentRouter.isRouteChoiceSelection(body));
-            } catch (RuntimeException error) {
-                // 이동 해상은 부가 기능이다 — DB가 흔들려도 대화를 끊지 않고 LLM 경로로 넘긴다.
-                log.warn("Build Chat deterministic route resolution failed, falling back to LLM path", error);
-                fastRoute = Optional.empty();
-            }
-            if (fastRoute.isPresent()) {
-                PartRouteResolver.ResolvedRoute resolved = fastRoute.get();
-                Map<String, Object> response = fastResponse("GENERAL", resolved.message(), List.of());
-                // navigationActions()가 만드는 모양과 정확히 같게 — 프론트가 두 경로를 구분하지 않게 한다.
-                response.put("actions", List.of(MockData.map(
-                        "type", AiChatActionType.OPEN_ROUTE.name(),
-                        "label", resolved.label(),
-                        "payload", MockData.map("route", resolved.route())
-                )));
-                // 이동한 턴은 완결 응답이라 되묻기 에코도 다음 행동 칩도 붙이지 않는다.
-                // 캐시에도 넣지 않는다 — 이미 DB 조회만으로 끝나 아낄 LLM 비용이 없고,
-                // /parts/{uuid}를 캐싱하면 비활성화된 상품 경로를 TTL 동안 계속 내보낸다.
-                logBuildChatPath("FAST_PART_DETAIL_ROUTE", startedNanos, userId, requestedAiProfile, false,
-                        BuildChatGuardStats.empty(), "redisMs=" + redisMs);
-                return response;
-            }
-        }
-        Optional<Map<String, Object>> fastPartRecommendation = quoteAgentFlow
-                ? Optional.empty()
-                : deterministicPartRecommendationResponse(body, message, user);
-        if (fastPartRecommendation.isPresent()) {
-            Map<String, Object> response = fastPartRecommendation.get();
-            applyConversationalPartAdvice(response, body, message, user, requestedAiProfile);
-            attachFollowUpContext(response, message);
-            buildChatCacheService.storeAsync(body, requestedAiProfile, userId, response);
-            logBuildChatPath("FAST_PART_RECOMMEND", startedNanos, userId, requestedAiProfile, false,
-                    BuildChatGuardStats.empty(), "redisMs=" + redisMs);
-            return response;
-        }
-        if (!quoteAgentFlow
-                && recommendFlow
-                && tierSnapshotStore != null
-                && rawBudgetIntent.hasBudget()
-                && !rawBudgetIntent.explicitHardConstraint()
-                && objectMaps(objectMap(body.get("currentQuoteDraft")).get("items")).isEmpty()) {
-            stageStartNanos = System.nanoTime();
-            // 스냅샷은 티어 예산 기준 TARGET 밴드로 미리 계산돼 있다. 요청 예산이 티어와 다를 수 있으므로
-            // (허용 오차 15%), 실제 요청 예산 기준 모드 규칙(TARGET ±12.5%, MAX 이하)을 서빙 시점에
-            // 다시 검증하고, 하나라도 어긋나면 빠른 경로를 포기하고 일반 경로로 흘린다.
-            Optional<BuildChatTierSnapshotStore.TierSnapshot> tierSnapshot =
-                    tierSnapshotStore.bestFor(rawBudgetIntent.budget(), rawBudgetIntent.mode(), tierSnapshotTolerancePct)
-                            .filter(snapshot -> snapshotSatisfiesBudgetMode(snapshot.builds(), rawBudgetIntent.budget(), rawBudgetIntent.mode()));
-            long tierMs = elapsedMs(stageStartNanos);
-            if (tierSnapshot.isPresent()) {
-                BuildChatTierSnapshotStore.TierSnapshot snapshot = tierSnapshot.get();
-                Map<String, Object> response = fastResponse(
-                        "BUDGET",
-                        "내부 자산과 자동 검증 기준으로 미리 계산한 추천 조합을 바로 가져왔습니다.",
-                        snapshot.builds(),
-                        snapshot.warnings()
+
+        /* 대화형 agent를 호출 => 응답객체 생성 */
+        AiChatEngineResponse agentResponse =
+                quoteAgentAiChatEngineAdapter.respondLlmRequired(
+                        engineRequest,
+                        requestedAiProfile
                 );
-                buildChatCacheService.storeAsync(body, requestedAiProfile, userId, response);
-                logBuildChatPath("FAST_TIER_SNAPSHOT", startedNanos, userId, requestedAiProfile, false, BuildChatGuardStats.empty(),
-                        "redisMs=" + redisMs + " tierMs=" + tierMs + " tierBudgetWon=" + snapshot.tierBudgetWon());
-                return withConversationTransition(response, recommendationConversationTransition);
-            }
-        }
-        stageStartNanos = System.nanoTime();
-        Optional<Map<String, Object>> completionResponse = recommendFlow && !quoteAgentFlow
-                ? draftCompletionFastResponse(body, message, rawBudgetIntent)
-                : Optional.empty();
-        long completionMs = elapsedMs(stageStartNanos);
-        if (completionResponse.isPresent()) {
-            Map<String, Object> response = completionResponse.get();
-            buildChatCacheService.storeAsync(body, requestedAiProfile, userId, response);
-            logBuildChatPath("FAST_DRAFT_COMPLETION", startedNanos, userId, requestedAiProfile, false, BuildChatGuardStats.routeFallback(),
-                    "redisMs=" + redisMs + " completionMs=" + completionMs);
-            return withConversationTransition(response, recommendationConversationTransition);
-        }
-        stageStartNanos = System.nanoTime();
-        Optional<Map<String, Object>> deterministicResponse = recommendFlow && !quoteAgentFlow
-                ? deterministicFastResponse(body, message, rawBudgetIntent)
-                : Optional.empty();
-        long deterministicMs = elapsedMs(stageStartNanos);
-        if (deterministicResponse.isPresent()) {
-            Map<String, Object> response = deterministicResponse.get();
-            buildChatCacheService.storeAsync(body, requestedAiProfile, userId, response);
-            if (semanticCacheAllowed && !carriesTurnSpecificRouting(response)) {
-                semanticCacheService.storeAsync(body, requestedAiProfile, intentDecision, response);
-            }
-            logBuildChatPath("FAST_DETERMINISTIC", startedNanos, userId, requestedAiProfile, false, BuildChatGuardStats.routeFallback(),
-                    "redisMs=" + redisMs + " deterministicMs=" + deterministicMs);
-            return withConversationTransition(response, recommendationConversationTransition);
-        }
-        stageStartNanos = System.nanoTime();
-        var semanticCachedResponse = semanticCacheAllowed
-                ? semanticCacheService.lookup(body, requestedAiProfile, intentDecision)
-                : Optional.<Map<String, Object>>empty();
-        long semanticMs = elapsedMs(stageStartNanos);
-        if (semanticCachedResponse.isPresent()) {
-            Map<String, Object> response = new LinkedHashMap<>(semanticCachedResponse.get());
-            // 배포 전에 저장된 행에는 아직 이동 경로가 남아 있을 수 있다(TTL 만료 전까지).
-            // 다른 질문에 실려 화면을 끌고 가지 않도록 읽는 쪽에서도 한 번 더 벗겨낸다.
-            response.remove("actions");
-            if (mergedClarificationReply && shouldPreserveMergedTurnContext(response)) {
-                attachFollowUpContext(response, message);
-            }
-            logBuildChatPath("SEMANTIC_CACHE_HIT", startedNanos, userId, requestedAiProfile, true, BuildChatGuardStats.empty(),
-                    "redisMs=" + redisMs + " deterministicMs=" + deterministicMs + " semanticMs=" + semanticMs);
-            return withConversationTransition(response, recommendationConversationTransition);
-        }
-        // 다중부품 감액 요청은 현재 드래프트를 대체할 전체 변경안과 부품별 조정 칩을 함께 제공한다.
-        // 사용자가 적용 버튼을 누르기 전에는 quote draft를 변경하지 않는다.
-        Optional<Map<String, Object>> multiPartReduction = quoteAgentFlow
-                ? Optional.empty()
-                : multiPartReductionResponse(body, message, rawBudgetIntent);
-        if (multiPartReduction.isPresent()) {
-            Map<String, Object> response = multiPartReduction.get();
-            attachFollowUpContext(response, message);
-            buildChatCacheService.storeAsync(body, requestedAiProfile, userId, response);
-            if (semanticCacheAllowed && !carriesTurnSpecificRouting(response)) {
-                semanticCacheService.storeAsync(body, requestedAiProfile, intentDecision, response);
-            }
-            logBuildChatPath("FAST_MULTI_PART_REDUCTION", startedNanos, userId, requestedAiProfile, false, BuildChatGuardStats.routeFallback(),
-                    "redisMs=" + redisMs + " deterministicMs=" + deterministicMs + " semanticMs=" + semanticMs);
-            return response;
-        }
-        stageStartNanos = System.nanoTime();
-        // 사실 우선: 서버가 방금 계산한 사실(파싱 예산·최소 구성가·부품 조건 최저가·드래프트 요약)을
-        // LLM 프롬프트에 주입한다 — LLM이 이미 아는 사실을 되묻거나("예산이 빠졌어요")
-        // 사실과 다른 캔드 답("찾지 못했다")을 쓰는 것을 원천 차단한다.
-        Map<String, Object> engineBody = new LinkedHashMap<>(body);
-        engineBody.put("serverFacts", intentDecision.intent() == BuildChatIntent.LOCATE_BOARD_PART
-                ? Map.of()
-                : buildServerFacts(message, rawBudgetIntent, body, user));
-        if ((recommendFlow || isExplicitHardFullBuildRecommendation(message, body, rawBudgetIntent))
-                && rawBudgetIntent.explicitHardConstraint()
-                && objectMaps(objectMap(body.get("currentQuoteDraft")).get("items")).isEmpty()) {
-            // 라우터가 전체 견적 추천으로 확정했고 편집할 draft도 없는 경우다. LLM 판단은 유지하되
-            // 이동·AS·mutation 필드를 포함한 범용 schema 대신 견적 요구사항 전용 schema를 사용한다.
-            engineBody.put("_buildRecommendationParseOnly", true);
-        }
-        AiChatEngineResponse engineResponse;
-        try {
-            AiChatEngineRequest engineRequest = new AiChatEngineRequest(
-                    message,
-                    chatSurface(body),
-                    firstText(
-                            text(body.get("selectedCategory")),
-                            firstText(detectRecommendationTargetCategory(message), detectPartCategory(message))
-                    ),
-                    text(body.get("buildId")),
-                    text(body.get("draftId")),
-                    engineBody,
-                    userId
-            );
-            engineResponse = mockRequest
-                    ? mockAiChatEngine.respond(engineRequest)
-                    : quoteAgentFlow
-                            ? quoteAgentAiChatEngineAdapter.respondLlmRequired(engineRequest, requestedAiProfile)
-                            : aiChatEngine.respondLlmRequired(engineRequest, requestedAiProfile);
-        } catch (RuntimeException error) {
-            if (recommendFlow) {
-                throw error;
-            }
-            // 라우터가 UNSUPPORTED로 봤던 문장인데 LLM까지 불가한 경우 — dead-end 문구 대신
-            // 지금 눌러볼 수 있는 기능 칩과 함께 우아하게 거절한다.
-            log.warn("Build Chat LLM unavailable for demoted UNSUPPORTED intent, returning graceful refusal", error);
-            Map<String, Object> refusal = gracefulRefusalResponse(intentDecision.targetCategory());
-            attachFollowUpContext(refusal, message);
-            logBuildChatPath("FAST_UNSUPPORTED_FALLBACK", startedNanos, userId, requestedAiProfile, false, BuildChatGuardStats.empty());
-            return refusal;
-        }
-        long engineMs = elapsedMs(stageStartNanos);
-        if (engineResponse.intent() == AiChatIntent.SUPPORT_GUIDANCE) {
-            Map<String, Object> response = shoppingSupportGuidanceResponse(
-                    message,
-                    objectMap(objectMap(engineResponse.parsedContext()).get("supportIntent"))
-            );
-            attachFollowUpContext(response, message);
-            logBuildChatPath("LLM_SUPPORT_GUIDANCE", startedNanos, userId, requestedAiProfile, false, BuildChatGuardStats.empty(),
-                    "redisMs=" + redisMs + " engineMs=" + engineMs);
-            return response;
-        }
-        BuildChatGuardStats guardStats = new BuildChatGuardStats();
-        Map<String, Object> response = responseMap(engineResponse, rawBudgetIntent, guardStats);
-        // "어느 상품인지" 되묻는 턴은 그 자체로 완결이다 — 질문 문구와 후보 칩이 한 짝이라, 아래 후처리
-        // (부품 제약 역제안·용도 예산 칩·폴백 조합·에코)가 하나라도 손대면 상품을 물어 놓고
-        // 예산 조합이나 "조건을 넓혀서 추천해줘" 칩을 보여 주게 된다. 여기서 잘라 낸다.
-        if (!stringList(engineResponse.parsedContext().get("routeChoiceChips")).isEmpty()) {
-            response.put("builds", List.of());
-            buildChatCacheService.storeAsync(body, requestedAiProfile, userId, response);
-            logBuildChatPath("LLM_ROUTE_CHOICE", startedNanos, userId, requestedAiProfile, false, guardStats,
-                    "redisMs=" + redisMs + " engineMs=" + engineMs);
-            return response;
-        }
-        if (intentDecision.intent() == BuildChatIntent.LOCATE_BOARD_PART) {
-            List<String> focusCategories = llmBoardFocusCategories(engineResponse.parsedContext(), body);
-            if (!focusCategories.isEmpty()) {
-                Map<String, Object> focusResponse = boardFocusResponse(focusCategories);
-                buildChatCacheService.storeAsync(body, requestedAiProfile, userId, focusResponse);
-                logBuildChatPath("LLM_BOARD_FOCUS", startedNanos, userId, requestedAiProfile, false, guardStats,
-                        "redisMs=" + redisMs + " engineMs=" + engineMs);
-                return focusResponse;
-            }
-        }
-        boolean readOnlySimulationFlow = intentDecision.intent() == BuildChatIntent.SIMULATE_REPLACEMENT;
-        boolean readOnlyBoardFocusFlow = intentDecision.intent() == BuildChatIntent.LOCATE_BOARD_PART;
-        if (readOnlySimulationFlow || readOnlyBoardFocusFlow) {
-            response.put("builds", List.of());
-        }
-        // 라우터가 전체 견적(BUILD_RECOMMEND)으로 판정했는데 LLM 엔진이 내부적으로 부품 추천으로
-        // 분류해 answerType=PART가 되는 경우를 교정한다 (조합 카드가 있으면 BUDGET으로 표기).
-        if (intentDecision.intent() == BuildChatIntent.BUILD_RECOMMEND
-                && !objectMaps(response.get("builds")).isEmpty()
-                && "PART".equals(text(response.get("answerType")))) {
-            response.put("answerType", "BUDGET");
-        }
-        // 데모 안전망: 견적 요청인데 LLM이 빈 조합을 반환하면(용도-only 등) 내부 자산 기준
-        // 폴백 조합으로 보강해 빈 화면을 막는다. 라우터가 이미 BUILD_RECOMMEND로 판정한 경우만.
-        // 단 드래프트가 있는 되묻기/수정 턴(ASK_FOLLOW_UP·BUILD_MODIFY)은 무관한 예산 조합을 끼워넣지
-        // 않는다 — 되묻기 응답에 카드가 생기면 원문 에코 조건이 깨진다. 드래프트 없는 용도-only 턴은 유지.
-        boolean draftModifyTurn = intentDecision.intent() == BuildChatIntent.BUILD_RECOMMEND
-                && objectMaps(response.get("builds")).isEmpty()
-                && !objectMaps(objectMap(body.get("currentQuoteDraft")).get("items")).isEmpty()
-                && (engineResponse.intent() == AiChatIntent.ASK_FOLLOW_UP
-                        || engineResponse.intent() == AiChatIntent.BUILD_MODIFY);
-        // 무예산 용도-only 되묻기 턴(드래프트도 예산도 없이 용도만 있어 LLM이 되물은 경우)에는
-        // 무관한 예산 조합을 주입하지 않고, 대신 예산대 방향 칩만 붙인다(아래 에코 블록 근처).
-        boolean usageOnlyFollowUp = engineResponse.intent() == AiChatIntent.ASK_FOLLOW_UP
-                && !rawBudgetIntent.hasBudget()
-                && objectMaps(objectMap(body.get("currentQuoteDraft")).get("items")).isEmpty();
-        if (intentDecision.intent() == BuildChatIntent.BUILD_RECOMMEND
-                && objectMaps(response.get("builds")).isEmpty()
-                && !draftModifyTurn
-                && !usageOnlyFollowUp
-                && !hasEffectiveHardConstraint(engineResponse.parsedContext(), rawBudgetIntent)) {
-            List<String> fallbackWarnings = new ArrayList<>();
-            List<Map<String, Object>> fallbackBuilds = rawBudgetIntent.hasBudget()
-                    ? nearBudgetLadderBuilds(rawBudgetIntent.budget(), rawBudgetIntent.mode(), List.of(), fallbackWarnings, new BuildChatGuardStats())
-                    : openBudgetFallbackBuilds(fallbackWarnings);
-            if (!fallbackBuilds.isEmpty()) {
-                response.put("answerType", "BUDGET");
-                response.put("builds", fallbackBuilds);
-                List<String> mergedWarnings = new ArrayList<>(stringList(response.get("warnings")));
-                mergedWarnings.addAll(fallbackWarnings);
-                response.put("warnings", distinct(mergedWarnings));
-            }
-        }
-        // 범용 역제안 후처리 — LLM이 구조화한 제약을 부품 DB와 대조해, 불가능한 요청이면
-        // dead-end 대신 실데이터 숫자(최저가·부족액·최소 구성가)와 다음 행동 칩을 제시한다.
-        // 미리보기(변경)를 먼저 시도하고, 미리보기가 못 만들어진 변경 요청은 부품 제약 역제안이 이어받는다.
-        // 단, "여유 있는 케이스 추천"은 LLM이 BUILD_MODIFY로 흔들려도 실제 개선 검증이 먼저다.
-        // 이 순서를 지키지 않으면 검증 전 추천 1개가 변경 미리보기로 확정된다.
-        boolean caseImprovementHandled = !readOnlyBoardFocusFlow
-                && applyCaseScoreImprovementProposal(response, engineResponse, message, body);
-        if (!readOnlySimulationFlow && !readOnlyBoardFocusFlow && !caseImprovementHandled) {
-            applyDraftEditPreview(response, engineResponse, body);
-        }
-        if (!readOnlyBoardFocusFlow) {
-            // 속성 요청(수랭/PCIe 세대/통풍) + 드래프트에 같은 카테고리 존재 → 1:1 스펙비교 카드로 답한다.
-            // 카드가 못 나오면(비교 대상 없음·후보 없음) 아래 역제안이 후보 나열로 이어받는다.
-            if (!caseImprovementHandled) {
-                applyAttributeSimulationCard(response, engineResponse, message, body);
-                applyPartConstraintCounterProposal(response, engineResponse, message, body, user);
-            }
-            applyUsageMinimumCounterProposal(response, engineResponse, rawBudgetIntent);
-        }
-        if (recommendFlow
-                && objectMaps(response.get("builds")).isEmpty()
-                && response.get("simulation") == null
-                && hasEffectiveHardConstraint(engineResponse.parsedContext(), rawBudgetIntent)) {
-            List<String> unresolvedWarnings = new ArrayList<>(stringList(response.get("warnings")));
-            unresolvedWarnings.add("PART_CONSTRAINT_NOT_FOUND");
-            response.put("answerType", "BUDGET");
-            response.put("message", "요청하신 \"" + message.trim()
-                    + "\" 조건을 모두 만족하면서 자동 검증을 통과한 내부 자산 조합을 찾지 못했습니다. "
-                    + "조건을 유지한 채 예산을 조정하거나 일부 조건을 완화해 다시 확인해 주세요.");
-            response.put("warnings", distinct(unresolvedWarnings));
-            response.put("quickReplies", List.of(
-                    "조건을 유지하고 예산을 높여 추천해줘",
-                    "일부 조건을 완화해서 추천해줘"));
-            response.remove("clarification");
-        }
-        // LLM이 스스로 되물은 턴("용량이나 DDR 조건 알려주세요")은 원문을 에코해 다음 짧은 답("ddr5")이
-        // 원 요청과 합성되게 한다 — 이게 없으면 후속 답이 맥락을 잃고 대화가 끊긴다.
-        // GENERAL 계열(PRICE_ALERT_HELP 등)은 의도적으로 제외 — 에코 오염 진입점을 넓히지 않는다.
-        boolean askedFollowUp = engineResponse.intent() == AiChatIntent.ASK_FOLLOW_UP
-                || ((engineResponse.intent() == AiChatIntent.PART_RECOMMEND
-                                || engineResponse.intent() == AiChatIntent.BUILD_MODIFY
-                                || engineResponse.intent() == AiChatIntent.EXPLAIN)
-                        && objectMaps(response.get("builds")).isEmpty()
-                        && stringList(response.get("quickReplies")).isEmpty());
-        // 되묻기는 최대 1회 — 이미 되묻기 후속 턴이면 에코를 재부착하지 않는다.
-        // 속성 1:1 카드로 답을 낸 턴은 완결 응답이므로 에코를 붙이지 않는다(카드가 주인공).
-        // 화면을 실제로 옮긴 턴도 완결 응답이다 — 에코를 붙이면 다음 이동 요청이 이 문장과 합성돼 깨진다.
-        if (askedFollowUp && !clarificationFollowUp
-                && response.get("actions") == null
-                && response.get("clarification") == null && response.get("simulation") == null) {
-            response.put("clarification", MockData.map(
-                    "missingSlots", List.of(),
-                    "originalMessage", message
-            ));
-        }
-        // 무예산 용도-only 되묻기에는 예산대 방향 칩을 붙여 클릭 한 번으로 다음 턴이 예산으로 진행되게 한다.
-        if (usageOnlyFollowUp && stringList(response.get("quickReplies")).isEmpty()) {
-            response.put("quickReplies", usageBudgetDirectionChips(message, clarificationMinimumTotal(message)));
-        }
-        alignBuildCountMessage(response);
-        ensureNextAction(response, intentDecision.intent(), rawBudgetIntent);
-        if ((mergedClarificationReply && shouldPreserveMergedTurnContext(response))
-                || shouldPreserveSuccessfulTurnContext(response)) {
-            attachFollowUpContext(response, message);
-        }
-        candidateReranker.recordShadowScores(body, response, userId, requestedAiProfile);
-        log.debug("Build Chat response generated: userId={}, requestedAiProfile={}, cacheStore=true", userId, requestedAiProfile);
-        buildChatCacheService.storeAsync(body, requestedAiProfile, userId, response);
-        // 이 턴의 상품·화면에 종속된 산출물(이동 경로·후보 선택 칩)은 semantic 캐시에 넣지 않는다 —
-        // 서명이 비슷하다는 이유로 다른 질문에 재생되면 엉뚱한 화면으로 끌고 가거나 남의 상품을 권한다.
-        boolean turnSpecificRouting = carriesTurnSpecificRouting(response)
-                || !stringList(engineResponse.parsedContext().get("routeChoiceChips")).isEmpty();
-        if (semanticCacheAllowed && !turnSpecificRouting) {
-            semanticCacheService.storeAsync(body, requestedAiProfile, intentDecision, response);
-        }
-        logBuildChatPath("LLM_FULL", startedNanos, userId, requestedAiProfile, false, guardStats,
-                "redisMs=" + redisMs + " deterministicMs=" + deterministicMs + " semanticMs=" + semanticMs + " engineMs=" + engineMs);
-        return withConversationTransition(response, recommendationConversationTransition);
+
+        /* 해당 객체를 반환 */
+        return quoteAgentResponseMap(
+            agentResponse,
+            rawBudgetIntent
+        );
+
+        // BuildChatIntentDecision intentDecision = intentRouter.decide(body, message);
+        // String recommendationConversationTransition = buildRecommendationConversationTransition(
+        //         message,
+        //         mergedClarificationReply,
+        //         intentDecision,
+        //         rawBudgetIntent
+        // );
+        // log.debug(
+        //         "Build Chat intent decision: intent={}, confidence={}, sideEffectRisk={}, preferredPath={}, cachePolicy={}, ambiguityReasons={}",
+        //         intentDecision.intent(),
+        //         intentDecision.confidence(),
+        //         intentDecision.sideEffectRisk(),
+        //         intentDecision.preferredPath(),
+        //         intentDecision.cachePolicy(),
+        //         intentDecision.ambiguityReasons()
+        // );
+        // log.debug(
+        //         "Build Chat request received: userId={}, requestedAiProfile={}, cacheLookup=true, cacheService={}",
+        //         userId,
+        //         requestedAiProfile,
+        //         buildChatCacheService.getClass().getName()
+        // );
+        // if (intentDecision.intent() == BuildChatIntent.SUPPORT_GUIDANCE) {
+        //     Map<String, Object> response = shoppingSupportGuidanceResponse(message, Map.of());
+        //     attachFollowUpContext(response, message);
+        //     logBuildChatPath("FAST_SUPPORT_GUIDANCE", startedNanos, userId, requestedAiProfile, false, BuildChatGuardStats.empty());
+        //     return response;
+        // }
+        // if (intentDecision.intent() == BuildChatIntent.OPEN_DRAFT_HISTORY) {
+        //     Map<String, Object> response = draftHistoryResponse(user, intentDecision);
+        //     logBuildChatPath("FAST_DRAFT_HISTORY", startedNanos, userId, requestedAiProfile, false,
+        //             BuildChatGuardStats.empty());
+        //     return response;
+        // }
+        // if (intentDecision.intent() == BuildChatIntent.LOCATE_BOARD_PART
+        //         && "HIGH".equals(intentDecision.confidence())
+        //         && !intentDecision.targetCategories().isEmpty()) {
+        //     Map<String, Object> response = boardFocusResponse(intentDecision.targetCategories());
+        //     logBuildChatPath("FAST_BOARD_FOCUS", startedNanos, userId, requestedAiProfile, false, BuildChatGuardStats.empty());
+        //     return response;
+        // }
+        // if (intentDecision.intent() == BuildChatIntent.EXPLAIN_BUILD_SCORE) {
+        //     Map<String, Object> response = buildScoreExplanationResponse(body, message, user, intentDecision);
+        //     if (mergedClarificationReply) {
+        //         attachFollowUpContext(response, message);
+        //     } else if (contextualCandidateFollowUp) {
+        //         attachFollowUpContext(response, clarificationOriginal + " " + rawMessage);
+        //     }
+        //     logBuildChatPath("LIVE_BUILD_ASSESSMENT", startedNanos, userId, SCORE_EXPLANATION_PROFILE, false, BuildChatGuardStats.empty());
+        //     return response;
+        // }
+        // if (intentDecision.intent() == BuildChatIntent.SIMULATE_REPLACEMENT) {
+        //     Optional<Map<String, Object>> simulationCard = performanceSimulationResponse(body, message);
+        //     // 카드가 못 나왔고(교체 대상 미해상) 속성 요청 가능성이 있으면 dead-end로 끝내지 않고 LLM 경로로
+        //     // 흘려보낸다(UNSUPPORTED→LLM 강등과 동일 철학) — LLM이 "수랭/PCIe 5.0/통풍" 같은 속성을
+        //     // partConstraint로 구조화하면 서버가 속성 조회로 1:1 비교 카드 또는 후보를 제시한다.
+        //     // LLM도 못 잡으면 아래 공통 경로의 안전망(속성 카드 실패 시 역제안·에코·칩)이 받는다.
+        //     boolean attributeFallThrough = simulationCard.isEmpty()
+        //             && simulationAttributeFallThroughEligible(body, message);
+        //     if (!attributeFallThrough) {
+        //         Map<String, Object> response = simulationCard
+        //                 .orElseGet(() -> simulationClarificationResponse(body, message));
+        //         // 시뮬 카드가 못 나온 dead-end면 원문을 에코해 다음 짧은 답("MSI X870")이 원 요청과 합성되게
+        //         // 한다(무상태 후속). 되묻기는 최대 1회 — 이미 후속 턴이면 재부착하지 않는다.
+        //         if (response.get("simulation") == null && response.get("clarification") == null) {
+        //             response.put("clarification", MockData.map("missingSlots", List.of(), "originalMessage", message));
+        //         }
+        //         // 에코도 카드도 없는 순수 dead-end에는 다음 행동 칩을 보강한다(형태 판정 — 에코가 붙었으면 개입 안 함).
+        //         ensureNextAction(response, intentDecision.intent(), rawBudgetIntent);
+        //         logBuildChatPath("FAST_SIMULATION", startedNanos, userId, requestedAiProfile, false, BuildChatGuardStats.empty());
+        //         return response;
+        //     }
+        // }
+        // Optional<Map<String, Object>> targetFpsPreview = targetFpsGpuPreviewResponse(body, message);
+        // if (targetFpsPreview.isPresent()) {
+        //     Map<String, Object> response = targetFpsPreview.get();
+        //     attachFollowUpContext(response, message);
+        //     logBuildChatPath("FAST_TARGET_FPS_DRAFT_EDIT", startedNanos, userId, requestedAiProfile, false,
+        //             BuildChatGuardStats.empty());
+        //     return response;
+        // }
+        // Optional<Map<String, Object>> compatibleCasePreview = compatibleCaseRepairPreviewResponse(body, message);
+        // if (compatibleCasePreview.isPresent()) {
+        //     Map<String, Object> response = compatibleCasePreview.get();
+        //     attachFollowUpContext(response, message);
+        //     logBuildChatPath("FAST_COMPATIBLE_CASE_DRAFT_EDIT", startedNanos, userId, requestedAiProfile, false,
+        //             BuildChatGuardStats.empty());
+        //     return response;
+        // }
+        // Optional<Map<String, Object>> exactPartPreview = exactSingletonPartPreviewResponse(body, message, user);
+        // if (exactPartPreview.isPresent()) {
+        //     Map<String, Object> response = exactPartPreview.get();
+        //     attachFollowUpContext(response, message);
+        //     logBuildChatPath("FAST_EXACT_PART_PREVIEW", startedNanos, userId, requestedAiProfile, false, BuildChatGuardStats.empty());
+        //     return response;
+        // }
+        // Optional<Map<String, Object>> underspecifiedPartMutation = underspecifiedPartMutationClarificationResponse(body, message);
+        // if (underspecifiedPartMutation.isPresent()) {
+        //     Map<String, Object> response = underspecifiedPartMutation.get();
+        //     logBuildChatPath("FAST_PART_SELECTION_CLARIFICATION", startedNanos, userId, requestedAiProfile, false,
+        //             BuildChatGuardStats.empty());
+        //     return response;
+        // }
+        // Optional<Map<String, Object>> directionalDraftEdit = directionalDraftEditFastResponse(body, message);
+        // if (directionalDraftEdit.isPresent()) {
+        //     Map<String, Object> response = directionalDraftEdit.get();
+        //     attachFollowUpContext(response, message);
+        //     logBuildChatPath("FAST_DIRECTIONAL_DRAFT_EDIT", startedNanos, userId, requestedAiProfile, false, BuildChatGuardStats.empty());
+        //     return response;
+        // }
+        // Optional<Map<String, Object>> fastCaseImprovement = fastCaseScoreImprovementResponse(body, message);
+        // if (fastCaseImprovement.isPresent()) {
+        //     Map<String, Object> response = fastCaseImprovement.get();
+        //     attachFollowUpContext(response, message);
+        //     logBuildChatPath("FAST_CASE_SCORE_IMPROVEMENT", startedNanos, userId, requestedAiProfile, false, BuildChatGuardStats.empty());
+        //     return response;
+        // }
+        // Optional<Map<String, Object>> progressiveClarification = progressiveLowInformationClarificationResponse(
+        //         message,
+        //         rawMessage,
+        //         clarificationOriginal,
+        //         mergedClarificationReply,
+        //         intentDecision
+        // );
+        // if (progressiveClarification.isPresent()) {
+        //     Map<String, Object> response = progressiveClarification.get();
+        //     logBuildChatPath("FAST_PROGRESSIVE_CLARIFICATION", startedNanos, userId, requestedAiProfile, false,
+        //             BuildChatGuardStats.empty());
+        //     return response;
+        // }
+        // if (intentDecision.intent() == BuildChatIntent.ASK_CLARIFICATION && !quoteAgentEnabled) {
+        //     Map<String, Object> response = clarificationResponse(
+        //             body,
+        //             message,
+        //             rawMessage,
+        //             intentDecision.ambiguityReasons(),
+        //             clarificationFollowUp,
+        //             userId
+        //     );
+        //     logBuildChatPath("FAST_CLARIFICATION", startedNanos, userId, requestedAiProfile, false, BuildChatGuardStats.empty());
+        //     return response;
+        // }
+        // // 라우터가 UNSUPPORTED로 본 문장도 즉답 거절하지 않는다 — 키워드 오인("램을 바꿔줘" 류)이
+        // // 잦아, LLM 제약 파서까지 흘려보내 실제 의도(부품 제약·드래프트 변경·설명)를 살린다.
+        // // LLM이 불가하거나 실패할 때만 우아한 거절(기능 안내 + 바로 눌러볼 칩)로 마무리한다.
+        // Optional<Map<String, Object>> minimumFeasibleBuild = minimumFeasibleBuildResponse(body, message);
+        // if (minimumFeasibleBuild.isPresent()) {
+        //     Map<String, Object> response = minimumFeasibleBuild.get();
+        //     buildChatCacheService.storeAsync(body, requestedAiProfile, userId, response);
+        //     logBuildChatPath("FAST_MINIMUM_FEASIBLE_BUILD", startedNanos, userId, requestedAiProfile, false,
+        //             BuildChatGuardStats.routeFallback());
+        //     return response;
+        // }
+        // boolean recommendFlow = intentDecision.intent() == BuildChatIntent.BUILD_RECOMMEND;
+        // boolean quoteAgentFlow = quoteAgentEnabled
+        //         && quoteAgentAiChatEngineAdapter != null
+        //         && userId != null
+        //         && (intentDecision.intent() == BuildChatIntent.BUILD_RECOMMEND
+        //             || intentDecision.intent() == BuildChatIntent.ASK_CLARIFICATION
+        //             || intentDecision.intent() == BuildChatIntent.UNSUPPORTED);
+        // // 명시 부품 하드 조건은 모델명·예산이 정확히 일치해야만 재사용할 수 있다. exact cache는 계속
+        // // 사용하되, miss 가능성이 높은 semantic lookup을 위해 임베딩을 먼저 호출하지 않는다. 복잡한
+        // // 요구사항 해석은 아래 LLM 경로에 그대로 맡긴다.
+        // boolean semanticCacheAllowed = !quoteAgentFlow && !rawBudgetIntent.explicitHardConstraint();
+        // long stageStartNanos = System.nanoTime();
+        // var cachedResponse = quoteAgentFlow
+        //         ? Optional.<Map<String, Object>>empty()
+        //         : buildChatCacheService.lookup(body, requestedAiProfile, userId);
+        // long redisMs = elapsedMs(stageStartNanos);
+        // if (cachedResponse.isPresent()) {
+        //     // 캐시 구현이나 테스트 대역이 불변 Map을 반환할 수 있다. 후속 문맥을 붙이더라도
+        //     // 캐시 원본 payload 자체를 바꾸지 않도록 요청별 복사본만 수정한다.
+        //     Map<String, Object> response = new LinkedHashMap<>(cachedResponse.get());
+        //     if (mergedClarificationReply && shouldPreserveMergedTurnContext(response)) {
+        //         attachFollowUpContext(response, message);
+        //     }
+        //     logBuildChatPath("CACHE_HIT", startedNanos, userId, requestedAiProfile, true, BuildChatGuardStats.empty(),
+        //             "redisMs=" + redisMs);
+        //     return withConversationTransition(response, recommendationConversationTransition);
+        // }
+        // // 결정적 이동: "{정확한 상품명} 상세페이지로 이동해"류를 LLM 없이 즉시 처리한다.
+        // // 라우터가 UNSUPPORTED로 본 턴에서만 시도한다 — 견적 추천·시뮬·점수설명·보드포커스·되묻기는
+        // // 이미 위에서 각자 경로로 빠졌으므로, 여기서는 구조적으로 '이동만' 가로챌 수 있다.
+        // // 상품을 하나로 특정했을 때만 이동하고, 못 하면 조용히 기존 LLM 경로로 떨어진다.
+        // if (partRouteResolver != null && intentDecision.intent() == BuildChatIntent.UNSUPPORTED) {
+        //     Optional<PartRouteResolver.ResolvedRoute> fastRoute;
+        //     try {
+        //         fastRoute = partRouteResolver.resolveFastRoute(
+        //                 message,
+        //                 text(body.get("selectedCategory")),
+        //                 BuildChatIntentRouter.isRouteChoiceSelection(body));
+        //     } catch (RuntimeException error) {
+        //         // 이동 해상은 부가 기능이다 — DB가 흔들려도 대화를 끊지 않고 LLM 경로로 넘긴다.
+        //         log.warn("Build Chat deterministic route resolution failed, falling back to LLM path", error);
+        //         fastRoute = Optional.empty();
+        //     }
+        //     if (fastRoute.isPresent()) {
+        //         PartRouteResolver.ResolvedRoute resolved = fastRoute.get();
+        //         Map<String, Object> response = fastResponse("GENERAL", resolved.message(), List.of());
+        //         // navigationActions()가 만드는 모양과 정확히 같게 — 프론트가 두 경로를 구분하지 않게 한다.
+        //         response.put("actions", List.of(MockData.map(
+        //                 "type", AiChatActionType.OPEN_ROUTE.name(),
+        //                 "label", resolved.label(),
+        //                 "payload", MockData.map("route", resolved.route())
+        //         )));
+        //         // 이동한 턴은 완결 응답이라 되묻기 에코도 다음 행동 칩도 붙이지 않는다.
+        //         // 캐시에도 넣지 않는다 — 이미 DB 조회만으로 끝나 아낄 LLM 비용이 없고,
+        //         // /parts/{uuid}를 캐싱하면 비활성화된 상품 경로를 TTL 동안 계속 내보낸다.
+        //         logBuildChatPath("FAST_PART_DETAIL_ROUTE", startedNanos, userId, requestedAiProfile, false,
+        //                 BuildChatGuardStats.empty(), "redisMs=" + redisMs);
+        //         return response;
+        //     }
+        // }
+        // Optional<Map<String, Object>> fastPartRecommendation = quoteAgentFlow
+        //         ? Optional.empty()
+        //         : deterministicPartRecommendationResponse(body, message, user);
+        // if (fastPartRecommendation.isPresent()) {
+        //     Map<String, Object> response = fastPartRecommendation.get();
+        //     applyConversationalPartAdvice(response, body, message, user, requestedAiProfile);
+        //     attachFollowUpContext(response, message);
+        //     buildChatCacheService.storeAsync(body, requestedAiProfile, userId, response);
+        //     logBuildChatPath("FAST_PART_RECOMMEND", startedNanos, userId, requestedAiProfile, false,
+        //             BuildChatGuardStats.empty(), "redisMs=" + redisMs);
+        //     return response;
+        // }
+        // if (!quoteAgentFlow
+        //         && recommendFlow
+        //         && tierSnapshotStore != null
+        //         && rawBudgetIntent.hasBudget()
+        //         && !rawBudgetIntent.explicitHardConstraint()
+        //         && objectMaps(objectMap(body.get("currentQuoteDraft")).get("items")).isEmpty()) {
+        //     stageStartNanos = System.nanoTime();
+        //     // 스냅샷은 티어 예산 기준 TARGET 밴드로 미리 계산돼 있다. 요청 예산이 티어와 다를 수 있으므로
+        //     // (허용 오차 15%), 실제 요청 예산 기준 모드 규칙(TARGET ±12.5%, MAX 이하)을 서빙 시점에
+        //     // 다시 검증하고, 하나라도 어긋나면 빠른 경로를 포기하고 일반 경로로 흘린다.
+        //     Optional<BuildChatTierSnapshotStore.TierSnapshot> tierSnapshot =
+        //             tierSnapshotStore.bestFor(rawBudgetIntent.budget(), rawBudgetIntent.mode(), tierSnapshotTolerancePct)
+        //                     .filter(snapshot -> snapshotSatisfiesBudgetMode(snapshot.builds(), rawBudgetIntent.budget(), rawBudgetIntent.mode()));
+        //     long tierMs = elapsedMs(stageStartNanos);
+        //     if (tierSnapshot.isPresent()) {
+        //         BuildChatTierSnapshotStore.TierSnapshot snapshot = tierSnapshot.get();
+        //         Map<String, Object> response = fastResponse(
+        //                 "BUDGET",
+        //                 "내부 자산과 자동 검증 기준으로 미리 계산한 추천 조합을 바로 가져왔습니다.",
+        //                 snapshot.builds(),
+        //                 snapshot.warnings()
+        //         );
+        //         buildChatCacheService.storeAsync(body, requestedAiProfile, userId, response);
+        //         logBuildChatPath("FAST_TIER_SNAPSHOT", startedNanos, userId, requestedAiProfile, false, BuildChatGuardStats.empty(),
+        //                 "redisMs=" + redisMs + " tierMs=" + tierMs + " tierBudgetWon=" + snapshot.tierBudgetWon());
+        //         return withConversationTransition(response, recommendationConversationTransition);
+        //     }
+        // }
+        // stageStartNanos = System.nanoTime();
+        // Optional<Map<String, Object>> completionResponse = recommendFlow && !quoteAgentFlow
+        //         ? draftCompletionFastResponse(body, message, rawBudgetIntent)
+        //         : Optional.empty();
+        // long completionMs = elapsedMs(stageStartNanos);
+        // if (completionResponse.isPresent()) {
+        //     Map<String, Object> response = completionResponse.get();
+        //     buildChatCacheService.storeAsync(body, requestedAiProfile, userId, response);
+        //     logBuildChatPath("FAST_DRAFT_COMPLETION", startedNanos, userId, requestedAiProfile, false, BuildChatGuardStats.routeFallback(),
+        //             "redisMs=" + redisMs + " completionMs=" + completionMs);
+        //     return withConversationTransition(response, recommendationConversationTransition);
+        // }
+        // stageStartNanos = System.nanoTime();
+        // Optional<Map<String, Object>> deterministicResponse = recommendFlow && !quoteAgentFlow
+        //         ? deterministicFastResponse(body, message, rawBudgetIntent)
+        //         : Optional.empty();
+        // long deterministicMs = elapsedMs(stageStartNanos);
+        // if (deterministicResponse.isPresent()) {
+        //     Map<String, Object> response = deterministicResponse.get();
+        //     buildChatCacheService.storeAsync(body, requestedAiProfile, userId, response);
+        //     if (semanticCacheAllowed && !carriesTurnSpecificRouting(response)) {
+        //         semanticCacheService.storeAsync(body, requestedAiProfile, intentDecision, response);
+        //     }
+        //     logBuildChatPath("FAST_DETERMINISTIC", startedNanos, userId, requestedAiProfile, false, BuildChatGuardStats.routeFallback(),
+        //             "redisMs=" + redisMs + " deterministicMs=" + deterministicMs);
+        //     return withConversationTransition(response, recommendationConversationTransition);
+        // }
+        // stageStartNanos = System.nanoTime();
+        // var semanticCachedResponse = semanticCacheAllowed
+        //         ? semanticCacheService.lookup(body, requestedAiProfile, intentDecision)
+        //         : Optional.<Map<String, Object>>empty();
+        // long semanticMs = elapsedMs(stageStartNanos);
+        // if (semanticCachedResponse.isPresent()) {
+        //     Map<String, Object> response = new LinkedHashMap<>(semanticCachedResponse.get());
+        //     // 배포 전에 저장된 행에는 아직 이동 경로가 남아 있을 수 있다(TTL 만료 전까지).
+        //     // 다른 질문에 실려 화면을 끌고 가지 않도록 읽는 쪽에서도 한 번 더 벗겨낸다.
+        //     response.remove("actions");
+        //     if (mergedClarificationReply && shouldPreserveMergedTurnContext(response)) {
+        //         attachFollowUpContext(response, message);
+        //     }
+        //     logBuildChatPath("SEMANTIC_CACHE_HIT", startedNanos, userId, requestedAiProfile, true, BuildChatGuardStats.empty(),
+        //             "redisMs=" + redisMs + " deterministicMs=" + deterministicMs + " semanticMs=" + semanticMs);
+        //     return withConversationTransition(response, recommendationConversationTransition);
+        // }
+        // // 다중부품 감액 요청은 현재 드래프트를 대체할 전체 변경안과 부품별 조정 칩을 함께 제공한다.
+        // // 사용자가 적용 버튼을 누르기 전에는 quote draft를 변경하지 않는다.
+        // Optional<Map<String, Object>> multiPartReduction = quoteAgentFlow
+        //         ? Optional.empty()
+        //         : multiPartReductionResponse(body, message, rawBudgetIntent);
+        // if (multiPartReduction.isPresent()) {
+        //     Map<String, Object> response = multiPartReduction.get();
+        //     attachFollowUpContext(response, message);
+        //     buildChatCacheService.storeAsync(body, requestedAiProfile, userId, response);
+        //     if (semanticCacheAllowed && !carriesTurnSpecificRouting(response)) {
+        //         semanticCacheService.storeAsync(body, requestedAiProfile, intentDecision, response);
+        //     }
+        //     logBuildChatPath("FAST_MULTI_PART_REDUCTION", startedNanos, userId, requestedAiProfile, false, BuildChatGuardStats.routeFallback(),
+        //             "redisMs=" + redisMs + " deterministicMs=" + deterministicMs + " semanticMs=" + semanticMs);
+        //     return response;
+        // }
+        // stageStartNanos = System.nanoTime();
+        // // 사실 우선: 서버가 방금 계산한 사실(파싱 예산·최소 구성가·부품 조건 최저가·드래프트 요약)을
+        // // LLM 프롬프트에 주입한다 — LLM이 이미 아는 사실을 되묻거나("예산이 빠졌어요")
+        // // 사실과 다른 캔드 답("찾지 못했다")을 쓰는 것을 원천 차단한다.
+        // Map<String, Object> engineBody = new LinkedHashMap<>(body);
+        // engineBody.put("serverFacts", intentDecision.intent() == BuildChatIntent.LOCATE_BOARD_PART
+        //         ? Map.of()
+        //         : buildServerFacts(message, rawBudgetIntent, body, user));
+        // if ((recommendFlow || isExplicitHardFullBuildRecommendation(message, body, rawBudgetIntent))
+        //         && rawBudgetIntent.explicitHardConstraint()
+        //         && objectMaps(objectMap(body.get("currentQuoteDraft")).get("items")).isEmpty()) {
+        //     // 라우터가 전체 견적 추천으로 확정했고 편집할 draft도 없는 경우다. LLM 판단은 유지하되
+        //     // 이동·AS·mutation 필드를 포함한 범용 schema 대신 견적 요구사항 전용 schema를 사용한다.
+        //     engineBody.put("_buildRecommendationParseOnly", true);
+        // }
+        // AiChatEngineResponse engineResponse;
+        // try {
+        //     AiChatEngineRequest engineRequest = new AiChatEngineRequest(
+        //             message,
+        //             chatSurface(body),
+        //             firstText(
+        //                     text(body.get("selectedCategory")),
+        //                     firstText(detectRecommendationTargetCategory(message), detectPartCategory(message))
+        //             ),
+        //             text(body.get("buildId")),
+        //             text(body.get("draftId")),
+        //             engineBody,
+        //             userId
+        //     );
+        //     engineResponse = mockRequest
+        //             ? mockAiChatEngine.respond(engineRequest)
+        //             : quoteAgentFlow
+        //                     ? quoteAgentAiChatEngineAdapter.respondLlmRequired(engineRequest, requestedAiProfile)
+        //                     : aiChatEngine.respondLlmRequired(engineRequest, requestedAiProfile);
+        // } catch (RuntimeException error) {
+        //     if (recommendFlow) {
+        //         throw error;
+        //     }
+        //     // 라우터가 UNSUPPORTED로 봤던 문장인데 LLM까지 불가한 경우 — dead-end 문구 대신
+        //     // 지금 눌러볼 수 있는 기능 칩과 함께 우아하게 거절한다.
+        //     log.warn("Build Chat LLM unavailable for demoted UNSUPPORTED intent, returning graceful refusal", error);
+        //     Map<String, Object> refusal = gracefulRefusalResponse(intentDecision.targetCategory());
+        //     attachFollowUpContext(refusal, message);
+        //     logBuildChatPath("FAST_UNSUPPORTED_FALLBACK", startedNanos, userId, requestedAiProfile, false, BuildChatGuardStats.empty());
+        //     return refusal;
+        // }
+        // long engineMs = elapsedMs(stageStartNanos);
+        // if (engineResponse.intent() == AiChatIntent.SUPPORT_GUIDANCE) {
+        //     Map<String, Object> response = shoppingSupportGuidanceResponse(
+        //             message,
+        //             objectMap(objectMap(engineResponse.parsedContext()).get("supportIntent"))
+        //     );
+        //     attachFollowUpContext(response, message);
+        //     logBuildChatPath("LLM_SUPPORT_GUIDANCE", startedNanos, userId, requestedAiProfile, false, BuildChatGuardStats.empty(),
+        //             "redisMs=" + redisMs + " engineMs=" + engineMs);
+        //     return response;
+        // }
+        // BuildChatGuardStats guardStats = new BuildChatGuardStats();
+        // Map<String, Object> response = responseMap(engineResponse, rawBudgetIntent, guardStats);
+        // // "어느 상품인지" 되묻는 턴은 그 자체로 완결이다 — 질문 문구와 후보 칩이 한 짝이라, 아래 후처리
+        // // (부품 제약 역제안·용도 예산 칩·폴백 조합·에코)가 하나라도 손대면 상품을 물어 놓고
+        // // 예산 조합이나 "조건을 넓혀서 추천해줘" 칩을 보여 주게 된다. 여기서 잘라 낸다.
+        // if (!stringList(engineResponse.parsedContext().get("routeChoiceChips")).isEmpty()) {
+        //     response.put("builds", List.of());
+        //     buildChatCacheService.storeAsync(body, requestedAiProfile, userId, response);
+        //     logBuildChatPath("LLM_ROUTE_CHOICE", startedNanos, userId, requestedAiProfile, false, guardStats,
+        //             "redisMs=" + redisMs + " engineMs=" + engineMs);
+        //     return response;
+        // }
+        // if (intentDecision.intent() == BuildChatIntent.LOCATE_BOARD_PART) {
+        //     List<String> focusCategories = llmBoardFocusCategories(engineResponse.parsedContext(), body);
+        //     if (!focusCategories.isEmpty()) {
+        //         Map<String, Object> focusResponse = boardFocusResponse(focusCategories);
+        //         buildChatCacheService.storeAsync(body, requestedAiProfile, userId, focusResponse);
+        //         logBuildChatPath("LLM_BOARD_FOCUS", startedNanos, userId, requestedAiProfile, false, guardStats,
+        //                 "redisMs=" + redisMs + " engineMs=" + engineMs);
+        //         return focusResponse;
+        //     }
+        // }
+        // boolean readOnlySimulationFlow = intentDecision.intent() == BuildChatIntent.SIMULATE_REPLACEMENT;
+        // boolean readOnlyBoardFocusFlow = intentDecision.intent() == BuildChatIntent.LOCATE_BOARD_PART;
+        // if (readOnlySimulationFlow || readOnlyBoardFocusFlow) {
+        //     response.put("builds", List.of());
+        // }
+        // // 라우터가 전체 견적(BUILD_RECOMMEND)으로 판정했는데 LLM 엔진이 내부적으로 부품 추천으로
+        // // 분류해 answerType=PART가 되는 경우를 교정한다 (조합 카드가 있으면 BUDGET으로 표기).
+        // if (intentDecision.intent() == BuildChatIntent.BUILD_RECOMMEND
+        //         && !objectMaps(response.get("builds")).isEmpty()
+        //         && "PART".equals(text(response.get("answerType")))) {
+        //     response.put("answerType", "BUDGET");
+        // }
+        // // 데모 안전망: 견적 요청인데 LLM이 빈 조합을 반환하면(용도-only 등) 내부 자산 기준
+        // // 폴백 조합으로 보강해 빈 화면을 막는다. 라우터가 이미 BUILD_RECOMMEND로 판정한 경우만.
+        // // 단 드래프트가 있는 되묻기/수정 턴(ASK_FOLLOW_UP·BUILD_MODIFY)은 무관한 예산 조합을 끼워넣지
+        // // 않는다 — 되묻기 응답에 카드가 생기면 원문 에코 조건이 깨진다. 드래프트 없는 용도-only 턴은 유지.
+        // boolean draftModifyTurn = intentDecision.intent() == BuildChatIntent.BUILD_RECOMMEND
+        //         && objectMaps(response.get("builds")).isEmpty()
+        //         && !objectMaps(objectMap(body.get("currentQuoteDraft")).get("items")).isEmpty()
+        //         && (engineResponse.intent() == AiChatIntent.ASK_FOLLOW_UP
+        //                 || engineResponse.intent() == AiChatIntent.BUILD_MODIFY);
+        // // 무예산 용도-only 되묻기 턴(드래프트도 예산도 없이 용도만 있어 LLM이 되물은 경우)에는
+        // // 무관한 예산 조합을 주입하지 않고, 대신 예산대 방향 칩만 붙인다(아래 에코 블록 근처).
+        // boolean usageOnlyFollowUp = engineResponse.intent() == AiChatIntent.ASK_FOLLOW_UP
+        //         && !rawBudgetIntent.hasBudget()
+        //         && objectMaps(objectMap(body.get("currentQuoteDraft")).get("items")).isEmpty();
+        // if (intentDecision.intent() == BuildChatIntent.BUILD_RECOMMEND
+        //         && objectMaps(response.get("builds")).isEmpty()
+        //         && !draftModifyTurn
+        //         && !usageOnlyFollowUp
+        //         && !hasEffectiveHardConstraint(engineResponse.parsedContext(), rawBudgetIntent)) {
+        //     List<String> fallbackWarnings = new ArrayList<>();
+        //     List<Map<String, Object>> fallbackBuilds = rawBudgetIntent.hasBudget()
+        //             ? nearBudgetLadderBuilds(rawBudgetIntent.budget(), rawBudgetIntent.mode(), List.of(), fallbackWarnings, new BuildChatGuardStats())
+        //             : openBudgetFallbackBuilds(fallbackWarnings);
+        //     if (!fallbackBuilds.isEmpty()) {
+        //         response.put("answerType", "BUDGET");
+        //         response.put("builds", fallbackBuilds);
+        //         List<String> mergedWarnings = new ArrayList<>(stringList(response.get("warnings")));
+        //         mergedWarnings.addAll(fallbackWarnings);
+        //         response.put("warnings", distinct(mergedWarnings));
+        //     }
+        // }
+        // // 범용 역제안 후처리 — LLM이 구조화한 제약을 부품 DB와 대조해, 불가능한 요청이면
+        // // dead-end 대신 실데이터 숫자(최저가·부족액·최소 구성가)와 다음 행동 칩을 제시한다.
+        // // 미리보기(변경)를 먼저 시도하고, 미리보기가 못 만들어진 변경 요청은 부품 제약 역제안이 이어받는다.
+        // // 단, "여유 있는 케이스 추천"은 LLM이 BUILD_MODIFY로 흔들려도 실제 개선 검증이 먼저다.
+        // // 이 순서를 지키지 않으면 검증 전 추천 1개가 변경 미리보기로 확정된다.
+        // boolean caseImprovementHandled = !readOnlyBoardFocusFlow
+        //         && applyCaseScoreImprovementProposal(response, engineResponse, message, body);
+        // if (!readOnlySimulationFlow && !readOnlyBoardFocusFlow && !caseImprovementHandled) {
+        //     applyDraftEditPreview(response, engineResponse, body);
+        // }
+        // if (!readOnlyBoardFocusFlow) {
+        //     // 속성 요청(수랭/PCIe 세대/통풍) + 드래프트에 같은 카테고리 존재 → 1:1 스펙비교 카드로 답한다.
+        //     // 카드가 못 나오면(비교 대상 없음·후보 없음) 아래 역제안이 후보 나열로 이어받는다.
+        //     if (!caseImprovementHandled) {
+        //         applyAttributeSimulationCard(response, engineResponse, message, body);
+        //         applyPartConstraintCounterProposal(response, engineResponse, message, body, user);
+        //     }
+        //     applyUsageMinimumCounterProposal(response, engineResponse, rawBudgetIntent);
+        // }
+        // if (recommendFlow
+        //         && objectMaps(response.get("builds")).isEmpty()
+        //         && response.get("simulation") == null
+        //         && hasEffectiveHardConstraint(engineResponse.parsedContext(), rawBudgetIntent)) {
+        //     List<String> unresolvedWarnings = new ArrayList<>(stringList(response.get("warnings")));
+        //     unresolvedWarnings.add("PART_CONSTRAINT_NOT_FOUND");
+        //     response.put("answerType", "BUDGET");
+        //     response.put("message", "요청하신 \"" + message.trim()
+        //             + "\" 조건을 모두 만족하면서 자동 검증을 통과한 내부 자산 조합을 찾지 못했습니다. "
+        //             + "조건을 유지한 채 예산을 조정하거나 일부 조건을 완화해 다시 확인해 주세요.");
+        //     response.put("warnings", distinct(unresolvedWarnings));
+        //     response.put("quickReplies", List.of(
+        //             "조건을 유지하고 예산을 높여 추천해줘",
+        //             "일부 조건을 완화해서 추천해줘"));
+        //     response.remove("clarification");
+        // }
+        // // LLM이 스스로 되물은 턴("용량이나 DDR 조건 알려주세요")은 원문을 에코해 다음 짧은 답("ddr5")이
+        // // 원 요청과 합성되게 한다 — 이게 없으면 후속 답이 맥락을 잃고 대화가 끊긴다.
+        // // GENERAL 계열(PRICE_ALERT_HELP 등)은 의도적으로 제외 — 에코 오염 진입점을 넓히지 않는다.
+        // boolean askedFollowUp = engineResponse.intent() == AiChatIntent.ASK_FOLLOW_UP
+        //         || ((engineResponse.intent() == AiChatIntent.PART_RECOMMEND
+        //                         || engineResponse.intent() == AiChatIntent.BUILD_MODIFY
+        //                         || engineResponse.intent() == AiChatIntent.EXPLAIN)
+        //                 && objectMaps(response.get("builds")).isEmpty()
+        //                 && stringList(response.get("quickReplies")).isEmpty());
+        // // 되묻기는 최대 1회 — 이미 되묻기 후속 턴이면 에코를 재부착하지 않는다.
+        // // 속성 1:1 카드로 답을 낸 턴은 완결 응답이므로 에코를 붙이지 않는다(카드가 주인공).
+        // // 화면을 실제로 옮긴 턴도 완결 응답이다 — 에코를 붙이면 다음 이동 요청이 이 문장과 합성돼 깨진다.
+        // if (askedFollowUp && !clarificationFollowUp
+        //         && response.get("actions") == null
+        //         && response.get("clarification") == null && response.get("simulation") == null) {
+        //     response.put("clarification", MockData.map(
+        //             "missingSlots", List.of(),
+        //             "originalMessage", message
+        //     ));
+        // }
+        // // 무예산 용도-only 되묻기에는 예산대 방향 칩을 붙여 클릭 한 번으로 다음 턴이 예산으로 진행되게 한다.
+        // if (usageOnlyFollowUp && stringList(response.get("quickReplies")).isEmpty()) {
+        //     response.put("quickReplies", usageBudgetDirectionChips(message, clarificationMinimumTotal(message)));
+        // }
+        // alignBuildCountMessage(response);
+        // ensureNextAction(response, intentDecision.intent(), rawBudgetIntent);
+        // if ((mergedClarificationReply && shouldPreserveMergedTurnContext(response))
+        //         || shouldPreserveSuccessfulTurnContext(response)) {
+        //     attachFollowUpContext(response, message);
+        // }
+        // candidateReranker.recordShadowScores(body, response, userId, requestedAiProfile);
+        // log.debug("Build Chat response generated: userId={}, requestedAiProfile={}, cacheStore=true", userId, requestedAiProfile);
+        // buildChatCacheService.storeAsync(body, requestedAiProfile, userId, response);
+        // // 이 턴의 상품·화면에 종속된 산출물(이동 경로·후보 선택 칩)은 semantic 캐시에 넣지 않는다 —
+        // // 서명이 비슷하다는 이유로 다른 질문에 재생되면 엉뚱한 화면으로 끌고 가거나 남의 상품을 권한다.
+        // boolean turnSpecificRouting = carriesTurnSpecificRouting(response)
+        //         || !stringList(engineResponse.parsedContext().get("routeChoiceChips")).isEmpty();
+        // if (semanticCacheAllowed && !turnSpecificRouting) {
+        //     semanticCacheService.storeAsync(body, requestedAiProfile, intentDecision, response);
+        // }
+        // logBuildChatPath("LLM_FULL", startedNanos, userId, requestedAiProfile, false, guardStats,
+        //         "redisMs=" + redisMs + " deterministicMs=" + deterministicMs + " semanticMs=" + semanticMs + " engineMs=" + engineMs);
+        // return withConversationTransition(response, recommendationConversationTransition);
     }
 
     private Map<String, Object> buildScoreExplanationResponse(
@@ -1645,6 +1671,58 @@ public class BuildChatService {
             lastIndex = matcher.start();
         }
         return lastIndex;
+    }
+
+    static Map<String, Object> quoteAgentResponseMap(
+            AiChatEngineResponse response, BudgetIntent budgetIntent
+    ) {
+        List<Map<String, Object>> builds = response.recommendations() == null ? List.of()
+                : response.recommendations().stream().limit(1)
+                        .map(item -> quoteAgentBuildMap(item, budgetIntent)).toList();
+        Map<String, Object> result = MockData.map(
+                "answerType", answerType(response.intent()), "message", response.assistantMessage(),
+                "builds", builds, "warnings", List.of(),
+                "evidenceIds", response.evidenceIds() == null ? List.of() : response.evidenceIds(),
+                "agentSessionId", response.agentSessionId()
+        );
+        List<AiChatEngineResponse.PartRecommendation> parts =
+                response.partRecommendations() == null ? List.of() : response.partRecommendations();
+        if (response.intent() == AiChatIntent.PART_RECOMMEND && !parts.isEmpty()) {
+            String category = parts.get(0).category();
+            result.put("partRecommendation", MockData.map(
+                    "category", category,
+                    "options", parts.stream().filter(part -> category.equals(part.category()))
+                            .map(part -> MockData.map(
+                                    "partId", part.partId(), "name", part.name(), "price", part.price()
+                            )).toList()
+            ));
+        }
+        return result;
+    }
+
+    private static Map<String, Object> quoteAgentBuildMap(
+            AiChatEngineResponse.BuildRecommendation recommendation, BudgetIntent budgetIntent
+    ) {
+        List<Map<String, Object>> items = recommendation.items().stream()
+                .map(part -> MockData.map(
+                        "partId", part.partId(), "category", part.category(),
+                        "name", part.name(), "manufacturer", part.manufacturer(),
+                        "quantity", 1, "price", part.price(),
+                        "note", "QuoteAgent 검증 추천"
+                )).toList();
+        int budget = budgetIntent != null && budgetIntent.hasBudget()
+                ? budgetIntent.budget() : recommendation.estimatedTotalPrice();
+        return MockData.map(
+                "id", "quote-agent-" + Math.abs(items.hashCode()),
+                "tier", "balanced", "label", "맞춤 추천",
+                "title", recommendation.name(), "summary", recommendation.summary(),
+                "totalPrice", recommendation.estimatedTotalPrice(),
+                "badges", List.of("QUOTE_AGENT"),
+                "budgetWon", budget, "budgetLabel", formatBudgetLabel(budget),
+                "tierLabel", "맞춤 추천", "appliedPartCategories", List.of(),
+                "items", items, "toolResults", List.of(), "warnings", List.of(),
+                "confidence", recommendation.confidence(), "evidenceIds", List.of()
+        );
     }
 
     private Map<String, Object> responseMap(
@@ -6505,6 +6583,11 @@ public class BuildChatService {
             List<String> warnings,
             BuildChatGuardStats guardStats
     ) {
+        /* 대화 모드에서는 추천 견적을 생성하지 않는다 */
+        if (engineResponse.intent() == AiChatIntent.ASK_FOLLOW_UP) {
+            return List.of();
+        }
+
         List<AiChatEngineResponse.BuildRecommendation> recommendations = engineResponse.recommendations();
         if (recommendations == null || recommendations.isEmpty()) {
             return budgetFallbackBuilds(engineResponse, rawBudgetIntent, warnings, guardStats);

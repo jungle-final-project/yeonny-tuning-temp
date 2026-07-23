@@ -1,4 +1,4 @@
-package com.buildgraph.prototype.quoteagent.query;
+package com.buildgraph.prototype.aichat.query;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.core.type.TypeReference;
@@ -9,7 +9,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
-import java.util.UUID;
 import org.springframework.http.HttpStatus;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Repository;
@@ -25,33 +24,23 @@ public class AiChatSessionQuery {
         this.objectMapper = objectMapper;
     }
 
-    public AiChatSessionState findOrCreate(String sessionId, Long userInternalId) {
-        if (userInternalId == null) {
-            throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "로그인이 필요합니다.");
-        }
-        if (sessionId == null || sessionId.isBlank()) {
-            return create(userInternalId);
-        }
-
-        UUID parsedSessionId = parseSessionId(sessionId);
+    public AiChatSessionState findOrCreate(Long userInternalId) {
+        requireUser(userInternalId);
         List<AiChatSessionState> rows = jdbcTemplate.query("""
                 SELECT session_id::text AS session_id, context
                 FROM ai_chat_sessions
-                WHERE session_id = ?
-                  AND user_id = ?
+                WHERE user_id = ?
+                ORDER BY created_at DESC, id DESC
+                LIMIT 1
                 """,
                 (rs, rowNum) -> new AiChatSessionState(
                         rs.getString("session_id"),
                         parseContext(rs.getString("context"))
                 ),
-                parsedSessionId,
                 userInternalId
         );
 
-        if (rows.isEmpty()) {
-            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "대화 세션을 찾을 수 없습니다.");
-        }
-        return rows.get(0);
+        return rows.isEmpty() ? create(userInternalId) : rows.get(0);
     }
 
     private AiChatSessionState create(Long userInternalId) {
@@ -69,13 +58,13 @@ public class AiChatSessionQuery {
     }
 
     public void updateSession(
-            String sessionId,
             Long userInternalId,
             Map<String, Object> newContext
     ) {
+        requireUser(userInternalId);
         try {
             Map<String, Object> updatedContext = new LinkedHashMap<>();
-            Map<String, Object> oldContext = getOldContext(sessionId, userInternalId);
+            Map<String, Object> oldContext = getOldContext(userInternalId);
             Set<String> usageTags = new LinkedHashSet<>();
 
             Object oldBudget = oldContext.get("budget");
@@ -90,11 +79,15 @@ public class AiChatSessionQuery {
             int updated = jdbcTemplate.update("""
                     UPDATE ai_chat_sessions
                     SET context = ?::jsonb
-                    WHERE session_id = ?
-                      AND user_id = ?
+                    WHERE id = (
+                        SELECT id
+                        FROM ai_chat_sessions
+                        WHERE user_id = ?
+                        ORDER BY created_at DESC, id DESC
+                        LIMIT 1
+                    )
                     """,
                     jsonContext,
-                    parseSessionId(sessionId),
                     userInternalId
             );
             if (updated == 0) {
@@ -105,12 +98,30 @@ public class AiChatSessionQuery {
         }
     }
 
-    private Map<String, Object> getOldContext(String sessionId, Long userInternalId) {
+    public void resetContext(Long userInternalId) {
+        requireUser(userInternalId);
+        jdbcTemplate.update("""
+                UPDATE ai_chat_sessions
+                SET context = '{}'::jsonb
+                WHERE id = (
+                    SELECT id
+                    FROM ai_chat_sessions
+                    WHERE user_id = ?
+                    ORDER BY created_at DESC, id DESC
+                    LIMIT 1
+                )
+                """,
+                userInternalId
+        );
+    }
+
+    private Map<String, Object> getOldContext(Long userInternalId) {
         return jdbcTemplate.query("""
                 SELECT context::text AS context
                 FROM ai_chat_sessions
-                WHERE session_id = ?
-                  AND user_id = ?
+                WHERE user_id = ?
+                ORDER BY created_at DESC, id DESC
+                LIMIT 1
                 FOR UPDATE
                 """,
                 rs -> {
@@ -119,16 +130,13 @@ public class AiChatSessionQuery {
                     }
                     return parseContext(rs.getString("context"));
                 },
-                parseSessionId(sessionId),
                 userInternalId
         );
     }
 
-    private static UUID parseSessionId(String sessionId) {
-        try {
-            return UUID.fromString(sessionId);
-        } catch (IllegalArgumentException error) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "sessionId 형식이 올바르지 않습니다.", error);
+    private static void requireUser(Long userInternalId) {
+        if (userInternalId == null) {
+            throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "로그인이 필요합니다.");
         }
     }
 

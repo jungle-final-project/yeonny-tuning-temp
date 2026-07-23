@@ -1,4 +1,4 @@
-package com.buildgraph.prototype.quoteagent.schema;
+package com.buildgraph.prototype.aichat.chat.schema;
 
 import java.util.List;
 import java.util.Map;

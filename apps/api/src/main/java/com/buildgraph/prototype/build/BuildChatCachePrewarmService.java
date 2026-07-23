@@ -46,7 +46,7 @@ public class BuildChatCachePrewarmService {
     public BuildChatCachePrewarmService(
             BuildChatService buildChatService,
             BuildChatCacheService buildChatCacheService,
-            @Value("${ai.build-chat.cache.prewarm.enabled:true}") boolean enabled,
+            @Value("${ai.build-chat.cache.prewarm.enabled:false}") boolean enabled,
             @Value("${ai.build-chat.cache.prewarm.ttl-seconds:3600}") long ttlSeconds
     ) {
         this.buildChatService = buildChatService;

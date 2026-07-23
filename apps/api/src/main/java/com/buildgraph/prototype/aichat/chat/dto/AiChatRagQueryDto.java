@@ -1,4 +1,4 @@
-package com.buildgraph.prototype.quoteagent.chat.dto;
+package com.buildgraph.prototype.aichat.chat.dto;
 
 public record AiChatRagQueryDto(
         double performance,

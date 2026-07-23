@@ -1,4 +1,4 @@
-package com.buildgraph.prototype.quoteagent.chat;
+package com.buildgraph.prototype.aichat.chat;
 
 import java.util.Map;
 

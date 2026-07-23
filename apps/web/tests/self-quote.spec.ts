@@ -4869,35 +4869,23 @@ test('opens the candidate panel from the category deep link', async ({ page }) =
   await expect(page).toHaveURL('/self-quote');
 });
 
-// 챗봇에 "케이스 추천해줘" → 서버가 partRecommendation을 내려주면 일반 카탈로그와 분리된
-// AI 추천 화면이 열린다. 전체 목록으로 넘어간 뒤에는 추천 고정 없이 일반 목록으로 동작한다.
-test('챗봇 부품 추천은 간결한 AI 추천 화면을 열고 전체 목록으로 단방향 전환한다', async ({ page }) => {
+// 부품 추천은 셀프견적 후보 패널로 화면을 가로채지 않고 채팅 안에 표시한다.
+test('챗봇 부품 추천은 현재 채팅 안에 카드로 표시한다', async ({ page }) => {
   await loginAsUser(page);
-  // 챗봇은 authUser로 대화 저장소 주인을 정한다 — 없으면 보내기 자체가 막힌다.
   await page.addInitScript(() => {
     localStorage.setItem('buildgraph.authUser', JSON.stringify({
       id: 'user-part-recommend', email: 'user@example.com', name: 'Part Recommend User', role: 'USER'
     }));
   });
-
   await page.route('**/api/quote-drafts/current**', async (route) => {
     await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(fullDraft) });
   });
-  await page.route('**/api/parts**', async (route) => {
-    // 서버 정렬은 가격순이라 추천 2순위가 목록 3번째로 온다 — 프론트가 다시 올려야 한다.
+  await page.route('**/api/parts/**', async (route) => {
+    const partId = route.request().url().split('/').pop() ?? '';
     await route.fulfill({
       status: 200,
       contentType: 'application/json',
-      body: JSON.stringify({
-        items: [
-          candidatePart('case-other', 'CASE', '무관한 케이스'),
-          candidatePart('case-pick-1', 'CASE', '추천 케이스 1'),
-          candidatePart('case-pick-2', 'CASE', '추천 케이스 2')
-        ],
-        page: 0,
-        size: 20,
-        total: 3
-      })
+      body: JSON.stringify(candidatePart(partId, 'CASE', partId === 'case-pick-1' ? '추천 케이스 1' : '추천 케이스 2'))
     });
   });
   await page.route('**/api/ai/build-chat', async (route) => {
@@ -4906,9 +4894,10 @@ test('챗봇 부품 추천은 간결한 AI 추천 화면을 열고 전체 목록
       contentType: 'application/json',
       body: JSON.stringify({
         answerType: 'PART',
-        message: '내부 자산 기준으로 고른 케이스 추천 2개를 부품 목록에 띄웠어요.',
+        message: '내부 자산 기준으로 케이스 2개를 추천했어요.',
         builds: [],
         warnings: [],
+        navigation: { route: '/self-quote?category=CASE' },
         partRecommendation: {
           category: 'CASE',
           options: [
@@ -4924,51 +4913,13 @@ test('챗봇 부품 추천은 간결한 AI 추천 화면을 열고 전체 목록
   await page.getByRole('textbox', { name: 'AI 챗봇에게 PC 사양 질문' }).fill('케이스 추천해줘');
   await page.getByRole('button', { name: '질문 보내기' }).click();
 
-  // 패널이 그 카테고리로 열린다 — 사용자가 슬롯을 누르지 않았는데도.
-  const panel = page.getByTestId('slot-candidate-panel');
-  await expect(panel).toBeVisible();
-  await expect(panel).toHaveAttribute('data-view', 'AI_RECOMMENDATION');
-  await expect(panel).toHaveAttribute('aria-label', 'AI 추천 케이스');
-  await expect(panel.getByRole('heading', { name: 'AI 추천 케이스' })).toBeVisible();
-  await expect(panel.getByText('현재 견적 기준 추천 2개')).toBeVisible();
-  await expect(panel.getByTestId('candidate-ai-current-part')).toContainText('현재 케이스:');
-  await expect(panel.getByTestId('candidate-ai-current-part')).toContainText('풀보드 케이스');
-  await expect(page).toHaveURL('/self-quote?category=CASE');
-
-  // 추천 화면에는 카탈로그 도구를 섞지 않고 추천 카드만 보여준다.
-  const names = panel.getByTestId('slot-candidate-list').locator('[data-testid="slot-candidate-card"]');
-  await expect(panel.getByTestId('candidate-panel-search')).toHaveCount(0);
-  await expect(panel.getByRole('combobox', { name: '후보 정렬 기준' })).toHaveCount(0);
-  await expect(panel.getByTestId('candidate-filters-toggle')).toHaveCount(0);
-  await expect(panel.getByRole('button', { name: '후보 더 보기' })).toHaveCount(0);
-  await expect(panel.getByTestId('candidate-ai-picks-banner')).toHaveCount(0);
-  await expect(names).toHaveCount(2);
-  await expect(names.nth(0)).toContainText('추천 케이스 1');
-  await expect(names.nth(1)).toContainText('추천 케이스 2');
-
-  // 전체 목록 전환은 추천 상태를 소비한다. 일반 서버 순서를 그대로 따르고 도구를 복원한다.
-  await panel.getByRole('button', { name: '전체 케이스 보기' }).click();
-  await expect(panel).toHaveAttribute('data-view', 'CATALOG');
-  await expect(panel).toHaveAttribute('aria-label', '케이스 부품 목록');
-  await expect(panel.getByRole('heading', { name: '케이스 부품 목록' })).toBeVisible();
-  await expect(panel.getByTestId('candidate-panel-search')).toBeVisible();
-  await expect(panel.getByRole('combobox', { name: '후보 정렬 기준' })).toBeVisible();
-  await expect(panel.getByTestId('candidate-filters-toggle')).toBeVisible();
-  await expect(panel.getByTestId('candidate-ai-current-part')).toHaveCount(0);
-  await expect(panel.getByTestId('candidate-panel-selected')).toBeVisible();
-  await expect(names).toHaveCount(3);
-  await expect(names.first()).toContainText('무관한 케이스');
-
-  // 카탈로그 검색을 지워도 소비한 추천 화면은 다시 살아나지 않는다.
-  await panel.getByTestId('candidate-search').fill('무관한');
-  await expect(panel.getByText('무관한 케이스')).toBeVisible();
-  await panel.getByRole('button', { name: '검색어 지우기' }).click();
-  await expect(panel).toHaveAttribute('data-view', 'CATALOG');
-
-  // 닫았다가 같은 슬롯을 수동으로 다시 열어도 오래된 추천은 복원되지 않는다.
-  await panel.getByRole('button', { name: '후보 패널 닫기' }).click();
-  await page.getByTestId('checklist-CASE').click();
-  await expect(page.getByTestId('slot-candidate-panel')).toHaveAttribute('data-view', 'CATALOG');
+  const recommendation = page.getByTestId('ai-inline-part-recommendation');
+  await expect(recommendation).toBeVisible();
+  await expect(recommendation.getByTestId('ai-inline-part-card')).toHaveCount(2);
+  await expect(recommendation).toContainText('추천 케이스 1');
+  await expect(recommendation).toContainText('추천 케이스 2');
+  await expect(page.getByTestId('slot-candidate-panel')).toHaveCount(0);
+  await expect(page).toHaveURL('/self-quote');
 });
 
 // 목록은 가격순 20건씩 실린다 — 비싼 추천은 첫 장에 없다. 그대로 두면 챗봇이

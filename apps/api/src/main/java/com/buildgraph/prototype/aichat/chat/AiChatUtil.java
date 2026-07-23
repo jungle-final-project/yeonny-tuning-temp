@@ -1,4 +1,4 @@
-package com.buildgraph.prototype.quoteagent.chat;
+package com.buildgraph.prototype.aichat.chat;
 
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -9,6 +9,7 @@ import org.springframework.web.server.ResponseStatusException;
 
 import com.buildgraph.prototype.agent.AiProfileConfig;
 import com.buildgraph.prototype.agent.AiProfileDefinition;
+import com.buildgraph.prototype.aichat.chat.dto.AiChatResponseDto;
 import com.fasterxml.jackson.databind.ObjectMapper;
 
 public final class AiChatUtil {
@@ -17,6 +18,67 @@ public final class AiChatUtil {
 
     private AiChatUtil() {
     }
+
+    /* 견적을 객체형태로 조립해서 반환하는 함수 */
+    public static AiChatResponseDto.BuildRecommendation toBuildRecommendation(
+            String recommendedFor,
+            List<Map<String, Object>> matchedParts
+    ) {
+        List<AiChatResponseDto.PartRecommendation> items =
+                matchedParts.stream()
+                        .map(part -> {
+                            String partId = firstText(
+                                    text(part.get("partId")),
+                                    text(part.get("id"))
+                            );
+                            Integer price = firstNumber(
+                                    part.get("price"),
+                                    part.get("currentPrice")
+                            );
+
+                            Map<String, Object> attributes =
+                                    objectMap(part.get("attributes"));
+                            if (part.get("performance_score") != null) {
+                                attributes.put(
+                                        "performanceScore",
+                                        part.get("performance_score")
+                                );
+                            }
+                            if (part.get("value_score") != null) {
+                                attributes.put(
+                                        "valueScore",
+                                        part.get("value_score")
+                                );
+                            }
+                            if (part.get("match_score") != null) {
+                                attributes.put(
+                                        "matchScore",
+                                        part.get("match_score")
+                                );
+                            }
+
+                            return new AiChatResponseDto.PartRecommendation(
+                                    partId,
+                                    text(part.get("category")),
+                                    text(part.get("name")),
+                                    text(part.get("manufacturer")),
+                                    price == null ? 0 : price,
+                                    attributes
+                            );
+                        })
+                        .toList();
+
+        int estimatedTotalPrice = items.stream()
+                .mapToInt(AiChatResponseDto.PartRecommendation::price)
+                .sum();
+
+        return new AiChatResponseDto.BuildRecommendation(
+                recommendedFor,
+                estimatedTotalPrice,
+                items
+        );
+    }
+
 
     public static Map<String, Object> objectMap(Object value) {
         if (value instanceof Map<?, ?> map) {

@@ -1232,7 +1232,7 @@ Embedding 정책:
 
 ### ai_chat_sessions / ai_chat_messages
 
-QuoteAgent feature flag가 활성화된 Build Chat의 사용자별 대화 문맥을 서버에 저장한다. `ai_chat_sessions.session_id`는 public UUID이고 `user_id -> users.id` 소유권을 반드시 함께 검사한다. `context`에는 현재 `budget`, 누적 `usageTags` 등 QuoteAgent가 구조화한 문맥만 저장하며 다른 사용자의 session UUID만으로 조회할 수 없다. `ai_chat_messages`는 같은 session UUID에 연결되는 선택적 턴 저장 테이블이다.
+QuoteAgent feature flag가 활성화된 Build Chat의 사용자별 대화 문맥을 서버에 저장한다. 현재 구현은 로그인 `user_id`의 최신 행 하나를 현재 대화로 사용하며 프론트에 `session_id`를 노출하거나 다시 받지 않는다. `context`에는 현재 `budget`, 누적 `usageTags` 등 QuoteAgent가 구조화한 문맥만 저장한다. `POST /api/ai/build-chat/session/reset`은 새 행이나 상태 컬럼을 만들지 않고 해당 사용자의 현재 `context`를 `{}`로 초기화한다. `ai_chat_messages`는 같은 session UUID에 연결되는 선택적 턴 저장 테이블이다.
 
 ### part_vectors
 

@@ -98,6 +98,12 @@ export function buildChat(payload: AiBuildChatRequest) {
   });
 }
 
+export function resetBuildChatSession() {
+  return api<{ status: 'RESET' }>('/api/ai/build-chat/session/reset', {
+    method: 'POST'
+  });
+}
+
 export type HomeRecommendedBuildsResponse = {
   items: AiRecommendedBuild[];
   generatedAt: string;

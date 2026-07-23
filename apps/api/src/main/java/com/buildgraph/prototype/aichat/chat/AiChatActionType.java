@@ -1,4 +1,4 @@
-package com.buildgraph.prototype.quoteagent.chat;
+package com.buildgraph.prototype.aichat.chat;
 
 public enum AiChatActionType {
     OPEN_SELF_QUOTE,

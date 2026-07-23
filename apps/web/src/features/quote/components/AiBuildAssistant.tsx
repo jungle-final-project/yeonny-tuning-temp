@@ -1,13 +1,14 @@
 import { type CSSProperties, type FormEvent, type ReactNode, memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useQueries, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useLocation, useNavigate } from 'react-router-dom';
-import { ArrowDown, ArrowRight, BarChart3, Bot, CheckCircle2, Download, LifeBuoy, Send, ShoppingCart, Sparkles, X } from 'lucide-react';
+import { ArrowDown, ArrowRight, BarChart3, Bot, CheckCircle2, Download, LifeBuoy, MessageSquarePlus, Send, ShoppingCart, Sparkles, X } from 'lucide-react';
 import { useLockedPageScroll } from '../../../hooks/useHiddenPageScrollbar';
 import { useStickToBottom } from '../../../hooks/useStickToBottom';
 import { AUTH_CHANGED_EVENT, ApiError, clearToken, getToken } from '../../../lib/api';
 import { AI_BUILD_ASSISTANT_CLOSE_EVENT, AI_BUILD_ASSISTANT_OPEN_EVENT, AI_BUILD_ASSISTANT_TOGGLE_EVENT, SUPPORT_CHAT_CLOSE_EVENT, SUPPORT_CHAT_OPEN_EVENT, requestPerfCompare, setAiAssistantOpen, type AiAssistantOpenDetail } from '../../../lib/events';
-import { applyAiBuildToQuoteDraft, getCurrentQuoteDraft, putQuoteDraftItem } from '../../parts/partsApi';
-import type { QuoteDraft } from '../../parts/types';
+import { handlePartImageError, partImageUrl, specRows } from '../../parts/partDisplay';
+import { applyAiBuildToQuoteDraft, getCurrentQuoteDraft, getPart, putQuoteDraftItem } from '../../parts/partsApi';
+import type { PartRow, QuoteDraft } from '../../parts/types';
 import { downloadPcAgentForCurrentUser } from '../../support/agentDownload';
 import { ensurePcAgentConnected, type PcAgentConnectionPhase } from '../../support/pcAgentLauncher';
 import { requestPcAgentDiagnosis } from '../../support/supportApi';
@@ -23,7 +24,6 @@ import {
   navigationRouteFrom,
   partRecommendationFrom,
   readPerformanceView,
-  rememberAiPartPicks,
   normalizeAiBuilds,
   type AiQuickReplyKind,
   normalizeAiRecommendedBuild,
@@ -33,6 +33,7 @@ import {
   saveAssistantSession,
   saveSelectedAiBuild,
   type AiAssessmentContext,
+  type AiPartRecommendation,
   type AiAssistantSession,
   type AiBuildAssessment,
   type AiChatMessage,
@@ -45,7 +46,7 @@ import {
   type BuildGraphFocus,
   type PartCategory
 } from '../aiSelection';
-import { buildChat, resolveBuildGraph } from '../quoteApi';
+import { buildChat, resetBuildChatSession, resolveBuildGraph } from '../quoteApi';
 
 type AiBuildAssistantProps = {
   surface?: 'home' | 'self-quote';
@@ -155,14 +156,6 @@ function currentRouteKey(location: { pathname: string; search: string }) {
   return `${location.pathname}${location.search}`;
 }
 
-function isCurrentSelfQuoteCategory(
-  location: { pathname: string; search: string },
-  category: PartCategory
-) {
-  if (location.pathname !== '/self-quote') return false;
-  return new URLSearchParams(location.search).get('category') === category;
-}
-
 export function AiBuildAssistant({ surface = 'home', variant = 'floating', onBoardFocus, onDraftHistory }: AiBuildAssistantProps) {
   const navigate = useNavigate();
   // 늦게 도착한 응답이 화면을 낚아채지 않도록 '보낼 때 있던 화면'과 '지금 화면'을 비교한다.
@@ -193,6 +186,7 @@ export function AiBuildAssistant({ surface = 'home', variant = 'floating', onBoa
   const [session, setSession] = useState(() => readAssistantSession());
   const sessionRef = useRef(session);
   const [isSending, setIsSending] = useState(false);
+  const [isResettingConversation, setIsResettingConversation] = useState(false);
   // 응답 대기 임시 버블. 300ms 이내 응답에는 띄우지 않아 깜빡임을 막는다(pendingVisible 게이트).
   // 세션에 저장하지 않고 React 상태로만 둬서 새로고침 시 유령 버블이 남지 않게 한다.
   const [pending, setPending] = useState<{ id: string; excerpt: string } | null>(null);
@@ -224,8 +218,6 @@ export function AiBuildAssistant({ surface = 'home', variant = 'floating', onBoa
     thumbHeight: CENTER_SCROLLBAR_MIN_THUMB_HEIGHT,
     thumbTop: 0
   });
-  // 직전 응답이 되묻기였다면 다음 전송에 원 요청을 에코해 서버가 두 문장을 합성하게 한다(1회 왕복).
-  const [pendingClarification, setPendingClarification] = useState<{ originalMessage: string } | null>(null);
   const hasToken = Boolean(getToken());
   useLockedPageScroll(open && placement === 'center');
   // 패널을 실제로 연 뒤에만 현재 견적(드래프트)을 미리 받는다. 전역 렌더라 로그인만으로
@@ -249,25 +241,12 @@ export function AiBuildAssistant({ surface = 'home', variant = 'floating', onBoa
   }, []);
 
   useEffect(() => {
-    function resetCenteredConversation() {
-      const ownerKey = getAiStorageOwnerKey();
-      const nextSession = resetAssistantConversation(ownerKey);
-      setSession(nextSession);
-      setPrompt('');
-      setSubmitError(null);
-      setApplyError(null);
-      setFailedBuild(null);
-      setPendingClarification(null);
-      setCenterScrollbar((current) => ({ ...current, canScroll: false, visible: false, thumbTop: 0 }));
-    }
 
     const openAssistant = (event: Event) => {
       const detail = (event as CustomEvent<AiAssistantOpenDetail>).detail;
       const nextPlacement = detail?.placement ?? 'side';
       setPlacement(nextPlacement);
-      if (nextPlacement === 'center') {
-        resetCenteredConversation();
-      }
+
       if (!isDesktopAssistant) {
         window.dispatchEvent(new Event(SUPPORT_CHAT_CLOSE_EVENT));
       }
@@ -483,7 +462,7 @@ export function AiBuildAssistant({ surface = 'home', variant = 'floating', onBoa
     quickReplySource?: AiQuickReplyKind
   ) {
     const nextPrompt = rawPrompt.trim();
-    if (!nextPrompt || isSending || applyingBuildId) return;
+    if (!nextPrompt || isSending || isResettingConversation || applyingBuildId) return;
 
     const ownerKey = getAiStorageOwnerKey();
     if (!getToken() || !ownerKey) {
@@ -532,7 +511,6 @@ export function AiBuildAssistant({ surface = 'home', variant = 'floating', onBoa
       };
       setSession(nextSession);
       saveAssistantSession(nextSession, ownerKey);
-      setPendingClarification(null);
       const fastRoute = `/self-quote?category=${fastCategory}`;
       if (fastRoute !== currentRouteKey(location)) {
         navigate(fastRoute);
@@ -562,9 +540,7 @@ export function AiBuildAssistant({ surface = 'home', variant = 'floating', onBoa
     try {
       // 셀프견적에서는 어떤 후속 질문도 현재 장바구니와 충돌할 수 있으므로 최신 draft를 항상 보낸다.
       // 홈의 문맥 없는 전체 견적 추천만 draft 없이 보내 shared cache 이점을 유지한다.
-      const shouldAttachDraft = surface === 'self-quote'
-        || pendingClarification !== null
-        || needsDraftContext(nextPrompt);
+      const shouldAttachDraft = surface === 'self-quote' || needsDraftContext(nextPrompt);
       const currentQuoteDraft = shouldAttachDraft
         ? quoteDraftQuery.data ?? await queryClient.fetchQuery({
           queryKey: ['quote-draft', 'current'],
@@ -573,7 +549,6 @@ export function AiBuildAssistant({ surface = 'home', variant = 'floating', onBoa
         : undefined;
       const response = await buildChat({
         message: nextPrompt,
-        agentSessionId: baseSession.agentSessionId,
         currentBuilds: recentBuildsForChatContext(baseSession),
         currentQuoteDraft,
         // PART_CANDIDATE_PANEL은 두 화면 모두 선언한다 — 홈에서 물어도 셀프견적으로 옮겨
@@ -588,11 +563,6 @@ export function AiBuildAssistant({ surface = 'home', variant = 'floating', onBoa
             }
           : { surface: 'HOME', capabilities: ['PART_CANDIDATE_PANEL'] },
         assessmentContext,
-        // 칩은 직전 질문에 대한 "답"이 아니라 "선택"이다 — 원문 에코를 함께 보내면 서버가 두 문장을
-        // 합성해 상품명이 묻힌다. 서버에도 같은 가드가 있지만 보내지 않는 쪽이 계약상 정확하다.
-        clarificationContext: quickReplySource === 'ROUTE_CHOICE'
-          ? undefined
-          : (pendingClarification ?? undefined),
         quickReplySource
       });
       const boardFocus = normalizeBoardFocus(response.boardFocus);
@@ -602,13 +572,10 @@ export function AiBuildAssistant({ surface = 'home', variant = 'floating', onBoa
       if (response.draftHistory?.type === 'QUOTE_DRAFT_HISTORY' && onDraftHistory) {
         onDraftHistory(response.draftHistory);
       }
-      setPendingClarification(
-        response.clarification?.originalMessage
-          ? { originalMessage: response.clarification.originalMessage }
-          : null
-      );
+
       const responseTime = new Date().toISOString();
       const normalizedResponseBuilds = response.builds?.length ? normalizeAiBuilds(response.builds) : undefined;
+      const partRecommendation = partRecommendationFrom(response) ?? undefined;
       const responseBuilds = normalizedResponseBuilds?.map((build) => (
         currentQuoteDraft && isVerifiedAutoApplyBuild(build)
           ? withAutoApplyChangeReceipt(build, currentQuoteDraft)
@@ -626,13 +593,13 @@ export function AiBuildAssistant({ surface = 'home', variant = 'floating', onBoa
         simulation: response.simulation ?? undefined,
         buildAssessment: response.buildAssessment ?? undefined,
         supportGuidance: response.supportGuidance ?? undefined,
+        partRecommendation,
         warnings: response.warnings ?? [],
         quickReplies: response.quickReplies ?? undefined,
         quickReplyKind: response.quickReplyKind ?? undefined,
         quickReplyCommands: response.quickReplyCommands ?? undefined
       };
       const nextSession = {
-        agentSessionId: response.agentSessionId ?? baseSession.agentSessionId ?? null,
         messages: [...optimisticSession.messages, assistantMessage],
         latestBuilds,
         savedBuildIds: baseSession.savedBuildIds,
@@ -652,8 +619,7 @@ export function AiBuildAssistant({ surface = 'home', variant = 'floating', onBoa
       // 패널을 먼저 닫아야 한다 — 중앙 모달은 fixed inset-0 전체화면이라 열린 채로 두면
       // 도착한 화면을 그대로 덮어, 사용자 눈에는 이동이 일어나지 않은 것과 똑같이 보인다.
       const navigationRoute = navigationRouteFrom(response);
-      const followedNavigation = Boolean(navigationRoute) && canFollowNavigation(requestId, sentFromPathname);
-      if (navigationRoute && canFollowNavigation(requestId, sentFromPathname)) {
+      if (navigationRoute && !partRecommendation && canFollowNavigation(requestId, sentFromPathname)) {
         if (!isEmbedded) {
           setOpen(false);
         }
@@ -661,31 +627,6 @@ export function AiBuildAssistant({ surface = 'home', variant = 'floating', onBoa
         // 눌러야 하는 히스토리가 쌓인다. 경로가 같아도 검색어(q)가 다르면 다른 화면이므로 이동한다.
         if (navigationRoute !== currentRouteKey(locationRef.current)) {
           navigate(navigationRoute);
-        }
-      }
-      // 부품 추천이면 상품 나열을 부품 목록 패널에 넘긴다(말풍선은 서버가 이미 줄여서 보냈다).
-      // 홈에서 물었어도 같은 경로로 셀프견적에 보낸다 — 채팅 기록은 세션에 남아 그쪽에서 이어진다.
-      // 이동과 같은 가드를 태운다: 늦게 온 답이 사용자가 이미 떠난 화면을 끌고 가면 안 된다.
-      const partRecommendation = partRecommendationFrom(response);
-      if (partRecommendation && canFollowNavigation(requestId, sentFromPathname)) {
-        // 추천 순서는 화면 이동을 건너뛰지 못한다 — 옮겨 가며 이 컴포넌트가 언마운트되기 때문이다.
-        // 이동을 안 하더라도(이미 그 패널이 열려 있는 경우) 저장은 한다. 저장이 신호를 쏘고
-        // 열려 있는 패널이 그 신호로 새 순서를 읽는다.
-        rememberAiPartPicks(partRecommendation);
-        if (!isEmbedded) {
-          setOpen(false);
-        }
-        // 위에서 이미 서버가 지정한 곳으로 옮겼으면 두 번 밀지 않는다. 두 번 밀면 첫 이동이
-        // 실어 준 검색어(q)가 곧바로 지워지고, 뒤로가기가 사용자가 본 적 없는 화면으로 돌아간다.
-        const candidatePanelRoute = `/self-quote?category=${partRecommendation.category}`;
-        // 같은 카테고리 패널에서는 저장 이벤트만으로 추천 화면이 갱신된다. URL을 다시 만들면
-        // 사용자가 카탈로그에서 쓰던 q 검색어가 사라져 '전체 목록 보기' 후 상태를 복원할 수 없다.
-        const alreadyInCandidateCategory = isCurrentSelfQuoteCategory(
-          locationRef.current,
-          partRecommendation.category
-        );
-        if (!followedNavigation && !alreadyInCandidateCategory && candidatePanelRoute !== currentRouteKey(locationRef.current)) {
-          navigate(candidatePanelRoute);
         }
       }
       const verifiedRepairBuild = responseBuilds?.length === 1
@@ -748,7 +689,6 @@ export function AiBuildAssistant({ surface = 'home', variant = 'floating', onBoa
       setRevealMessageId(assistantMessage.id);
     };
 
-    setPendingClarification(null);
     if (resolution.status === 'MISSING') {
       appendResult('바로 앞 대화에 적용할 변경안이 없습니다. 먼저 원하는 변경안을 요청해 주세요.');
       return;
@@ -928,6 +868,55 @@ export function AiBuildAssistant({ surface = 'home', variant = 'floating', onBoa
     });
   }, [applyingBuildId, isSending, pendingAutoApplyBuild, selectBuild]);
 
+  async function startNewConversation() {
+    if (isSending || isResettingConversation || applyingBuildId) return;
+
+    const ownerKey = getAiStorageOwnerKey();
+    if (!getToken() || !ownerKey) {
+      setSubmitError(LOGIN_REQUIRED_MESSAGE);
+      return;
+    }
+
+    setIsResettingConversation(true);
+    setSubmitError(null);
+    try {
+      await resetBuildChatSession();
+      const nextSession = resetAssistantConversation(ownerKey);
+      setSession(nextSession);
+      setPrompt('');
+      setApplyError(null);
+      setFailedBuild(null);
+      setPendingAutoApplyBuild(null);
+      setRevealMessageId(null);
+      setPending(null);
+      setPendingVisible(false);
+      setCenterScrollbar((current) => ({ ...current, canScroll: false, visible: false, thumbTop: 0 }));
+    } catch (error) {
+      if (error instanceof ApiError && error.status === 401) {
+        clearToken();
+        setSession(readAssistantSession(null));
+        setSubmitError(LOGIN_REQUIRED_MESSAGE);
+        return;
+      }
+      setSubmitError('새 대화를 시작하지 못했습니다. 잠시 후 다시 시도해 주세요.');
+    } finally {
+      setIsResettingConversation(false);
+    }
+  }
+
+  const newConversationButton = (className: string) => (
+    <button
+      type="button"
+      data-testid="ai-chat-new-conversation"
+      onClick={() => void startNewConversation()}
+      disabled={isSending || isResettingConversation || Boolean(applyingBuildId)}
+      className={className}
+    >
+      <MessageSquarePlus size={16} />
+      <span>{isResettingConversation ? '시작 중...' : '새 대화 시작하기'}</span>
+    </button>
+  );
+
   if (!isPanelOpen) {
     return (
       <button
@@ -977,14 +966,14 @@ export function AiBuildAssistant({ surface = 'home', variant = 'floating', onBoa
             autoComplete="off"
             value={prompt}
             onChange={(event) => setPrompt(event.target.value)}
-            disabled={isSending}
+            disabled={isSending || isResettingConversation}
             placeholder="예산, 용도, 원하는 게임을 입력해 주세요"
             className="min-w-0 flex-1 bg-transparent px-3 text-[20px] font-medium leading-8 text-slate-900 outline-none placeholder:text-slate-400"
           />
           <button
             type="submit"
             aria-label="질문 보내기"
-            disabled={!prompt.trim() || isSending}
+            disabled={!prompt.trim() || isSending || isResettingConversation}
             className="grid h-14 w-14 shrink-0 place-items-center rounded-full bg-commerce-ink text-white transition hover:bg-slate-700 disabled:bg-slate-300"
           >
             <Send size={24} />
@@ -992,11 +981,14 @@ export function AiBuildAssistant({ surface = 'home', variant = 'floating', onBoa
         </div>
       </form>
     );
+    const centeredNewConversationButton = newConversationButton(
+      'absolute left-0 -top-14 z-10 flex h-11 items-center gap-2 rounded-full bg-white px-4 text-sm font-black text-slate-700 shadow-lg transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-60 sm:-left-4 sm:top-0'
+    );
     const centeredCloseButton = (
       <button
         type="button"
         data-testid="ai-chat-close-button"
-        aria-label="AI 견적 어시스턴트 닫기"
+        aria-label="상담봇 닫기"
         onClick={() => setOpen(false)}
         className="absolute right-0 -top-16 z-10 grid h-14 w-14 place-items-center rounded-full bg-white text-slate-600 shadow-lg transition hover:bg-slate-100 hover:text-commerce-ink focus:outline-none focus:ring-4 focus:ring-blue-100 sm:-right-16 sm:top-0"
       >
@@ -1010,7 +1002,7 @@ export function AiBuildAssistant({ surface = 'home', variant = 'floating', onBoa
         className="fixed inset-0 z-50 flex min-h-dvh bg-slate-950/60 px-4 py-6"
         role="dialog"
         aria-modal="true"
-        aria-label="AI 견적 어시스턴트"
+        aria-label="상담봇"
         onWheel={(event) => event.stopPropagation()}
         onTouchMove={(event) => event.stopPropagation()}
       >
@@ -1018,6 +1010,7 @@ export function AiBuildAssistant({ surface = 'home', variant = 'floating', onBoa
           {hasMessages ? (
             <div className="flex h-full min-h-0 items-center justify-center">
               <div className="relative flex max-h-full min-h-0 w-full max-w-[896px] flex-col">
+                {centeredNewConversationButton}
                 {centeredCloseButton}
                 <div className="relative min-h-0">
                   <div
@@ -1089,6 +1082,7 @@ export function AiBuildAssistant({ surface = 'home', variant = 'floating', onBoa
           ) : (
             <div className="flex h-full items-center justify-center px-0 py-12 text-center">
               <div className="relative mx-auto flex w-full max-w-[896px] -translate-y-3 flex-col items-center">
+                {centeredNewConversationButton}
                 {centeredCloseButton}
                 <h2 className="text-[34px] font-black leading-[42px] text-white">
                   어떤 PC를 맞춰볼까요?
@@ -1124,11 +1118,14 @@ export function AiBuildAssistant({ surface = 'home', variant = 'floating', onBoa
       <div className={isEmbedded ? 'border-b border-slate-200 bg-white px-4 py-3' : 'border-b border-[#c45c22] bg-[#de6c2d] px-4 py-3 text-white'}>
         <div className="flex items-center justify-between gap-3">
           <div className="flex min-w-0 items-center gap-3">
+            {newConversationButton(isEmbedded
+              ? 'flex shrink-0 items-center gap-1.5 rounded-md border border-slate-200 px-2.5 py-2 text-xs font-black text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60'
+              : 'flex shrink-0 items-center gap-1.5 rounded-md border border-white/30 px-2.5 py-2 text-xs font-black text-white transition hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-60')}
             <div className={isEmbedded ? 'grid h-10 w-10 shrink-0 place-items-center rounded-full bg-[#de6c2d] text-white shadow-sm' : 'grid h-9 w-9 shrink-0 place-items-center rounded-md bg-white text-[#de6c2d] shadow-sm'}>
               <Sparkles size={20} />
             </div>
             <div className="min-w-0">
-              <h2 className={isEmbedded ? 'truncate text-sm font-black text-commerce-ink' : 'truncate text-sm font-black text-white'}>AI 견적 어시스턴트</h2>
+              <h2 className={isEmbedded ? 'truncate text-sm font-black text-commerce-ink' : 'truncate text-sm font-black text-white'}>상담봇</h2>
               <p className={isEmbedded ? 'truncate text-xs font-bold text-slate-500' : 'truncate text-xs font-bold text-white/80'}>{surface === 'home' ? '내부 견적 자산 기준 · 호환성 자동 체크' : '현재 견적 기준 · 부품 교체 자동 적용'}</p>
             </div>
           </div>
@@ -1148,7 +1145,8 @@ export function AiBuildAssistant({ surface = 'home', variant = 'floating', onBoa
 
       <div className={`${bodyClassName} ${isDockedAssistant ? 'bg-[#f7f7f8]' : ''}`}>
         {isDockedAssistant ? (
-          <div className="flex justify-end px-4 pt-2">
+          <div className="flex items-center justify-between px-4 pt-2">
+            {newConversationButton('flex items-center gap-1.5 rounded-md px-2.5 py-2 text-xs font-black text-slate-600 transition hover:bg-slate-200 hover:text-slate-900 disabled:cursor-not-allowed disabled:opacity-60')}
             <button
               type="button"
               aria-label="AI 견적 챗봇 닫기"
@@ -1210,14 +1208,14 @@ export function AiBuildAssistant({ surface = 'home', variant = 'floating', onBoa
               autoComplete="off"
               value={prompt}
               onChange={(event) => setPrompt(event.target.value)}
-              disabled={isSending}
+              disabled={isSending || isResettingConversation}
               placeholder="PC 견적을 물어보세요..."
               className="min-w-0 flex-1 bg-transparent px-3 text-sm font-medium text-slate-900 outline-none placeholder:text-slate-400"
             />
             <button
               type="submit"
               aria-label="질문 보내기"
-              disabled={!prompt.trim() || isSending}
+              disabled={!prompt.trim() || isSending || isResettingConversation}
               className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-[#de6c2d] text-white transition hover:bg-[#c45c22] disabled:bg-slate-300"
             >
               <Send size={17} />
@@ -1455,6 +1453,132 @@ function useSequentialReveal(sentences: string[], extraCount: number, active: bo
   return active ? count : total;
 }
 
+function InlinePartRecommendationCards({
+  recommendation,
+  size
+}: {
+  recommendation: AiPartRecommendation;
+  size: AiChatMessageSize;
+}) {
+  const navigate = useNavigate();
+  const queryClient = useQueryClient();
+  const isLarge = size === 'large';
+  const [addingPartId, setAddingPartId] = useState<string | null>(null);
+  const [feedback, setFeedback] = useState<string | null>(null);
+  const detailQueries = useQueries({
+    queries: recommendation.options.map((option) => ({
+      queryKey: ['parts', 'detail', option.partId],
+      queryFn: () => getPart(option.partId),
+      staleTime: 60_000
+    }))
+  });
+
+  const addPart = async (part: PartRow) => {
+    if (addingPartId) return;
+    setAddingPartId(part.id);
+    setFeedback(null);
+    try {
+      const updatedDraft = await putQuoteDraftItem(part.id, 1, crypto.randomUUID());
+      queryClient.setQueryData(['quote-draft', 'current'], updatedDraft);
+      void queryClient.invalidateQueries({ queryKey: ['parts', 'slot-candidates'] });
+      setFeedback(`${part.name}을(를) 견적에 담았습니다.`);
+    } catch {
+      setFeedback('견적에 담지 못했습니다. 잠시 후 다시 시도해 주세요.');
+    } finally {
+      setAddingPartId(null);
+    }
+  };
+
+  return (
+    <section
+      data-testid="ai-inline-part-recommendation"
+      className={`${isLarge ? 'mt-4 rounded-[24px] p-4' : 'mt-2 rounded-2xl p-3'} border border-slate-200 bg-white shadow-sm`}
+    >
+      <div className="mb-3 flex items-center justify-between gap-3">
+        <div>
+          <p className={`${isLarge ? 'text-lg' : 'text-sm'} font-black text-slate-900`}>
+            {PART_CATEGORY_LABELS[recommendation.category]} 추천
+          </p>
+          <p className={`${isLarge ? 'text-sm' : 'text-[11px]'} mt-0.5 text-slate-500`}>
+            추천 부품을 비교하고 바로 견적에 담을 수 있어요.
+          </p>
+        </div>
+        <span className="shrink-0 rounded-full bg-orange-50 px-2.5 py-1 text-[11px] font-black text-[#de6c2d]">
+          {recommendation.options.length}개
+        </span>
+      </div>
+
+      <div className="grid gap-2">
+        {recommendation.options.map((option, index) => {
+          const detail = detailQueries[index]?.data;
+          const part: PartRow = detail?.id === option.partId
+            ? detail
+            : {
+                id: option.partId,
+                category: recommendation.category,
+                name: option.name,
+                price: option.price,
+                status: 'ACTIVE'
+              };
+          const rows = detail?.id === option.partId ? specRows(part).slice(0, 3) : [];
+          const isAdding = addingPartId === part.id;
+          return (
+            <article
+              key={part.id}
+              data-testid="ai-inline-part-card"
+              className={`${isLarge ? 'gap-4 rounded-2xl p-4' : 'gap-3 rounded-xl p-3'} flex border border-slate-200 bg-slate-50/70`}
+            >
+              <button
+                type="button"
+                onClick={() => navigate(`/parts/${part.id}`)}
+                aria-label={`${part.name} 상세 보기`}
+                className={`${isLarge ? 'h-24 w-24' : 'h-20 w-20'} shrink-0 overflow-hidden rounded-xl border border-slate-200 bg-white`}
+              >
+                <img
+                  src={partImageUrl(part)}
+                  alt=""
+                  className="h-full w-full object-contain p-2"
+                  onError={(event) => handlePartImageError(event, part.category)}
+                />
+              </button>
+              <div className="min-w-0 flex-1">
+                {part.manufacturer ? (
+                  <p className="mb-0.5 truncate text-[10px] font-bold text-slate-400">{part.manufacturer}</p>
+                ) : null}
+                <button
+                  type="button"
+                  onClick={() => navigate(`/parts/${part.id}`)}
+                  className={`${isLarge ? 'text-base' : 'text-[13px]'} line-clamp-2 text-left font-black leading-5 text-slate-900 hover:text-[#de6c2d]`}
+                >
+                  {part.name}
+                </button>
+                {rows.length > 0 ? (
+                  <p className={`${isLarge ? 'text-xs' : 'text-[10px]'} mt-1 line-clamp-2 text-slate-500`}>
+                    {rows.map((row) => `${row.label} ${row.value}`).join(' · ')}
+                  </p>
+                ) : null}
+                <div className="mt-2 flex flex-wrap items-center justify-between gap-2">
+                  <strong className={`${isLarge ? 'text-lg' : 'text-sm'} text-[#de6c2d]`}>
+                    {part.price.toLocaleString('ko-KR')}원
+                  </strong>
+                  <button
+                    type="button"
+                    disabled={Boolean(addingPartId)}
+                    onClick={() => void addPart(part)}
+                    className="rounded-lg bg-slate-900 px-3 py-1.5 text-[11px] font-black text-white transition hover:bg-[#de6c2d] disabled:cursor-wait disabled:opacity-50"
+                  >
+                    {isAdding ? '담는 중...' : '견적에 담기'}
+                  </button>
+                </div>
+              </div>
+            </article>
+          );
+        })}
+      </div>
+      {feedback ? <p className="mt-2 text-xs font-bold text-slate-600" role="status">{feedback}</p> : null}
+    </section>
+  );
+}
 const ChatMessage = memo(function ChatMessage({
   message,
   onSelectBuild,
@@ -1503,6 +1627,7 @@ const ChatMessage = memo(function ChatMessage({
     : (message.supportGuidance ? 1 : 0)
       + (message.simulation ? 1 : 0)
       + (message.buildAssessment ? 1 : 0)
+      + (message.partRecommendation ? 1 : 0)
       + (message.builds?.length ?? 0);
   const animate = reveal && !isUser && !prefersReducedMotion() && sentences.length + extraCount > 1;
   const revealedCount = useSequentialReveal(sentences, extraCount, animate);
@@ -1531,7 +1656,7 @@ const ChatMessage = memo(function ChatMessage({
               <span className={`${assistantIconClassName} ai-message-author-icon grid place-items-center rounded-full`}>
                 <Sparkles size={isLarge ? 17 : 12} />
               </span>
-              {message.supportGuidance ? 'PC 상태 안내' : message.buildAssessment ? '견적 점수 설명' : message.simulation ? '성능 시뮬레이션' : 'AI 견적 어시스턴트'}
+              {message.supportGuidance ? 'PC 상태 안내' : message.buildAssessment ? '견적 점수 설명' : message.simulation ? '성능 시뮬레이션' : '상담봇'}
             </div>
           ) : null}
           {isUser ? (
@@ -1599,6 +1724,12 @@ const ChatMessage = memo(function ChatMessage({
           animate
             ? <FadeInBlock><BuildAssessmentCard assessment={message.buildAssessment} size={size} /></FadeInBlock>
             : <BuildAssessmentCard assessment={message.buildAssessment} size={size} />
+        ) : null}
+
+        {message.partRecommendation && revealNextExtra() ? (
+          animate
+            ? <FadeInBlock><InlinePartRecommendationCards recommendation={message.partRecommendation} size={size} /></FadeInBlock>
+            : <InlinePartRecommendationCards recommendation={message.partRecommendation} size={size} />
         ) : null}
 
         {message.builds?.length ? (

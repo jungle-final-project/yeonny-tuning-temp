@@ -1,6 +1,4 @@
-package com.buildgraph.prototype.quoteagent.tools;
-
-import com.buildgraph.prototype.quoteagent.chat.dto.AiChatResponseDto;
+package com.buildgraph.prototype.aichat.tools;
 
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -10,6 +8,8 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import org.springframework.stereotype.Component;
+
+import com.buildgraph.prototype.aichat.chat.dto.AiChatResponseDto;
 
 @Component("quoteAgentPartReplacementRanker")
 public class PartReplacementRanker {
